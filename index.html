@@ -142,6 +142,7 @@
         height: 100%;
         background: #050b13;
         cursor: crosshair;
+        touch-action: none;
       }
 
       .hud {
@@ -323,13 +324,13 @@
 
         <div class="group">
           <div class="meta"><span>Zoom</span><strong id="zoomReadout">2.40x</strong></div>
-          <input id="zoomRange" type="range" min="0.5" max="18" step="0.1" value="2.4" />
+          <input id="zoomRange" type="range" min="0.5" max="1000" step="0.5" value="2.4" />
         </div>
 
         <div class="row">
           <div class="group">
             <label class="label" for="iterInput">Iterations</label>
-            <input id="iterInput" type="number" min="60" max="700" step="10" value="220" />
+            <input id="iterInput" type="number" min="60" max="2000" step="10" value="220" />
           </div>
           <div class="group">
             <label class="label" for="qualitySelect">Quality</label>
@@ -353,7 +354,7 @@
         </div>
       </div>
 
-      <div class="version">v0.04</div>
+      <div class="version">v0.05</div>
     </div>
 
     <script>
@@ -378,7 +379,10 @@
         juliaY: 0.156,
         dragging: false,
         lastX: 0,
-        lastY: 0
+        lastY: 0,
+        pinchDistance: null,
+        pinchCenter: null,
+        touchMode: false
       };
 
       const presets = {
@@ -501,7 +505,7 @@
         const offCtx = offscreen.getContext('2d');
         const image = offCtx.createImageData(renderW, renderH);
 
-        const maxIter = clamp(Math.round(state.iterations), 60, 700);
+        const maxIter = clamp(Math.round(state.iterations), 60, 2000);
         const scaleX = 3.0 / state.zoom;
         const scaleY = 2.2 / state.zoom;
         const minX = state.centerX - scaleX;
@@ -601,9 +605,178 @@
         renderFractal();
       }
 
-      function resizeCanvas() {
+      function getPointerPoint(event) {
+        const rect = canvas.getBoundingClientRect();
+        return {
+          x: event.clientX - rect.left,
+          y: event.clientY - rect.top
+        };
+      }
+
+      function pointDistance(a, b) {
+        return Math.hypot(a.x - b.x, a.y - b.y);
+      }
+
+      function pointerStart(event) {
+        if (event.pointerType === 'touch' || event.pointerType === 'pen') {
+          state.touchMode = true;
+        }
+
+        if (event.isPrimary === false && event.pointerType === 'touch') {
+          return;
+        }
+
+        state.dragging = true;
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
+      }
+
+      function pointerMove(event) {
+        if (!state.dragging) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const dx = event.clientX - state.lastX;
+        const dy = event.clientY - state.lastY;
+        const scaleX = (3.4 / state.zoom) / rect.width;
+        const scaleY = (2.5 / state.zoom) / rect.height;
+
+        state.centerX -= dx * scaleX;
+        state.centerY += dy * scaleY;
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
         renderFractal();
       }
+
+      function pointerEnd() {
+        state.dragging = false;
+      }
+
+      function setZoomFromFactor(factor, anchorX, anchorY) {
+        const oldZoom = state.zoom;
+        const newZoom = clamp(oldZoom * factor, 0.5, 1000);
+
+        if (newZoom === oldZoom) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const px = (anchorX - rect.left) / rect.width;
+        const py = (anchorY - rect.top) / rect.height;
+
+        const worldScale = 3.2 / oldZoom;
+        const worldX = state.centerX + (px - 0.5) * worldScale * 2;
+        const worldY = state.centerY + (py - 0.5) * (2.4 / oldZoom) * 2;
+
+        const nextScale = 3.2 / newZoom;
+        state.centerX = worldX - (px - 0.5) * nextScale * 2;
+        state.centerY = worldY - (py - 0.5) * (2.4 / newZoom) * 2;
+        state.zoom = newZoom;
+        state.preset = 'custom';
+        updateLabels();
+        syncControls();
+        renderFractal();
+      }
+
+      function handlePointerDown(event) {
+        if (event.pointerType === 'touch') {
+          if (event.isPrimary === false) {
+            return;
+          }
+        }
+        pointerStart(event);
+      }
+
+      canvas.addEventListener('pointerdown', handlePointerDown);
+      canvas.addEventListener('pointermove', pointerMove);
+      canvas.addEventListener('pointerup', pointerEnd);
+      canvas.addEventListener('pointerleave', pointerEnd);
+      canvas.addEventListener('pointercancel', pointerEnd);
+
+      canvas.addEventListener('mousedown', (event) => {
+        pointerStart(event);
+      });
+
+      window.addEventListener('mousemove', (event) => {
+        if (!state.dragging || event.pointerType === 'touch') return;
+        const rect = canvas.getBoundingClientRect();
+        const dx = event.clientX - state.lastX;
+        const dy = event.clientY - state.lastY;
+        const scaleX = (3.2 / state.zoom) / rect.width;
+        const scaleY = (2.4 / state.zoom) / rect.height;
+        state.centerX -= dx * scaleX;
+        state.centerY += dy * scaleY;
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
+        renderFractal();
+      });
+
+      window.addEventListener('mouseup', () => {
+        state.dragging = false;
+      });
+
+      canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? 1.12 : 0.88;
+        const pt = getPointerPoint(event);
+        setZoomFromFactor(factor, pt.x, pt.y);
+      }, { passive: false });
+
+      canvas.addEventListener('touchstart', (event) => {
+        if (event.touches.length === 1) {
+          const touch = event.touches[0];
+          state.dragging = true;
+          state.lastX = touch.clientX;
+          state.lastY = touch.clientY;
+          return;
+        }
+
+        if (event.touches.length === 2) {
+          const a = event.touches[0];
+          const b = event.touches[1];
+          state.dragging = false;
+          state.pinchDistance = pointDistance({ x: a.clientX, y: a.clientY }, { x: b.clientX, y: b.clientY });
+          state.pinchCenter = {
+            x: (a.clientX + b.clientX) / 2,
+            y: (a.clientY + b.clientY) / 2
+          };
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchmove', (event) => {
+        if (event.touches.length === 1) {
+          const touch = event.touches[0];
+          const rect = canvas.getBoundingClientRect();
+          const dx = touch.clientX - state.lastX;
+          const dy = touch.clientY - state.lastY;
+          const scaleX = (3.2 / state.zoom) / rect.width;
+          const scaleY = (2.4 / state.zoom) / rect.height;
+          state.centerX -= dx * scaleX;
+          state.centerY += dy * scaleY;
+          state.lastX = touch.clientX;
+          state.lastY = touch.clientY;
+          renderFractal();
+          return;
+        }
+
+        if (event.touches.length === 2 && state.pinchDistance) {
+          const a = event.touches[0];
+          const b = event.touches[1];
+          const newDistance = pointDistance({ x: a.clientX, y: a.clientY }, { x: b.clientX, y: b.clientY });
+          const pinch = {
+            x: (a.clientX + b.clientX) / 2,
+            y: (a.clientY + b.clientY) / 2
+          };
+
+          const factor = newDistance / state.pinchDistance;
+          setZoomFromFactor(factor, pinch.x, pinch.y);
+          state.pinchDistance = newDistance;
+          state.pinchCenter = pinch;
+        }
+      }, { passive: false });
+
+      canvas.addEventListener('touchend', () => {
+        state.dragging = false;
+        state.pinchDistance = null;
+        state.pinchCenter = null;
+      });
 
       document.getElementById('renderBtn').addEventListener('click', renderFractal);
       document.getElementById('centerBtn').addEventListener('click', () => {
@@ -638,43 +811,9 @@
         button.addEventListener('click', () => setPreset(button.dataset.preset));
       });
 
-      canvas.addEventListener('mousedown', (event) => {
-        state.dragging = true;
-        state.lastX = event.clientX;
-        state.lastY = event.clientY;
-      });
-
-      window.addEventListener('mousemove', (event) => {
-        if (!state.dragging) return;
-        const dx = event.clientX - state.lastX;
-        const dy = event.clientY - state.lastY;
-        const rect = canvas.getBoundingClientRect();
-        const scaleX = (3.2 / state.zoom) / rect.width;
-        const scaleY = (2.4 / state.zoom) / rect.height;
-        state.centerX -= dx * scaleX;
-        state.centerY += dy * scaleY;
-        state.lastX = event.clientX;
-        state.lastY = event.clientY;
-        renderFractal();
-      });
-
-      window.addEventListener('mouseup', () => {
-        state.dragging = false;
-      });
-
-      canvas.addEventListener('wheel', (event) => {
-        event.preventDefault();
-        const factor = event.deltaY < 0 ? 1.12 : 0.88;
-        state.zoom = clamp(state.zoom * factor, 0.5, 18);
-        state.preset = 'custom';
-        syncControls();
-        updateLabels();
-        renderFractal();
-      }, { passive: false });
-
-      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('resize', renderFractal);
       setPreset('deepValley');
-      resizeCanvas();
+      renderFractal();
     </script>
   </body>
 </html>
