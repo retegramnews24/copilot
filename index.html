@@ -2,7 +2,7 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>ReteGram Mini App</title>
     <style>
       :root {
@@ -26,35 +26,39 @@
 
       html, body {
         margin: 0;
-        min-height: 100%;
+        width: 100%;
+        height: 100%;
         background:
           radial-gradient(circle at 15% 15%, rgba(84, 184, 255, 0.18), transparent 25%),
           radial-gradient(circle at 80% 18%, rgba(160, 120, 255, 0.19), transparent 29%),
           linear-gradient(135deg, var(--bg-0), var(--bg-1) 45%, var(--bg-2));
         color: var(--text);
         font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        overflow: hidden;
       }
 
       body {
-        display: grid;
-        place-items: center;
-        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .app-shell {
         position: relative;
-        width: min(430px, calc(100vw - 24px));
-        min-height: min(820px, 92vh);
-        border: 1px solid rgba(255,255,255,0.09);
-        background: rgba(7, 16, 28, 0.55);
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        max-width: 100vw;
+        max-height: 100vh;
+        min-height: 0;
+        border: 0;
+        background: rgba(7, 16, 28, 0.56);
         backdrop-filter: blur(16px);
-        border-radius: 30px;
-        box-shadow:
-          0 30px 80px rgba(0,0,0,0.38),
-          inset 0 0 0 1px rgba(255,255,255,0.04),
-          0 0 0 1px rgba(84, 184, 255, 0.08);
+        box-shadow: none;
         overflow: hidden;
         isolation: isolate;
+        display: flex;
+        flex-direction: column;
       }
 
       .app-shell::before {
@@ -72,12 +76,13 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 22px 22px 16px;
+        padding: clamp(14px, 2vh, 22px) clamp(14px, 3vw, 22px) clamp(10px, 1.8vh, 16px);
         z-index: 1;
+        flex-shrink: 0;
       }
 
       .time {
-        font-size: 0.8rem;
+        font-size: clamp(0.72rem, 1.2vw, 0.82rem);
         letter-spacing: 0.08em;
         color: var(--muted);
         font-weight: 700;
@@ -90,15 +95,15 @@
       }
 
       .status-dot {
-        width: 8px;
-        height: 8px;
+        width: clamp(7px, 1vw, 8px);
+        height: clamp(7px, 1vw, 8px);
         border-radius: 99px;
         background: var(--success);
         box-shadow: 0 0 12px rgba(114, 240, 183, 0.7);
       }
 
       .status-label {
-        font-size: 0.72rem;
+        font-size: clamp(0.62rem, 1vw, 0.72rem);
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted);
@@ -108,16 +113,26 @@
       .content {
         position: relative;
         z-index: 1;
-        padding: 12px 22px 26px;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(12px, 1.8vh, 18px);
+        flex: 1;
+        min-height: 0;
+        padding: 0 clamp(14px, 3vw, 22px) clamp(12px, 2vh, 20px);
       }
 
       .hero {
         position: relative;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
         background: linear-gradient(135deg, rgba(14, 27, 41, 0.86), rgba(17, 28, 46, 0.52));
         border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 28px;
-        padding: 20px 18px 18px;
+        border-radius: clamp(20px, 4vw, 28px);
+        padding: clamp(14px, 2.4vw, 20px) clamp(14px, 3vw, 18px) clamp(12px, 2vw, 18px);
         box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+        flex: 1 1 auto;
+        min-height: 0;
       }
 
       .badge {
@@ -129,10 +144,11 @@
         background: rgba(84, 184, 255, 0.08);
         border: 1px solid rgba(84, 184, 255, 0.18);
         color: var(--cyan);
-        font-size: 0.7rem;
+        font-size: clamp(0.62rem, 1.2vw, 0.7rem);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
+        width: fit-content;
       }
 
       .badge::before {
@@ -145,8 +161,8 @@
       }
 
       h1 {
-        margin: 16px 0 10px;
-        font-size: clamp(2rem, 1.2rem + 3vw, 3.1rem);
+        margin: clamp(10px, 1.6vh, 16px) 0 clamp(6px, 1.2vh, 10px);
+        font-size: clamp(2rem, 6vw, 3.1rem);
         line-height: 0.95;
         letter-spacing: -0.06em;
       }
@@ -163,13 +179,14 @@
         margin: 0;
         color: var(--muted);
         line-height: 1.5;
-        font-size: 0.98rem;
+        font-size: clamp(0.78rem, 2vw, 0.98rem);
       }
 
       .hero-visual {
         position: relative;
-        height: 185px;
-        margin-top: 18px;
+        flex: 1 1 auto;
+        min-height: clamp(120px, 26vh, 185px);
+        margin-top: clamp(10px, 2vh, 18px);
         border-radius: 22px;
         overflow: hidden;
         border: 1px solid rgba(255,255,255,0.05);
@@ -186,12 +203,12 @@
       .stats {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 10px;
-        margin-top: 16px;
+        gap: clamp(7px, 1vw, 10px);
+        margin-top: clamp(10px, 1.6vh, 16px);
       }
 
       .stat {
-        padding: 14px 10px 12px;
+        padding: clamp(10px, 1.8vw, 14px) clamp(8px, 1.5vw, 10px) clamp(8px, 1.8vw, 12px);
         border-radius: 16px;
         border: 1px solid var(--line);
         background: rgba(20, 32, 52, 0.72);
@@ -200,7 +217,7 @@
 
       .stat strong {
         display: block;
-        font-size: 1.05rem;
+        font-size: clamp(0.9rem, 2.3vw, 1.05rem);
         letter-spacing: -0.05em;
       }
 
@@ -208,28 +225,28 @@
         display: block;
         margin-top: 4px;
         color: var(--muted);
-        font-size: 0.7rem;
+        font-size: clamp(0.56rem, 1.2vw, 0.7rem);
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
 
       .panel {
-        margin-top: 18px;
-        padding: 16px 16px 12px;
+        padding: clamp(12px, 2vw, 16px) clamp(12px, 2vw, 16px) clamp(10px, 1.8vw, 12px);
         background: rgba(15, 21, 32, 0.8);
         border: 1px solid var(--line);
         border-radius: 24px;
+        flex-shrink: 0;
       }
 
       .panel-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 14px;
+        margin-bottom: clamp(10px, 1.8vh, 14px);
       }
 
       .mini-title {
-        font-size: 0.8rem;
+        font-size: clamp(0.7rem, 1.6vw, 0.8rem);
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted);
@@ -245,7 +262,7 @@
         background: rgba(114, 240, 183, 0.08);
         color: var(--success);
         border-radius: 999px;
-        font-size: 0.68rem;
+        font-size: clamp(0.58rem, 1.2vw, 0.68rem);
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -264,18 +281,17 @@
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 12px;
-        margin-top: 14px;
       }
 
       .button {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        padding: 15px 16px;
+        padding: clamp(12px, 2vw, 15px) 16px;
         border-radius: 18px;
         border: 1px solid rgba(255,255,255,0.06);
         font-weight: 700;
-        font-size: 0.9rem;
+        font-size: clamp(0.78rem, 2vw, 0.9rem);
         letter-spacing: -0.02em;
         cursor: pointer;
         transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
@@ -302,7 +318,8 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
         padding: 12px 8px 0;
-        margin-top: 18px;
+        margin-top: 0;
+        flex-shrink: 0;
       }
 
       .nav-item {
@@ -311,12 +328,12 @@
         justify-content: center;
         align-items: center;
         gap: 7px;
-        min-height: 70px;
+        min-height: clamp(52px, 8vh, 70px);
         border-radius: 18px;
         color: var(--muted);
         background: rgba(18, 28, 41, 0.52);
         border: 1px solid rgba(255,255,255,0.04);
-        font-size: 0.7rem;
+        font-size: clamp(0.56rem, 1.35vw, 0.7rem);
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
@@ -516,9 +533,23 @@
         100% { transform: scaleX(1); }
       }
 
-      @media (max-width: 380px) {
-        .app-shell { border-radius: 24px; }
-        .content { padding-inline: 16px; }
+      @media (max-width: 420px) {
+        .hero {
+          padding: 12px 12px 10px;
+        }
+
+        .panel {
+          padding: 10px 10px 8px;
+        }
+
+        .actions {
+          gap: 8px;
+        }
+
+        .bottom-nav {
+          gap: 6px;
+          padding-inline: 4px;
+        }
       }
     </style>
   </head>
