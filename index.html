@@ -2,21 +2,21 @@
 <html lang="it">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Fractint Mini App</title>
     <style>
       :root {
-        --bg: #0b1020;
-        --bg-2: #121b2e;
+        --bg: #0a1020;
+        --bg-2: #101a2d;
         --panel: rgba(17, 25, 39, 0.9);
-        --panel-soft: rgba(23, 33, 52, 0.92);
-        --line: rgba(154, 184, 224, 0.2);
-        --text: #ebf5ff;
-        --muted: #9bb2c5;
-        --blue: #71d4ff;
-        --violet: #a789ff;
-        --green: #7cf1c4;
-        --orange: #ffc66d;
+        --panel-2: rgba(19, 30, 46, 0.95);
+        --line: rgba(160, 190, 229, 0.2);
+        --text: #edf7ff;
+        --muted: #9db4c9;
+        --blue: #74d6ff;
+        --violet: #a98cff;
+        --green: #7df0c3;
+        --amber: #ffd877;
       }
 
       * { box-sizing: border-box; }
@@ -25,9 +25,9 @@
         margin: 0;
         width: 100%;
         height: 100%;
-        background: radial-gradient(circle at top, rgba(113, 212, 255, 0.08), transparent 30%), #090d15;
+        background: radial-gradient(circle at top, rgba(116,214,255,0.08), transparent 30%), #070d16;
         color: var(--text);
-        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        font-family: "Segoe UI", Tahoma, Arial, sans-serif;
       }
 
       body {
@@ -37,25 +37,26 @@
       }
 
       .app {
-        width: min(94vw, 430px);
-        height: min(96vh, 860px);
-        background: linear-gradient(180deg, #0a111b 0%, #0e1726 100%);
+        position: relative;
+        width: min(96vw, 430px);
+        height: min(94vh, 860px);
+        background: linear-gradient(180deg, #0a111b 0%, #0d1726 100%);
         border: 1px solid var(--line);
-        border-radius: 28px;
+        border-radius: 30px;
         overflow: hidden;
-        box-shadow: 0 28px 80px rgba(0,0,0,0.5), inset 0 0 20px rgba(125, 170, 255, 0.06);
+        box-shadow: 0 26px 90px rgba(0,0,0,0.52), inset 0 0 24px rgba(116,214,255,0.05);
       }
 
-      .topbar {
+      .header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 14px 16px 10px;
+        padding: 16px 18px 12px;
         border-bottom: 1px solid rgba(255,255,255,0.06);
       }
 
       .brand {
-        display: flex;
+        display: inline-flex;
         align-items: center;
         gap: 10px;
         font-weight: 700;
@@ -67,63 +68,74 @@
         height: 10px;
         border-radius: 50%;
         background: linear-gradient(135deg, var(--blue), var(--violet));
-        box-shadow: 0 0 12px rgba(113, 212, 255, 0.8);
+        box-shadow: 0 0 12px rgba(116,214,255,0.8);
       }
 
-      .status {
+      .state {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
         border: 1px solid var(--line);
         border-radius: 999px;
-        padding: 6px 10px;
         font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
         color: var(--green);
-        background: rgba(124, 241, 196, 0.08);
+        background: rgba(125, 240, 195, 0.06);
+      }
+
+      .state::before {
+        content: "";
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 10px rgba(125,240,195,0.8);
       }
 
       .toolbar {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
-        gap: 8px;
-        padding: 10px 16px 12px;
+        gap: 10px;
+        padding: 12px 16px 14px;
         border-bottom: 1px solid rgba(255,255,255,0.06);
       }
 
-      button, select, input {
-        font: inherit;
-      }
-
-      button {
+      .btn {
         appearance: none;
+        border: 1px solid var(--line);
         background: rgba(255,255,255,0.03);
         color: var(--text);
-        border: 1px solid var(--line);
+        min-height: 42px;
         border-radius: 12px;
         cursor: pointer;
-        min-height: 40px;
-        padding: 0 10px;
-        transition: transform 0.15s ease, border-color 0.15s ease;
+        font: inherit;
+        font-weight: 600;
+        transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
       }
 
-      button:hover {
-        border-color: rgba(113, 212, 255, 0.5);
+      .btn:hover {
+        border-color: rgba(116,214,255,0.5);
         transform: translateY(-1px);
       }
 
-      .primary {
-        background: linear-gradient(135deg, rgba(113, 212, 255, 0.22), rgba(167, 137, 255, 0.22));
+      .btn.primary {
+        background: linear-gradient(135deg, rgba(116,214,255,0.20), rgba(169,140,255,0.22));
       }
 
       .viewer {
         position: relative;
-        height: 430px;
-        background: #050a12;
+        height: 420px;
+        background: #050b13;
         border-bottom: 1px solid rgba(255,255,255,0.06);
       }
 
       canvas {
+        display: block;
         width: 100%;
         height: 100%;
-        display: block;
-        background: #050a12;
+        background: #050b13;
         cursor: crosshair;
       }
 
@@ -131,20 +143,21 @@
         position: absolute;
         left: 12px;
         bottom: 12px;
-        min-width: 138px;
-        background: rgba(11, 18, 30, 0.7);
+        min-width: 150px;
+        background: rgba(10,17,26,0.74);
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 12px;
         padding: 8px 10px;
         font-family: Consolas, monospace;
         font-size: 11px;
         line-height: 1.5;
         color: var(--text);
-        backdrop-filter: blur(3px);
+        backdrop-filter: blur(4px);
+        pointer-events: none;
       }
 
       .controls {
-        padding: 12px 16px 16px;
+        padding: 12px 16px 18px;
         display: grid;
         gap: 12px;
       }
@@ -174,40 +187,64 @@
       select, input[type="number"] {
         width: 100%;
         border: 1px solid var(--line);
-        background: rgba(9, 15, 22, 0.9);
+        background: rgba(8, 15, 23, 0.88);
         color: var(--text);
         border-radius: 10px;
         padding: 8px 10px;
+        font: inherit;
       }
 
       input[type="range"] {
         width: 100%;
-        accent-color: #98d9ff;
+        accent-color: #9fe6ff;
       }
 
-      .micro {
+      .stack {
+        display: grid;
+        gap: 8px;
+      }
+
+      .meta {
         display: flex;
         align-items: center;
+        justify-content: space-between;
         gap: 8px;
         color: var(--muted);
+        font-size: 12px;
       }
 
-      .micro strong {
+      .meta strong {
         color: var(--text);
+        font-weight: 700;
+      }
+
+      .version {
+        position: absolute;
+        left: 50%;
+        bottom: 10px;
+        transform: translateX(-50%);
+        font-size: 10px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(237,247,255,0.8);
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.03);
+        border-radius: 999px;
+        padding: 6px 10px;
       }
     </style>
   </head>
   <body>
     <div class="app">
-      <div class="topbar">
-        <div class="brand"><span class="dot"></span> Fractint</div>
-        <div class="status">live</div>
+      <div class="header">
+        <div class="brand"><span class="dot"></span>Fractint</div>
+        <div class="state">live</div>
       </div>
 
       <div class="toolbar">
-        <button class="primary" id="renderBtn">Render</button>
-        <button id="centerBtn">Center</button>
-        <button id="resetBtn">Reset</button>
+        <button class="btn primary" id="renderBtn">Render</button>
+        <button class="btn" id="centerBtn">Center</button>
+        <button class="btn" id="resetBtn">Reset</button>
       </div>
 
       <div class="viewer">
@@ -235,9 +272,9 @@
           </div>
         </div>
 
-        <div class="group">
-          <div class="micro"><span>Zoom</span><strong id="zoomReadout">2.4x</strong></div>
-          <input id="zoomRange" type="range" min="0.5" max="18" step="0.1" value="2.4" />
+        <div class="group stack">
+          <div class="meta"><span>Zoom</span><strong id="zoomReadout">2.40x</strong></div>
+          <input id="zoomRange" type="range" min="0.5" max="20" step="0.1" value="2.4" />
         </div>
 
         <div class="row">
@@ -246,9 +283,9 @@
             <input id="iterInput" type="number" min="40" max="500" step="10" value="180" />
           </div>
           <div class="group">
-            <label class="label" for="sizeSelect">Detail</label>
-            <select id="sizeSelect">
-              <option value="0.7">Fast</option>
+            <label class="label" for="qualitySelect">Quality</label>
+            <select id="qualitySelect">
+              <option value="0.8">Fast</option>
               <option value="1" selected>Balanced</option>
               <option value="1.5">High</option>
             </select>
@@ -266,6 +303,8 @@
           </div>
         </div>
       </div>
+
+      <div class="version">v0.02</div>
     </div>
 
     <script>
@@ -278,30 +317,28 @@
         type: 'mandelbrot',
         palette: 0,
         centerX: -0.74,
-        centerY: 0.0,
+        centerY: 0,
         zoom: 2.4,
         iterations: 180,
+        quality: 1,
         juliaX: -0.8,
         juliaY: 0.156,
-        detail: 1,
         dragging: false,
         lastX: 0,
         lastY: 0
       };
 
-      function clamp(v, min, max) {
-        return Math.min(max, Math.max(min, v));
+      function clamp(value, min, max) {
+        return Math.min(max, Math.max(min, value));
       }
 
       function getPalette(index) {
         const palettes = [
-          [[0,0,0],[18,22,44],[38,76,122],[118,209,255],[255,255,255]],
+          [[0,0,0],[18,22,44],[39,76,122],[116,209,255],[255,255,255]],
           [[0,0,0],[4,19,31],[15,79,104],[74,155,196],[216,248,255]],
           [[0,0,0],[60,20,10],[130,58,18],[240,150,58],[255,236,192]]
         ];
-
-        const p = palettes[index] || palettes[0];
-        return p;
+        return palettes[index] || palettes[0];
       }
 
       function colorAt(norm, paletteIndex) {
@@ -337,19 +374,12 @@
 
         for (let py = 0; py < h; py++) {
           for (let px = 0; px < w; px++) {
-            let zx, zy, cx, cy;
-            if (state.type === 'mandelbrot') {
-              cx = minX + px * stepX;
-              cy = minY + py * stepY;
-              zx = 0; zy = 0;
-            } else if (state.type === 'julia') {
-              cx = minX + px * stepX;
-              cy = minY + py * stepY;
-              zx = cx;
-              zy = cy;
-            } else {
-              cx = minX + px * stepX;
-              cy = minY + py * stepY;
+            let zx = 0;
+            let zy = 0;
+            let cx = minX + px * stepX;
+            let cy = minY + py * stepY;
+
+            if (state.type === 'julia' || state.type === 'burningShip') {
               zx = cx;
               zy = cy;
             }
@@ -391,19 +421,8 @@
         }
 
         ctx.putImageData(img, 0, 0);
-
         hud.innerHTML = `center: ${state.centerX.toFixed(4)}, ${state.centerY.toFixed(4)}<br>zoom: ${state.zoom.toFixed(2)}x<br>iter: ${maxIter}<br>type: ${state.type}`;
         zoomReadout.textContent = `${state.zoom.toFixed(2)}x`;
-      }
-
-      function resizeCanvas() {
-        const rect = canvas.getBoundingClientRect();
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const width = Math.max(260, Math.floor(rect.width * dpr));
-        const height = Math.max(220, Math.floor(rect.height * dpr));
-        canvas.width = width;
-        canvas.height = height;
-        renderFractal();
       }
 
       function syncControls() {
@@ -411,6 +430,7 @@
         document.getElementById('paletteSelect').value = String(state.palette);
         document.getElementById('zoomRange').value = String(state.zoom);
         document.getElementById('iterInput').value = String(state.iterations);
+        document.getElementById('qualitySelect').value = String(state.quality);
         document.getElementById('juliaX').value = String(state.juliaX);
         document.getElementById('juliaY').value = String(state.juliaY);
         zoomReadout.textContent = `${state.zoom.toFixed(2)}x`;
@@ -421,8 +441,19 @@
         state.palette = Number(document.getElementById('paletteSelect').value);
         state.zoom = Number(document.getElementById('zoomRange').value);
         state.iterations = Number(document.getElementById('iterInput').value);
+        state.quality = Number(document.getElementById('qualitySelect').value);
         state.juliaX = Number(document.getElementById('juliaX').value);
         state.juliaY = Number(document.getElementById('juliaY').value);
+        renderFractal();
+      }
+
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = Math.max(260, Math.floor(rect.width * dpr));
+        const h = Math.max(220, Math.floor(rect.height * dpr));
+        canvas.width = w;
+        canvas.height = h;
         renderFractal();
       }
 
@@ -451,6 +482,7 @@
       document.getElementById('paletteSelect').addEventListener('change', updateFromInputs);
       document.getElementById('zoomRange').addEventListener('input', updateFromInputs);
       document.getElementById('iterInput').addEventListener('change', updateFromInputs);
+      document.getElementById('qualitySelect').addEventListener('change', updateFromInputs);
       document.getElementById('juliaX').addEventListener('change', updateFromInputs);
       document.getElementById('juliaY').addEventListener('change', updateFromInputs);
 
@@ -465,8 +497,8 @@
         const dx = e.clientX - state.lastX;
         const dy = e.clientY - state.lastY;
         const rect = canvas.getBoundingClientRect();
-        const scaleX = (3.4 / state.zoom) / rect.width;
-        const scaleY = (2.5 / state.zoom) / rect.height;
+        const scaleX = (3.2 / state.zoom) / rect.width;
+        const scaleY = (2.4 / state.zoom) / rect.height;
         state.centerX -= dx * scaleX;
         state.centerY += dy * scaleY;
         state.lastX = e.clientX;
@@ -481,7 +513,7 @@
       canvas.addEventListener('wheel', (e) => {
         e.preventDefault();
         const factor = e.deltaY < 0 ? 1.12 : 0.88;
-        state.zoom = clamp(state.zoom * factor, 0.5, 18);
+        state.zoom = clamp(state.zoom * factor, 0.5, 20);
         syncControls();
         renderFractal();
       }, { passive: false });
