@@ -26,7 +26,7 @@
     <main class="stage-wrap">
       <div class="stage-toolbar">
         <div class="current-fractal"><div class="current-kicker" id="currentCategory">COMPLEX DYNAMICS</div><div class="current-title" id="currentTitle">Mandelbrot Set</div></div>
-        <div class="toolbar-actions"><button class="tool-btn" id="randomBtn" title="Frattale casuale">✧ <span>CASUALE</span></button><button class="tool-btn" id="resetBtn" title="Reimposta vista">↺ <span>RESET</span></button><button class="tool-btn primary" id="exportBtn" title="Esporta immagine">⇩ <span>ESPORTA</span></button></div>
+        <div class="toolbar-actions"><button class="tool-btn" id="randomBtn" title="Frattale casuale">✧ <span>CASUALE</span></button><button class="tool-btn deep-tool" id="deepZoomBtn" title="Precisione multipla Mandelbrot/Julia" aria-pressed="false">∞ <span>DEEP ZOOM</span></button><button class="tool-btn" id="resetBtn" title="Reimposta vista">↺ <span>RESET</span></button><button class="tool-btn primary" id="exportBtn" title="Salva immagine PNG">⇩ <span>SALVA PNG</span></button></div>
       </div>
       <section class="visual-stage" id="visualStage">
         <canvas id="canvas2d"></canvas><canvas id="canvas3d" class="hidden"></canvas>
@@ -47,12 +47,13 @@
         <div class="control-block" id="juliaBlock"><div class="control-label"><label for="juliaC">Costante Julia — Re</label><output id="juliaRealValue">−0.80</output></div><input id="juliaReal" type="range" min="-1.5" max="1.5" value="-0.8" step="0.01"><div class="control-label sub-control"><label for="juliaImag">Costante Julia — Im</label><output id="juliaImagValue">0.156</output></div><input id="juliaImag" type="range" min="-1.5" max="1.5" value="0.156" step="0.001"></div>
         <div class="control-block" id="paletteBlock"><div class="control-label"><label for="palette">Palette cromatica</label></div><div class="palette-row"><select id="palette"><option value="cosmic">Cosmic</option><option value="fire">Solar flare</option><option value="ocean">Deep ocean</option><option value="aurora">Aurora</option><option value="mono">Monochrome</option><option value="candy">Candy</option><option value="gold">Gold</option><option value="neon">Neon</option></select><button class="palette-swatch" id="paletteCycle" title="Cambia palette">✧</button></div></div>
         <div class="control-block" id="renderQualityBlock"><div class="control-label"><label for="quality">Qualità render</label><output id="qualityValue">70%</output></div><input id="quality" type="range" min="35" max="100" value="70" step="5"></div>
+        <div class="control-block deep-precision" id="deepPrecisionBlock" hidden><div class="control-label"><label for="deepPrecision">Precisione multipla</label><output>BigInt</output></div><select id="deepPrecision"><option value="128">128 bit · veloce</option><option value="256">256 bit</option><option value="512" selected>512 bit · consigliato</option><option value="1024">1024 bit · estremo</option></select><small>Solo Mandelbrot e Julia. Render CPU più impegnativo.</small></div>
         <div class="control-block" id="threeControls" hidden><div class="control-label"><label for="threePower">Potenza 3D</label><output id="threePowerValue">8</output></div><input id="threePower" type="range" min="3" max="12" value="8" step="1"><div class="control-label sub-control"><label for="threeDetail">Dettaglio 3D</label><output id="threeDetailValue">8</output></div><input id="threeDetail" type="range" min="4" max="14" value="8" step="1"></div>
         <div class="control-block preset-block"><div class="control-label"><label for="preset">Preset</label></div><select id="preset"><option value="">Scegli una composizione…</option></select></div>
         <div class="control-actions"><button class="action-btn secondary" id="randomJulia">Julia casuale</button><button class="action-btn secondary" id="highQualityBtn">Render HD</button></div>
         <div class="stats-card"><div><span>POSIZIONE</span><b id="positionStat">−0.500 / 0.000</b></div><div><span>FATTORE ZOOM</span><b id="zoomStat">1.00×</b></div><div><span>RENDER</span><b id="renderStat">Canvas CPU</b></div></div>
       </div>
-      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v2.0.0</span></div>
+      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v2.2.0</span></div>
     </aside>
   </div>
 </div>

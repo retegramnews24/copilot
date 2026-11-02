@@ -78,10 +78,46 @@ function drawVector(type,cfg,w,h){
  }
  return ctx.getImageData(0,0,w,h).data;
 }
+
+// Deep Mandelbrot/Julia renderer. Coordinates and the iterative orbit use signed
+// fixed-point BigInt arithmetic: precision is configurable from 128 to 1024 bits.
+function fixedRatioToNumber(v,bits){if(v===0n)return 0;const shift=BigInt(Math.max(0,bits-42));return Number(v>>shift)/Math.pow(2,bits-Number(shift));}
+function fixedFromNumber(v,Q){return BigInt(Math.round(v*1e12))*Q/1000000000000n;}
+async function renderDeep(cfg,w,h){
+ const bits=Math.max(128,Math.min(1024,Number(cfg.deepBits)||512)),shift=BigInt(bits),Q=1n<<shift;
+ const cx0=BigInt(cfg.deepCx),cy0=BigInt(cfg.deepCy),span=BigInt(cfg.deepScale),max=Math.max(40,Math.min(1200,Number(cfg.iterations)||240));
+ const type=cfg.type;if(type!=='mandelbrot'&&type!=='julia')throw new Error('Deep zoom disponibile per Mandelbrot e Julia');
+ const jr=Number(cfg.juliaReal),ji=Number(cfg.juliaImag),jcR=fixedFromNumber(Number.isFinite(jr)?jr:-.8,Q),jcI=fixedFromNumber(Number.isFinite(ji)?ji:.156,Q);
+ const data=new Uint8ClampedArray(w*h*4),pal=palettes[cfg.palette]||palettes.cosmic,min=BigInt(Math.min(w,h)),den=2n*min,escape=256n*Q;
+ const pxSpan=span;
+ for(let y0=0;y0<h;y0+=3){if(cfg.job!==newestJob)return data;const ymax=Math.min(h,y0+3);
+  for(let py=y0;py<ymax;py++){
+   const oy=BigInt(2*py+1-h)*pxSpan/den,baseY=cy0+oy;
+   for(let px=0;px<w;px++){
+    const ox=BigInt(2*px+1-w)*pxSpan/den,cx=cx0+ox,cy=baseY;
+    let zx=type==='julia'?cx:0n,zy=type==='julia'?cy:0n,cr=type==='julia'?jcR:cx,ci=type==='julia'?jcI:cy;
+    let it=0,mag=0n;
+    while(it<max){const xx=(zx*zx)>>shift,yy=(zy*zy)>>shift;mag=xx+yy;if(mag>escape)break;const xy=(zx*zy)>>shift;const nx=xx-yy+cr,ny=(xy<<1n)+ci;zx=nx;zy=ny;it++;}
+    const k=(py*w+px)*4;
+    if(it>=max){data[k]=3;data[k+1]=5;data[k+2]=13;data[k+3]=255;continue;}
+    const radius=Math.sqrt(Math.max(1.000001,fixedRatioToNumber(mag,bits)));
+    const smoothIt=it+1-Math.log2(Math.max(1e-9,Math.log2(radius)));
+    const t=Math.max(0,Math.min(1,(smoothIt%max)/max)),col=pal(t);
+    data[k]=col[0];data[k+1]=col[1];data[k+2]=col[2];data[k+3]=255;
+   }
+  }
+  self.postMessage({job:cfg.job,progress:Math.round(ymax/h*100)});
+  await new Promise(resolve=>setTimeout(resolve,0));
+ }
+ return data;
+}
+
 async function render(cfg){
  const job=cfg.job,w=cfg.width,h=cfg.height,type=cfg.type;
  let data;
- if(['fern','sierpinski'].includes(type)){
+ if(cfg.deep){
+  data=await renderDeep(cfg,w,h);
+ }else if(['fern','sierpinski'].includes(type)){
   data=pointRender(cfg,w,h);
  }else if(['koch','levy','dragon','hilbert','tree','pythagoras','apollonian'].includes(type)){
   data=drawVector(type,cfg,w,h);
