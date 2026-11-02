@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReteGram Mini App v0.03</title>
+    <style>
+      body {
+        margin: 0; height: 100vh; display: grid; place-items: center; background: #030d17; color: #edf8ff; font-family: Arial,sans-serif;
+      }
+      .phone {
+        width: 430px; height: 900px; border-radius: 28px; background: linear-gradient(180deg,#020b14,#091c2b 60%,#081823); position: relative; padding: 16px; box-sizing: border-box;
+      }
+      .topline { display:flex; justify-content:space-between; align-items:center; }
+      .pill { background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.15); border-radius: 999px; padding:9px 18px; }
+      .brand { font-size: 62px; font-weight: 800; line-height: 0.92; margin: 18px 0 14px; }
+      .brand span { background: linear-gradient(90deg,#edf7ff,#9ecbff,#d2b3ff,#f0b5e5); -webkit-background-clip:text; color:transparent; }
+      .subtitle { color:#b9ccdf; max-width: 29ch; line-height:1.45; font-size:18px; }
+      .visual { margin-top: 18px; height: 240px; border-radius: 22px; background: radial-gradient(circle at 25% 15%, rgba(115, 170, 255, 0.18), transparent 25%), linear-gradient(180deg,#0e2031,#081926); border:1px solid rgba(255,255,255,0.06); }
+      .info { margin-top: 18px; display:grid; grid-template-columns: repeat(3,1fr); gap:10px; }
+      .card { background: rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.09); border-radius: 16px; padding: 14px 8px; text-align:center; }
+      .big { font-size: 28px; font-weight:700; }
+      .small { font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#a4bdd7; }
+      .version { position:absolute; right:16px; bottom:12px; font-size:11px; color:rgba(255,255,255,0.85); }
+    </style>
+  </head>
+  <body>
+    <div class="phone">
+      <div class="topline"><div class="pill">Chiudi</div><div class="pill">⋮</div></div>
+      <div class="brand"><span>ReteGram</span><br>Mini App</div>
+      <div class="subtitle">Un punto di accesso smart per notizie, messaggi e attività del bot in un’esperienza fluida e leggera.</div>
+      <div class="visual"></div>
+      <div class="info">
+        <div class="card"><div class="big">28k</div><div class="small">Users</div></div>
+        <div class="card"><div class="big">96%</div><div class="small">Uptime</div></div>
+        <div class="card"><div class="big">3s</div><div class="small">Launch</div></div>
+      </div>
+      <div class="version">v0.03</div>
+    </div>
+  </body>
+</html>

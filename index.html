@@ -3,14 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>ReteGram Mini App</title>
+    <title>ReteGram Mini App v0.06</title>
     <style>
       :root {
         --bg-deep: #050d17;
         --bg-mid: #071824;
-        --bg-panel: rgba(13, 22, 34, 0.9);
-        --bg-card: rgba(27, 41, 57, 0.92);
-        --bg-card-2: rgba(18, 31, 45, 0.96);
+        --panel: rgba(12, 22, 34, 0.9);
+        --panel-2: rgba(18, 31, 45, 0.96);
         --line: rgba(175, 205, 235, 0.14);
         --text: #edf8ff;
         --muted: #9db7cf;
@@ -19,11 +18,9 @@
         --blue: #7aa7ff;
         --violet: #b08dff;
         --pink: #f7a8de;
-        --glass: rgba(255,255,255,0.04);
       }
 
       * { box-sizing: border-box; }
-
       html, body {
         margin: 0;
         width: 100%;
@@ -33,7 +30,6 @@
         font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         overflow: hidden;
       }
-
       body {
         display: flex;
         align-items: center;
@@ -52,7 +48,6 @@
           linear-gradient(180deg, #020b13 0%, #0a1521 50%, #091a2b 100%);
         overflow: hidden;
       }
-
       .phone::before {
         content: "";
         position: absolute;
@@ -78,7 +73,6 @@
         flex-shrink: 0;
         min-height: 36px;
       }
-
       .left-controls, .right-controls {
         display: flex;
         align-items: center;
@@ -101,20 +95,14 @@
         letter-spacing: -0.02em;
         line-height: 1;
       }
-
-      .close-pill {
-        min-width: 116px;
-      }
-
+      .close-pill { min-width: 116px; }
       .close-x {
         position: relative;
         width: 16px;
         height: 16px;
         display: inline-block;
       }
-
-      .close-x::before,
-      .close-x::after {
+      .close-x::before, .close-x::after {
         content: "";
         position: absolute;
         left: 7px;
@@ -124,7 +112,6 @@
         border-radius: 2px;
         background: #eef8ff;
       }
-
       .close-x::before { transform: rotate(45deg); }
       .close-x::after { transform: rotate(-45deg); }
 
@@ -137,7 +124,6 @@
         background: rgba(255,255,255,0.04);
         border: 1px solid rgba(255,255,255,0.12);
       }
-
       .caret {
         width: 10px;
         height: 10px;
@@ -146,16 +132,12 @@
         transform: rotate(-45deg) translateY(-2px);
         margin-left: 2px;
       }
-
       .menu-dots {
         position: relative;
         width: 20px;
         height: 16px;
       }
-
-      .menu-dots::before,
-      .menu-dots::after,
-      .menu-dots span {
+      .menu-dots::before, .menu-dots::after, .menu-dots span {
         content: "";
         position: absolute;
         left: 50%;
@@ -165,7 +147,6 @@
         background: rgba(255,255,255,0.9);
         transform: translateX(-50%);
       }
-
       .menu-dots::before { top: 1px; }
       .menu-dots::after { bottom: 1px; }
       .menu-dots span { top: 50%; transform: translate(-50%, -50%); }
@@ -178,11 +159,7 @@
         min-height: 0;
         padding-top: 8px;
       }
-
-      .title-wrap {
-        padding: 0 2px;
-      }
-
+      .title-wrap { padding: 0 2px; }
       .brand {
         margin: 0;
         line-height: 0.92;
@@ -190,14 +167,12 @@
         font-weight: 800;
         font-size: clamp(2.4rem, 7vw, 4.1rem);
       }
-
       .brand .gradient {
         background: linear-gradient(90deg, #f3fbff 0%, #cceeff 14%, #9ec7ff 34%, #d2b6ff 63%, #f7bfdc 100%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
       }
-
       .subtitle {
         margin: 12px 0 0;
         max-width: 31ch;
@@ -212,11 +187,9 @@
         height: 260px;
         border-radius: 28px;
         overflow: hidden;
-        background:
-          linear-gradient(180deg, rgba(15, 32, 42, 0.72), rgba(12, 22, 32, 0.9));
+        background: linear-gradient(180deg, rgba(15, 32, 42, 0.72), rgba(12, 22, 32, 0.9));
         border: 1px solid rgba(255,255,255,0.05);
       }
-
       .fractal {
         position: absolute;
         inset: 0;
@@ -230,7 +203,6 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
       }
-
       .stat {
         border-radius: 16px;
         background: rgba(20, 31, 43, 0.7);
@@ -238,14 +210,12 @@
         padding: 14px 8px 12px;
         text-align: center;
       }
-
       .stat strong {
         display: block;
         font-size: clamp(1.1rem, 3vw, 1.8rem);
         font-weight: 800;
         letter-spacing: -0.05em;
       }
-
       .stat span {
         display: block;
         margin-top: 4px;
@@ -261,7 +231,6 @@
         background: rgba(17, 28, 40, 0.8);
         border: 1px solid var(--line);
       }
-
       .status-head {
         display: flex;
         align-items: center;
@@ -269,7 +238,6 @@
         gap: 8px;
         margin-bottom: 12px;
       }
-
       .status-label {
         color: var(--muted);
         font-size: 0.72rem;
@@ -277,7 +245,6 @@
         text-transform: uppercase;
         font-weight: 700;
       }
-
       .ready {
         display: inline-flex;
         align-items: center;
@@ -292,7 +259,6 @@
         letter-spacing: 0.16em;
         font-weight: 700;
       }
-
       .ready::before {
         content: "";
         width: 8px;
@@ -307,7 +273,6 @@
         grid-template-columns: 1fr 1fr;
         gap: 12px;
       }
-
       .cta {
         appearance: none;
         border: none;
@@ -321,12 +286,10 @@
         align-items: center;
         justify-content: center;
       }
-
       .cta.primary {
         background: linear-gradient(135deg, #9adfe4, #7fc5ff);
         color: #041a23;
       }
-
       .cta.secondary {
         background: rgba(255,255,255,0.04);
         color: var(--text);
@@ -338,7 +301,6 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 10px;
       }
-
       .tab {
         border-radius: 16px;
         background: rgba(16, 29, 41, 0.72);
@@ -355,19 +317,32 @@
         font-size: 0.6rem;
         font-weight: 700;
       }
-
       .tab.active {
         background: linear-gradient(180deg, rgba(117, 171, 255, 0.14), rgba(176, 141, 255, 0.08));
         border-color: rgba(154, 199, 255, 0.12);
         color: var(--text);
       }
-
       .tab-sq {
         width: 18px;
         height: 18px;
         border-radius: 6px;
         background: linear-gradient(135deg, rgba(122,216,255,0.15), rgba(176,141,255,0.18));
         border: 1px solid rgba(255,255,255,0.08);
+      }
+
+      .version-badge {
+        position: absolute;
+        right: 12px;
+        bottom: 12px;
+        z-index: 2;
+        padding: 5px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.04);
+        color: rgba(237,248,255,0.9);
+        font-size: 0.62rem;
+        letter-spacing: 0.12em;
+        text-transform: lowercase;
       }
 
       @media (max-width: 360px) {
@@ -395,45 +370,7 @@
           </div>
 
           <div class="hero-visual" aria-label="Fractal artwork">
-            <svg class="fractal" viewBox="0 0 430 260" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
-              <defs>
-                <linearGradient id="g1" x1="0" x2="1" y1="0" y2="1">
-                  <stop offset="0%" stop-color="#dfeeff" stop-opacity="0.7"/>
-                  <stop offset="50%" stop-color="#c7d7ff" stop-opacity="0.5"/>
-                  <stop offset="100%" stop-color="#d9c0ff" stop-opacity="0.5"/>
-                </linearGradient>
-                <radialGradient id="glow1" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stop-color="#a9d7ff" stop-opacity="0.18"/>
-                  <stop offset="100%" stop-color="#a9d7ff" stop-opacity="0"/>
-                </radialGradient>
-              </defs>
-
-              <circle cx="118" cy="100" r="78" fill="url(#glow1)" />
-              <circle cx="330" cy="84" r="74" fill="url(#glow1)" />
-
-              <g fill="none" stroke="rgba(245,250,255,0.7)" stroke-width="1.6">
-                <path d="M-10 110 C 60 70, 130 68, 188 105 S 294 150, 445 100"/>
-                <path d="M-20 142 C 60 114, 120 115, 195 133 S 322 170, 445 125"/>
-                <path d="M-28 174 C 75 146, 156 140, 214 170 S 328 210, 460 170"/>
-                <path d="M-20 88 C 62 44, 127 38, 202 82 S 315 118, 450 72"/>
-                <path d="M-26 205 C 64 182, 150 182, 226 212 S 330 240, 460 198"/>
-              </g>
-
-              <g fill="rgba(242,248,255,0.8)">
-                <circle cx="58" cy="119" r="4"/>
-                <circle cx="136" cy="92" r="3.6"/>
-                <circle cx="206" cy="152" r="3.8"/>
-                <circle cx="272" cy="118" r="3.5"/>
-                <circle cx="345" cy="100" r="3.7"/>
-                <circle cx="384" cy="143" r="3.5"/>
-                <circle cx="144" cy="182" r="3.2"/>
-              </g>
-
-              <g fill="url(#g1)" opacity="0.8">
-                <circle cx="186" cy="120" r="28" fill-opacity="0.18"/>
-                <circle cx="318" cy="128" r="26" fill-opacity="0.18"/>
-              </g>
-            </svg>
+            <canvas id="fractalCanvas" class="fractal"></canvas>
           </div>
 
           <div class="stats">
@@ -456,7 +393,6 @@
               <div class="status-label">Bot status</div>
               <div class="ready">Ready</div>
             </div>
-
             <div class="cta-row">
               <button class="cta primary">Apri app</button>
               <button class="cta secondary">Notifiche</button>
@@ -470,6 +406,92 @@
           </div>
         </div>
       </div>
+      <div class="version-badge">v0.06</div>
     </div>
+
+    <script>
+      const canvas = document.getElementById('fractalCanvas');
+      const ctx = canvas.getContext('2d');
+
+      function palette(t) {
+        const a = [
+          [7, 19, 30],
+          [26, 83, 124],
+          [75, 126, 255],
+          [176, 141, 255],
+          [247, 168, 222],
+          [255, 255, 255]
+        ];
+        const stop = t * (a.length - 1);
+        const i = Math.floor(stop);
+        const f = stop - i;
+        const c1 = a[Math.min(i, a.length - 1)];
+        const c2 = a[Math.min(i + 1, a.length - 1)];
+        const r = Math.round(c1[0] + (c2[0] - c1[0]) * f);
+        const g = Math.round(c1[1] + (c2[1] - c1[1]) * f);
+        const b = Math.round(c1[2] + (c2[2] - c1[2]) * f);
+        return [r, g, b];
+      }
+
+      function renderFractal() {
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const w = Math.max(280, Math.floor(rect.width));
+        const h = Math.max(220, Math.floor(rect.height));
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = w * dpr;
+        canvas.height = h * dpr;
+        canvas.style.width = w + 'px';
+        canvas.style.height = h + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const image = ctx.createImageData(w, h);
+        const maxIter = 120;
+
+        const cxStart = -1.8;
+        const cxEnd = 0.75;
+        const cyStart = -1.1;
+        const cyEnd = 1.1;
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const nx = x / w;
+            const ny = y / h;
+
+            const cRe = cxStart + (cxEnd - cxStart) * nx;
+            const cIm = cyStart + (cyEnd - cyStart) * ny;
+
+            let zRe = 0;
+            let zIm = 0;
+            let iter = 0;
+            while (iter < maxIter && zRe * zRe + zIm * zIm < 4) {
+              const temp = zRe * zRe - zIm * zIm + cRe;
+              zIm = 2 * zRe * zIm + cIm;
+              zRe = temp;
+              iter++;
+            }
+
+            const t = iter / maxIter;
+            const [r, g, b] = palette(t);
+            const idx = (y * w + x) * 4;
+            image.data[idx] = r;
+            image.data[idx + 1] = g;
+            image.data[idx + 2] = b;
+            image.data[idx + 3] = 255;
+
+            if (iter === maxIter) {
+              image.data[idx] = 6;
+              image.data[idx + 1] = 14;
+              image.data[idx + 2] = 24;
+              image.data[idx + 3] = 255;
+            }
+          }
+        }
+
+        ctx.putImageData(image, 0, 0);
+      }
+
+      renderFractal();
+      window.addEventListener('resize', renderFractal);
+    </script>
   </body>
 </html>
