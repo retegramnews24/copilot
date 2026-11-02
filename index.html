@@ -3,21 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>ReteGram Mini App v0.06</title>
+    <title>ReteGram Mini App Retro Computer Graphics</title>
     <style>
       :root {
-        --bg-deep: #050d17;
-        --bg-mid: #071824;
-        --panel: rgba(12, 22, 34, 0.9);
-        --panel-2: rgba(18, 31, 45, 0.96);
-        --line: rgba(175, 205, 235, 0.14);
-        --text: #edf8ff;
-        --muted: #9db7cf;
-        --cyan: #7ad8ff;
-        --cyan-2: #74f0d5;
+        --bg0: #040b0f;
+        --bg1: #0b1c22;
+        --bg2: #102630;
+        --panel: rgba(13, 22, 28, 0.96);
+        --line: rgba(180, 220, 230, 0.12);
+        --text: #ebf8ff;
+        --muted: #afc7d7;
+        --green: #6ee7af;
+        --cyan: #73e9ff;
         --blue: #7aa7ff;
-        --violet: #b08dff;
-        --pink: #f7a8de;
+        --violet: #b38cff;
+        --pink: #f0a4d9;
       }
 
       * { box-sizing: border-box; }
@@ -27,41 +27,40 @@
         height: 100%;
         background: #000;
         color: var(--text);
-        font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        font-family: "Segoe UI", Arial, sans-serif;
         overflow: hidden;
       }
       body {
         display: flex;
-        align-items: center;
         justify-content: center;
+        align-items: center;
       }
 
       .phone {
-        position: relative;
         width: min(100vw, 430px);
         height: 100dvh;
         min-height: 100vh;
-        max-height: 100dvh;
         background:
-          radial-gradient(circle at 25% 18%, rgba(127, 191, 255, 0.14), transparent 22%),
-          radial-gradient(circle at 75% 18%, rgba(176, 141, 255, 0.12), transparent 20%),
-          linear-gradient(180deg, #020b13 0%, #0a1521 50%, #091a2b 100%);
+          radial-gradient(circle at 20% 12%, rgba(116,233,255,0.09), transparent 20%),
+          radial-gradient(circle at 80% 8%, rgba(179,140,255,0.10), transparent 20%),
+          linear-gradient(180deg, #020a12 0%, #081923 46%, #081b2a 100%);
+        position: relative;
         overflow: hidden;
       }
       .phone::before {
         content: "";
         position: absolute;
         inset: 0;
-        background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent 18%, transparent 82%, rgba(122,157,205,0.08));
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent 20%, transparent 80%, rgba(155, 177, 191, 0.06));
         pointer-events: none;
       }
 
       .screen {
         position: relative;
         z-index: 1;
+        height: 100%;
         display: flex;
         flex-direction: column;
-        height: 100%;
         padding: calc(12px + env(safe-area-inset-top)) 14px calc(12px + env(safe-area-inset-bottom));
       }
 
@@ -69,75 +68,66 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 10px;
-        flex-shrink: 0;
-        min-height: 36px;
+        min-height: 42px;
       }
-      .left-controls, .right-controls {
+      .left, .right {
         display: flex;
         align-items: center;
         gap: 10px;
       }
-
       .pill {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 10px;
-        height: 34px;
+        gap: 9px;
+        height: 32px;
         padding: 0 14px;
         border-radius: 999px;
         background: rgba(255,255,255,0.04);
-        border: 1px solid rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.15);
         color: var(--text);
         font-weight: 700;
-        font-size: 1.05rem;
-        letter-spacing: -0.02em;
-        line-height: 1;
+        font-size: 0.95rem;
       }
-      .close-pill { min-width: 116px; }
       .close-x {
         position: relative;
         width: 16px;
         height: 16px;
-        display: inline-block;
       }
       .close-x::before, .close-x::after {
         content: "";
         position: absolute;
         left: 7px;
-        top: 1px;
+        top: 0;
         width: 2px;
-        height: 14px;
-        border-radius: 2px;
-        background: #eef8ff;
+        height: 16px;
+        background: rgba(255,255,255,0.95);
       }
       .close-x::before { transform: rotate(45deg); }
       .close-x::after { transform: rotate(-45deg); }
 
       .icon-btn {
-        display: grid;
-        place-items: center;
         width: 34px;
         height: 34px;
         border-radius: 50%;
+        display: grid;
+        place-items: center;
         background: rgba(255,255,255,0.04);
         border: 1px solid rgba(255,255,255,0.12);
       }
-      .caret {
+      .arrow {
         width: 10px;
         height: 10px;
-        border-left: 2px solid rgba(255,255,255,0.95);
-        border-bottom: 2px solid rgba(255,255,255,0.95);
+        border-left: 2px solid rgba(255,255,255,0.92);
+        border-bottom: 2px solid rgba(255,255,255,0.92);
         transform: rotate(-45deg) translateY(-2px);
-        margin-left: 2px;
       }
-      .menu-dots {
+      .menu {
         position: relative;
-        width: 20px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
       }
-      .menu-dots::before, .menu-dots::after, .menu-dots span {
+      .menu::before, .menu::after, .menu span {
         content: "";
         position: absolute;
         left: 50%;
@@ -147,9 +137,9 @@
         background: rgba(255,255,255,0.9);
         transform: translateX(-50%);
       }
-      .menu-dots::before { top: 1px; }
-      .menu-dots::after { bottom: 1px; }
-      .menu-dots span { top: 50%; transform: translate(-50%, -50%); }
+      .menu::before { top: 0; }
+      .menu::after { bottom: 0; }
+      .menu span { top: 50%; transform: translate(-50%, -50%); }
 
       .content {
         display: flex;
@@ -157,42 +147,40 @@
         gap: 14px;
         flex: 1;
         min-height: 0;
-        padding-top: 8px;
+        padding-top: 10px;
       }
+
       .title-wrap { padding: 0 2px; }
-      .brand {
+      .title {
         margin: 0;
-        line-height: 0.92;
-        letter-spacing: -0.075em;
+        line-height: 0.9;
+        letter-spacing: -0.08em;
+        font-size: clamp(2.6rem, 7vw, 4.1rem);
         font-weight: 800;
-        font-size: clamp(2.4rem, 7vw, 4.1rem);
       }
-      .brand .gradient {
-        background: linear-gradient(90deg, #f3fbff 0%, #cceeff 14%, #9ec7ff 34%, #d2b6ff 63%, #f7bfdc 100%);
+      .title .gradient {
+        background: linear-gradient(90deg, #f1fbff, #e1f8ff 12%, #85d6ff 26%, #b29eff 56%, #f0b9e6 100%);
         -webkit-background-clip: text;
         background-clip: text;
         color: transparent;
       }
       .subtitle {
-        margin: 12px 0 0;
-        max-width: 31ch;
+        margin: 10px 0 0;
+        max-width: 30ch;
         color: var(--muted);
-        font-size: clamp(0.9rem, 2.2vw, 1.05rem);
-        line-height: 1.4;
-        letter-spacing: -0.02em;
+        font-size: clamp(0.88rem, 2.2vw, 1.04rem);
+        line-height: 1.46;
       }
 
-      .hero-visual {
+      .art {
         position: relative;
-        height: 260px;
+        height: 248px;
         border-radius: 28px;
         overflow: hidden;
-        background: linear-gradient(180deg, rgba(15, 32, 42, 0.72), rgba(12, 22, 32, 0.9));
+        background: linear-gradient(180deg, rgba(15,30,40,0.92), rgba(7,16,22,0.96));
         border: 1px solid rgba(255,255,255,0.05);
       }
-      .fractal {
-        position: absolute;
-        inset: 0;
+      canvas {
         width: 100%;
         height: 100%;
         display: block;
@@ -200,12 +188,12 @@
 
       .stats {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0,1fr));
         gap: 10px;
       }
       .stat {
         border-radius: 16px;
-        background: rgba(20, 31, 43, 0.7);
+        background: rgba(18,30,42,0.8);
         border: 1px solid var(--line);
         padding: 14px 8px 12px;
         text-align: center;
@@ -213,34 +201,33 @@
       .stat strong {
         display: block;
         font-size: clamp(1.1rem, 3vw, 1.8rem);
+        letter-spacing: -0.04em;
         font-weight: 800;
-        letter-spacing: -0.05em;
       }
       .stat span {
         display: block;
         margin-top: 4px;
         color: var(--muted);
-        font-size: 0.64rem;
+        font-size: 0.62rem;
         letter-spacing: 0.14em;
         text-transform: uppercase;
       }
 
-      .status-panel {
+      .panel {
         padding: 12px 12px 10px;
         border-radius: 18px;
-        background: rgba(17, 28, 40, 0.8);
+        background: rgba(16, 27, 38, 0.84);
         border: 1px solid var(--line);
       }
-      .status-head {
+      .panel-head {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        gap: 8px;
         margin-bottom: 12px;
       }
-      .status-label {
+      .panel-label {
         color: var(--muted);
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         letter-spacing: 0.18em;
         text-transform: uppercase;
         font-weight: 700;
@@ -251,12 +238,12 @@
         gap: 7px;
         padding: 6px 10px 6px 8px;
         border-radius: 999px;
-        background: rgba(116, 240, 213, 0.08);
-        border: 1px solid rgba(116, 240, 213, 0.18);
-        color: #8ceec0;
-        font-size: 0.65rem;
+        background: rgba(110, 231, 175, 0.12);
+        border: 1px solid rgba(110, 231, 175, 0.20);
+        color: #8deac1;
+        font-size: 0.62rem;
+        letter-spacing: 0.14em;
         text-transform: uppercase;
-        letter-spacing: 0.16em;
         font-weight: 700;
       }
       .ready::before {
@@ -264,8 +251,8 @@
         width: 8px;
         height: 8px;
         border-radius: 50%;
-        background: #75ecb0;
-        box-shadow: 0 0 10px rgba(117,236,176,0.8);
+        background: #71e4ae;
+        box-shadow: 0 0 10px rgba(113, 228, 174, 0.8);
       }
 
       .cta-row {
@@ -277,35 +264,32 @@
         appearance: none;
         border: none;
         border-radius: 16px;
-        min-height: 66px;
+        min-height: 62px;
         font: inherit;
         font-weight: 700;
-        font-size: clamp(1.06rem, 2.7vw, 1.6rem);
+        font-size: clamp(1rem, 2.6vw, 1.48rem);
         letter-spacing: -0.04em;
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
       .cta.primary {
-        background: linear-gradient(135deg, #9adfe4, #7fc5ff);
-        color: #041a23;
+        background: linear-gradient(135deg, #9edfe7, #7ec9ff);
+        color: #071b22;
       }
       .cta.secondary {
         background: rgba(255,255,255,0.04);
-        color: var(--text);
         border: 1px solid rgba(255,255,255,0.08);
+        color: var(--text);
       }
 
       .nav {
         display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-columns: repeat(3, minmax(0,1fr));
         gap: 10px;
       }
       .tab {
+        min-height: 72px;
         border-radius: 16px;
-        background: rgba(16, 29, 41, 0.72);
+        background: rgba(17,28,39,0.72);
         border: 1px solid rgba(255,255,255,0.06);
-        min-height: 74px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -318,35 +302,30 @@
         font-weight: 700;
       }
       .tab.active {
-        background: linear-gradient(180deg, rgba(117, 171, 255, 0.14), rgba(176, 141, 255, 0.08));
-        border-color: rgba(154, 199, 255, 0.12);
+        background: linear-gradient(180deg, rgba(111,168,255,0.12), rgba(179,140,255,0.08));
+        border-color: rgba(153,194,255,0.12);
         color: var(--text);
       }
-      .tab-sq {
+      .tab-box {
         width: 18px;
         height: 18px;
         border-radius: 6px;
-        background: linear-gradient(135deg, rgba(122,216,255,0.15), rgba(176,141,255,0.18));
-        border: 1px solid rgba(255,255,255,0.08);
+        background: linear-gradient(135deg, rgba(116,233,255,0.13), rgba(179,140,255,0.16));
+        border: 1px solid rgba(255,255,255,0.06);
       }
 
-      .version-badge {
+      .version {
         position: absolute;
         right: 12px;
-        bottom: 12px;
+        bottom: 10px;
         z-index: 2;
-        padding: 5px 8px;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.04);
-        color: rgba(237,248,255,0.9);
         font-size: 0.62rem;
         letter-spacing: 0.12em;
-        text-transform: lowercase;
-      }
-
-      @media (max-width: 360px) {
-        .pill { min-width: 100px; }
+        color: rgba(237,248,255,0.82);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 999px;
+        background: rgba(255,255,255,0.04);
+        padding: 5px 8px;
       }
     </style>
   </head>
@@ -354,44 +333,35 @@
     <div class="phone">
       <div class="screen">
         <div class="topbar">
-          <div class="left-controls">
-            <div class="pill close-pill"><span class="close-x"></span>Chiudi</div>
+          <div class="left">
+            <div class="pill"><span class="close-x"></span>Chiudi</div>
           </div>
-          <div class="right-controls">
-            <div class="icon-btn"><span class="caret"></span></div>
-            <div class="icon-btn"><div class="menu-dots"><span></span></div></div>
+          <div class="right">
+            <div class="icon-btn"><div class="arrow"></div></div>
+            <div class="icon-btn"><div class="menu"><span></span></div></div>
           </div>
         </div>
 
         <div class="content">
           <div class="title-wrap">
-            <h1 class="brand"><span class="gradient">ReteGram</span><br />Mini App</h1>
+            <h1 class="title"><span class="gradient">ReteGram</span><br />Mini App</h1>
             <p class="subtitle">Un punto di accesso smart per notizie, messaggi e attività del bot in un’esperienza fluida e leggera.</p>
           </div>
 
-          <div class="hero-visual" aria-label="Fractal artwork">
-            <canvas id="fractalCanvas" class="fractal"></canvas>
+          <div class="art">
+            <canvas id="fractalCanvas"></canvas>
           </div>
 
           <div class="stats">
-            <div class="stat">
-              <strong>28k</strong>
-              <span>Users</span>
-            </div>
-            <div class="stat">
-              <strong>96%</strong>
-              <span>Uptime</span>
-            </div>
-            <div class="stat">
-              <strong>3s</strong>
-              <span>Launch</span>
-            </div>
+            <div class="stat"><strong>28k</strong><span>Users</span></div>
+            <div class="stat"><strong>96%</strong><span>Uptime</span></div>
+            <div class="stat"><strong>3s</strong><span>Launch</span></div>
           </div>
 
-          <div class="status-panel">
-            <div class="status-head">
-              <div class="status-label">Bot status</div>
-              <div class="ready">Ready</div>
+          <div class="panel">
+            <div class="panel-head">
+              <span class="panel-label">Bot status</span>
+              <span class="ready">Ready</span>
             </div>
             <div class="cta-row">
               <button class="cta primary">Apri app</button>
@@ -400,42 +370,22 @@
           </div>
 
           <div class="nav">
-            <div class="tab active"><span class="tab-sq"></span>Home</div>
-            <div class="tab"><span class="tab-sq"></span>Feed</div>
-            <div class="tab"><span class="tab-sq"></span>Profile</div>
+            <div class="tab active"><span class="tab-box"></span>Home</div>
+            <div class="tab"><span class="tab-box"></span>Feed</div>
+            <div class="tab"><span class="tab-box"></span>Profile</div>
           </div>
         </div>
       </div>
-      <div class="version-badge">v0.06</div>
+      <div class="version">v0.08</div>
     </div>
 
     <script>
       const canvas = document.getElementById('fractalCanvas');
       const ctx = canvas.getContext('2d');
 
-      function palette(t) {
-        const a = [
-          [7, 19, 30],
-          [26, 83, 124],
-          [75, 126, 255],
-          [176, 141, 255],
-          [247, 168, 222],
-          [255, 255, 255]
-        ];
-        const stop = t * (a.length - 1);
-        const i = Math.floor(stop);
-        const f = stop - i;
-        const c1 = a[Math.min(i, a.length - 1)];
-        const c2 = a[Math.min(i + 1, a.length - 1)];
-        const r = Math.round(c1[0] + (c2[0] - c1[0]) * f);
-        const g = Math.round(c1[1] + (c2[1] - c1[1]) * f);
-        const b = Math.round(c1[2] + (c2[2] - c1[2]) * f);
-        return [r, g, b];
-      }
-
-      function renderFractal() {
+      function drawRetroComputerFractal() {
         const rect = canvas.parentElement.getBoundingClientRect();
-        const w = Math.max(280, Math.floor(rect.width));
+        const w = Math.max(300, Math.floor(rect.width));
         const h = Math.max(220, Math.floor(rect.height));
         const dpr = window.devicePixelRatio || 1;
         canvas.width = w * dpr;
@@ -444,54 +394,58 @@
         canvas.style.height = h + 'px';
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-        const image = ctx.createImageData(w, h);
-        const maxIter = 120;
+        const bg = ctx.createLinearGradient(0, 0, w, h);
+        bg.addColorStop(0, '#071b27');
+        bg.addColorStop(0.5, '#081e2d');
+        bg.addColorStop(1, '#07141d');
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, w, h);
 
-        const cxStart = -1.8;
-        const cxEnd = 0.75;
-        const cyStart = -1.1;
-        const cyEnd = 1.1;
+        ctx.lineWidth = 1.3;
+        ctx.strokeStyle = 'rgba(224, 244, 255, 0.7)';
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
 
-        for (let y = 0; y < h; y++) {
-          for (let x = 0; x < w; x++) {
-            const nx = x / w;
-            const ny = y / h;
-
-            const cRe = cxStart + (cxEnd - cxStart) * nx;
-            const cIm = cyStart + (cyEnd - cyStart) * ny;
-
-            let zRe = 0;
-            let zIm = 0;
-            let iter = 0;
-            while (iter < maxIter && zRe * zRe + zIm * zIm < 4) {
-              const temp = zRe * zRe - zIm * zIm + cRe;
-              zIm = 2 * zRe * zIm + cIm;
-              zRe = temp;
-              iter++;
-            }
-
-            const t = iter / maxIter;
-            const [r, g, b] = palette(t);
-            const idx = (y * w + x) * 4;
-            image.data[idx] = r;
-            image.data[idx + 1] = g;
-            image.data[idx + 2] = b;
-            image.data[idx + 3] = 255;
-
-            if (iter === maxIter) {
-              image.data[idx] = 6;
-              image.data[idx + 1] = 14;
-              image.data[idx + 2] = 24;
-              image.data[idx + 3] = 255;
-            }
+        const phases = [0, 0.9, 1.7, 2.5];
+        phases.forEach((phase, index) => {
+          ctx.beginPath();
+          for (let x = -10; x <= w + 10; x += 4) {
+            const y = h * 0.22 + index * 26 + Math.sin(x * 0.05 + phase) * (28 + index * 8);
+            if (x === -10) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
           }
-        }
+          ctx.stroke();
+        });
 
-        ctx.putImageData(image, 0, 0);
+        const glows = [
+          { x: w * 0.23, y: h * 0.42, r: 66 },
+          { x: w * 0.72, y: h * 0.38, r: 70 },
+          { x: w * 0.5, y: h * 0.28, r: 40 }
+        ];
+
+        glows.forEach(g => {
+          const grad = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, g.r);
+          grad.addColorStop(0, 'rgba(135, 216, 255, 0.24)');
+          grad.addColorStop(0.4, 'rgba(111, 146, 255, 0.12)');
+          grad.addColorStop(1, 'rgba(111, 146, 255, 0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(g.x, g.y, g.r, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        const nodes = [
+          [w * 0.12, h * 0.44], [w * 0.28, h * 0.30], [w * 0.48, h * 0.39],
+          [w * 0.66, h * 0.32], [w * 0.82, h * 0.45], [w * 0.90, h * 0.58]
+        ];
+        nodes.forEach(([x, y]) => {
+          ctx.beginPath();
+          ctx.arc(x, y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
       }
 
-      renderFractal();
-      window.addEventListener('resize', renderFractal);
+      drawRetroComputerFractal();
+      window.addEventListener('resize', drawRetroComputerFractal);
     </script>
   </body>
 </html>
