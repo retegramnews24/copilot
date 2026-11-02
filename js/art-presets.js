@@ -32,4 +32,40 @@ window.FRACTAL_ART_PRESETS = [
  {id:'menger-cathedral',title:'Menger Cathedral',subtitle:'Architettura impossibile',fractal:'menger',mood:'three',scene:'menger',palette:'ocean',cx:0,cy:0,scale:1,iterations:9,threePower:8,threeDetail:10,rotX:-.35,rotY:.55},
  {id:'mandelbox-prism',title:'Prism Box',subtitle:'Un minerale di luce',fractal:'mandelbox',mood:'three',scene:'prism3d',palette:'neon',cx:0,cy:0,scale:1,iterations:9,threePower:8,threeDetail:11,rotX:-.2,rotY:.8},
  {id:'quaternion-pearl',title:'Quaternion Pearl',subtitle:'Una perla nello spazio',fractal:'quaternion',mood:'three',scene:'pearl3d',palette:'gold',cx:0,cy:0,scale:1,iterations:9,threePower:8,threeDetail:10,rotX:-.4,rotY:.35}
+,
+ {id:'gosper-galaxy',title:'Gosper Galaxy',subtitle:'Una costellazione esagonale',fractal:'gosper',mood:'geometry',scene:'prism',palette:'aurora',cx:0,cy:0,scale:2.7,iterations:4},
+ {id:'minkowski-lace',title:'Minkowski Lace',subtitle:'Merletto di ghiaccio',fractal:'minkowski',mood:'geometry',scene:'frost',palette:'ocean',cx:0,cy:0,scale:2.7,iterations:3},
+ {id:'peano-cathedral',title:'Peano Cathedral',subtitle:'Architetture che riempiono lo spazio',fractal:'peano',mood:'geometry',scene:'ice',palette:'neon',cx:0,cy:0,scale:2.5,iterations:4},
+ {id:'arrowhead',title:'Arrowhead Bloom',subtitle:'Triangoli in movimento',fractal:'sierpinski-arrowhead',mood:'geometry',scene:'triangle',palette:'candy',cx:0,cy:0,scale:2.7,iterations:7},
+ {id:'cesaro-snow',title:'Cesàro Snow',subtitle:'Un cristallo a punte morbide',fractal:'cesaro',mood:'geometry',scene:'snow',palette:'ocean',cx:0,cy:0,scale:2.6,iterations:5},
+ {id:'h-fractal',title:'Horizon H',subtitle:'Una finestra dopo l’altra',fractal:'hfractal',mood:'geometry',scene:'lace',palette:'gold',cx:0,cy:0,scale:2.7,iterations:8},
+ {id:'tsquare-glass',title:'T-Square Glass',subtitle:'Vetri geometrici',fractal:'tsquare',mood:'geometry',scene:'carpet',palette:'neon',cx:0,cy:0,scale:2.7,iterations:7},
+ {id:'pentaflake',title:'Pentaflake Halo',subtitle:'Cinque petali all’infinito',fractal:'pentaflake',mood:'floral',scene:'rose',palette:'candy',cx:0,cy:0,scale:2.7,iterations:4},
+ {id:'hexaflake',title:'Hexaflake Prism',subtitle:'Un cristallo a sei lati',fractal:'hexaflake',mood:'geometry',scene:'prism',palette:'aurora',cx:0,cy:0,scale:2.8,iterations:4},
+ {id:'cantor-dust',title:'Cantor Dust',subtitle:'Polvere di stelle',fractal:'cantor-dust',mood:'geometry',scene:'pearl',palette:'gold',cx:0,cy:0,scale:2.5,iterations:8},
+ {id:'botanical-code',title:'Botanical Code',subtitle:'La grammatica delle foglie',fractal:'plant',mood:'nature',scene:'fern',palette:'aurora',cx:0,cy:0,scale:2.8,iterations:6},
+ {id:'lorenz-butterfly',title:'Lorenz Butterfly',subtitle:'Il battito del caos',fractal:'lorenz',mood:'chaos',scene:'prism',palette:'neon',cx:0,cy:1,scale:3.2,iterations:1000},
+ {id:'rossler-ribbon',title:'Rössler Ribbon',subtitle:'Un nastro nello spazio',fractal:'rossler',mood:'chaos',scene:'mirage',palette:'ocean',cx:0,cy:.2,scale:3.2,iterations:1100},
+ {id:'thomas-mandala',title:'Thomas Mandala',subtitle:'Simmetria nel movimento',fractal:'thomas',mood:'chaos',scene:'garden',palette:'candy',cx:0,cy:0,scale:2.8,iterations:1100},
+ {id:'aizawa-nebula',title:'Aizawa Nebula',subtitle:'Vortice di luce',fractal:'aizawa',mood:'chaos',scene:'nebula',palette:'cosmic',cx:0,cy:0,scale:2.7,iterations:1200},
+ {id:'henon-vortex',title:'Hénon Vortex',subtitle:'Il battito di una mappa',fractal:'henon',mood:'chaos',scene:'ember',palette:'fire',cx:0,cy:0,scale:3.2,iterations:1400},
+ {id:'ikeda-orbit',title:'Ikeda Orbit',subtitle:'Una spirale ottica',fractal:'ikeda',mood:'chaos',scene:'opal',palette:'aurora',cx:0,cy:0,scale:3.2,iterations:1400},
+ {id:'clifford-garden',title:'Clifford Garden',subtitle:'Filamenti botanici',fractal:'clifford',mood:'chaos',scene:'romanesco',palette:'aurora',cx:0,cy:0,scale:3.2,iterations:1000},
+ {id:'dejong-silk',title:'De Jong Silk',subtitle:'Seta di forme incerte',fractal:'dejong',mood:'chaos',scene:'velvet',palette:'candy',cx:0,cy:0,scale:3.2,iterations:1000},
+ {id:'lyapunov-bloom',title:'Lyapunov Bloom',subtitle:'Il confine tra ordine e caos',fractal:'lyapunov',mood:'chaos',scene:'crimson',palette:'fire',cx:3.5,cy:3.5,scale:3.5,iterations:90},
+ {id:'fractal-flame',title:'Fractal Flame',subtitle:'Scie di luce viva',fractal:'flame',mood:'chaos',scene:'solar',palette:'fire',cx:0,cy:0,scale:4,iterations:1500},
+ {id:'dla-crystal',title:'DLA Crystal',subtitle:'Cristallizzazione casuale',fractal:'dla',mood:'random',scene:'ice',palette:'ocean',cx:0,cy:0,scale:2.6,iterations:1600},
+ {id:'brownian-branches',title:'Brownian Branches',subtitle:'Una crescita imprevedibile',fractal:'brownian-tree',mood:'random',scene:'branch',palette:'gold',cx:0,cy:0,scale:2.6,iterations:1800},
+ {id:'fractal-terrain',title:'Fractal Terrain',subtitle:'Montagne nate dal rumore',fractal:'landscape',mood:'random',scene:'forest',palette:'aurora',cx:0,cy:0,scale:2.5,iterations:7},
+ {id:'rule30-rain',title:'Rule 30 Rain',subtitle:'Pioggia di pixel viventi',fractal:'rule30',mood:'random',scene:'mirage',palette:'neon',cx:0,cy:0,scale:2,iterations:7},
+ {id:'rule90-lace',title:'Rule 90 Lace',subtitle:'Un merletto di triangoli',fractal:'rule90',mood:'random',scene:'triangle',palette:'gold',cx:0,cy:0,scale:2,iterations:7}
+,{id:'hopalong-ribbons',title:'Hopalong Ribbons',subtitle:'Nessun percorso si ripete',fractal:'hopalong',mood:'chaos',scene:'hopalong',palette:'aurora',cx:0,cy:0,scale:4.2,iterations:1800}
+,{id:'bedhead-petals',title:'Bedhead Petals',subtitle:'Un giardino impossibile',fractal:'bedhead',mood:'chaos',scene:'bedhead',palette:'candy',cx:0,cy:0,scale:4.2,iterations:1700}
+,{id:'halvorsen-triad',title:'Halvorsen Triad',subtitle:'Tre ali nel caos',fractal:'halvorsen',mood:'chaos',scene:'halvorsen',palette:'neon',cx:0,cy:0,scale:3.2,iterations:1500}
+,{id:'chen-spiral',title:'Chen Spiral',subtitle:'Una spirale dinamica',fractal:'chen',mood:'chaos',scene:'chen',palette:'ocean',cx:0,cy:0,scale:3.2,iterations:1500}
+,{id:'dadras-knot',title:'Dadras Knot',subtitle:'Un nodo di luce',fractal:'dadras',mood:'chaos',scene:'dadras',palette:'fire',cx:0,cy:0,scale:3.2,iterations:1500}
+,{id:'reaction-garden',title:'Reaction Garden',subtitle:'Coralli di colore che si formano',fractal:'gray-scott',mood:'random',scene:'reaction',palette:'aurora',cx:0,cy:0,scale:2.5,iterations:8}
+,{id:'cellular-life',title:'Cellular Life',subtitle:'La vita nasce da regole semplici',fractal:'game-of-life',mood:'random',scene:'life',palette:'neon',cx:0,cy:0,scale:2.5,iterations:8}
+,{id:'rule110-machine',title:'Rule 110 Machine',subtitle:'La geometria del calcolo',fractal:'rule110',mood:'random',scene:'rule110',palette:'gold',cx:0,cy:0,scale:2,iterations:8}
+,{id:'logistic-symphony',title:'Logistic Symphony',subtitle:'Dal ritmo al caos',fractal:'logistic-bifurcation',mood:'chaos',scene:'bifurcation',palette:'fire',cx:3.25,cy:.5,scale:1.55,iterations:8}
 ];

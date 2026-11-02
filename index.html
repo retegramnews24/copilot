@@ -11,14 +11,14 @@
   <header class="topbar">
     <button class="icon-btn mobile-only" id="openLibrary" aria-label="Apri catalogo">☰</button>
     <div class="brand"><div class="brand-mark">ƒ</div><div><div class="brand-name">FRACTAL <span>ATELIER</span></div><div class="brand-sub">ART BEYOND INFINITY</div></div></div>
-    <div class="top-actions"><span class="engine-status" id="engineStatus"><i></i> READY</span><button class="icon-btn" id="helpBtn" title="Ispirazione">✧</button><button class="icon-btn" id="fullscreenBtn" title="Schermo intero">⛶</button></div>
+    <div class="top-actions"><span class="engine-status" id="engineStatus"><i></i> READY</span><button class="icon-btn" id="helpBtn" title="Ispirazione">✧</button><button class="icon-btn immersive-btn" id="fullscreenBtn" title="Tela immersiva senza interfaccia" aria-label="Tela immersiva senza interfaccia">⛶</button></div>
   </header>
   <div class="workspace" id="workspace">
     <aside class="library" id="library">
       <div class="library-head"><div class="eyebrow">FORME E MONDI</div><button class="icon-btn close-library mobile-only" id="closeLibrary">×</button></div>
       <div class="search-wrap"><span>⌕</span><input id="searchFormula" placeholder="Cerca una forma…" autocomplete="off"></div>
       <div class="category-tabs" id="categoryTabs">
-        <button class="cat-tab active" data-category="all">TUTTI</button><button class="cat-tab" data-category="complex">COSMO</button><button class="cat-tab" data-category="geometry">GEOMETRIE</button><button class="cat-tab" data-category="nature">NATURA</button><button class="cat-tab" data-category="three">3D</button>
+        <button class="cat-tab active" data-category="all">TUTTI</button><button class="cat-tab" data-category="complex">COSMO</button><button class="cat-tab" data-category="geometry">GEOMETRIE</button><button class="cat-tab" data-category="nature">NATURA</button><button class="cat-tab" data-category="attractors">CAOS</button><button class="cat-tab" data-category="random">CASUALI</button><button class="cat-tab" data-category="three">3D</button>
       </div>
       <div class="formula-list" id="formulaList"></div>
       <div class="library-foot"><span>FORME DA ESPLORARE</span><span id="formulaCount">—</span></div>
@@ -26,7 +26,7 @@
     <main class="stage-wrap">
       <div class="stage-toolbar">
         <div class="current-fractal"><div class="current-kicker" id="currentCategory">A WORLD OF COLOUR</div><div class="current-title" id="currentTitle">Violet Reverie</div></div>
-        <div class="toolbar-actions"><button class="tool-btn" id="randomBtn" title="Sorprendimi">✧ <span>SORPRENDIMI</span></button><button class="tool-btn deep-tool" id="deepZoomBtn" title="Zoom infinito" aria-pressed="false">∞</button><button class="tool-btn" id="resetBtn" title="Torna all’opera">↺</button><button class="tool-btn primary" id="exportBtn" title="Salva immagine">⇧ <span>SALVA</span></button></div>
+        <div class="toolbar-actions"><button class="tool-btn" id="randomBtn" title="Sorprendimi">✧ <span>SORPRENDIMI</span></button><button class="tool-btn deep-tool" id="deepZoomBtn" title="Zoom infinito" aria-pressed="false">∞</button><button class="tool-btn" id="resetBtn" title="Torna all’opera">↺</button></div>
       </div>
       <section class="visual-stage" id="visualStage">
         <canvas id="canvas2d"></canvas><canvas id="previewCanvas" class="preview-layer" hidden aria-hidden="true"></canvas><canvas id="canvas3d" class="hidden"></canvas>
@@ -39,8 +39,8 @@
       </section>
       <div class="bottom-toolbar"><div class="palette-strip" id="paletteStrip" aria-label="Palette colori">
 <button class="palette-chip active" data-palette="cosmic"><i class="swatch cosmic"></i><span>Cosmica</span></button><button class="palette-chip" data-palette="aurora"><i class="swatch aurora"></i><span>Aurora</span></button><button class="palette-chip" data-palette="fire"><i class="swatch fire"></i><span>Fiamma</span></button><button class="palette-chip" data-palette="ocean"><i class="swatch ocean"></i><span>Oceano</span></button><button class="palette-chip" data-palette="candy"><i class="swatch candy"></i><span>Pastello</span></button><button class="palette-chip" data-palette="gold"><i class="swatch gold"></i><span>Oro</span></button><button class="palette-chip" data-palette="neon"><i class="swatch neon"></i><span>Neon</span></button><button class="palette-chip" data-palette="mono"><i class="swatch mono"></i><span>Inchiostro</span></button>
-</div><div class="bottom-actions"><button class="mini-btn" id="favoriteBtn" title="Salva tra i preferiti">♡</button><button class="mini-btn" id="formulaInfoBtn" title="Dettagli opera">✧</button></div></div>
-<section class="art-gallery" id="artGallery"><div class="gallery-heading"><div><div class="eyebrow">LA COLLEZIONE</div><h2>Lasciati sorprendere</h2></div><span class="gallery-count" id="artCount">32 opere</span></div><div class="art-filters" id="artFilters"><button class="art-filter active" data-art-filter="all">Tutte</button><button class="art-filter" data-art-filter="cosmos">Cosmo</button><button class="art-filter" data-art-filter="floral">Fiori</button><button class="art-filter" data-art-filter="geometry">Geometrie</button><button class="art-filter" data-art-filter="nature">Natura</button><button class="art-filter" data-art-filter="three">3D</button></div><div class="art-cards" id="artCards"></div></section>
+</div><div class="bottom-actions"><button class="mini-btn" id="favoriteBtn" title="Aggiungi ai preferiti">♡</button><button class="mini-btn" id="formulaInfoBtn" title="Dettagli opera">✧</button></div></div>
+<section class="art-gallery" id="artGallery"><div class="gallery-heading"><div><div class="eyebrow">LA COLLEZIONE</div><h2>Lasciati sorprendere</h2></div><span class="gallery-count" id="artCount">67 opere</span></div><div class="art-filters" id="artFilters"><button class="art-filter active" data-art-filter="all">Tutte</button><button class="art-filter" data-art-filter="cosmos">Cosmo</button><button class="art-filter" data-art-filter="floral">Fiori</button><button class="art-filter" data-art-filter="geometry">Geometrie</button><button class="art-filter" data-art-filter="nature">Natura</button><button class="art-filter" data-art-filter="chaos">Caos</button><button class="art-filter" data-art-filter="random">Organiche</button><button class="art-filter" data-art-filter="three">3D</button></div><div class="art-cards" id="artCards"></div></section>
     </main>
     <aside class="control-panel" id="controlPanel">
       <div class="panel-heading"><div><div class="eyebrow">CONTROL ROOM</div><h2>Parametri</h2></div><button class="icon-btn" id="collapseControls" title="Riduci pannello">⌄</button></div>
@@ -56,7 +56,7 @@
         <div class="control-actions"><button class="action-btn secondary" id="randomJulia">Julia casuale</button><button class="action-btn secondary" id="highQualityBtn">Render HD</button></div>
         <div class="stats-card"><div><span>POSIZIONE</span><b id="positionStat">−0.500 / 0.000</b></div><div><span>FATTORE ZOOM</span><b id="zoomStat">1.00×</b></div><div><span>RENDER</span><b id="renderStat">Canvas CPU</b></div></div>
       </div>
-      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v3.0.0</span></div>
+      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v4.1.0</span></div>
     </aside>
   </div>
 </div>

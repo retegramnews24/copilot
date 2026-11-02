@@ -1,35 +1,35 @@
-# Fractal Art Explorer — Telegram Mini App
+# Fractal Art Explorer — Telegram Mini App v4.1
 
-Una galleria interattiva di arte frattale, ottimizzata per smartphone e Telegram Mini Apps. La schermata principale mette al centro l’immagine: scegli una composizione, esplora con zoom e trascinamento, cambia palette e salva le tue creazioni.
+Una galleria interattiva di forme frattali, geometrie autosimili, mappe caotiche, attrattori, sistemi stocastici e sculture 3D. Progetto statico pronto per GitHub Pages.
 
-## Cosa trovi
-
-- **32 preset artistici precaricati**, organizzati in Cosmo, Fiori, Geometrie, Natura e 3D.
-- Oltre 30 formule e famiglie frattali del motore precedente, con Mandelbrot, Julia, Burning Ship, Newton, geometrie autosimili, felce di Barnsley e renderer 3D.
-- Otto palette cromatiche selezionabili con un tocco.
-- Zoom, pan e gesto pinch; rotazione e avvicinamento per le opere 3D.
-- Deep zoom multiprecisione per Mandelbrot e Julia, ancora disponibile nel motore.
-- Esportazione PNG, preferiti, fullscreen Telegram e cache offline.
-- Catalogo completo delle formule disponibile dal pulsante menu; i controlli avanzati sono nascosti per lasciare spazio all’opera.
+## Novità v4.1
+- Modalità **Tela immersiva**: canvas a tutto schermo, senza titoli, HUD, comandi, filtri o testo sovrapposto; pensata per guardare l'opera e fare screenshot dal telefono.
+- Uscita dalla tela: pulsante Indietro di Telegram, tasto `Esc` su desktop, oppure pressione prolungata nell'angolo in alto a destra se il client non espone un pulsante Indietro.
+- Rimossa completamente l'esportazione/salvataggio PNG e il relativo pulsante.
+- Catalogo ampliato con 71 forme nel catalogo e 67 opere curate con formule live: Mandelbrot/Julia e varianti, Newton, Lyapunov, curve di Koch/Lévy/Dragon/Gosper/Minkowski/Peano/Cesàro, Sierpiński, Cantor, Vicsek, T-square, H/Pentaflake/Hexaflake, IFS botanici, attrattori di Lorenz/Rössler/Thomas/Aizawa/Halvorsen/Chen/Dadras, mappe di Hénon/Ikeda/Clifford/De Jong/Hopalong/Bedhead, Fractal Flame, DLA/Brownian Tree, paesaggi fBm, reazione-diffusione Gray–Scott, Game of Life, automi Rule 30/90/110 e diagramma di biforcazione logistica, oltre ai quattro renderer volumetrici.
+- Galleria mobile più compatta: più spazio al frattale, collezione orizzontale, filtri a scorrimento.
+- Nessun servizio remoto necessario per i calcoli; il renderer usa worker e WebGL2 dove previsto.
 
 ## Pubblicazione su GitHub Pages
+1. Estrai l'archivio e carica **tutti** i file nella root del repository.
+2. In GitHub → Settings → Pages scegli `Deploy from a branch`, `main` e `/ (root)`.
+3. Inserisci l'URL HTTPS come URL della Mini App in BotFather.
 
-1. Estrai lo ZIP.
-2. Carica **tutti** i file e le cartelle nella root del repository GitHub.
-3. In Settings → Pages seleziona il branch `main` e la cartella `/root`.
-4. Inserisci l’URL HTTPS pubblicato come URL della Mini App in BotFather.
+## Modalità screenshot
+Tocca il pulsante ⛶ nella barra superiore per entrare in modalità solo grafica. La tela riempie tutto lo schermo e non mostra alcuna scritta o icona sopra l'immagine. In Telegram l'uscita usa `BackButton` e `requestFullscreen()/exitFullscreen()` quando supportati; in browser usa Fullscreen API, `Esc` oppure la pressione prolungata nell'angolo in alto a destra.
 
-`index.html` si trova direttamente nella root. Non è richiesto un backend.
+## Famiglie e riferimenti di catalogazione
+La raccolta segue le principali famiglie comunemente usate per classificare i frattali: escape-time e dinamiche complesse; sistemi di funzioni iterate (IFS) e curve geometriche; L-system; attrattori caotici; processi stocastici e aggregazione; automi cellulari e frattali volumetrici. Non esiste un elenco finito di “tutte le forme possibili”: le famiglie generano varianti senza limite e questo catalogo è un atlante ampliabile, non un'enumerazione matematica esaustiva.
 
-## Uso
+Riferimenti introduttivi: 
+- Wolfram MathWorld, Fractal e voci correlate: https://mathworld.wolfram.com/Fractal.html
+- IEEE Technology Navigator, Fractals: https://technav.ieee.org/topic/fractals/
+- Fractal Institute, Fractal Types: https://fractal.institute/encyclopedia/mathematics/fractal-types/
+- Fractal Lab, catalogo di dinamiche complesse, IFS, L-systems e curve geometriche: https://fractal.suparnpatra.com/
+- Telegram Mini Apps API (fullscreen, safe areas, BackButton): https://core.telegram.org/bots/webapps
 
-- Tocca una scheda della collezione per caricare un’opera.
-- Trascina sull’immagine per esplorare; usa pinch o rotella per lo zoom.
-- Scegli una palette dalla barra in basso.
-- Usa ✧ per una sorpresa, ↺ per tornare alla composizione iniziale e ⇧ per esportare PNG.
-- Usa ☆ per i preferiti e ⛶ per lo schermo intero.
-- Il menu in alto apre il catalogo completo delle formule.
-
-## Nota
-
-Le miniature della collezione sono illustrazioni cromatiche di anteprima; l’opera principale viene generata dal motore frattale nel browser. Le prestazioni 3D dipendono dal supporto WebGL2 del dispositivo. Il salvataggio usa la condivisione o il download offerti dal browser/Android: una Mini App non può scrivere direttamente nella cartella privata di Telegram.
+## Note tecniche
+- La modalità a tutto schermo mostra il buffer renderizzato; non produce un file immagine e non avvia un salvataggio. Per conservare un'immagine, usa la funzione screenshot del sistema operativo del telefono.
+- I sistemi stocastici usano semi deterministici per mantenere stabile l'immagine tra i render della stessa composizione.
+- Le curve L-system e i frattali geometrici sono rendering 2D. Lorenz, Rössler, Thomas e altri attrattori sono proiettati su una tela 2D; i renderer Mandelbulb/Menger/Mandelbox/Julia quaternionica restano le forme volumetriche 3D.
+- Alcune famiglie sono interpretazioni artistiche o implementazioni didattiche/procedurali, non simulazioni scientifiche calibrate.

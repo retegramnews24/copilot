@@ -16,5 +16,4 @@ void main(){vec2 uv=(gl_FragCoord.xy-.5*u_resolution)/u_resolution.y;vec3 ro=vec
  resize(){if(!this.ok)return;let d=Math.min(devicePixelRatio||1,.72),w=Math.max(1,Math.floor(this.canvas.clientWidth*d)),h=Math.max(1,Math.floor(this.canvas.clientHeight*d));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;}this.draw();}
  set(cfg){this.kind=cfg.kind;this.power=cfg.power;this.detail=cfg.detail;this.palette=cfg.palette;this.draw();}
  draw(){if(!this.ok||!this.program)return;let gl=this.gl;gl.viewport(0,0,this.canvas.width,this.canvas.height);gl.useProgram(this.program);let u=this.u;gl.uniform2f(u.u_resolution,this.canvas.width,this.canvas.height);gl.uniform1f(u.u_rx,this.rotX);gl.uniform1f(u.u_ry,this.rotY);gl.uniform1f(u.u_zoom,this.zoom);gl.uniform1f(u.u_power,this.power);gl.uniform1f(u.u_palette,this.palette);gl.uniform1i(u.u_kind,this.kind);gl.uniform1i(u.u_detail,this.detail);gl.drawArrays(gl.TRIANGLES,0,6);}
- exportCanvas(){return this.canvas;}
 };
