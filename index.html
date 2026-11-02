@@ -7,6 +7,14 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
+<!-- Initial five-second animated fractal splash; the explorer below is unchanged. -->
+<div class="splash-screen" id="splashScreen" role="status" aria-label="Fractal Art Explorer — apertura">
+  <canvas id="splashCanvas" aria-hidden="true"></canvas>
+  <div class="splash-glow splash-glow-one"></div><div class="splash-glow splash-glow-two"></div>
+  <div class="splash-grain"></div>
+  <div class="splash-brand"><span class="splash-mark">ƒ</span><div><strong>FRACTAL <i>ATELIER</i></strong><small>ART BEYOND INFINITY</small></div></div>
+  <div class="splash-footer"><span>ENTERING THE INFINITE</span><div class="splash-progress"><i></i></div></div>
+</div>
 <div class="app-shell">
   <header class="topbar">
     <button class="icon-btn mobile-only" id="openLibrary" aria-label="Apri catalogo">☰</button>
@@ -61,5 +69,5 @@
   </div>
 </div>
 <div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal"><button class="modal-close" id="modalClose">×</button><div id="modalContent"></div></section></div>
-<script src="js/catalog.js"></script><script src="js/art-presets.js"></script><script src="js/renderer3d.js"></script><script src="js/app.js"></script>
+<script src="js/catalog.js"></script><script src="js/art-presets.js"></script><script src="js/renderer3d.js"></script><script src="js/app.js"></script><script src="js/splash.js"></script>
 </body></html>

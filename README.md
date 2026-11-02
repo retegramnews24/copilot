@@ -1,6 +1,9 @@
-# Fractal Art Explorer — Telegram Mini App v4.1
+# Fractal Art Explorer — Telegram Mini App v4.2
 
 Una galleria interattiva di forme frattali, geometrie autosimili, mappe caotiche, attrattori, sistemi stocastici e sculture 3D. Progetto statico pronto per GitHub Pages.
+
+## Novità v4.2
+- Splash screen iniziale di 5 secondi con frattale Julia animato, palette luminosa, marchio e indicatore di avanzamento. Al termine sfuma e apre l’esploratore. Tutta l’interfaccia e le funzioni della v4.1 restano invariate.
 
 ## Novità v4.1
 - Modalità **Tela immersiva**: canvas a tutto schermo, senza titoli, HUD, comandi, filtri o testo sovrapposto; pensata per guardare l'opera e fare screenshot dal telefono.

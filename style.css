@@ -71,3 +71,27 @@ body.art-only .modal-backdrop{display:none!important}
 
 /* New atlas forms */
 .art-hopalong{background:repeating-radial-gradient(ellipse at 50% 50%,#d4b5ff 0 1px,#50347f 2px 5px,#11162d 7px 11px)}.art-bedhead{background:radial-gradient(ellipse at 50% 50%,#ffd2ec,#9a58bb 27%,transparent 62%),linear-gradient(135deg,#25103e,#6a3178,#101629)}.art-halvorsen{background:conic-gradient(from 20deg,#54e7d7,#6155d9,#f2a4d6,#54e7d7)}.art-chen{background:repeating-radial-gradient(ellipse at 50% 50%,#7ee4f1 0 2px,#3458a2 4px 9px,#11152b 11px 15px)}.art-dadras{background:radial-gradient(ellipse at 50% 50%,#ffc27d,#e45e64 20%,transparent 62%),linear-gradient(135deg,#321331,#813957,#0e1328)}.art-reaction{background:radial-gradient(circle at 40% 45%,#b4f0cd 0 12%,transparent 22%),radial-gradient(circle at 64% 60%,#cf8de8 0 13%,transparent 24%),linear-gradient(135deg,#0c263c,#21645c,#14122b)}.art-life{background:repeating-conic-gradient(#77ebd6 0 25%,#142a4a 0 50%) 0/18px 18px}.art-rule110{background:repeating-linear-gradient(45deg,#f1d28e 0 2px,#42306c 3px 8px,#11152e 9px 13px)}.art-bifurcation{background:repeating-linear-gradient(90deg,#ffb36d 0 2px,#8d356d 3px 5px,#211432 6px 10px)}
+
+
+/* Five-second animated opening splash — explorer UI underneath remains untouched. */
+.splash-screen{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;overflow:hidden;background:#080611;opacity:1;visibility:visible;transition:opacity .4s ease,visibility .4s ease;isolation:isolate}
+.splash-screen.is-leaving{opacity:0;visibility:hidden;pointer-events:none}
+.splash-screen canvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:-3;filter:saturate(1.18) contrast(1.04)}
+.splash-screen:after{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(ellipse at 50% 44%,transparent 12%,#09061133 48%,#07050fe8 100%),linear-gradient(180deg,#08061135 0%,transparent 32%,transparent 68%,#080611a8 100%);pointer-events:none}
+.splash-glow{position:absolute;width:min(80vw,520px);aspect-ratio:1;border-radius:50%;filter:blur(68px);opacity:.22;z-index:-2;pointer-events:none;mix-blend-mode:screen}
+.splash-glow-one{background:#a14cff;left:-22%;top:20%;animation:splash-drift-one 4.8s ease-in-out infinite alternate}
+.splash-glow-two{background:#19d9cf;right:-24%;bottom:5%;animation:splash-drift-two 4.2s ease-in-out infinite alternate}
+.splash-grain{position:absolute;inset:0;z-index:-1;opacity:.09;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.4'/%3E%3C/svg%3E")}
+.splash-brand{position:absolute;top:calc(env(safe-area-inset-top,0px) + 34px);left:0;right:0;display:flex;align-items:center;justify-content:center;gap:13px;color:#fff;text-shadow:0 2px 24px #0009;animation:splash-brand-in .9s cubic-bezier(.2,.8,.2,1) both}
+.splash-mark{font:italic 54px/1 Georgia,serif;color:#e8caff;text-shadow:0 0 22px #ba79ffb0}
+.splash-brand strong{display:block;font:600 16px/1.3 system-ui,sans-serif;letter-spacing:.19em}
+.splash-brand strong i{font-style:normal;color:#d6b4ff}
+.splash-brand small{display:block;margin-top:5px;font:9px/1.2 system-ui,sans-serif;letter-spacing:.34em;color:#d8cce9a8}
+.splash-footer{position:absolute;left:28px;right:28px;bottom:calc(env(safe-area-inset-bottom,0px) + 38px);display:grid;gap:12px;justify-items:center;color:#e8dcf5b8;font:9px/1 system-ui,sans-serif;letter-spacing:.28em}
+.splash-progress{width:min(190px,48vw);height:2px;background:#ffffff26;overflow:hidden;border-radius:9px}
+.splash-progress i{display:block;width:100%;height:100%;transform:scaleX(0);transform-origin:left;background:linear-gradient(90deg,#8f6cff,#f4b1e8,#6ce8d8);box-shadow:0 0 12px #c49aff;animation:splash-progress-fill 4.6s linear forwards}
+@keyframes splash-progress-fill{to{transform:scaleX(1)}}
+@keyframes splash-brand-in{from{opacity:0;transform:translateY(-10px);letter-spacing:.3em}to{opacity:1;transform:translateY(0)}}
+@keyframes splash-drift-one{from{transform:translate3d(-8%,0,0) scale(.85)}to{transform:translate3d(18%,12%,0) scale(1.18)}}
+@keyframes splash-drift-two{from{transform:translate3d(8%,8%,0) scale(1.12)}to{transform:translate3d(-18%,-10%,0) scale(.82)}}
+@media(max-width:480px){.splash-brand{top:calc(env(safe-area-inset-top,0px) + 27px)}.splash-footer{bottom:calc(env(safe-area-inset-bottom,0px) + 28px)}}
