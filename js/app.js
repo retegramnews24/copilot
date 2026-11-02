@@ -60,6 +60,48 @@ function setupInteractions(){
  window.addEventListener('keydown',e=>{if(e.target.matches('input,select'))return;if(e.key==='+'||e.key==='=')zoom(.7);if(e.key==='-')zoom(1.4);if(e.key.toLowerCase()==='r')resetView();if(e.key==='Escape'){$('library').classList.remove('open');closeModal();}if(e.key===' '){e.preventDefault();$('controlPanel').classList.toggle('collapsed');}if(e.key.startsWith('Arrow')){if(deepEnabled){let d=deepScale/12n;if(e.key==='ArrowLeft')deepCx-=d;if(e.key==='ArrowRight')deepCx+=d;if(e.key==='ArrowUp')deepCy-=d;if(e.key==='ArrowDown')deepCy+=d;updateDeepApprox();}else{let d=scale*.08;if(e.key==='ArrowLeft')centerX-=d;if(e.key==='ArrowRight')centerX+=d;if(e.key==='ArrowUp')centerY-=d;if(e.key==='ArrowDown')centerY+=d;}scheduleDraw();updateHUD();}});
  window.addEventListener('resize',()=>{if(is3d)renderer3d?.resize();else scheduleDraw();});
 }
-function start(){initWorker();try{renderer3d=new FractInt3D(canvas3d);if(!renderer3d.ok){$('engineStatus').textContent='WEBGL2 NON DISPONIBILE';}}catch(e){console.warn(e);$('engineStatus').textContent='GPU ERROR';}setupInteractions();renderLibrary();$('favoriteBtn').innerHTML=(favorites.has(active.id)?'★':'☆')+' <span>Preferiti</span>';selectFormula('mandelbrot');if(window.Telegram?.WebApp){let tg=window.Telegram.WebApp;tg.ready();tg.expand();tg.setHeaderColor?.('#0b1020');tg.setBackgroundColor?.('#080b16');if(tg.isVersionAtLeast?.('8.0')){tg.onEvent?.('fullscreenChanged',()=>{document.body.classList.toggle('telegram-fullscreen',!!tg.isFullscreen);});tg.onEvent?.('fullscreenFailed',()=>showToast('Telegram non ha consentito il fullscreen'));} }if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('service-worker.js').catch(()=>{});}
+
+let activeArtId='violet-reverie',artFilter='all';
+function renderArtCards(){
+ const list=(window.FRACTAL_ART_PRESETS||[]).filter(p=>artFilter==='all'||p.mood===artFilter);
+ $('artCards').innerHTML=list.map(p=>`<button class="art-card ${activeArtId===p.id?'selected':''}" data-art-id="${p.id}" aria-label="Apri ${p.title}"><span class="art-thumb art-${p.scene}"><i></i><b></b></span><span class="art-card-copy"><strong>${p.title}</strong><small>${p.subtitle}</small></span></button>`).join('');
+ $('artCount').textContent=list.length+' '+(list.length===1?'opera':'opere');
+}
+function applyArtPreset(id){
+ const p=(window.FRACTAL_ART_PRESETS||[]).find(x=>x.id===id);if(!p)return;
+ if(deepEnabled){updateDeepApprox();deepEnabled=false;}
+ selectFormula(p.fractal);
+ activeArtId=p.id;centerX=p.cx;centerY=p.cy;scale=p.scale;iterations=p.iterations||active.iterations;palette=p.palette||'cosmic';
+ if(typeof p.power==='number')power=p.power;
+ if(typeof p.juliaReal==='number')juliaReal=p.juliaReal;
+ if(typeof p.juliaImag==='number')juliaImag=p.juliaImag;
+ $('iterations').value=iterations;$('iterationsValue').value=iterations;
+ $('power').value=power;$('powerValue').value=power.toFixed(1);
+ $('juliaReal').value=juliaReal;$('juliaRealValue').value=juliaReal.toFixed(2);
+ $('juliaImag').value=juliaImag;$('juliaImagValue').value=juliaImag.toFixed(3);
+ $('palette').value=palette;
+ if(active.mode==='3D'&&renderer3d){$('threePower').value=p.threePower||8;$('threePowerValue').value=$('threePower').value;renderer3d.power=+$('threePower').value;$('threeDetail').value=p.threeDetail||10;$('threeDetailValue').value=$('threeDetail').value;renderer3d.detail=+$('threeDetail').value;renderer3d.zoom=1;renderer3d.rotX=p.rotX??-.28;renderer3d.rotY=p.rotY??.45;}
+ $('currentTitle').textContent=p.title;$('currentCategory').textContent=({cosmos:'COSMIC COLLECTION',floral:'BOTANICAL DREAMS',geometry:'INFINITE PATTERNS',nature:'INSPIRED BY NATURE',three:'SCULPTURES IN SPACE'})[p.mood]||'FRACTAL ART';
+ $('favoriteBtn').textContent=favorites.has(active.id)?'★':'♡';
+ document.body.dataset.artMood=p.mood;
+ renderArtCards();
+ document.querySelectorAll('.palette-chip').forEach(b=>b.classList.toggle('active',b.dataset.palette===palette));
+ $('deepZoomBtn').classList.remove('active');$('deepZoomBtn').setAttribute('aria-pressed','false');
+ scheduleDraw();updateHUD();
+}
+function initArtExplorer(){
+ renderArtCards();
+ $('artFilters').addEventListener('click',e=>{const b=e.target.closest('[data-art-filter]');if(!b)return;artFilter=b.dataset.artFilter;document.querySelectorAll('.art-filter').forEach(x=>x.classList.toggle('active',x===b));renderArtCards();});
+ $('artCards').addEventListener('click',e=>{const b=e.target.closest('[data-art-id]');if(b)applyArtPreset(b.dataset.artId);});
+ document.querySelectorAll('.palette-chip').forEach(b=>b.addEventListener('click',()=>{palette=b.dataset.palette;$('palette').value=palette;document.querySelectorAll('.palette-chip').forEach(x=>x.classList.toggle('active',x===b));scheduleDraw();}));
+ $('formulaList').addEventListener('click',e=>{const b=e.target.closest('[data-id]');if(!b)return;const p=(window.FRACTAL_ART_PRESETS||[]).find(x=>x.fractal===b.dataset.id);if(p)setTimeout(()=>applyArtPreset(p.id),0);});
+ $('randomBtn').onclick=()=>{const list=(window.FRACTAL_ART_PRESETS||[]).filter(p=>p.id!==activeArtId);applyArtPreset(list[Math.floor(Math.random()*list.length)].id);};
+ $('resetBtn').onclick=()=>applyArtPreset(activeArtId||'violet-reverie');
+ $('favoriteBtn').onclick=()=>toggleFavorite();
+ $('formulaInfoBtn').onclick=()=>{const p=(window.FRACTAL_ART_PRESETS||[]).find(x=>x.id===activeArtId);if(!p)return;$('modalContent').innerHTML=`<div class="modal-kicker">${p.subtitle}</div><h2>${p.title}</h2><p>Una piccola finestra su un mondo infinito. Lasciati guidare dalle forme, cambia colore e segui i dettagli: ogni viaggio è unico.</p>`;openModal();};
+ $('helpBtn').onclick=()=>{$('modalContent').innerHTML='<div class="modal-kicker">FRACTAL ART EXPLORER</div><h2>Entra nell’infinito</h2><p>Scorri la collezione e scegli un’opera. Trascina l’immagine per esplorarla, pizzica per avvicinarti e cambia palette per darle una nuova atmosfera.</p><p>La stella conserva i tuoi preferiti. Il simbolo di salvataggio esporta l’immagine. Usa ⛶ per immergerti a tutto schermo.</p>';openModal();};
+}
+
+function start(){initWorker();try{renderer3d=new FractInt3D(canvas3d);if(!renderer3d.ok){$('engineStatus').textContent='WEBGL2 NON DISPONIBILE';}}catch(e){console.warn(e);$('engineStatus').textContent='GPU ERROR';}setupInteractions();renderLibrary();$('favoriteBtn').innerHTML=(favorites.has(active.id)?'★':'☆')+' <span>Preferiti</span>';selectFormula('mandelbrot');initArtExplorer();applyArtPreset('violet-reverie');if(window.Telegram?.WebApp){let tg=window.Telegram.WebApp;tg.ready();tg.expand();tg.setHeaderColor?.('#0b1020');tg.setBackgroundColor?.('#080b16');if(tg.isVersionAtLeast?.('8.0')){tg.onEvent?.('fullscreenChanged',()=>{document.body.classList.toggle('telegram-fullscreen',!!tg.isFullscreen);});tg.onEvent?.('fullscreenFailed',()=>showToast('Telegram non ha consentito il fullscreen'));} }if('serviceWorker' in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('service-worker.js').catch(()=>{});}
 start();
 })();

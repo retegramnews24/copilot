@@ -1,85 +1,35 @@
-# FractInt Mini — Telegram Mini App
+# Fractal Art Explorer — Telegram Mini App
 
-**Versione 2.3.0** — esploratore frattale mobile-first, statico, senza backend obbligatorio.
+Una galleria interattiva di arte frattale, ottimizzata per smartphone e Telegram Mini Apps. La schermata principale mette al centro l’immagine: scegli una composizione, esplora con zoom e trascinamento, cambia palette e salva le tue creazioni.
 
-## Funzioni incluse
+## Cosa trovi
 
-- Catalogo di 36 formule e costruzioni frattali, divise in complessi, geometrici, natura/IFS e 3D.
-- Insiemi dinamici: Mandelbrot, Julia, Multibrot, Burning Ship, Tricorn/Mandelbar, Celtic, Buffalo, Perpendicular Burning Ship, Phoenix, Magnet I/II, Nova, Newton z³−1 e z⁴−1, Sine, Exponential, Biomorph, McMullen/Rational e Lambda.
-- Geometrici: Sierpiński, tappeto di Sierpiński, Koch, Lévy C, Drago, Hilbert, Cantor, Vicsek, albero di Pitagora e gasket di Apollonio.
-- Natura/IFS: felce di Barnsley, albero frattale, spirali ispirate al Romanesco.
-- Renderer volumetrico WebGL2 con ray marching e distance estimator per Mandelbulb, spugna di Menger, Mandelbox e sezione di Julia quaternionica.
-- Worker JavaScript separato per i calcoli 2D, così l'interfaccia resta reattiva durante il rendering.
-- Zoom, pan, pinch, rotazione 3D, iterazioni, esponente, costante Julia, 8 palette, preset, preferiti, PNG e render HD.
-- Deep zoom multiprecisione per Mandelbrot e Julia, con coordinate/orbite fixed-point BigInt selezionabili a 128, 256, 512 o 1024 bit. Il renderer profondo lavora nel Web Worker e riduce automaticamente la risoluzione di anteprima alle precisioni più impegnative.
-- Fullscreen nativo Telegram Mini Apps (Bot API 8.0+) con fallback alla Fullscreen API del browser.
-- Esportazione PNG via condivisione nativa Web Share, selettore di salvataggio file quando disponibile e download Blob come fallback.
-- Layout responsive per Android/Telegram, tasto schermo intero e supporto Telegram WebApp SDK.
+- **32 preset artistici precaricati**, organizzati in Cosmo, Fiori, Geometrie, Natura e 3D.
+- Oltre 30 formule e famiglie frattali del motore precedente, con Mandelbrot, Julia, Burning Ship, Newton, geometrie autosimili, felce di Barnsley e renderer 3D.
+- Otto palette cromatiche selezionabili con un tocco.
+- Zoom, pan e gesto pinch; rotazione e avvicinamento per le opere 3D.
+- Deep zoom multiprecisione per Mandelbrot e Julia, ancora disponibile nel motore.
+- Esportazione PNG, preferiti, fullscreen Telegram e cache offline.
+- Catalogo completo delle formule disponibile dal pulsante menu; i controlli avanzati sono nascosti per lasciare spazio all’opera.
 
-## Pubblicazione GitHub Pages
+## Pubblicazione su GitHub Pages
 
-1. Estrai lo ZIP e carica **tutti** i file e le cartelle nella root del repository.
-2. In GitHub: Settings → Pages → Deploy from a branch → `main` → `/ (root)`.
-3. Attendi la pubblicazione e apri l'URL HTTPS assegnato a GitHub Pages.
-4. In BotFather configura la Mini App/Web App con quell'URL HTTPS.
+1. Estrai lo ZIP.
+2. Carica **tutti** i file e le cartelle nella root del repository GitHub.
+3. In Settings → Pages seleziona il branch `main` e la cartella `/root`.
+4. Inserisci l’URL HTTPS pubblicato come URL della Mini App in BotFather.
 
-Non rinominare `index.html` e non spostare la cartella `js` o `assets`: sono percorsi relativi.
+`index.html` si trova direttamente nella root. Non è richiesto un backend.
 
-## Avvio locale
+## Uso
 
-Per testare il Worker e WebGL, usa un server HTTP (non `file://`). Per esempio:
+- Tocca una scheda della collezione per caricare un’opera.
+- Trascina sull’immagine per esplorare; usa pinch o rotella per lo zoom.
+- Scegli una palette dalla barra in basso.
+- Usa ✧ per una sorpresa, ↺ per tornare alla composizione iniziale e ⇧ per esportare PNG.
+- Usa ☆ per i preferiti e ⛶ per lo schermo intero.
+- Il menu in alto apre il catalogo completo delle formule.
 
-```bash
-python -m http.server 8080
-```
+## Nota
 
-Poi visita `http://localhost:8080`.
-
-## Note tecniche e limiti
-
-- Il deep zoom usa aritmetica fixed-point BigInt fino a 1024 bit per Mandelbrot/Julia. Non è un perturbation/reference-orbit renderer: prestazioni e dettaglio dipendono da iterazioni, risoluzione e CPU del telefono. Gli altri frattali 2D restano in doppia precisione standard.
-- Il Mandelbulb è una generalizzazione 3D resa con distance estimation e ray marching; la spugna di Menger e il Mandelbox usano distance estimator iterativi. Sono renderer real-time approssimati, non immagini pre-renderizzate.
-- La formula di Romanesco è una visualizzazione procedurale ispirata alla fillotassi, non una simulazione botanica completa.
-- Il rendering HD 2D aumenta la risoluzione alla qualità massima configurata dal dispositivo; la complessità e il tempo di calcolo dipendono da telefono/browser.
-- **Salvataggio su Telegram/Android:** l’app genera un PNG locale. Quando il client espone Web Share, si apre il foglio di condivisione Android (puoi scegliere Telegram o File); altrimenti si avvia un download del browser. Una Mini App statica non può scrivere forzatamente in una cartella privata Telegram. L’API ufficiale `Telegram.WebApp.downloadFile` richiede un URL HTTPS del file ospitato su server, quindi non può ricevere direttamente il Blob appena creato nel canvas.
-- Telegram SDK, Google Fonts e WebGL2 sono opzionali rispetto alle formule 2D: il sito resta utilizzabile senza login o API key. I Google Fonts sono solo un miglioramento estetico.
-
-## Struttura
-
-```text
-fractint-telegram-pro/
-├── index.html
-├── style.css
-├── manifest.webmanifest
-├── service-worker.js
-├── README.md
-├── assets/
-│   └── icon.svg
-└── js/
-    ├── app.js
-    ├── catalog.js
-    ├── render-worker.js
-    └── renderer3d.js
-```
-
-## Riferimenti matematici
-
-Le definizioni implementate seguono le formulazioni standard delle mappe complesse (Mandelbrot/Julia, Burning Ship, Tricorn, Multibrot, Newton e mappe razionali) e il metodo distance-estimation/ray-marching per i solidi frattali. Non esiste un catalogo finito di “tutte” le formule frattali possibili: questa raccolta include 36 famiglie/varianti significative ed è progettata per essere estesa. Per approfondire: Wolfram MathWorld, *Burning Ship Fractal*; documentazione e repository shader pubblici dedicati a Mandelbulb e distance estimation.
-
-## Salvataggio immagini su Android
-
-Premi **SALVA PNG**. L’app prova nell’ordine la condivisione file nativa (puoi scegliere Telegram e inviare a Messaggi salvati, oppure File), il selettore di salvataggio del browser quando supportato e infine il download standard. Il percorso effettivo è deciso da Android/Telegram: le Mini App non hanno accesso diretto alle cartelle private dell’app. Telegram `downloadFile` richiede un URL HTTPS ospitato su un server; per questo progetto statico non può ricevere direttamente il Blob PNG creato dal canvas.
-
-## Deep zoom e limiti numerici
-
-La precisione fixed-point BigInt è configurabile da 128 fino a 1024 bit e viene usata dal renderer Web Worker per Mandelbrot e Julia. A precisioni maggiori il lato lungo dell’anteprima e il numero di iterazioni vengono limitati automaticamente per evitare che il telefono resti bloccato. Non equivale a un renderer perturbativo con orbita di riferimento: per esplorazioni estremamente profonde e immagini finali ad altissima risoluzione, un renderer dedicato con perturbation theory e rendering a tile offrirebbe più dettaglio e velocità.
-
-## v2.3.0 — fix rendering interactions
-
-- Added a transformed last-frame preview during zoom and pan, so a coarse but geometrically aligned image remains visible while the worker recalculates.
-- Fixed world-coordinate mapping for Sierpiński gasket, fern, Koch and recursive vector shapes, plus Sierpiński carpet, Vicsek and Cantor.
-- Reimplemented the Sierpiński triangle as a per-pixel iterated-triangle test; zooming now reveals new detail instead of magnifying a finite point cloud.
-- Reworked PNG export: native file sharing where available, system save picker where supported, and a visible fallback preview with download/open actions.
-- Rendering indicator no longer obscures the preview.
-
-The Mini App cannot force a private Telegram folder destination. The final destination is controlled by Android/Telegram's share or save UI. Telegram's native `downloadFile` accepts an HTTPS file URL; a canvas-generated local Blob is therefore exported via Web Share / browser download instead.
+Le miniature della collezione sono illustrazioni cromatiche di anteprima; l’opera principale viene generata dal motore frattale nel browser. Le prestazioni 3D dipendono dal supporto WebGL2 del dispositivo. Il salvataggio usa la condivisione o il download offerti dal browser/Android: una Mini App non può scrivere direttamente nella cartella privata di Telegram.
