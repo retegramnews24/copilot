@@ -20,6 +20,8 @@
         --pink: #ff7bc9;
         --gold: #ffca6a;
         --success: #72f0b7;
+        --safe-top: max(0px, env(safe-area-inset-top));
+        --safe-bottom: max(0px, env(safe-area-inset-bottom));
       }
 
       * { box-sizing: border-box; }
@@ -28,10 +30,7 @@
         margin: 0;
         width: 100%;
         height: 100%;
-        background:
-          radial-gradient(circle at 15% 15%, rgba(84, 184, 255, 0.18), transparent 25%),
-          radial-gradient(circle at 80% 18%, rgba(160, 120, 255, 0.19), transparent 29%),
-          linear-gradient(135deg, var(--bg-0), var(--bg-1) 45%, var(--bg-2));
+        background: #000;
         color: var(--text);
         font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         overflow: hidden;
@@ -39,22 +38,18 @@
 
       body {
         display: flex;
-        align-items: center;
+        align-items: stretch;
         justify-content: center;
       }
 
       .app-shell {
         position: relative;
         width: 100vw;
-        height: 100vh;
+        max-width: 430px;
         height: 100dvh;
-        max-width: 100vw;
-        max-height: 100vh;
-        min-height: 0;
-        border: 0;
-        background: rgba(7, 16, 28, 0.56);
+        min-height: 100vh;
+        background: rgba(7, 16, 28, 0.58);
         backdrop-filter: blur(16px);
-        box-shadow: none;
         overflow: hidden;
         isolation: isolate;
         display: flex;
@@ -73,16 +68,16 @@
 
       .telegram-bar {
         position: relative;
+        z-index: 1;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: clamp(14px, 2vh, 22px) clamp(14px, 3vw, 22px) clamp(10px, 1.8vh, 16px);
-        z-index: 1;
+        padding: calc(12px + var(--safe-top)) clamp(14px, 3vw, 18px) 8px;
         flex-shrink: 0;
       }
 
       .time {
-        font-size: clamp(0.72rem, 1.2vw, 0.82rem);
+        font-size: clamp(0.7rem, 1.5vw, 0.82rem);
         letter-spacing: 0.08em;
         color: var(--muted);
         font-weight: 700;
@@ -90,21 +85,21 @@
 
       .status {
         display: flex;
-        gap: 8px;
         align-items: center;
+        gap: 8px;
       }
 
       .status-dot {
-        width: clamp(7px, 1vw, 8px);
-        height: clamp(7px, 1vw, 8px);
-        border-radius: 99px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
         background: var(--success);
-        box-shadow: 0 0 12px rgba(114, 240, 183, 0.7);
+        box-shadow: 0 0 10px rgba(114, 240, 183, 0.7);
       }
 
       .status-label {
-        font-size: clamp(0.62rem, 1vw, 0.72rem);
-        letter-spacing: 0.06em;
+        font-size: clamp(0.6rem, 1vw, 0.7rem);
+        letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--muted);
         font-weight: 700;
@@ -115,11 +110,94 @@
         z-index: 1;
         display: flex;
         flex-direction: column;
-        gap: clamp(12px, 1.8vh, 18px);
+        gap: clamp(12px, 1.7vh, 18px);
         flex: 1;
         min-height: 0;
-        padding: 0 clamp(14px, 3vw, 22px) clamp(12px, 2vh, 20px);
+        padding: 0 clamp(14px, 3vw, 18px) calc(14px + var(--safe-bottom));
       }
+
+      .header-strip {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 2px;
+        position: relative;
+      }
+
+      .header-left, .header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .bot-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 7px 14px;
+        min-height: 30px;
+        width: fit-content;
+        border-radius: 999px;
+        background: rgba(84, 184, 255, 0.1);
+        border: 1px solid rgba(84, 184, 255, 0.16);
+        color: #d9f0ff;
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .bot-badge::before {
+        content: "";
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--teal), var(--cyan));
+        box-shadow: 0 0 12px rgba(84,184,255,0.7);
+      }
+
+      .header-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 36px;
+        height: 30px;
+        border-radius: 20px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.06);
+        color: var(--text);
+        font-size: 1rem;
+        line-height: 1;
+      }
+
+      .menu-dots {
+        position: relative;
+        width: 18px;
+        height: 18px;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .menu-dots::before,
+      .menu-dots::after,
+      .menu-dots span {
+        content: "";
+        position: absolute;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: #dfeeff;
+        box-shadow: 0 0 0 1px rgba(255,255,255,0.1);
+      }
+
+      .menu-dots::before { transform: translateY(-6px); }
+      .menu-dots::after { transform: translateY(6px); }
+      .menu-dots span { transform: translateX(0); }
 
       .hero {
         position: relative;
@@ -129,41 +207,16 @@
         background: linear-gradient(135deg, rgba(14, 27, 41, 0.86), rgba(17, 28, 46, 0.52));
         border: 1px solid rgba(255,255,255,0.06);
         border-radius: clamp(20px, 4vw, 28px);
-        padding: clamp(14px, 2.4vw, 20px) clamp(14px, 3vw, 18px) clamp(12px, 2vw, 18px);
+        padding: clamp(14px, 2.3vw, 20px) clamp(14px, 3vw, 18px) clamp(12px, 2vw, 18px);
         box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
         flex: 1 1 auto;
         min-height: 0;
       }
 
-      .badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 7px 12px;
-        border-radius: 999px;
-        background: rgba(84, 184, 255, 0.08);
-        border: 1px solid rgba(84, 184, 255, 0.18);
-        color: var(--cyan);
-        font-size: clamp(0.62rem, 1.2vw, 0.7rem);
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        width: fit-content;
-      }
-
-      .badge::before {
-        content: "";
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, var(--teal), var(--cyan));
-        box-shadow: 0 0 14px rgba(84, 184, 255, 0.75);
-      }
-
       h1 {
-        margin: clamp(10px, 1.6vh, 16px) 0 clamp(6px, 1.2vh, 10px);
-        font-size: clamp(2rem, 6vw, 3.1rem);
-        line-height: 0.95;
+        margin: clamp(8px, 1.4vh, 16px) 0 clamp(6px, 1vh, 10px);
+        font-size: clamp(2.15rem, 6vw, 3.1rem);
+        line-height: 0.96;
         letter-spacing: -0.06em;
       }
 
@@ -175,17 +228,17 @@
       }
 
       .lead {
-        max-width: 28ch;
+        max-width: 30ch;
         margin: 0;
         color: var(--muted);
-        line-height: 1.5;
-        font-size: clamp(0.78rem, 2vw, 0.98rem);
+        line-height: 1.45;
+        font-size: clamp(0.8rem, 2vw, 0.98rem);
       }
 
       .hero-visual {
         position: relative;
         flex: 1 1 auto;
-        min-height: clamp(120px, 26vh, 185px);
+        min-height: clamp(120px, 26vh, 180px);
         margin-top: clamp(10px, 2vh, 18px);
         border-radius: 22px;
         overflow: hidden;
@@ -318,7 +371,6 @@
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 8px;
         padding: 12px 8px 0;
-        margin-top: 0;
         flex-shrink: 0;
       }
 
@@ -534,22 +586,10 @@
       }
 
       @media (max-width: 420px) {
-        .hero {
-          padding: 12px 12px 10px;
-        }
-
-        .panel {
-          padding: 10px 10px 8px;
-        }
-
-        .actions {
-          gap: 8px;
-        }
-
-        .bottom-nav {
-          gap: 6px;
-          padding-inline: 4px;
-        }
+        .hero { padding: 12px 12px 10px; }
+        .panel { padding: 10px 10px 8px; }
+        .actions { gap: 8px; }
+        .bottom-nav { gap: 6px; padding-inline: 4px; }
       }
     </style>
   </head>
@@ -576,8 +616,18 @@
       </div>
 
       <div class="content">
+        <div class="header-strip">
+          <div class="header-left">
+            <span class="header-icon">✕</span>
+            <span class="bot-badge">Chiudi</span>
+          </div>
+          <div class="header-right">
+            <span class="header-icon">⌄</span>
+            <span class="header-icon menu-dots"><span></span></span>
+          </div>
+        </div>
+
         <section class="hero">
-          <div class="badge">Telegram Bot</div>
           <h1><span class="gradient-text">ReteGram</span><br />Mini App</h1>
           <p class="lead">Un punto di accesso smart per notizie, messaggi e attività del bot in un’esperienza fluida e leggera.</p>
 
