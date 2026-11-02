@@ -29,7 +29,7 @@
         <div class="toolbar-actions"><button class="tool-btn" id="randomBtn" title="Frattale casuale">✧ <span>CASUALE</span></button><button class="tool-btn deep-tool" id="deepZoomBtn" title="Precisione multipla Mandelbrot/Julia" aria-pressed="false">∞ <span>DEEP ZOOM</span></button><button class="tool-btn" id="resetBtn" title="Reimposta vista">↺ <span>RESET</span></button><button class="tool-btn primary" id="exportBtn" title="Salva immagine PNG">⇩ <span>SALVA PNG</span></button></div>
       </div>
       <section class="visual-stage" id="visualStage">
-        <canvas id="canvas2d"></canvas><canvas id="canvas3d" class="hidden"></canvas>
+        <canvas id="canvas2d"></canvas><canvas id="previewCanvas" class="preview-layer" hidden aria-hidden="true"></canvas><canvas id="canvas3d" class="hidden"></canvas>
         <div class="render-overlay" id="renderOverlay"><div class="loader"></div><span id="renderMessage">CALCOLO IN CORSO</span></div>
         <div class="stage-hud top-left"><span class="live-dot"></span><span id="modeLabel">2D FRACTAL</span></div>
         <div class="stage-hud bottom-left"><span id="zoomLabel">ZOOM 1.00×</span><span class="hud-sep">/</span><span id="precisionLabel">CPU RENDER</span></div>
@@ -53,7 +53,7 @@
         <div class="control-actions"><button class="action-btn secondary" id="randomJulia">Julia casuale</button><button class="action-btn secondary" id="highQualityBtn">Render HD</button></div>
         <div class="stats-card"><div><span>POSIZIONE</span><b id="positionStat">−0.500 / 0.000</b></div><div><span>FATTORE ZOOM</span><b id="zoomStat">1.00×</b></div><div><span>RENDER</span><b id="renderStat">Canvas CPU</b></div></div>
       </div>
-      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v2.2.0</span></div>
+      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v2.3.0</span></div>
     </aside>
   </div>
 </div>

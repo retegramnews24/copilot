@@ -1,6 +1,6 @@
 # FractInt Mini — Telegram Mini App
 
-**Versione 2.2.0** — esploratore frattale mobile-first, statico, senza backend obbligatorio.
+**Versione 2.3.0** — esploratore frattale mobile-first, statico, senza backend obbligatorio.
 
 ## Funzioni incluse
 
@@ -73,3 +73,13 @@ Premi **SALVA PNG**. L’app prova nell’ordine la condivisione file nativa (pu
 ## Deep zoom e limiti numerici
 
 La precisione fixed-point BigInt è configurabile da 128 fino a 1024 bit e viene usata dal renderer Web Worker per Mandelbrot e Julia. A precisioni maggiori il lato lungo dell’anteprima e il numero di iterazioni vengono limitati automaticamente per evitare che il telefono resti bloccato. Non equivale a un renderer perturbativo con orbita di riferimento: per esplorazioni estremamente profonde e immagini finali ad altissima risoluzione, un renderer dedicato con perturbation theory e rendering a tile offrirebbe più dettaglio e velocità.
+
+## v2.3.0 — fix rendering interactions
+
+- Added a transformed last-frame preview during zoom and pan, so a coarse but geometrically aligned image remains visible while the worker recalculates.
+- Fixed world-coordinate mapping for Sierpiński gasket, fern, Koch and recursive vector shapes, plus Sierpiński carpet, Vicsek and Cantor.
+- Reimplemented the Sierpiński triangle as a per-pixel iterated-triangle test; zooming now reveals new detail instead of magnifying a finite point cloud.
+- Reworked PNG export: native file sharing where available, system save picker where supported, and a visible fallback preview with download/open actions.
+- Rendering indicator no longer obscures the preview.
+
+The Mini App cannot force a private Telegram folder destination. The final destination is controlled by Android/Telegram's share or save UI. Telegram's native `downloadFile` accepts an HTTPS file URL; a canvas-generated local Blob is therefore exported via Web Share / browser download instead.

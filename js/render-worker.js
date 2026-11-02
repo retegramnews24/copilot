@@ -33,24 +33,17 @@ function iterate(kind,x,y,cfg){let zx=0,zy=0,cx=x,cy=y,prevx=0,prevy=0,iter=0,ro
  }
  let rr=zx*zx+zy*zy;return {i:smooth(iter,rr),r:rr,root,converged:iter>=max-1};
 }
-function pointRender(cfg,w,h){let data=new Uint8ClampedArray(w*h*4),pal=palettes[cfg.palette]||palettes.cosmic;for(let i=0;i<data.length;i+=4){data[i]=4;data[i+1]=7;data[i+2]=16;data[i+3]=255;}const put=(x,y,t)=>{let px=Math.round((x-cfg.cx)/cfg.scale*Math.min(w,h)+w/2),py=Math.round((y-cfg.cy)/cfg.scale*Math.min(w,h)+h/2);if(px<0||px>=w||py<0||py>=h)return;let k=(py*w+px)*4,col=pal(t);data[k]=col[0];data[k+1]=col[1];data[k+2]=col[2];};
- let seed=cfg.job*9197+17;const rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
- if(cfg.type==='fern'){let x=0,y=0,n=Math.max(90000,Math.min(650000,w*h*.85));for(let i=0;i<n;i++){let r=rand(),nx,ny;if(r<.01){nx=0;ny=.16*y;}else if(r<.86){nx=.85*x+.04*y;ny=-.04*x+.85*y+1.6;}else if(r<.93){nx=.2*x-.26*y;ny=.23*x+.22*y+1.6;}else{nx=-.15*x+.28*y;ny=.26*x+.24*y+.44;}x=nx;y=ny;if(i>30){let px=(x/5.5+.5)*w,py=h-(y/10.5)*h;if(px>=0&&px<w&&py>=0&&py<h){let k=(Math.floor(py)*w+Math.floor(px))*4,col=pal((i%1500)/1500);data[k]=col[0];data[k+1]=col[1];data[k+2]=col[2];}}}return data;}
- if(cfg.type==='sierpinski'){let verts=[[.5,.04],[.03,.94],[.97,.94]],x=.5,y=.5,n=Math.min(700000,w*h*1.1);for(let i=0;i<n;i++){let v=verts[(rand()*3)|0];x=(x+v[0])/2;y=(y+v[1])/2;if(i>20){let px=x*w,py=y*h,k=(Math.floor(py)*w+Math.floor(px))*4,col=pal((i%1000)/1000);data[k]=col[0];data[k+1]=col[1];data[k+2]=col[2];}}return data;}
- return data;
-}
-function geometricPixel(type,u,v,depth){
- if(type==='carpet'){for(let i=0;i<depth;i++){let x=((u%1)+1)%1,y=((v%1)+1)%1;if(x>1/3&&x<2/3&&y>1/3&&y<2/3)return false;u=u*3%1;v=v*3%1;}return true;}
- if(type==='vicsek'){for(let i=0;i<depth;i++){let x=((u%1)+1)%1,y=((v%1)+1)%1;let a=x<1/3?0:x<2/3?1:2,b=y<1/3?0:y<2/3?1:2;if(!((a===1&&b===1)||(a!==1&&b!==1)))return false;u=u*3%1;v=v*3%1;}return true;}
- if(type==='cantor'){if(v>.48||v<-.48)return false;let x=(u+1)/2;for(let i=0;i<depth;i++){let t=x*3%1;if(t>1/3&&t<2/3)return false;x=x*3%1;}return true;}
- return false;
-}
+function pointRender(cfg,w,h){let data=new Uint8ClampedArray(w*h*4),pal=palettes[cfg.palette]||palettes.cosmic;for(let i=0;i<data.length;i+=4){data[i]=4;data[i+1]=7;data[i+2]=16;data[i+3]=255;}const put=(x,y,t)=>{let px=Math.round((x-cfg.cx)/cfg.scale*Math.min(w,h)+w/2),py=Math.round((y-cfg.cy)/cfg.scale*Math.min(w,h)+h/2);if(px<0||px>=w||py<0||py>=h)return;let k=(py*w+px)*4,col=pal(t);data[k]=col[0];data[k+1]=col[1];data[k+2]=col[2];};let x=0,y=0,n=Math.max(120000,Math.min(900000,w*h*1.6));for(let i=0;i<n;i++){let r=Math.random(),nx,ny;if(r<.01){nx=0;ny=.16*y;}else if(r<.86){nx=.85*x+.04*y;ny=-.04*x+.85*y+1.6;}else if(r<.93){nx=.2*x-.26*y;ny=.23*x+.22*y+1.6;}else{nx=-.15*x+.28*y;ny=.26*x+.24*y+.44;}x=nx;y=ny;if(i>30)put(x,y,(i%1800)/1800);}return data;}
+async function renderSierpinski(cfg,w,h){const data=new Uint8ClampedArray(w*h*4),pal=palettes[cfg.palette]||palettes.cosmic,min=Math.min(w,h),baseScale=cfg.baseScale||1.2,baseCx=cfg.baseCx??.5,baseCy=cfg.baseCy??.5,depth=Math.max(5,Math.min(20,Math.round(cfg.iterations/12)||10));for(let y0=0;y0<h;y0+=12){if(cfg.job!==newestJob)return data;const yMax=Math.min(h,y0+12);for(let py=y0;py<yMax;py++){const wy=(py-h/2)/min*cfg.scale+cfg.cy,v=(wy-(baseCy-baseScale/2))/baseScale;for(let px=0;px<w;px++){const wx=(px-w/2)/min*cfg.scale+cfg.cx,u=(wx-(baseCx-baseScale/2))/baseScale,k=(py*w+px)*4;let t=0,inside=false;if(u>=.03&&u<=.97&&v>=.04&&v<=.94){let xx=(u-.03)/.94,yy=(v-.04)/.90;let a=1-yy,b=.5*yy+.5-xx,c=.5*yy+xx-.5;inside=true;let level=0;for(;level<depth;level++){if(Math.max(a,b,c)<.5){inside=false;break;}if(a>=b&&a>=c){a=2*a-1;b*=2;c*=2;}else if(b>=c){b=2*b-1;a*=2;c*=2;}else{c=2*c-1;a*=2;b*=2;}}t=inside?.55+.4*(level/depth):0;}const col=inside?pal(t):[4,7,16];data[k]=col[0];data[k+1]=col[1];data[k+2]=col[2];data[k+3]=255;}}self.postMessage({job:cfg.job,progress:Math.round(yMax/h*100)});await new Promise(resolve=>setTimeout(resolve,0));}return data;}
+
+function geometricPixel(type,u,v,depth){if(u<0||u>1||v<0||v>1)return false;if(type==='carpet'){for(let i=0;i<depth;i++){let x=u*3%1,y=v*3%1;if(x>1/3&&x<2/3&&y>1/3&&y<2/3)return false;u=u*3%1;v=v*3%1;}return true;}if(type==='vicsek'){for(let i=0;i<depth;i++){let x=u*3%1,y=v*3%1;let a=x<1/3?0:x<2/3?1:2,b=y<1/3?0:y<2/3?1:2;if(!((a===1&&b===1)||(a!==1&&b!==1)))return false;u=u*3%1;v=v*3%1;}return true;}if(type==='cantor'){if(v<.44||v>.56)return false;let x=u;for(let i=0;i<depth;i++){let t=x*3%1;if(t>1/3&&t<2/3)return false;x=x*3%1;}return true;}return false;}
+
 function drawVector(type,cfg,w,h){
  const off=new OffscreenCanvas(w,h),ctx=off.getContext('2d');
  ctx.fillStyle='#050811';ctx.fillRect(0,0,w,h);
  const pal=palettes[cfg.palette]||palettes.cosmic,stroke=pal(.72).map(v=>Math.round(v));
  ctx.strokeStyle=`rgb(${stroke[0]},${stroke[1]},${stroke[2]})`;ctx.lineWidth=Math.max(1,w/900);ctx.lineCap='round';ctx.lineJoin='round';
- const cx=w/2,cy=h/2,unit=Math.min(w,h)*.42;
+ const cx=w/2,cy=h/2,unit=Math.min(w,h)*.42,baseScale=cfg.baseScale||cfg.scale,baseCx=cfg.baseCx||0,baseCy=cfg.baseCy||0,viewScale=baseScale/(cfg.scale||baseScale),tx=w/2*(1-viewScale)+(baseCx-cfg.cx)*Math.min(w,h)/(cfg.scale||baseScale),ty=h/2*(1-viewScale)+(baseCy-cfg.cy)*Math.min(w,h)/(cfg.scale||baseScale);ctx.setTransform(viewScale,0,0,viewScale,tx,ty);
  if(type==='koch'){
   function line(a,b,n){if(n===0){ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);return;}let dx=(b[0]-a[0])/3,dy=(b[1]-a[1])/3,p=[a[0]+dx,a[1]+dy],q=[a[0]+2*dx,a[1]+2*dy],ang=-Math.PI/3,peak=[p[0]+dx*Math.cos(ang)-dy*Math.sin(ang),p[1]+dx*Math.sin(ang)+dy*Math.cos(ang)];line(a,p,n-1);line(p,peak,n-1);line(peak,q,n-1);line(q,b,n-1);}
   let r=unit*.82,pts=[[cx,cy-r],[cx-r*.866,cy+r*.5],[cx+r*.866,cy+r*.5]];ctx.beginPath();for(let i=0;i<3;i++)line(pts[i],pts[(i+1)%3],Math.min(6,Math.round(cfg.iterations)));ctx.stroke();
@@ -117,8 +110,10 @@ async function render(cfg){
  let data;
  if(cfg.deep){
   data=await renderDeep(cfg,w,h);
- }else if(['fern','sierpinski'].includes(type)){
+ }else if(type==='fern'){
   data=pointRender(cfg,w,h);
+ }else if(type==='sierpinski'){
+  data=await renderSierpinski(cfg,w,h);
  }else if(['koch','levy','dragon','hilbert','tree','pythagoras','apollonian'].includes(type)){
   data=drawVector(type,cfg,w,h);
  }else{
@@ -134,7 +129,7 @@ async function render(cfg){
      const u=(px-w/2)/min*scale+cx,v=(py-h/2)/min*scale+cy,k=(py*w+px)*4;
      let t=0,inside=false;
      if(type==='carpet'||type==='vicsek'||type==='cantor'){
-      inside=geometricPixel(type,u/scale+0.5,v/scale+0.5,depth);t=inside?0.78:0;
+      const bs=cfg.baseScale||scale,bx=cfg.baseCx||0,by=cfg.baseCy||0;inside=geometricPixel(type,(u-(bx-bs/2))/bs,(v-(by-bs/2))/bs,depth);t=inside?0.78:0;
      }else if(type==='romanesco'){
       const a=Math.atan2(v,u),r=Math.hypot(u,v),spiral=Math.abs(Math.sin(a*13+Math.log(r+1e-4)*5));
       t=spiral-Math.exp(-r*2)*.45<.09?0.7:0;
