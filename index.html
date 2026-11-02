@@ -6,17 +6,19 @@
     <title>Fractint Mini App</title>
     <style>
       :root {
-        --bg: #0a1020;
-        --bg-2: #101a2d;
+        --bg0: #070d15;
+        --bg1: #0d1826;
+        --bg2: #101e2e;
         --panel: rgba(17, 25, 39, 0.9);
-        --panel-2: rgba(19, 30, 46, 0.95);
-        --line: rgba(160, 190, 229, 0.2);
+        --panel-2: rgba(22, 32, 46, 0.92);
+        --line: rgba(160, 191, 228, 0.17);
         --text: #edf7ff;
-        --muted: #9db4c9;
+        --muted: #9bb2c5;
         --blue: #74d6ff;
         --violet: #a98cff;
         --green: #7df0c3;
         --amber: #ffd877;
+        --red: #ff8b7d;
       }
 
       * { box-sizing: border-box; }
@@ -25,7 +27,7 @@
         margin: 0;
         width: 100%;
         height: 100%;
-        background: radial-gradient(circle at top, rgba(116,214,255,0.08), transparent 30%), #070d16;
+        background: radial-gradient(circle at top, rgba(116,214,255,0.10), transparent 28%), #070d15;
         color: var(--text);
         font-family: "Segoe UI", Tahoma, Arial, sans-serif;
       }
@@ -40,11 +42,11 @@
         position: relative;
         width: min(96vw, 430px);
         height: min(94vh, 860px);
-        background: linear-gradient(180deg, #0a111b 0%, #0d1726 100%);
+        background: linear-gradient(180deg, #0a1119 0%, #0d1723 100%);
         border: 1px solid var(--line);
         border-radius: 30px;
         overflow: hidden;
-        box-shadow: 0 26px 90px rgba(0,0,0,0.52), inset 0 0 24px rgba(116,214,255,0.05);
+        box-shadow: 0 30px 90px rgba(0,0,0,0.52), inset 0 0 24px rgba(116,214,255,0.05);
       }
 
       .header {
@@ -52,7 +54,7 @@
         align-items: center;
         justify-content: space-between;
         padding: 16px 18px 12px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
       }
 
       .brand {
@@ -63,7 +65,7 @@
         letter-spacing: 0.04em;
       }
 
-      .dot {
+      .brand-mark {
         width: 10px;
         height: 10px;
         border-radius: 50%;
@@ -71,21 +73,21 @@
         box-shadow: 0 0 12px rgba(116,214,255,0.8);
       }
 
-      .state {
+      .live {
         display: inline-flex;
         align-items: center;
         gap: 8px;
         padding: 6px 10px;
-        border: 1px solid var(--line);
         border-radius: 999px;
-        font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        border: 1px solid var(--line);
+        background: rgba(125,240,195,0.06);
         color: var(--green);
-        background: rgba(125, 240, 195, 0.06);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
       }
 
-      .state::before {
+      .live::before {
         content: "";
         width: 8px;
         height: 8px;
@@ -99,7 +101,11 @@
         grid-template-columns: repeat(3, 1fr);
         gap: 10px;
         padding: 12px 16px 14px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+      }
+
+      button, select, input {
+        font: inherit;
       }
 
       .btn {
@@ -110,7 +116,6 @@
         min-height: 42px;
         border-radius: 12px;
         cursor: pointer;
-        font: inherit;
         font-weight: 600;
         transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
       }
@@ -128,7 +133,7 @@
         position: relative;
         height: 420px;
         background: #050b13;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
       }
 
       canvas {
@@ -143,8 +148,8 @@
         position: absolute;
         left: 12px;
         bottom: 12px;
-        min-width: 150px;
-        background: rgba(10,17,26,0.74);
+        min-width: 156px;
+        background: rgba(10,17,26,0.76);
         border: 1px solid var(--line);
         border-radius: 12px;
         padding: 8px 10px;
@@ -191,17 +196,11 @@
         color: var(--text);
         border-radius: 10px;
         padding: 8px 10px;
-        font: inherit;
       }
 
       input[type="range"] {
         width: 100%;
         accent-color: #9fe6ff;
-      }
-
-      .stack {
-        display: grid;
-        gap: 8px;
       }
 
       .meta {
@@ -216,6 +215,23 @@
       .meta strong {
         color: var(--text);
         font-weight: 700;
+      }
+
+      .preset-grid {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      .tiny {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: rgba(255,255,255,0.02);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 6px 9px;
+        font-size: 12px;
+        cursor: pointer;
       }
 
       .version {
@@ -237,13 +253,13 @@
   <body>
     <div class="app">
       <div class="header">
-        <div class="brand"><span class="dot"></span>Fractint</div>
-        <div class="state">live</div>
+        <div class="brand"><span class="brand-mark"></span>Fractint</div>
+        <div class="live">live</div>
       </div>
 
       <div class="toolbar">
         <button class="btn primary" id="renderBtn">Render</button>
-        <button class="btn" id="centerBtn">Center</button>
+        <button class="btn" id="randomBtn">Random</button>
         <button class="btn" id="resetBtn">Reset</button>
       </div>
 
@@ -265,29 +281,40 @@
           <div class="group">
             <label class="label" for="paletteSelect">Palette</label>
             <select id="paletteSelect">
-              <option value="0">Classic</option>
-              <option value="1">Ocean</option>
-              <option value="2">Sunset</option>
+              <option value="classic">Classic</option>
+              <option value="ocean">Ocean</option>
+              <option value="sunset">Sunset</option>
+              <option value="neon">Neon</option>
             </select>
           </div>
         </div>
 
-        <div class="group stack">
+        <div class="group">
+          <div class="meta"><span>Preset</span><strong id="presetLabel">Deep Valley</strong></div>
+          <div class="preset-grid" style="margin-top: 10px;">
+            <button class="tiny" data-preset="deepValley">Deep</button>
+            <button class="tiny" data-preset="seahorse">Seahorse</button>
+            <button class="tiny" data-preset="storm">Storm</button>
+            <button class="tiny" data-preset="nova">Nova</button>
+          </div>
+        </div>
+
+        <div class="group">
           <div class="meta"><span>Zoom</span><strong id="zoomReadout">2.40x</strong></div>
-          <input id="zoomRange" type="range" min="0.5" max="20" step="0.1" value="2.4" />
+          <input id="zoomRange" type="range" min="0.5" max="18" step="0.1" value="2.4" />
         </div>
 
         <div class="row">
           <div class="group">
             <label class="label" for="iterInput">Iterations</label>
-            <input id="iterInput" type="number" min="40" max="500" step="10" value="180" />
+            <input id="iterInput" type="number" min="60" max="700" step="10" value="220" />
           </div>
           <div class="group">
             <label class="label" for="qualitySelect">Quality</label>
             <select id="qualitySelect">
-              <option value="0.8">Fast</option>
+              <option value="0.7">Fast</option>
               <option value="1" selected>Balanced</option>
-              <option value="1.5">High</option>
+              <option value="1.35">High</option>
             </select>
           </div>
         </div>
@@ -304,7 +331,7 @@
         </div>
       </div>
 
-      <div class="version">v0.02</div>
+      <div class="version">v0.03</div>
     </div>
 
     <script>
@@ -312,14 +339,16 @@
       const ctx = canvas.getContext('2d');
       const hud = document.getElementById('hud');
       const zoomReadout = document.getElementById('zoomReadout');
+      const presetLabel = document.getElementById('presetLabel');
 
       const state = {
         type: 'mandelbrot',
-        palette: 0,
+        palette: 'classic',
+        preset: 'deepValley',
         centerX: -0.74,
-        centerY: 0,
+        centerY: 0.0,
         zoom: 2.4,
-        iterations: 180,
+        iterations: 220,
         quality: 1,
         juliaX: -0.8,
         juliaY: 0.156,
@@ -328,21 +357,77 @@
         lastY: 0
       };
 
+      const presets = {
+        deepValley: {
+          label: 'Deep Valley',
+          type: 'mandelbrot',
+          centerX: -0.74,
+          centerY: 0.0,
+          zoom: 2.4,
+          iterations: 220,
+          palette: 'classic'
+        },
+        seahorse: {
+          label: 'Seahorse',
+          type: 'mandelbrot',
+          centerX: -0.75,
+          centerY: -0.12,
+          zoom: 4.6,
+          iterations: 260,
+          palette: 'ocean'
+        },
+        storm: {
+          label: 'Storm',
+          type: 'julia',
+          centerX: 0.0,
+          centerY: 0.0,
+          zoom: 2.8,
+          iterations: 260,
+          palette: 'neon',
+          juliaX: -0.85,
+          juliaY: 0.156
+        },
+        nova: {
+          label: 'Nova',
+          type: 'burningShip',
+          centerX: -0.15,
+          centerY: -0.53,
+          zoom: 2.8,
+          iterations: 240,
+          palette: 'sunset'
+        }
+      };
+
+      const palettes = {
+        classic: [[0,0,0],[16,19,42],[36,74,120],[118,208,255],[255,255,255]],
+        ocean: [[0,0,0],[4,19,31],[15,79,104],[74,155,196],[216,248,255]],
+        sunset: [[0,0,0],[53,18,7],[138,63,18],[240,146,55],[255,232,180]],
+        neon: [[0,0,0],[22,10,48],[72,18,120],[170,66,255],[255,236,180]]
+      };
+
       function clamp(value, min, max) {
         return Math.min(max, Math.max(min, value));
       }
 
-      function getPalette(index) {
-        const palettes = [
-          [[0,0,0],[18,22,44],[39,76,122],[116,209,255],[255,255,255]],
-          [[0,0,0],[4,19,31],[15,79,104],[74,155,196],[216,248,255]],
-          [[0,0,0],[60,20,10],[130,58,18],[240,150,58],[255,236,192]]
-        ];
-        return palettes[index] || palettes[0];
+      function setPreset(name) {
+        const preset = presets[name];
+        if (!preset) return;
+        state.preset = name;
+        state.type = preset.type || state.type;
+        state.centerX = preset.centerX ?? state.centerX;
+        state.centerY = preset.centerY ?? state.centerY;
+        state.zoom = preset.zoom ?? state.zoom;
+        state.iterations = preset.iterations ?? state.iterations;
+        state.palette = preset.palette ?? state.palette;
+        state.juliaX = preset.juliaX ?? state.juliaX;
+        state.juliaY = preset.juliaY ?? state.juliaY;
+        presetLabel.textContent = preset.label;
+        syncControls();
+        renderFractal();
       }
 
-      function colorAt(norm, paletteIndex) {
-        const palette = getPalette(paletteIndex);
+      function rgbAt(norm, key) {
+        const palette = palettes[key] || palettes.classic;
         if (norm <= 0) return palette[0];
         if (norm >= 1) return palette[palette.length - 1];
         const scaled = norm * (palette.length - 1);
@@ -362,7 +447,7 @@
         const w = canvas.width;
         const h = canvas.height;
         const img = ctx.createImageData(w, h);
-        const maxIter = clamp(Math.round(state.iterations), 40, 500);
+        const maxIter = clamp(Math.round(state.iterations), 60, 700);
         const scaleX = 3.0 / state.zoom;
         const scaleY = 2.2 / state.zoom;
         const minX = state.centerX - scaleX;
@@ -376,33 +461,40 @@
           for (let px = 0; px < w; px++) {
             let zx = 0;
             let zy = 0;
-            let cx = minX + px * stepX;
-            let cy = minY + py * stepY;
-
-            if (state.type === 'julia' || state.type === 'burningShip') {
-              zx = cx;
-              zy = cy;
-            }
+            const cx = minX + px * stepX;
+            const cy = minY + py * stepY;
 
             let iter = 0;
-            while (iter < maxIter) {
-              let xt;
-              if (state.type === 'mandelbrot') {
-                xt = zx * zx - zy * zy + cx;
+
+            if (state.type === 'mandelbrot') {
+              zx = 0; zy = 0;
+              while (iter < maxIter) {
+                const xt = zx * zx - zy * zy + cx;
                 zy = 2 * zx * zy + cy;
                 zx = xt;
-              } else if (state.type === 'julia') {
-                xt = zx * zx - zy * zy + state.juliaX;
+                if (zx * zx + zy * zy > 16) break;
+                iter++;
+              }
+            } else if (state.type === 'julia') {
+              zx = cx;
+              zy = cy;
+              while (iter < maxIter) {
+                const xt = zx * zx - zy * zy + state.juliaX;
                 zy = 2 * zx * zy + state.juliaY;
                 zx = xt;
-              } else {
-                xt = zx * zx - zy * zy + cx;
+                if (zx * zx + zy * zy > 16) break;
+                iter++;
+              }
+            } else {
+              zx = cx;
+              zy = cy;
+              while (iter < maxIter) {
+                const xt = zx * zx - zy * zy + cx;
                 zy = Math.abs(2 * zx * zy) + cy;
                 zx = xt;
+                if (zx * zx + zy * zy > 32) break;
+                iter++;
               }
-
-              if (zx * zx + zy * zy > 16) break;
-              iter++;
             }
 
             const idx = (py * w + px) * 4;
@@ -411,7 +503,7 @@
               img.data[idx + 1] = 0;
               img.data[idx + 2] = 0;
             } else {
-              const color = colorAt(Math.sqrt(iter / maxIter), state.palette);
+              const color = rgbAt(Math.sqrt(iter / maxIter), state.palette);
               img.data[idx] = color[0];
               img.data[idx + 1] = color[1];
               img.data[idx + 2] = color[2];
@@ -427,7 +519,7 @@
 
       function syncControls() {
         document.getElementById('typeSelect').value = state.type;
-        document.getElementById('paletteSelect').value = String(state.palette);
+        document.getElementById('paletteSelect').value = state.palette;
         document.getElementById('zoomRange').value = String(state.zoom);
         document.getElementById('iterInput').value = String(state.iterations);
         document.getElementById('qualitySelect').value = String(state.quality);
@@ -438,44 +530,39 @@
 
       function updateFromInputs() {
         state.type = document.getElementById('typeSelect').value;
-        state.palette = Number(document.getElementById('paletteSelect').value);
+        state.palette = document.getElementById('paletteSelect').value;
         state.zoom = Number(document.getElementById('zoomRange').value);
         state.iterations = Number(document.getElementById('iterInput').value);
         state.quality = Number(document.getElementById('qualitySelect').value);
         state.juliaX = Number(document.getElementById('juliaX').value);
         state.juliaY = Number(document.getElementById('juliaY').value);
+        state.preset = 'custom';
+        presetLabel.textContent = 'Custom';
         renderFractal();
       }
 
       function resizeCanvas() {
         const rect = canvas.getBoundingClientRect();
         const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        const w = Math.max(260, Math.floor(rect.width * dpr));
-        const h = Math.max(220, Math.floor(rect.height * dpr));
-        canvas.width = w;
-        canvas.height = h;
+        const width = Math.max(280, Math.floor(rect.width * dpr));
+        const height = Math.max(220, Math.floor(rect.height * dpr));
+        canvas.width = width;
+        canvas.height = height;
         renderFractal();
       }
 
-      document.getElementById('renderBtn').addEventListener('click', renderFractal);
-      document.getElementById('centerBtn').addEventListener('click', () => {
-        state.centerX = -0.74;
-        state.centerY = 0;
-        state.zoom = 2.4;
-        syncControls();
+      document.getElementById('renderBtn').addEventListener('click', () => {
         renderFractal();
       });
+
+      document.getElementById('randomBtn').addEventListener('click', () => {
+        const keys = Object.keys(presets);
+        const randomKey = keys[Math.floor(Math.random() * keys.length)];
+        setPreset(randomKey);
+      });
+
       document.getElementById('resetBtn').addEventListener('click', () => {
-        state.type = 'mandelbrot';
-        state.palette = 0;
-        state.centerX = -0.74;
-        state.centerY = 0;
-        state.zoom = 2.4;
-        state.iterations = 180;
-        state.juliaX = -0.8;
-        state.juliaY = 0.156;
-        syncControls();
-        renderFractal();
+        setPreset('deepValley');
       });
 
       document.getElementById('typeSelect').addEventListener('change', updateFromInputs);
@@ -486,23 +573,27 @@
       document.getElementById('juliaX').addEventListener('change', updateFromInputs);
       document.getElementById('juliaY').addEventListener('change', updateFromInputs);
 
-      canvas.addEventListener('mousedown', (e) => {
-        state.dragging = true;
-        state.lastX = e.clientX;
-        state.lastY = e.clientY;
+      document.querySelectorAll('[data-preset]').forEach((button) => {
+        button.addEventListener('click', () => setPreset(button.dataset.preset));
       });
 
-      window.addEventListener('mousemove', (e) => {
+      canvas.addEventListener('mousedown', (event) => {
+        state.dragging = true;
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
+      });
+
+      window.addEventListener('mousemove', (event) => {
         if (!state.dragging) return;
-        const dx = e.clientX - state.lastX;
-        const dy = e.clientY - state.lastY;
+        const dx = event.clientX - state.lastX;
+        const dy = event.clientY - state.lastY;
         const rect = canvas.getBoundingClientRect();
         const scaleX = (3.2 / state.zoom) / rect.width;
         const scaleY = (2.4 / state.zoom) / rect.height;
         state.centerX -= dx * scaleX;
         state.centerY += dy * scaleY;
-        state.lastX = e.clientX;
-        state.lastY = e.clientY;
+        state.lastX = event.clientX;
+        state.lastY = event.clientY;
         renderFractal();
       });
 
@@ -510,16 +601,18 @@
         state.dragging = false;
       });
 
-      canvas.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const factor = e.deltaY < 0 ? 1.12 : 0.88;
-        state.zoom = clamp(state.zoom * factor, 0.5, 20);
+      canvas.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const factor = event.deltaY < 0 ? 1.12 : 0.88;
+        state.zoom = clamp(state.zoom * factor, 0.5, 18);
+        state.preset = 'custom';
+        presetLabel.textContent = 'Custom';
         syncControls();
         renderFractal();
       }, { passive: false });
 
       window.addEventListener('resize', resizeCanvas);
-      syncControls();
+      setPreset('deepValley');
       resizeCanvas();
     </script>
   </body>
