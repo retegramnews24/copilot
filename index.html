@@ -1,1 +1,494 @@
+<!DOCTYPE html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fractint Mini App</title>
+    <style>
+      :root {
+        --bg: #0b1020;
+        --bg-2: #121b2e;
+        --panel: rgba(17, 25, 39, 0.9);
+        --panel-soft: rgba(23, 33, 52, 0.92);
+        --line: rgba(154, 184, 224, 0.2);
+        --text: #ebf5ff;
+        --muted: #9bb2c5;
+        --blue: #71d4ff;
+        --violet: #a789ff;
+        --green: #7cf1c4;
+        --orange: #ffc66d;
+      }
 
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle at top, rgba(113, 212, 255, 0.08), transparent 30%), #090d15;
+        color: var(--text);
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        display: grid;
+        place-items: center;
+        min-height: 100vh;
+      }
+
+      .app {
+        width: min(94vw, 430px);
+        height: min(96vh, 860px);
+        background: linear-gradient(180deg, #0a111b 0%, #0e1726 100%);
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        overflow: hidden;
+        box-shadow: 0 28px 80px rgba(0,0,0,0.5), inset 0 0 20px rgba(125, 170, 255, 0.06);
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px 10px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--blue), var(--violet));
+        box-shadow: 0 0 12px rgba(113, 212, 255, 0.8);
+      }
+
+      .status {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 11px;
+        color: var(--green);
+        background: rgba(124, 241, 196, 0.08);
+      }
+
+      .toolbar {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 10px 16px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+      }
+
+      button, select, input {
+        font: inherit;
+      }
+
+      button {
+        appearance: none;
+        background: rgba(255,255,255,0.03);
+        color: var(--text);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        cursor: pointer;
+        min-height: 40px;
+        padding: 0 10px;
+        transition: transform 0.15s ease, border-color 0.15s ease;
+      }
+
+      button:hover {
+        border-color: rgba(113, 212, 255, 0.5);
+        transform: translateY(-1px);
+      }
+
+      .primary {
+        background: linear-gradient(135deg, rgba(113, 212, 255, 0.22), rgba(167, 137, 255, 0.22));
+      }
+
+      .viewer {
+        position: relative;
+        height: 430px;
+        background: #050a12;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+      }
+
+      canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        background: #050a12;
+        cursor: crosshair;
+      }
+
+      .hud {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        min-width: 138px;
+        background: rgba(11, 18, 30, 0.7);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        font-family: Consolas, monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        color: var(--text);
+        backdrop-filter: blur(3px);
+      }
+
+      .controls {
+        padding: 12px 16px 16px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+
+      .group {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        padding: 10px;
+      }
+
+      .label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+
+      select, input[type="number"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: rgba(9, 15, 22, 0.9);
+        color: var(--text);
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: #98d9ff;
+      }
+
+      .micro {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+      }
+
+      .micro strong {
+        color: var(--text);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <div class="topbar">
+        <div class="brand"><span class="dot"></span> Fractint</div>
+        <div class="status">live</div>
+      </div>
+
+      <div class="toolbar">
+        <button class="primary" id="renderBtn">Render</button>
+        <button id="centerBtn">Center</button>
+        <button id="resetBtn">Reset</button>
+      </div>
+
+      <div class="viewer">
+        <canvas id="fractalCanvas"></canvas>
+        <div id="hud" class="hud"></div>
+      </div>
+
+      <div class="controls">
+        <div class="row">
+          <div class="group">
+            <label class="label" for="typeSelect">Fractal</label>
+            <select id="typeSelect">
+              <option value="mandelbrot">Mandelbrot</option>
+              <option value="julia">Julia</option>
+              <option value="burningShip">Burning Ship</option>
+            </select>
+          </div>
+          <div class="group">
+            <label class="label" for="paletteSelect">Palette</label>
+            <select id="paletteSelect">
+              <option value="0">Classic</option>
+              <option value="1">Ocean</option>
+              <option value="2">Sunset</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="group">
+          <div class="micro"><span>Zoom</span><strong id="zoomReadout">2.4x</strong></div>
+          <input id="zoomRange" type="range" min="0.5" max="18" step="0.1" value="2.4" />
+        </div>
+
+        <div class="row">
+          <div class="group">
+            <label class="label" for="iterInput">Iterations</label>
+            <input id="iterInput" type="number" min="40" max="500" step="10" value="180" />
+          </div>
+          <div class="group">
+            <label class="label" for="sizeSelect">Detail</label>
+            <select id="sizeSelect">
+              <option value="0.7">Fast</option>
+              <option value="1" selected>Balanced</option>
+              <option value="1.5">High</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="group">
+            <label class="label" for="juliaX">Julia X</label>
+            <input id="juliaX" type="number" value="-0.8" step="0.01" />
+          </div>
+          <div class="group">
+            <label class="label" for="juliaY">Julia Y</label>
+            <input id="juliaY" type="number" value="0.156" step="0.01" />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const canvas = document.getElementById('fractalCanvas');
+      const ctx = canvas.getContext('2d');
+      const hud = document.getElementById('hud');
+      const zoomReadout = document.getElementById('zoomReadout');
+
+      const state = {
+        type: 'mandelbrot',
+        palette: 0,
+        centerX: -0.74,
+        centerY: 0.0,
+        zoom: 2.4,
+        iterations: 180,
+        juliaX: -0.8,
+        juliaY: 0.156,
+        detail: 1,
+        dragging: false,
+        lastX: 0,
+        lastY: 0
+      };
+
+      function clamp(v, min, max) {
+        return Math.min(max, Math.max(min, v));
+      }
+
+      function getPalette(index) {
+        const palettes = [
+          [[0,0,0],[18,22,44],[38,76,122],[118,209,255],[255,255,255]],
+          [[0,0,0],[4,19,31],[15,79,104],[74,155,196],[216,248,255]],
+          [[0,0,0],[60,20,10],[130,58,18],[240,150,58],[255,236,192]]
+        ];
+
+        const p = palettes[index] || palettes[0];
+        return p;
+      }
+
+      function colorAt(norm, paletteIndex) {
+        const palette = getPalette(paletteIndex);
+        if (norm <= 0) return palette[0];
+        if (norm >= 1) return palette[palette.length - 1];
+        const scaled = norm * (palette.length - 1);
+        const lo = Math.floor(scaled);
+        const hi = Math.min(palette.length - 1, lo + 1);
+        const t = scaled - lo;
+        const c1 = palette[lo];
+        const c2 = palette[hi];
+        return [
+          Math.round(c1[0] + (c2[0] - c1[0]) * t),
+          Math.round(c1[1] + (c2[1] - c1[1]) * t),
+          Math.round(c1[2] + (c2[2] - c1[2]) * t)
+        ];
+      }
+
+      function renderFractal() {
+        const w = canvas.width;
+        const h = canvas.height;
+        const img = ctx.createImageData(w, h);
+        const maxIter = clamp(Math.round(state.iterations), 40, 500);
+        const scaleX = 3.0 / state.zoom;
+        const scaleY = 2.2 / state.zoom;
+        const minX = state.centerX - scaleX;
+        const maxX = state.centerX + scaleX;
+        const minY = state.centerY - scaleY;
+        const maxY = state.centerY + scaleY;
+        const stepX = (maxX - minX) / w;
+        const stepY = (maxY - minY) / h;
+
+        for (let py = 0; py < h; py++) {
+          for (let px = 0; px < w; px++) {
+            let zx, zy, cx, cy;
+            if (state.type === 'mandelbrot') {
+              cx = minX + px * stepX;
+              cy = minY + py * stepY;
+              zx = 0; zy = 0;
+            } else if (state.type === 'julia') {
+              cx = minX + px * stepX;
+              cy = minY + py * stepY;
+              zx = cx;
+              zy = cy;
+            } else {
+              cx = minX + px * stepX;
+              cy = minY + py * stepY;
+              zx = cx;
+              zy = cy;
+            }
+
+            let iter = 0;
+            while (iter < maxIter) {
+              let xt;
+              if (state.type === 'mandelbrot') {
+                xt = zx * zx - zy * zy + cx;
+                zy = 2 * zx * zy + cy;
+                zx = xt;
+              } else if (state.type === 'julia') {
+                xt = zx * zx - zy * zy + state.juliaX;
+                zy = 2 * zx * zy + state.juliaY;
+                zx = xt;
+              } else {
+                xt = zx * zx - zy * zy + cx;
+                zy = Math.abs(2 * zx * zy) + cy;
+                zx = xt;
+              }
+
+              if (zx * zx + zy * zy > 16) break;
+              iter++;
+            }
+
+            const idx = (py * w + px) * 4;
+            if (iter >= maxIter) {
+              img.data[idx] = 0;
+              img.data[idx + 1] = 0;
+              img.data[idx + 2] = 0;
+            } else {
+              const color = colorAt(Math.sqrt(iter / maxIter), state.palette);
+              img.data[idx] = color[0];
+              img.data[idx + 1] = color[1];
+              img.data[idx + 2] = color[2];
+            }
+            img.data[idx + 3] = 255;
+          }
+        }
+
+        ctx.putImageData(img, 0, 0);
+
+        hud.innerHTML = `center: ${state.centerX.toFixed(4)}, ${state.centerY.toFixed(4)}<br>zoom: ${state.zoom.toFixed(2)}x<br>iter: ${maxIter}<br>type: ${state.type}`;
+        zoomReadout.textContent = `${state.zoom.toFixed(2)}x`;
+      }
+
+      function resizeCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const width = Math.max(260, Math.floor(rect.width * dpr));
+        const height = Math.max(220, Math.floor(rect.height * dpr));
+        canvas.width = width;
+        canvas.height = height;
+        renderFractal();
+      }
+
+      function syncControls() {
+        document.getElementById('typeSelect').value = state.type;
+        document.getElementById('paletteSelect').value = String(state.palette);
+        document.getElementById('zoomRange').value = String(state.zoom);
+        document.getElementById('iterInput').value = String(state.iterations);
+        document.getElementById('juliaX').value = String(state.juliaX);
+        document.getElementById('juliaY').value = String(state.juliaY);
+        zoomReadout.textContent = `${state.zoom.toFixed(2)}x`;
+      }
+
+      function updateFromInputs() {
+        state.type = document.getElementById('typeSelect').value;
+        state.palette = Number(document.getElementById('paletteSelect').value);
+        state.zoom = Number(document.getElementById('zoomRange').value);
+        state.iterations = Number(document.getElementById('iterInput').value);
+        state.juliaX = Number(document.getElementById('juliaX').value);
+        state.juliaY = Number(document.getElementById('juliaY').value);
+        renderFractal();
+      }
+
+      document.getElementById('renderBtn').addEventListener('click', renderFractal);
+      document.getElementById('centerBtn').addEventListener('click', () => {
+        state.centerX = -0.74;
+        state.centerY = 0;
+        state.zoom = 2.4;
+        syncControls();
+        renderFractal();
+      });
+      document.getElementById('resetBtn').addEventListener('click', () => {
+        state.type = 'mandelbrot';
+        state.palette = 0;
+        state.centerX = -0.74;
+        state.centerY = 0;
+        state.zoom = 2.4;
+        state.iterations = 180;
+        state.juliaX = -0.8;
+        state.juliaY = 0.156;
+        syncControls();
+        renderFractal();
+      });
+
+      document.getElementById('typeSelect').addEventListener('change', updateFromInputs);
+      document.getElementById('paletteSelect').addEventListener('change', updateFromInputs);
+      document.getElementById('zoomRange').addEventListener('input', updateFromInputs);
+      document.getElementById('iterInput').addEventListener('change', updateFromInputs);
+      document.getElementById('juliaX').addEventListener('change', updateFromInputs);
+      document.getElementById('juliaY').addEventListener('change', updateFromInputs);
+
+      canvas.addEventListener('mousedown', (e) => {
+        state.dragging = true;
+        state.lastX = e.clientX;
+        state.lastY = e.clientY;
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!state.dragging) return;
+        const dx = e.clientX - state.lastX;
+        const dy = e.clientY - state.lastY;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = (3.4 / state.zoom) / rect.width;
+        const scaleY = (2.5 / state.zoom) / rect.height;
+        state.centerX -= dx * scaleX;
+        state.centerY += dy * scaleY;
+        state.lastX = e.clientX;
+        state.lastY = e.clientY;
+        renderFractal();
+      });
+
+      window.addEventListener('mouseup', () => {
+        state.dragging = false;
+      });
+
+      canvas.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 0.88;
+        state.zoom = clamp(state.zoom * factor, 0.5, 18);
+        syncControls();
+        renderFractal();
+      }, { passive: false });
+
+      window.addEventListener('resize', resizeCanvas);
+      syncControls();
+      resizeCanvas();
+    </script>
+  </body>
+</html>
