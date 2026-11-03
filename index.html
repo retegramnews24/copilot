@@ -1,73 +1,8 @@
 <!doctype html>
-<html lang="it">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no">
-<meta name="theme-color" content="#090812"><meta name="description" content="Fractal Art Explorer — entra in mondi di colore, forme e meraviglia.">
-<title>Fractal Art Explorer</title><link rel="manifest" href="manifest.webmanifest"><link rel="icon" href="assets/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-</head>
-<body>
-<!-- Initial five-second animated fractal splash; the explorer below is unchanged. -->
-<div class="splash-screen" id="splashScreen" role="status" aria-label="Fractal Art Explorer — apertura">
-  <canvas id="splashCanvas" aria-hidden="true"></canvas>
-  <div class="splash-glow splash-glow-one"></div><div class="splash-glow splash-glow-two"></div>
-  <div class="splash-grain"></div>
-  <div class="splash-brand"><span class="splash-mark">ƒ</span><div><strong>FRACTAL <i>ATELIER</i></strong><small>ART BEYOND INFINITY</small></div></div>
-  <div class="splash-footer"><span>ENTERING THE INFINITE</span><div class="splash-progress"><i></i></div></div>
-</div>
-<div class="app-shell">
-  <header class="topbar">
-    <button class="icon-btn mobile-only" id="openLibrary" aria-label="Apri catalogo">☰</button>
-    <div class="brand"><div class="brand-mark">ƒ</div><div><div class="brand-name">FRACTAL <span>ATELIER</span></div><div class="brand-sub">ART BEYOND INFINITY</div></div></div>
-    <div class="top-actions"><span class="engine-status" id="engineStatus"><i></i> READY</span><button class="icon-btn" id="helpBtn" title="Ispirazione">✧</button><button class="icon-btn immersive-btn" id="fullscreenBtn" title="Tela immersiva senza interfaccia" aria-label="Tela immersiva senza interfaccia">⛶</button></div>
-  </header>
-  <div class="workspace" id="workspace">
-    <aside class="library" id="library">
-      <div class="library-head"><div class="eyebrow">FORME E MONDI</div><button class="icon-btn close-library mobile-only" id="closeLibrary">×</button></div>
-      <div class="search-wrap"><span>⌕</span><input id="searchFormula" placeholder="Cerca una forma…" autocomplete="off"></div>
-      <div class="category-tabs" id="categoryTabs">
-        <button class="cat-tab active" data-category="all">TUTTI</button><button class="cat-tab" data-category="complex">COSMO</button><button class="cat-tab" data-category="geometry">GEOMETRIE</button><button class="cat-tab" data-category="nature">NATURA</button><button class="cat-tab" data-category="attractors">CAOS</button><button class="cat-tab" data-category="random">CASUALI</button><button class="cat-tab" data-category="three">3D</button>
-      </div>
-      <div class="formula-list" id="formulaList"></div>
-      <div class="library-foot"><span>FORME DA ESPLORARE</span><span id="formulaCount">—</span></div>
-    </aside>
-    <main class="stage-wrap">
-      <div class="stage-toolbar">
-        <div class="current-fractal"><div class="current-kicker" id="currentCategory">A WORLD OF COLOUR</div><div class="current-title" id="currentTitle">Violet Reverie</div></div>
-        <div class="toolbar-actions"><button class="tool-btn" id="randomBtn" title="Sorprendimi">✧ <span>SORPRENDIMI</span></button><button class="tool-btn deep-tool" id="deepZoomBtn" title="Zoom infinito" aria-pressed="false">∞</button><button class="tool-btn" id="resetBtn" title="Torna all’opera">↺</button></div>
-      </div>
-      <section class="visual-stage" id="visualStage">
-        <canvas id="canvas2d"></canvas><canvas id="previewCanvas" class="preview-layer" hidden aria-hidden="true"></canvas><canvas id="canvas3d" class="hidden"></canvas>
-        <div class="render-overlay" id="renderOverlay"><div class="loader"></div><span id="renderMessage">CALCOLO IN CORSO</span></div>
-        <div class="stage-hud top-left"><span class="live-dot"></span><span id="modeLabel">2D FRACTAL</span></div>
-        <div class="stage-hud bottom-left"><span id="zoomLabel">ZOOM 1.00×</span><span class="hud-sep">/</span><span id="precisionLabel">CPU RENDER</span></div>
-        <div class="stage-hud bottom-right" id="coordLabel">x: −0.5000 · y: 0.0000</div>
-        <div class="stage-hint" id="stageHint">TRASCINA PER SPOSTARTI · ROTELLA / PINCH PER ZOOM</div>
-        <button class="stage-zoom zoom-plus" id="zoomIn" aria-label="Zoom avanti">+</button><button class="stage-zoom zoom-minus" id="zoomOut" aria-label="Zoom indietro">−</button>
-      </section>
-      <div class="bottom-toolbar"><div class="palette-strip" id="paletteStrip" aria-label="Palette colori">
-<button class="palette-chip active" data-palette="cosmic"><i class="swatch cosmic"></i><span>Cosmica</span></button><button class="palette-chip" data-palette="aurora"><i class="swatch aurora"></i><span>Aurora</span></button><button class="palette-chip" data-palette="fire"><i class="swatch fire"></i><span>Fiamma</span></button><button class="palette-chip" data-palette="ocean"><i class="swatch ocean"></i><span>Oceano</span></button><button class="palette-chip" data-palette="candy"><i class="swatch candy"></i><span>Pastello</span></button><button class="palette-chip" data-palette="gold"><i class="swatch gold"></i><span>Oro</span></button><button class="palette-chip" data-palette="neon"><i class="swatch neon"></i><span>Neon</span></button><button class="palette-chip" data-palette="mono"><i class="swatch mono"></i><span>Inchiostro</span></button>
-</div><div class="bottom-actions"><button class="mini-btn" id="favoriteBtn" title="Aggiungi ai preferiti">♡</button><button class="mini-btn" id="formulaInfoBtn" title="Dettagli opera">✧</button></div></div>
-<section class="art-gallery" id="artGallery"><div class="gallery-heading"><div><div class="eyebrow">LA COLLEZIONE</div><h2>Lasciati sorprendere</h2></div><span class="gallery-count" id="artCount">67 opere</span></div><div class="art-filters" id="artFilters"><button class="art-filter active" data-art-filter="all">Tutte</button><button class="art-filter" data-art-filter="cosmos">Cosmo</button><button class="art-filter" data-art-filter="floral">Fiori</button><button class="art-filter" data-art-filter="geometry">Geometrie</button><button class="art-filter" data-art-filter="nature">Natura</button><button class="art-filter" data-art-filter="chaos">Caos</button><button class="art-filter" data-art-filter="random">Organiche</button><button class="art-filter" data-art-filter="three">3D</button></div><div class="art-cards" id="artCards"></div></section>
-    </main>
-    <aside class="control-panel" id="controlPanel">
-      <div class="panel-heading"><div><div class="eyebrow">CONTROL ROOM</div><h2>Parametri</h2></div><button class="icon-btn" id="collapseControls" title="Riduci pannello">⌄</button></div>
-      <div class="control-content" id="controlContent">
-        <div class="control-block"><div class="control-label"><label for="iterations">Iterazioni</label><output id="iterationsValue">180</output></div><input id="iterations" type="range" min="40" max="1200" value="180" step="10"><div class="range-ends"><span>VELOCE</span><span>DETTAGLIO</span></div></div>
-        <div class="control-block" id="powerBlock"><div class="control-label"><label for="power">Esponente / Potenza</label><output id="powerValue">2.0</output></div><input id="power" type="range" min="2" max="8" value="2" step="0.1"></div>
-        <div class="control-block" id="juliaBlock"><div class="control-label"><label for="juliaC">Costante Julia — Re</label><output id="juliaRealValue">−0.80</output></div><input id="juliaReal" type="range" min="-1.5" max="1.5" value="-0.8" step="0.01"><div class="control-label sub-control"><label for="juliaImag">Costante Julia — Im</label><output id="juliaImagValue">0.156</output></div><input id="juliaImag" type="range" min="-1.5" max="1.5" value="0.156" step="0.001"></div>
-        <div class="control-block" id="paletteBlock"><div class="control-label"><label for="palette">Palette cromatica</label></div><div class="palette-row"><select id="palette"><option value="cosmic">Cosmic</option><option value="fire">Solar flare</option><option value="ocean">Deep ocean</option><option value="aurora">Aurora</option><option value="mono">Monochrome</option><option value="candy">Candy</option><option value="gold">Gold</option><option value="neon">Neon</option></select><button class="palette-swatch" id="paletteCycle" title="Cambia palette">✧</button></div></div>
-        <div class="control-block" id="renderQualityBlock"><div class="control-label"><label for="quality">Qualità render</label><output id="qualityValue">70%</output></div><input id="quality" type="range" min="35" max="100" value="70" step="5"></div>
-        <div class="control-block deep-precision" id="deepPrecisionBlock" hidden><div class="control-label"><label for="deepPrecision">Precisione multipla</label><output>BigInt</output></div><select id="deepPrecision"><option value="128">128 bit · veloce</option><option value="256">256 bit</option><option value="512" selected>512 bit · consigliato</option><option value="1024">1024 bit · estremo</option></select><small>Solo Mandelbrot e Julia. Render CPU più impegnativo.</small></div>
-        <div class="control-block" id="threeControls" hidden><div class="control-label"><label for="threePower">Potenza 3D</label><output id="threePowerValue">8</output></div><input id="threePower" type="range" min="3" max="12" value="8" step="1"><div class="control-label sub-control"><label for="threeDetail">Dettaglio 3D</label><output id="threeDetailValue">8</output></div><input id="threeDetail" type="range" min="4" max="14" value="8" step="1"></div>
-        <div class="control-block preset-block"><div class="control-label"><label for="preset">Preset</label></div><select id="preset"><option value="">Scegli una composizione…</option></select></div>
-        <div class="control-actions"><button class="action-btn secondary" id="randomJulia">Julia casuale</button><button class="action-btn secondary" id="highQualityBtn">Render HD</button></div>
-        <div class="stats-card"><div><span>POSIZIONE</span><b id="positionStat">−0.500 / 0.000</b></div><div><span>FATTORE ZOOM</span><b id="zoomStat">1.00×</b></div><div><span>RENDER</span><b id="renderStat">Canvas CPU</b></div></div>
-      </div>
-      <div class="panel-bottom"><span>FRACTINT MINI</span><span>v4.1.0</span></div>
-    </aside>
-  </div>
-</div>
-<div class="modal-backdrop" id="modalBackdrop"><section class="modal" id="modal"><button class="modal-close" id="modalClose">×</button><div id="modalContent"></div></section></div>
-<script src="js/catalog.js"></script><script src="js/art-presets.js"></script><script src="js/renderer3d.js"></script><script src="js/app.js"></script><script src="js/splash.js"></script>
-</body></html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#090b12"><meta name="description" content="Sette paesaggi di luce e suono, composti con la successione di Fibonacci."><title>Fiora · Fibonacci sanctuary</title><link rel="stylesheet" href="style.css"><script src="https://telegram.org/js/telegram-web-app.js"></script><script defer src="app.js"></script></head>
+<body><canvas id="art" aria-label="Frattale generativo animato del chakra selezionato"></canvas><div class="shade"></div>
+<main><header><a class="brand" href="#">fiora<span>FIBONACCI SANCTUARY</span></a><button id="immerse" aria-label="Nascondi interfaccia">↗ <span>Immergiti</span></button></header>
+<section class="intro"><p class="eyebrow">1 · 1 · 2 · 3 · 5 · 8 · 13 · 21</p><h1>Ritrova il tuo<br><em>ritmo naturale.</em></h1><p>Sette colori. Un respiro.<br>Lascia che la geometria diventi quiete.</p></section>
+<section class="sanctuary" aria-label="Ambiente selezionato"><div class="orb-label"><span id="ordinal">01 / 07</span><span id="breath">Inspira · 5</span></div><div class="scene-info"><p class="eyebrow" id="sanskrit"></p><h2 id="chakraName"></h2><p id="intention"></p></div><div class="scene-actions"><button id="play">▷ <span>Attiva suono</span></button><button id="motion" aria-pressed="false" aria-label="Metti in pausa animazione">Ⅱ</button></div></section>
+<section class="bottom"><div class="section-label"><span>SCEGLI LA TUA ENERGIA</span><span>↙ Esplora i sette chakra</span></div><div id="chakras" role="group" aria-label="Seleziona chakra"></div><div class="settings"><label>Paesaggio sonoro<select id="sound"><option value="tone">Armonie</option><option value="water">Acqua</option><option value="air">Vento</option></select></label><label>Volume<input id="volume" type="range" min="0" max="34" value="13"></label><label>Geometria<select id="geometry"><option value="bloom">Fioritura</option><option value="tree">Albero frattale</option><option value="spiral">Spirali</option></select></label><label>Sessione<select id="timer"><option value="0">Libera</option><option value="5">5 minuti</option><option value="8">8 minuti</option><option value="13">13 minuti</option><option value="21">21 minuti</option></select></label></div><footer><span id="session">Il tuo spazio, senza fretta.</span><button id="about">La regola aurea ↗</button></footer></section></main>
+<button id="restore" hidden>↙ Torna ai chakra</button><dialog id="info"><h2>La quiete ha una proporzione.</h2><p>1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144… Ogni numero è la somma dei due precedenti.</p><p>Spazi, caratteri e controlli seguono questa scala. Il layout usa colonne 3:5; spirali, ramificazioni, armoniche e tempi derivano dagli stessi numeri. Il rapporto 89/55 approssima la sezione aurea.</p><p>I sette colori richiamano la tradizione dei chakra. Suoni e immagini sono una composizione artistica per il relax, senza attribuzioni terapeutiche. Respira liberamente, senza forzare il ritmo suggerito.</p><button id="closeInfo">Continua a esplorare</button></dialog></body></html>
