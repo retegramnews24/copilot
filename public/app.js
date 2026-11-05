@@ -43,7 +43,7 @@ function makeAvatar(user){
  return avatar;
 }
 function renderLobby(){
- const own=ownedGame();$('create').hidden=!!own;
+ const own=ownedGame();$('create').hidden=!!own;$('create-chess').disabled=!identity||!!own;$('create-chess').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  const active=games.filter(g=>!g.archived);
  const waiting=active.filter(g=>g.phase==='waiting').length,playing=active.filter(g=>g.phase==='playing').length;
  $('lobby-summary').textContent=active.length?waiting+' da giocare · '+playing+' in corso':'Un tavolo, due giocatori. Si comincia qui.';
@@ -54,7 +54,7 @@ function renderLobby(){
  for(const game of visible){
   const card=document.createElement('article');card.className='table-card';
   const title=document.createElement('div');title.className='table-title';
-  const heading=document.createElement('strong');heading.textContent='Partita '+game.number;
+  const heading=document.createElement('strong');heading.textContent='Tavolo '+game.number+' · Checkmate!';
   const badge=document.createElement('span');badge.className='game-badge '+game.phase;
   badge.textContent=game.phase==='waiting'?'Posto libero':game.phase==='playing'?'In corso':'Conclusa';title.append(heading,badge);
   const names=document.createElement('div');names.className='table-players';
@@ -103,7 +103,7 @@ function render(s){
  if(!state||s.revision!==state.revision){selectedSquare=null;promotionMove=null;$('promotion').hidden=true;trace('STATE','Partita '+s.number+' · '+s.phase+' · rev '+s.revision)}
  state=s;$('lobby').hidden=true;$('table').hidden=false;
  const mine=s.players.findIndex(p=>p.id===credentials.player);
- $('room-number').textContent=s.number?'Partita '+s.number:'Partita';
+ $('room-number').textContent=s.number?'Tavolo '+s.number+' · Checkmate!':'Checkmate!';
  $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?(s.archived?'Archiviata':s.chess?.reason||'Partita conclusa')+(s.chess?.result?' · '+s.chess.result:''):(mine===s.turn?'Tocca a te':'Tocca a '+s.players[s.turn].name)+(s.chess?.check?' · Scacco':'');
  $('players').replaceChildren();
  for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(s.chess?(i===0?'Bianco · ':'Nero · '):'')+(s.players[i]?.name||'Posto libero');$('players').append(el)}
@@ -153,10 +153,13 @@ function nickname(field='name'){
  const value=identity?.name||'Utente Telegram';if(!value)throw Error('Inserisci il tuo nome.');save('binotto-name',value);$('name').textContent=value;return value;
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
-action('create',async()=>{
+$('create').onclick=()=>selectPage('games');
+$('open-debug').onclick=()=>selectPage('debug');
+$('back-settings').onclick=()=>selectPage('settings');
+action('create-chess',async()=>{
  if(ownedGame())throw Error('Hai già una partita aperta: riprendila prima di crearne un’altra.');
  save('binotto-probe',true);const j=await api('create',{name:nickname()});
- stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);render(j.state);connect();renderLobby();
+ stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);selectPage('game');render(j.state);connect();renderLobby();
 });
 
 action('pass',async()=>render(await api('pass',{revision:state.revision})));
@@ -165,18 +168,21 @@ $('back-lobby').onclick=showLobby;
 $('newtable').onclick=()=>{showLobby();$('name').focus()};
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true)}if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Checkmate! 0.9'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.chess?'Scacchi':'Prototipo / sala'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia','Binottoland 1.0'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.chess?'Scacchi':'Prototipo / sala'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
 function selectPage(page){
  $('draw-dialog').hidden=true;
- document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===page;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$('page-'+tab.dataset.page).hidden=!selected});
- if(page!=='game')stopReplay();trace('UI','Pagina '+page);if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
+ const activeTab=page==='debug'?'settings':page;
+ document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===activeTab;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1});
+ document.querySelectorAll('.page').forEach(section=>section.hidden=section.id!=='page-'+page);
+ if(page!=='game')stopReplay();trace('UI','Pagina '+page);
+ if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
 }
 document.querySelectorAll('.tab').forEach((tab,index,tabs)=>{
- tab.onclick=()=>selectPage(tab.dataset.page);
- tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();selectPage(tabs[next].dataset.page)}
+ tab.onclick=()=>{if(tab.dataset.page==='game')showLobby();selectPage(tab.dataset.page)};
+ tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();if(tabs[next].dataset.page==='game')showLobby();selectPage(tabs[next].dataset.page)}
 });
 function applyTheme(theme){
  if(!['dark','light','slate','ocean','rose','sand'].includes(theme))theme='dark';
@@ -372,21 +378,21 @@ function applyPieceTheme(theme){
 applyPieceTheme(read('checkmate-pieces','classic'));
 document.querySelectorAll('[data-piece-choice]').forEach(button=>button.onclick=()=>{applyPieceTheme(button.dataset.pieceChoice);try{save('checkmate-pieces',button.dataset.pieceChoice)}catch(e){err(e.message)}});
 
-trace('BOOT','Checkmate! 0.9 · registro sessione attivo');
+trace('BOOT','Binottoland 1.0 · registro sessione attivo');
 
 
 
-async function startSession(){
- $('create').disabled=true;
+async function startSession(password){
+ $('create').disabled=true;$('access-submit').disabled=true;$('access-error').textContent='Verifica dell’accesso…';
  try{
   if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
-  const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData})});
+  const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,password})});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
-  identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
+  identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;$('club-gate').hidden=true;$('app-shell').hidden=false;
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chatMessages=payload.messages||[];
   $('create').disabled=false;renderLobby();connectLobby();
- }catch(e){err(e.message);$('auth-notice').hidden=false;trace('AUTH','Accesso richiesto da Telegram')}
+ }catch(e){$('access-error').textContent=e.message;trace('AUTH','Accesso non completato')}finally{$('access-password').value='';$('access-submit').disabled=false}
 }
 function sendPresence(away=document.hidden){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room,away}));
@@ -432,5 +438,6 @@ $('chat-form').onsubmit=async event=>{
 };
 setInterval(()=>{if(!document.hidden)sendPresence()},25000);
 window.addEventListener('pagehide',()=>{sendPresence(true);lobbyWS?.close()});
-startSession();
+$('access-form').onsubmit=event=>{event.preventDefault();startSession($('access-password').value)};
+if(!tg?.initData){$('access-submit').disabled=true;$('access-password').disabled=true;$('access-error').textContent='Apri Binottoland da Telegram per accedere.';$('access-telegram').hidden=false;}
 

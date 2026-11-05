@@ -57,8 +57,8 @@ async function telegramWebhook(req,env){
   if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
   const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
    chat_id:message.chat.id,
-   text:'🏁 Pronti a giocare? Apri Binottoland per giocare.',
-   reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
+   text:'Benvenuto nel circolo Binottoland. Lobby, amici e tavoli da gioco.',
+   reply_markup:{inline_keyboard:[[{text:'Apri Binottoland',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
   });
   if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
   return json({ok:true});
@@ -85,7 +85,11 @@ async function login(req,env){
   if(!Number.isFinite(age)||age< -60||age>86400)throw Error();
   const u=JSON.parse(p.get('user')||'null');if(!u||!Number.isSafeInteger(u.id)||u.id<=0)throw Error();
   const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):'',photo:typeof u.photo_url==='string'&&u.photo_url.startsWith('https://')&&u.photo_url.length<=512?u.photo_url:''};
-  const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
+  if(!env.ACCESS_PASSWORD)return json({error:'Accesso riservato in configurazione.'},503);
+  const access=await env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/access',{method:'POST',body:JSON.stringify({userId:user.id,password:typeof body.password==='string'?body.password:''})}));
+  if(!access.ok)return access;
+  const accessTag=hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD));
+  const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,accessTag,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
   const token='session.'+payload+'.'+hex(await mac(env.BOT_TOKEN,'session.'+payload));
   return json({user,token});
  }catch{return json({error:'Accesso Telegram non valido o scaduto. Chiudi e riapri la Mini App dal bot.'},401)}
@@ -97,6 +101,7 @@ async function sessionUser(req,env){
   const m=String(token||'').match(/^session\.([A-Za-z0-9_-]+)\.([a-f0-9]{64})$/);
   if(!m||!env.BOT_TOKEN||hex(await mac(env.BOT_TOKEN,'session.'+m[1]))!==m[2])return null;
   const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[1].replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))));
+  if(!env.ACCESS_PASSWORD||payload.accessTag!==hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)))return null;
   return payload.expires>Date.now()?payload.user:null;
  }catch{return null}
 }
@@ -111,12 +116,12 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.9.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.0'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
   const user=await sessionUser(req,env);
   if(!user)return json({error:'Apri Checkmate! da Telegram per accedere.'},401);
-  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));req=new Request(req,{headers:trustedHeaders});
+  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));req=new Request(req,{headers:trustedHeaders});
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
@@ -142,7 +147,7 @@ export default {
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
  public(s){return {room:s.room,number:s.number||null,archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,created:s.created,expires:s.expires}}
- broadcast(s){const msg=JSON.stringify(this.public(s));for(const ws of this.ctx.getWebSockets()){try{ws.send(msg)}catch{}}}
+ async broadcast(s){const msg=JSON.stringify(this.public(s)),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
   return this.ctx.blockConcurrencyWhile(async()=>{
@@ -161,7 +166,7 @@ export class Room extends DurableObject {
     if(path.endsWith('/ws')){
      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
      if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
-     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].send(JSON.stringify(this.public(s)));
+     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({accessTag:req.headers.get('X-Access-Tag')});pair[1].send(JSON.stringify(this.public(s)));
      return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     }
     if(path.endsWith('/replay')&&req.method==='GET'){
@@ -175,7 +180,7 @@ export class Room extends DurableObject {
      const old=s.players.find(p=>!p.id.startsWith('tg:')&&legacy&&p.token===legacy);
      if(user&&old&&!s.players.some(p=>p.id===user.player)){
       old.id=user.player;old.name=name(user.name);s.revision++;
-      await this.ctx.storage.put('state',s);this.broadcast(s);
+      await this.ctx.storage.put('state',s);await this.broadcast(s);
      }
      return json(this.public(s));
     }
@@ -186,7 +191,7 @@ export class Room extends DurableObject {
      const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
      if(s.players.some(p=>p.id===user?.player))return json({error:'Sei già un giocatore di questa partita.'},409);
      const token=id(),p={id:user?.player||id(),name:name(user?.name||b.name),token};s.players.push(p);s.phase='playing';s.revision++;
-     await this.ctx.storage.put('state',s);this.broadcast(s);return json({token,player:p.id,state:this.public(s)});
+     await this.ctx.storage.put('state',s);await this.broadcast(s);return json({token,player:p.id,state:this.public(s)});
     }
     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');const legacy=req.headers.get('X-Player-Token');const who=s.players.findIndex(p=>p.id===user?.player||(!p.id.startsWith('tg:')&&legacy&&p.token===legacy));
     if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
@@ -200,7 +205,7 @@ export class Room extends DurableObject {
      }
      s.archived=true;s.phase='finished';s.expires=null;s.revision++;
      if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
-     await this.ctx.storage.deleteAlarm();await this.ctx.storage.put('state',s);this.broadcast(s);
+     await this.ctx.storage.deleteAlarm();await this.ctx.storage.put('state',s);await this.broadcast(s);
      return json(this.public(s));
     }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
@@ -231,7 +236,7 @@ export class Room extends DurableObject {
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
      if(s.moves.length>=500)s.phase='finished';
     }else if(path.endsWith('/finish')){s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};}else bad('Azione non valida.');
-    s.revision++;await this.ctx.storage.put('state',s);this.broadcast(s);return json(this.public(s));
+    s.revision++;await this.ctx.storage.put('state',s);await this.broadcast(s);return json(this.public(s));
    }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
   });
  }
@@ -243,9 +248,9 @@ export class Room extends DurableObject {
  }
 
  async lobbyPayload(){
-  const games=await this.lobbyList(),unique=new Map();
+  const games=await this.lobbyList(),unique=new Map(),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;
   for(const ws of this.ctx.getWebSockets()){
-   const a=ws.deserializeAttachment();if(!a||a.kind!=='lobby'||a.closed||Date.now()-a.seen>65000)continue;
+   const a=ws.deserializeAttachment();if(!tag||!a||a.accessTag!==tag||a.kind!=='lobby'||a.closed||Date.now()-a.seen>65000)continue;
    const prior=unique.get(a.user.id);if(!prior||a.room)unique.set(a.user.id,a);
   }
   const users=[...unique.values()].map(a=>{
@@ -259,8 +264,8 @@ export class Room extends DurableObject {
   const payload=await this.lobbyPayload(),signature=JSON.stringify(payload.users);
   if(!force&&signature===this.presenceSignature)return;
   this.presenceSignature=signature;
-  const message=JSON.stringify(payload);
-  for(const ws of this.ctx.getWebSockets()){try{ws.send(message)}catch{}}
+  const message=JSON.stringify(payload),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;
+  for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
  }
  async lobby(req,path){
   if(path==='/lobby/list')return json(await this.lobbyPayload());
@@ -268,12 +273,20 @@ export class Room extends DurableObject {
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
    if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false});
+   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,accessTag:req.headers.get('X-Access-Tag')});
    await this.lobbyBroadcast();
    return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
   }
   if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
   const body=await req.json();
+  if(path==='/lobby/access'){
+   if(!this.env.ACCESS_PASSWORD)return json({error:'Accesso riservato in configurazione.'},503);
+   const key='access-attempt:'+body.userId,now=Date.now(),saved=await this.ctx.storage.get(key);
+   const attempt=saved&&now-saved.start<15*60000?saved:{count:0,start:now};
+   if(attempt.count>=5)return json({error:'Troppi tentativi. Riprova tra 15 minuti.'},429);
+   if(body.password!==this.env.ACCESS_PASSWORD){attempt.count++;await this.ctx.storage.put(key,attempt);return json({error:'Password non corretta.'},403)}
+   await this.ctx.storage.delete(key);return json({ok:true});
+  }
   if(path==='/lobby/join'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    if((await this.lobbyList()).some(g=>g.room!==body.room&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta. Puoi guardare le altre.'},409);
@@ -323,7 +336,7 @@ export class Room extends DurableObject {
  }
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();if(!this.env.ACCESS_PASSWORD||a?.accessTag!==hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD))){ws.close(4001,'Riapri la Mini App');return}if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;
