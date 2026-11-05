@@ -75,7 +75,7 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.6.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'0.7.0'});
 
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
@@ -85,7 +85,7 @@ export default {
    if(raw.length>4096)return json({error:'Richiesta troppo grande.'},413);
    return lobby.fetch(new Request(u.origin+'/lobby/create',{method:'POST',body:raw}));
   }
-  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|move|pass|finish|archive|delete|replay|ws)$/);
+  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|move|pass|finish|archive|delete|replay|offer-draw|accept-draw|reject-draw|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
 
   const response=await env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(req);
@@ -99,7 +99,7 @@ export default {
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
- public(s){return {room:s.room,number:s.number||null,archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,chess:s.chess||null,created:s.created,expires:s.expires}}
+ public(s){return {room:s.room,number:s.number||null,archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,created:s.created,expires:s.expires}}
  broadcast(s){const msg=JSON.stringify(this.public(s));for(const ws of this.ctx.getWebSockets()){try{ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
@@ -153,7 +153,16 @@ export class Room extends DurableObject {
     }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
-    if(path.endsWith('/move')){
+    if(path.endsWith('/offer-draw')){
+     if(!s.chess||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita di scacchi.'},409);
+     if(s.drawOffer)return json({error:'C’è già una proposta in attesa.'},409);
+     if(s.lastDrawOffer?.by===who&&s.lastDrawOffer?.ply===s.moves.length)return json({error:'Attendi una nuova mossa prima di proporre ancora la patta.'},409);
+     s.drawOffer={by:s.players[who].id,name:s.players[who].name};s.lastDrawOffer={by:who,ply:s.moves.length};
+    }else if(path.endsWith('/accept-draw')||path.endsWith('/reject-draw')){
+     if(!s.drawOffer||s.drawOffer.by===s.players[who].id)return json({error:'Non puoi rispondere a questa proposta.'},403);
+     if(path.endsWith('/accept-draw')){s.phase='finished';s.chess={...s.chess,legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
+     s.drawOffer=null;
+    }else if(path.endsWith('/move')){
      if(!s.chess)return json({error:'Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      if(typeof b.from!=='string'||typeof b.to!=='string')return json({error:'Mossa non valida.'},400);
@@ -161,7 +170,7 @@ export class Room extends DurableObject {
      for(const move of s.moves)game.move(move.san);
      let moved;try{moved=game.move({from:b.from,to:b.to,promotion:b.promotion||'q'})}catch{return json({error:'Mossa non consentita.'},400)}
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1,san:moved.san,from:moved.from,to:moved.to,...(moved.promotion?{promotion:moved.promotion}:{})});
-     s.turn=game.turn()==='w'?0:1;
+     s.drawOffer=null;s.turn=game.turn()==='w'?0:1;
      s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
      if(game.isGameOver())s.phase='finished';
     }else if(path.endsWith('/pass')){

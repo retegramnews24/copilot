@@ -36,13 +36,15 @@ function renderLobby(){
   const status=document.createElement('p');status.className='hint';status.textContent=game.phase==='waiting'?'In attesa di un avversario':game.phase==='finished'?'Conclusa':'In corso · turno di '+game.players[game.turn].name;
   const button=document.createElement('button');button.className='alt';
   const mine=game.players.some(p=>p.id===read('binotto-'+game.room,{}).player);
-  button.textContent=mine?'Riprendi':game.phase==='waiting'?'Entra · gioca o guarda':'Guarda';
+  if(game.phase==='playing')status.textContent=game.players[game.turn]?.id===read('binotto-'+game.room,{}).player?'Tocca a te':'Tocca a '+game.players[game.turn].name;
+  button.textContent=mine?'Riprendi':game.phase==='waiting'?(ownedGame()?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room);card.append(heading,names,status,button);$('games').append(card);
  }
  renderArchive();refreshDebug();
 }
 function stopRoom(){
  stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false;
+ $('manage-game').open=false;$('draw-dialog').hidden=true;
  selectedSquare=null;promotionMove=null;boardFlipped=null;$('promotion').hidden=true;roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close();ws=null}
 }
 function showLobby(){
@@ -53,7 +55,19 @@ async function openRoom(nextRoom){
  if(busy)return;
  stopRoom();room=nextRoom;state=null;credentials=read('binotto-'+room,{});const epoch=roomEpoch;
  err('');
- try{const s=await api('state');if(epoch!==roomEpoch)return;render(s);connect()}
+ try{
+ let s=await api('state');if(epoch!==roomEpoch)return;
+ if(s.phase==='waiting'&&!s.players.some(p=>p.id===credentials.player)&&!ownedGame()){
+  const playerName=$('name').value.trim()||read('binotto-name','')||tg?.initDataUnsafe?.user?.first_name||'Giocatore';
+  save('binotto-name',playerName);$('name').value=playerName;
+  try{
+   const j=await api('claim',{name:playerName});
+   save('binotto-'+nextRoom,{token:j.token,player:j.player});
+   if(epoch!==roomEpoch)return;credentials={token:j.token,player:j.player};s=j.state;
+  }catch(e){if(epoch!==roomEpoch)return;s=await api('state');trace('CLAIM',e.message)}
+ }
+ if(epoch!==roomEpoch)return;render(s);connect()
+}
  catch(e){if(epoch===roomEpoch){showLobby();err(e.message)}}
 }
 function render(s){
@@ -62,14 +76,20 @@ function render(s){
  state=s;$('lobby').hidden=true;$('table').hidden=false;
  const mine=s.players.findIndex(p=>p.id===credentials.player);
  $('room-number').textContent=s.number?'Partita '+s.number:'Partita';
- $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?(s.archived?'Archiviata':s.chess?.reason||'Partita conclusa')+(s.chess?.result?' · '+s.chess.result:''):'Turno di '+s.players[s.turn].name+(s.chess?.check?' · Scacco':'');
+ $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?(s.archived?'Archiviata':s.chess?.reason||'Partita conclusa')+(s.chess?.result?' · '+s.chess.result:''):(mine===s.turn?'Tocca a te':'Tocca a '+s.players[s.turn].name)+(s.chess?.check?' · Scacco':'');
  $('players').replaceChildren();
  for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(s.chess?(i===0?'Bianco · ':'Nero · '):'')+(s.players[i]?.name||'Posto libero');$('players').append(el)}
  $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
- $('join-name').hidden=s.phase!=='waiting'||mine>=0;
- $('claim').hidden=s.phase!=='waiting'||mine>=0;
+
  $('pass').hidden=!!s.chess||s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
  $('finish').hidden=s.phase==='finished'||mine<0;
+ $('offer-draw').hidden=!s.chess||s.phase!=='playing'||mine<0;
+ $('offer-draw').disabled=busy||!!s.drawOffer;
+ $('draw-response').hidden=!s.drawOffer||s.phase!=='playing';
+ $('draw-info').textContent=s.drawOffer?(s.drawOffer.by===credentials.player?'Hai offerto la patta. In attesa dell’avversario.':s.drawOffer.name+' propone la patta.'):'';
+ const responder=mine>=0&&s.drawOffer&&s.drawOffer.by!==credentials.player;
+ $('accept-draw').hidden=!responder;$('reject-draw').hidden=!responder;
+ if(s.phase!=='playing')$('draw-dialog').hidden=true;
  $('newtable').hidden=mine>=0&&s.phase!=='finished';
  $('expires').textContent=s.archived?'Archiviata · conservata fino all’eliminazione':'Disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');
  $('manage-game').hidden=mine<0;$('archive-game').hidden=!!s.archived;
@@ -103,21 +123,19 @@ action('create',async()=>{
  save('binotto-probe',true);const j=await api('create',{name:nickname()});
  stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);render(j.state);connect();renderLobby();
 });
-action('claim',async()=>{
- const own=ownedGame();if(own&&own.room!==room)throw Error('Hai già una partita aperta. Puoi assistere a questa.');
- const j=await api('claim',{name:nickname('join-name-input')});credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);render(j.state);renderLobby();
-});
+
 action('pass',async()=>render(await api('pass',{revision:state.revision})));
 action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(await api('finish',{revision:state.revision}))});
 $('back-lobby').onclick=showLobby;
 $('newtable').onclick=()=>{showLobby();$('name').focus()};
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopReplay();if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Checkmate! 0.6'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.chess?'Scacchi':'Prototipo / sala'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia','Checkmate! 0.7'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.chess?'Scacchi':'Prototipo / sala'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
 function selectPage(page){
+ $('draw-dialog').hidden=true;
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===page;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$('page-'+tab.dataset.page).hidden=!selected});
  if(page!=='game')stopReplay();trace('UI','Pagina '+page);if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
 }
@@ -126,10 +144,10 @@ document.querySelectorAll('.tab').forEach((tab,index,tabs)=>{
  tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();selectPage(tabs[next].dataset.page)}
 });
 function applyTheme(theme){
- if(!['dark','light','slate'].includes(theme))theme='dark';
+ if(!['dark','light','slate','ocean','rose','sand'].includes(theme))theme='dark';
  document.documentElement.dataset.theme=theme;
  document.querySelectorAll('[data-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.themeChoice===theme)));
- document.querySelector('meta[name="theme-color"]').content=theme==='light'?'#eeece4':theme==='slate'?'#14191f':'#111512';
+ document.querySelector('meta[name="theme-color"]').content={dark:'#111512',light:'#eeece4',slate:'#14191f',ocean:'#101e26',rose:'#211920',sand:'#eee4d3'}[theme];
 }
 applyTheme(read('checkmate-theme','dark'));
 document.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{applyTheme(button.dataset.themeChoice);try{save('checkmate-theme',button.dataset.themeChoice)}catch(e){err(e.message)}});
@@ -213,7 +231,7 @@ $('flip-board').onclick=()=>{const mine=state.players.findIndex(p=>p.id===creden
 document.querySelectorAll('[data-promotion]').forEach(button=>button.onclick=()=>{if(promotionMove)sendMove({...promotionMove,promotion:button.dataset.promotion})});
 $('cancel-promotion').onclick=()=>{promotionMove=null;$('promotion').hidden=true};
 function applyBoardTheme(theme){
- if(!['classic','forest','walnut'].includes(theme))theme='classic';
+ if(!['classic','forest','walnut','blue','plum','graphite'].includes(theme))theme='classic';
  document.documentElement.dataset.board=theme;
  document.querySelectorAll('[data-board-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.boardChoice===theme)));
 }
@@ -292,8 +310,23 @@ action('delete-game',async()=>{
  const result=await request('/api/lobby');games=result.games;renderLobby();trace('DELETE','Partita eliminata');
 });
 
-trace('BOOT','Checkmate! 0.6 · registro sessione attivo');
 
-$('join-name-input').value=read('binotto-name','');
+$('offer-draw').onclick=()=>{$('draw-dialog').hidden=false;$('confirm-draw').focus()};
+$('cancel-draw').onclick=()=>{$('draw-dialog').hidden=true;$('offer-draw').focus()};
+window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('draw-dialog').hidden){$('draw-dialog').hidden=true;$('offer-draw').focus()}});
+action('confirm-draw',async()=>{const revision=state.revision;render(await api('offer-draw',{revision}));$('draw-dialog').hidden=true});
+action('accept-draw',async()=>render(await api('accept-draw',{revision:state.revision})));
+action('reject-draw',async()=>render(await api('reject-draw',{revision:state.revision})));
+function applyPieceTheme(theme){
+ if(!['classic','forest','walnut','blue','plum','graphite'].includes(theme))theme='classic';
+ document.documentElement.dataset.pieces=theme;
+ document.querySelectorAll('[data-piece-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.pieceChoice===theme)));
+}
+applyPieceTheme(read('checkmate-pieces','classic'));
+document.querySelectorAll('[data-piece-choice]').forEach(button=>button.onclick=()=>{applyPieceTheme(button.dataset.pieceChoice);try{save('checkmate-pieces',button.dataset.pieceChoice)}catch(e){err(e.message)}});
+
+trace('BOOT','Checkmate! 0.7 · registro sessione attivo');
+
+
 request('/api/lobby').then(result=>{games=result.games;renderLobby()}).catch(e=>err(e.message));
 connectLobby();
