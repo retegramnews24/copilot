@@ -183,7 +183,7 @@ function applyTheme(theme){
  if(!['dark','light','slate','ocean','rose','sand'].includes(theme))theme='dark';
  document.documentElement.dataset.theme=theme;
  document.querySelectorAll('[data-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.themeChoice===theme)));
- document.querySelector('meta[name="theme-color"]').content={dark:'#111512',light:'#eeece4',slate:'#14191f',ocean:'#101e26',rose:'#211920',sand:'#eee4d3'}[theme];
+ document.querySelector('meta[name="theme-color"]').content={dark:'#15231f',light:'#f2eee4',slate:'#18233c',ocean:'#102c35',rose:'#301d2a',sand:'#efe0bd'}[theme];
 }
 applyTheme(read('checkmate-theme','dark'));
 document.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{applyTheme(button.dataset.themeChoice);try{save('checkmate-theme',button.dataset.themeChoice)}catch(e){err(e.message)}});
