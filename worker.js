@@ -50,7 +50,7 @@ async function telegramWebhook(req,env){
   const context=await chatContext(message.chat.id,env.BOT_TOKEN);
   const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
    chat_id:message.chat.id,
-   text:'🏁 Pronti a giocare? Apri Binottoland e crea una sfida. Poi condividi l’invito nel gruppo.',
+   text:'🏁 Pronti a giocare? Apri Binottoland per giocare.',
    reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp='+context}]]}
   });
   if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
@@ -95,13 +95,7 @@ export default {
    const chat=await contextChat(body.context,env.BOT_TOKEN);
    if(body.context&&!chat)return json({error:'Collegamento al gruppo scaduto. Usa di nuovo /gioca nel gruppo.'},400);
    const response=await stub.fetch(new Request(u.origin+'/init',{method:'POST',body:JSON.stringify({name:body.name,context:chat?body.context:null}),headers:{'Content-Type':'application/json','X-Room':room}}));
-   if(!response.ok||!chat)return response;
-   const result=await response.json();
-   try{
-    const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{chat_id:chat,text:'🏁 '+result.state.players[0].name+' ha aperto una sfida! Il primo che accetta gioca; gli altri possono assistere e aprire un altro tavolo.',reply_markup:{inline_keyboard:[[{text:'Gioca o assisti',url:'https://t.me/'+BOT_USERNAME+'?startapp=r_'+room}]]}});
-    result.announcement=sent.ok;
-   }catch{result.announcement=false}
-   return json(result);
+   return response;
   }
   const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|pass|finish|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
