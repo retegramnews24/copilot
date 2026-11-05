@@ -64,7 +64,7 @@ function renderLobby(){
   for(let i=0;i<2;i++){const person=document.createElement('span');person.className='table-player'+(!game.players[i]?' vacant':'');const dot=document.createElement('i');dot.className='side-dot '+(i?'black':'white');const label=document.createElement('span');label.textContent=game.players[i]?.name||'In attesa';person.append(dot,label);names.append(person)}
   const note=document.createElement('p');note.className='turn-note';
   const mine=game.players.some(p=>p.id===seat(game.room).player);
-  note.textContent=game.phase==='playing'?(game.players[game.turn]?.id===seat(game.room).player?'Tocca a te':'Tocca a '+game.players[game.turn].name):game.phase==='waiting'?'Il prossimo giocatore entra al tavolo.':'Disponibile per la revisione.';
+  note.textContent=game.phase==='playing'?(game.players[game.turn]?.id===seat(game.room).player?'Tocca a te':'Tocca a '+game.players[game.turn].name):game.phase==='waiting'?'':'Disponibile per la revisione.';
   const button=document.createElement('button');button.className='table-open '+(game.phase==='waiting'&&!mine&&!own?'':'alt');
   button.textContent=mine?(game.phase==='finished'?'Rivedi':'Riprendi'):game.phase==='waiting'?(own?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room);card.append(title,names,note,button);$('games').append(card);
@@ -227,6 +227,7 @@ function position(fen){
 }
 function canMove(){return replayPly===null&&!state?.archived&&state?.phase==='playing'&&state.players[state.turn]?.id===credentials.player&&!busy}
 function renderBoard(){
+ $('move-strip').hidden=!!state?.checkers;
  $('chess-area').hidden=!boardState();if(!boardState())return;
  $('board').setAttribute('aria-label',state.checkers?'Damiera italiana':'Scacchiera');
  if(state.checkers){renderCheckersBoard();return;}
@@ -281,7 +282,6 @@ function renderCheckersBoard(){
   button.setAttribute('aria-label',(dark?'Casella '+number:square)+(piece?' · '+(piece.toLowerCase()==='k'?'dama':'pedina')+' '+(piece===piece.toUpperCase()?'bianca':'nera'):' · vuota'));
   button.setAttribute('aria-disabled',String(!dark||!canMove()));
   if(piece)button.innerHTML=checkerSvg(piece);
-  if(dark){const coord=document.createElement('span');coord.className='coord square-number';coord.textContent=number;button.append(coord)}
   button.onclick=()=>selectChecker(square);$('board').append(button);
  }
  const capture=state.checkers.legalMoves?.some(m=>m.captures.length);
@@ -499,5 +499,6 @@ setInterval(()=>{if(!document.hidden)sendPresence()},25000);
 window.addEventListener('pagehide',()=>{sendPresence(true);lobbyWS?.close()});
 $('access-form').onsubmit=event=>{event.preventDefault();startSession($('access-password').value)};
 if(!tg?.initData){$('access-submit').disabled=true;$('access-password').disabled=true;$('access-error').textContent='Apri Binottoland da Telegram per accedere.';$('access-telegram').hidden=false;}
+
 
 

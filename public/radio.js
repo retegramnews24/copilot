@@ -1,65 +1,88 @@
 (()=>{
- const audio=document.getElementById('radio-audio'),panel=document.getElementById('radio-panel'),toggle=document.getElementById('radio-toggle'),play=document.getElementById('radio-play'),select=document.getElementById('radio-stations'),label=document.getElementById('radio-label'),status=document.getElementById('radio-status'),star=document.getElementById('radio-favorite'),volume=document.getElementById('radio-volume');
+ const $=id=>document.getElementById(id),audio=$('radio-audio'),panel=$('radio-panel'),toggle=$('radio-toggle'),play=$('radio-play'),select=$('radio-stations'),label=$('radio-label'),status=$('radio-status'),star=$('radio-favorite'),volume=$('radio-volume');
  const hosts=['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info','https://at1.api.radio-browser.info'];
- function readLocal(key,fallback){try{return JSON.parse(localStorage.getItem(key))||fallback}catch{return fallback}}
+ function readLocal(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback}catch{return fallback}}
  function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
  function normalize(raw){
-  if(!raw||typeof raw.name!=='string')return null;
-  const urls=[...new Set([...(raw.urls||[]),raw.url_resolved,raw.url].filter(x=>typeof x==='string'&&x.startsWith('https://')))];
-  return urls.length?{id:raw.id||raw.stationuuid||urls[0],name:raw.name.trim().slice(0,80),urls}:null;
+  if(!raw||typeof raw.name!=='string'||!raw.name.trim())return null;
+  const urls=[...new Set([...(Array.isArray(raw.urls)?raw.urls:[]),raw.url_resolved,raw.url].filter(x=>{try{return typeof x==='string'&&x.length<=2048&&new URL(x).protocol==='https:'}catch{return false}}))];
+  return urls.length?{id:String(raw.id||raw.stationuuid||urls[0]),name:raw.name.trim().slice(0,80),urls}:null;
  }
- let favorites=readLocal('binottoland-radio-favorites',[]).map(normalize).filter(Boolean),stations=[],current=normalize(readLocal('binottoland-radio-last',null)),loaded=false,loading=false,streamIndex=0,attempt=0,watchdog;
+ const stored=readLocal('binottoland-radio-favorites',[]);
+ let favorites=(Array.isArray(stored)?stored:[]).map(normalize).filter(Boolean),stations=[],current=normalize(readLocal('binottoland-radio-last',null));
+ let loaded=false,loading=false,streamIndex=0,attempt=0,watchdog,wantsPlay=false,pending=false,playbackMessage='',directoryMessage='';
  const saved=Number(readLocal('binottoland-radio-volume',.7));audio.volume=Number.isFinite(saved)?Math.min(1,Math.max(0,saved)):.7;volume.value=String(audio.volume);
- function allowed(){return !document.getElementById('app-shell').hidden}
+ const allowed=()=>!$('app-shell').hidden;
  function update(){
-  label.textContent=current?current.name:'Radio';star.textContent=current&&favorites.some(s=>s.id===current.id)?'★':'☆';star.setAttribute('aria-pressed',String(star.textContent==='★'));
-  play.textContent=audio.paused?'▶':'Ⅱ';play.setAttribute('aria-label',audio.paused?'Avvia radio':'Pausa radio');
+  label.textContent=current?current.name:'Radio';
+  const favorite=!!current&&favorites.some(s=>s.id===current.id);star.textContent=favorite?'★':'☆';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
+  play.textContent=wantsPlay?'Ⅱ':'▶';play.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');play.setAttribute('aria-pressed',String(wantsPlay));play.setAttribute('aria-busy',String(pending));
+  status.textContent=playbackMessage||directoryMessage;
+  if('mediaSession' in navigator){try{navigator.mediaSession.playbackState=wantsPlay&&!pending?'playing':current?'paused':'none'}catch{}}
  }
  function render(){
   select.replaceChildren();
   const all=[...favorites,...stations.filter(st=>!favorites.some(f=>f.id===st.id))];
   if(!all.length){const option=document.createElement('option');option.textContent=loading?'Caricamento radio…':'Nessuna radio caricata';option.value='';select.append(option)}
   for(const station of all){const option=document.createElement('option');option.value=station.id;option.textContent=(favorites.some(f=>f.id===station.id)?'★ ':'')+station.name;select.append(option)}
-  if(!current&&all.length)current=all[0];
+  if(!current&&all.length){current=all[0];saveLocal('binottoland-radio-last',current)}
   if(current&&!all.some(s=>s.id===current.id)){const option=document.createElement('option');option.value=current.id;option.textContent=current.name;select.prepend(option)}
-  if(current)select.value=current.id;update();
+  if(current)select.value=current.id;
+  select.disabled=!current&&!all.length;update();
  }
  async function loadStations(){
-  if(loading||!allowed())return;loading=true;status.textContent='Caricamento delle radio…';render();
-  for(const host of hosts){
-   try{
-    const response=await fetch(host+'/json/stations/search?countrycode=IT&hidebroken=true&order=clickcount&reverse=true&limit=24',{signal:AbortSignal.timeout(8000)});
-    if(!response.ok)throw Error();
-    const data=await response.json();stations=data.map(normalize).filter(Boolean);
-    if(!stations.length)throw Error();
-    loaded=true;loading=false;render();status.textContent='Scegli una radio e premi Play. Preferiti salvati sul dispositivo.';return;
-   }catch{}
-  }
-  loading=false;render();status.textContent='Elenco radio non raggiungibile. Puoi usare i preferiti o riprovare.';
+  if(loading||!allowed())return;loading=true;directoryMessage='Caricamento radio…';$('radio-reload').disabled=true;render();
+  try{
+   for(const host of hosts){
+    try{
+     const response=await fetch(host+'/json/stations/search?countrycode=IT&hidebroken=true&order=clickcount&reverse=true&limit=24',{signal:AbortSignal.timeout(8000)});
+     if(!response.ok)throw Error();const data=await response.json();if(!Array.isArray(data))throw Error();
+     const unique=new Map();for(const raw of data){const station=normalize(raw);if(station&&!unique.has(station.id))unique.set(station.id,station)}
+     if(!unique.size)throw Error();stations=[...unique.values()];loaded=true;directoryMessage='';return;
+    }catch{}
+   }
+   directoryMessage='Elenco non raggiungibile. Riprova.';
+  }finally{loading=false;$('radio-reload').disabled=false;render()}
  }
- function nextStream(){
-  clearTimeout(watchdog);
+ function stop(message='Radio in pausa.'){
+  wantsPlay=false;pending=false;attempt++;clearTimeout(watchdog);audio.pause();playbackMessage=message;update();
+ }
+ function nextStream(serial=attempt){
+  if(serial!==attempt||!wantsPlay)return;clearTimeout(watchdog);
   if(current&&streamIndex+1<current.urls.length){streamIndex++;startStream();return}
-  audio.pause();status.textContent='Radio non raggiungibile. Scegli un’altra stazione.';update();
+  stop('Radio non raggiungibile. Scegli un’altra stazione.');
+ }
+ function armWatchdog(serial){
+  clearTimeout(watchdog);watchdog=setTimeout(()=>{if(serial===attempt&&wantsPlay&&pending)nextStream(serial)},12000);
  }
  async function startStream(){
   if(!current||!allowed())return;
-  const serial=++attempt;clearTimeout(watchdog);audio.pause();audio.src=current.urls[streamIndex];audio.load();status.textContent='Connessione alla radio…';
-  try{
-   await audio.play();if(serial!==attempt)return;
-   watchdog=setTimeout(()=>{if(serial===attempt&&audio.readyState<2)nextStream()},12000);
-  }catch(error){if(serial!==attempt)return;if(error.name==='NotAllowedError'){status.textContent='Tocca Play per avviare la radio.';update()}else nextStream()}
+  const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;audio.pause();audio.src=current.urls[streamIndex];audio.load();playbackMessage='Connessione…';update();armWatchdog(serial);
+  if('mediaSession' in navigator&&window.MediaMetadata){try{navigator.mediaSession.metadata=new MediaMetadata({title:current.name,artist:'Binottoland · Radio'})}catch{}}
+  try{await audio.play();if(serial!==attempt)return;update()}
+  catch(error){if(serial!==attempt||!wantsPlay)return;if(error.name==='NotAllowedError')stop('Tocca Play per avviare la radio.');else nextStream(serial)}
  }
- toggle.onclick=()=>{panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden&&!loaded)loadStations()};
- play.onclick=()=>{if(!allowed())return;if(!current){panel.hidden=false;toggle.setAttribute('aria-expanded','true');loadStations();return}if(!audio.paused){attempt++;clearTimeout(watchdog);audio.pause();status.textContent='Radio in pausa.'}else{streamIndex=0;startStream()}update()};
+ function resume(){if(!allowed()||!current)return;streamIndex=0;startStream()}
+ toggle.onclick=()=>{if(!allowed())return;panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));if(!panel.hidden&&!loaded)loadStations()};
+ play.onclick=()=>{
+  if(!allowed())return;
+  if(wantsPlay){stop();return}
+  if(!current){panel.hidden=false;toggle.setAttribute('aria-expanded','true');loadStations();return}
+  resume();
+ };
  select.onchange=()=>{
   const selected=[...favorites,...stations,current].find(st=>st&&st.id===select.value);if(!selected)return;
-  attempt++;clearTimeout(watchdog);audio.pause();current=selected;streamIndex=0;saveLocal('binottoland-radio-last',current);update();startStream();
+  current=selected;saveLocal('binottoland-radio-last',current);streamIndex=0;startStream();
  };
- star.onclick=()=>{if(!current)return;const found=favorites.some(s=>s.id===current.id);favorites=found?favorites.filter(s=>s.id!==current.id):[...favorites,current];saveLocal('binottoland-radio-favorites',favorites);render()};
- volume.oninput=()=>{audio.volume=Number(volume.value);saveLocal('binottoland-radio-volume',audio.volume)};
- document.getElementById('radio-reload').onclick=loadStations;
- audio.addEventListener('playing',()=>{clearTimeout(watchdog);status.textContent=current?'In ascolto · '+current.name:'In ascolto';update()});
- audio.addEventListener('pause',update);audio.addEventListener('waiting',()=>{status.textContent='Buffering…'});audio.addEventListener('error',()=>{if(audio.getAttribute('src'))nextStream()});
+ star.onclick=()=>{if(!allowed()||!current)return;const found=favorites.some(s=>s.id===current.id);favorites=found?favorites.filter(s=>s.id!==current.id):[...favorites,current];saveLocal('binottoland-radio-favorites',favorites);render()};
+ volume.oninput=()=>{const value=Number(volume.value);if(!Number.isFinite(value))return;audio.volume=Math.min(1,Math.max(0,value));saveLocal('binottoland-radio-volume',audio.volume)};
+ $('radio-reload').onclick=loadStations;
+ audio.addEventListener('playing',()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto · '+current.name;update()});
+ audio.addEventListener('pause',()=>{if(!pending&&wantsPlay){wantsPlay=false;playbackMessage='Radio in pausa.';clearTimeout(watchdog)}update()});
+ const buffering=()=>{if(!wantsPlay)return;pending=true;playbackMessage='Buffering…';update();armWatchdog(attempt)};
+ audio.addEventListener('waiting',buffering);audio.addEventListener('stalled',buffering);
+ audio.addEventListener('error',()=>{if(audio.getAttribute('src')&&wantsPlay)nextStream()});
+ audio.addEventListener('ended',()=>{if(wantsPlay)nextStream()});
+ if('mediaSession' in navigator){try{navigator.mediaSession.setActionHandler('play',resume);navigator.mediaSession.setActionHandler('pause',()=>stop());navigator.mediaSession.setActionHandler('stop',()=>stop())}catch{}}
  render();
 })();
