@@ -84,7 +84,7 @@ async function login(req,env){
   const age=Date.now()/1000-Number(p.get('auth_date'));
   if(!Number.isFinite(age)||age< -60||age>86400)throw Error();
   const u=JSON.parse(p.get('user')||'null');if(!u||!Number.isSafeInteger(u.id)||u.id<=0)throw Error();
-  const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):''};
+  const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):'',photo:typeof u.photo_url==='string'&&u.photo_url.startsWith('https://')&&u.photo_url.length<=512?u.photo_url:''};
   const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
   const token='session.'+payload+'.'+hex(await mac(env.BOT_TOKEN,'session.'+payload));
   return json({user,token});
@@ -111,7 +111,7 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.8.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'0.9.0'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
   const user=await sessionUser(req,env);
@@ -270,7 +270,7 @@ export class Room extends DurableObject {
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false});
    await this.lobbyBroadcast();
-   return new Response(null,{status:101,webSocket:pair[0]});
+   return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
   }
   if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
   const body=await req.json();
@@ -289,9 +289,9 @@ export class Room extends DurableObject {
    if(!text||text.length>500)return json({error:'Scrivi da 1 a 500 caratteri.'},400);
    const last=await this.ctx.storage.get('chatlimit:'+user.id)||0;
    if(Date.now()-last<1500)return json({error:'Attendi un momento prima del prossimo messaggio.'},429);
-   const messages=await this.ctx.storage.get('chat')||[],message={id:id(),userId:user.id,name:user.name,text,at:Date.now()};
+   const messages=await this.ctx.storage.get('chat')||[],message={id:id(),userId:user.id,name:user.name,photo:user.photo||'',text,at:Date.now()};
    messages.push(message);await this.ctx.storage.put('chat',messages.slice(-100));await this.ctx.storage.put('chatlimit:'+user.id,Date.now());
-   await this.lobbyBroadcast();return json({ok:true});
+   await this.lobbyBroadcast();return json({ok:true,message});
   }
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
