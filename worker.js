@@ -29,7 +29,7 @@ async function setupTelegram(req,env,u){
   });
   if(!hook.ok)return json({error:'Telegram non ha attivato il webhook: '+hook.description},502);
   const commands=await telegramCall(env.BOT_TOKEN,'setMyCommands',{
-   commands:[{command:'gioca',description:'Apri una sfida Binottoland'}]
+   commands:[{command:'start',description:'Avvia Binottoland'},{command:'gioca',description:'Apri una sfida Binottoland'}]
   });
   if(!commands.ok)return json({ok:true,webhook:true,warning:'Webhook attivo; comando non registrato: '+commands.description});
   return json({ok:true,webhook:true,command:true});
@@ -45,7 +45,7 @@ async function telegramWebhook(req,env){
   const message=update?.message;
   const text=typeof message?.text==='string'?message.text.trim():'';
   if(!message||message.from?.is_bot||!text)return json({ok:true});
-  const match=text.match(/^\/gioca(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
+  const match=text.match(/^\/(?:gioca|start)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
   if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
   const context=await chatContext(message.chat.id,env.BOT_TOKEN);
   const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
