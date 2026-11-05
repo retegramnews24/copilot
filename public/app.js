@@ -43,8 +43,7 @@ function makeAvatar(user){
  return avatar;
 }
 function renderLobby(){
- const own=ownedGame();$('create').hidden=!!own;$('resume').hidden=!own;
- if(own){$('resume').textContent='Riprendi · '+own.number;$('resume').onclick=()=>openRoom(own.room)}
+ const own=ownedGame();$('create').hidden=!!own;
  const active=games.filter(g=>!g.archived);
  const waiting=active.filter(g=>g.phase==='waiting').length,playing=active.filter(g=>g.phase==='playing').length;
  $('lobby-summary').textContent=active.length?waiting+' da giocare · '+playing+' in corso':'Un tavolo, due giocatori. Si comincia qui.';
