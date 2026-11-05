@@ -47,15 +47,36 @@ async function telegramWebhook(req,env){
   if(!message||message.from?.is_bot||!text)return json({ok:true});
   const match=text.match(/^\/gioca(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
   if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
+  const context=await chatContext(message.chat.id,env.BOT_TOKEN);
   const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
    chat_id:message.chat.id,
    text:'🏁 Pronti a giocare? Apri Binottoland e crea una sfida. Poi condividi l’invito nel gruppo.',
-   reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
+   reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp='+context}]]}
   });
   if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
   return json({ok:true});
  }catch{return json({ok:true})}
 }
+
+async function signContext(value,token){
+ const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(token),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+ const bytes=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(value));
+ return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function chatContext(chat,token){
+ const value='g_'+String(chat).replace('-','n')+'_'+Math.floor(Date.now()/1000);
+ return value+'_'+await signContext(value,token);
+}
+async function contextChat(context,token){
+ const m=String(context||'').match(/^g_(n?\d+)_(\d+)_([a-f0-9]{64})$/);
+ if(!m||!token)return null;
+ const age=Date.now()/1000-Number(m[2]);
+ if(age< -60||age>7*86400)return null;
+ const value='g_'+m[1]+'_'+m[2];
+ if(await signContext(value,token)!==m[3])return null;
+ return m[1].replace('n','-');
+}
+
 export default {
  async fetch(req,env){
   const u=new URL(req.url);
@@ -70,7 +91,17 @@ export default {
   if(req.method==='POST'&&u.pathname==='/api/create'){
    if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
    const room=id();const stub=env.ROOMS.get(env.ROOMS.idFromName(room));
-   return stub.fetch(new Request(u.origin+'/init',{method:'POST',body:await req.text(),headers:{'Content-Type':'application/json','X-Room':room}}));
+   let body;try{body=await req.json()}catch{return json({error:'Richiesta non valida.'},400)}
+   const chat=await contextChat(body.context,env.BOT_TOKEN);
+   if(body.context&&!chat)return json({error:'Collegamento al gruppo scaduto. Usa di nuovo /gioca nel gruppo.'},400);
+   const response=await stub.fetch(new Request(u.origin+'/init',{method:'POST',body:JSON.stringify({name:body.name,context:chat?body.context:null}),headers:{'Content-Type':'application/json','X-Room':room}}));
+   if(!response.ok||!chat)return response;
+   const result=await response.json();
+   try{
+    const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{chat_id:chat,text:'🏁 '+result.state.players[0].name+' ha aperto una sfida! Il primo che accetta gioca; gli altri possono assistere e aprire un altro tavolo.',reply_markup:{inline_keyboard:[[{text:'Gioca o assisti',url:'https://t.me/'+BOT_USERNAME+'?startapp=r_'+room}]]}});
+    result.announcement=sent.ok;
+   }catch{result.announcement=false}
+   return json(result);
   }
   const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|pass|finish|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
@@ -79,7 +110,7 @@ export default {
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;}
- public(s){return {room:s.room,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,created:s.created,expires:s.expires}}
+ public(s){return {room:s.room,context:s.context||null,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,created:s.created,expires:s.expires}}
  broadcast(s){const msg=JSON.stringify(this.public(s));for(const ws of this.ctx.getWebSockets()){try{ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
@@ -90,7 +121,7 @@ export class Room extends DurableObject {
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),phase:'waiting',players:[{id:id(),name:name(b.name),token}],turn:0,revision:0,moves:[],created:Date.now(),expires:Date.now()+7*86400000};
+     s={room:req.headers.get('X-Room'),context:b.context||null,phase:'waiting',players:[{id:id(),name:name(b.name),token}],turn:0,revision:0,moves:[],created:Date.now(),expires:Date.now()+7*86400000};
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s)});
     }
