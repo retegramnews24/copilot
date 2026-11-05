@@ -1,6 +1,14 @@
 import { DurableObject } from 'cloudflare:workers';
+import { Chess } from 'chess.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const id=()=>crypto.randomUUID();
+function chessSnapshot(game,lastMove=null){
+ let result=null;
+ if(game.isCheckmate())result=game.turn()==='w'?'0-1':'1-0';
+ else if(game.isDraw())result='1/2-1/2';
+ const reason=game.isCheckmate()?'Scaccomatto':game.isStalemate()?'Stallo':game.isThreefoldRepetition()?'Triplice ripetizione':game.isInsufficientMaterial()?'Materiale insufficiente':game.isDrawByFiftyMoves()?'Regola delle 50 mosse':null;
+ return {fen:game.fen(),check:game.isCheck(),result,reason,lastMove,legalMoves:game.isGameOver()?[]:game.moves({verbose:true}).map(m=>({from:m.from,to:m.to,...(m.promotion?{promotion:m.promotion}:{})}))};
+}
 const bad=(message)=>{throw new Error(message)};
 const BOT_USERNAME='checkmategame_bot';
 const name=x=>{if(typeof x!=='string'||!x.trim())bad('Inserisci un nome.');return x.trim().slice(0,30)};
@@ -67,7 +75,7 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.4.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'0.5.0'});
 
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
@@ -77,7 +85,7 @@ export default {
    if(raw.length>4096)return json({error:'Richiesta troppo grande.'},413);
    return lobby.fetch(new Request(u.origin+'/lobby/create',{method:'POST',body:raw}));
   }
-  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|pass|finish|ws)$/);
+  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|move|pass|finish|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
 
   const response=await env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(req);
@@ -91,7 +99,7 @@ export default {
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
- public(s){return {room:s.room,number:s.number||null,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,created:s.created,expires:s.expires}}
+ public(s){return {room:s.room,number:s.number||null,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,chess:s.chess||null,created:s.created,expires:s.expires}}
  broadcast(s){const msg=JSON.stringify(this.public(s));for(const ws of this.ctx.getWebSockets()){try{ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
@@ -103,7 +111,7 @@ export class Room extends DurableObject {
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:id(),name:name(b.name),token}],turn:0,revision:0,moves:[],created:Date.now(),expires:Date.now()+7*86400000};
+     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:id(),name:name(b.name),token}],turn:0,revision:0,moves:[],chess:chessSnapshot(new Chess()),created:Date.now(),expires:Date.now()+7*86400000};
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s)});
     }
@@ -126,11 +134,23 @@ export class Room extends DurableObject {
     if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
-    if(path.endsWith('/pass')){
+    if(path.endsWith('/move')){
+     if(!s.chess)return json({error:'Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.'},409);
+     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
+     if(typeof b.from!=='string'||typeof b.to!=='string')return json({error:'Mossa non valida.'},400);
+     const game=new Chess();
+     for(const move of s.moves)game.move(move.san);
+     let moved;try{moved=game.move({from:b.from,to:b.to,promotion:b.promotion||'q'})}catch{return json({error:'Mossa non consentita.'},400)}
+     s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1,san:moved.san,from:moved.from,to:moved.to,...(moved.promotion?{promotion:moved.promotion}:{})});
+     s.turn=game.turn()==='w'?0:1;
+     s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
+     if(game.isGameOver())s.phase='finished';
+    }else if(path.endsWith('/pass')){
+     if(s.chess)return json({error:'Negli scacchi devi effettuare una mossa.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
      if(s.moves.length>=500)s.phase='finished';
-    }else if(path.endsWith('/finish'))s.phase='finished';else bad('Azione non valida.');
+    }else if(path.endsWith('/finish')){s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};}else bad('Azione non valida.');
     s.revision++;await this.ctx.storage.put('state',s);this.broadcast(s);return json(this.public(s));
    }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
   });
