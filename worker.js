@@ -2,13 +2,71 @@ import { DurableObject } from 'cloudflare:workers';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const id=()=>crypto.randomUUID();
 const bad=(message)=>{throw new Error(message)};
+const BOT_USERNAME='checkmategame_bot';
 const name=x=>{if(typeof x!=='string'||!x.trim())bad('Inserisci un nome.');return x.trim().slice(0,30)};
+async function webhookSecret(token){
+ const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
+ return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+async function telegramCall(token,method,payload){
+ const response=await fetch('https://api.telegram.org/bot'+token+'/'+method,{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+ });
+ const result=await response.json().catch(()=>null);
+ return {ok:response.ok&&result?.ok===true,description:result?.description||'Telegram non ha confermato la richiesta.'};
+}
+async function setupTelegram(req,env,u){
+ if(!env.BOT_TOKEN)return json({error:'Secret BOT_TOKEN non configurato.'},503);
+ if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
+ try{
+  const body=await req.json();
+  if(typeof body.token!=='string'||body.token!==env.BOT_TOKEN)return json({error:'Token non valido.'},403);
+  const secret=await webhookSecret(env.BOT_TOKEN);
+  const hook=await telegramCall(env.BOT_TOKEN,'setWebhook',{
+   url:u.origin+'/api/telegram/webhook',
+   secret_token:secret,
+   allowed_updates:['message']
+  });
+  if(!hook.ok)return json({error:'Telegram non ha attivato il webhook: '+hook.description},502);
+  const commands=await telegramCall(env.BOT_TOKEN,'setMyCommands',{
+   commands:[{command:'gioca',description:'Apri una sfida Binottoland'}]
+  });
+  if(!commands.ok)return json({ok:true,webhook:true,warning:'Webhook attivo; comando non registrato: '+commands.description});
+  return json({ok:true,webhook:true,command:true});
+ }catch{return json({error:'Richiesta di configurazione non valida.'},400)}
+}
+async function telegramWebhook(req,env){
+ if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN non configurato.'},503);
+ const supplied=req.headers.get('X-Telegram-Bot-Api-Secret-Token')||'';
+ if(supplied!==await webhookSecret(env.BOT_TOKEN))return json({error:'Richiesta Telegram non autorizzata.'},403);
+ if(Number(req.headers.get('Content-Length')||0)>8192)return json({ok:true});
+ try{
+  const update=await req.json();
+  const message=update?.message;
+  const text=typeof message?.text==='string'?message.text.trim():'';
+  if(!message||message.from?.is_bot||!text)return json({ok:true});
+  const match=text.match(/^\/gioca(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
+  if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
+  const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
+   chat_id:message.chat.id,
+   text:'🏁 Pronti a giocare? Apri Binottoland e crea una sfida. Poi condividi l’invito nel gruppo.',
+   reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
+  });
+  if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
+  return json({ok:true});
+ }catch{return json({ok:true})}
+}
 export default {
  async fetch(req,env){
   const u=new URL(req.url);
+  if(u.pathname==='/api/telegram/setup'&&req.method==='POST'){
+   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
+   return setupTelegram(req,env,u);
+  }
+  if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.1.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'0.2.0'});
   if(req.method==='POST'&&u.pathname==='/api/create'){
    if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
    const room=id();const stub=env.ROOMS.get(env.ROOMS.idFromName(room));
