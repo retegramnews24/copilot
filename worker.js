@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
+import { initialCheckers, playCheckers, checkersSnapshot, checkersKey } from './checkers.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const id=()=>crypto.randomUUID();
 function chessSnapshot(game,lastMove=null){
@@ -116,11 +117,11 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'1.1.0'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
   const user=await sessionUser(req,env);
-  if(!user)return json({error:'Apri Checkmate! da Telegram per accedere.'},401);
+  if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));req=new Request(req,{headers:trustedHeaders});
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
@@ -139,14 +140,14 @@ export default {
   if(response.ok&&(req.method==='POST'||match[2]==='state')){
    const result=await response.clone().json();
    const s=result.state||result;
-   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires})}));
+   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires})}));
   }
   return response;
  }
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
- public(s){return {room:s.room,number:s.number||null,archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,created:s.created,expires:s.expires}}
+ public(s){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,created:s.created,expires:s.expires}}
  async broadcast(s){const msg=JSON.stringify(this.public(s)),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
@@ -158,7 +159,7 @@ export class Room extends DurableObject {
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],chess:chessSnapshot(new Chess()),created:Date.now(),expires:Date.now()+7*86400000};
+     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],game:b.game==='checkers'?'checkers':'chess',chess:b.game==='checkers'?null:chessSnapshot(new Chess()),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s)});
     }
@@ -170,6 +171,11 @@ export class Room extends DurableObject {
      return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     }
     if(path.endsWith('/replay')&&req.method==='GET'){
+     if(s.checkers){
+      let game=initialCheckers();const frames=[{board:game.board,lastMove:null}];
+      for(const entry of s.moves){const played=playCheckers(game,entry.path);game=played.game;frames.push({board:game.board,lastMove:played.move})}
+      return json({room:s.room,revision:s.revision,frames});
+     }
      if(!s.chess)return json({frames:[]});
      const game=new Chess(),frames=[{fen:game.fen(),lastMove:null}];
      for(const entry of s.moves){const m=game.move(entry.san);frames.push({fen:game.fen(),lastMove:{from:m.from,to:m.to}})}
@@ -205,20 +211,29 @@ export class Room extends DurableObject {
      }
      s.archived=true;s.phase='finished';s.expires=null;s.revision++;
      if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
+     if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:s.checkers.reason||'Archiviata'};
      await this.ctx.storage.deleteAlarm();await this.ctx.storage.put('state',s);await this.broadcast(s);
      return json(this.public(s));
     }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
     if(path.endsWith('/offer-draw')){
-     if(!s.chess||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita di scacchi.'},409);
+     if((!s.chess&&!s.checkers)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
      if(s.drawOffer)return json({error:'C’è già una proposta in attesa.'},409);
      if(s.lastDrawOffer?.by===who&&s.lastDrawOffer?.ply===s.moves.length)return json({error:'Attendi una nuova mossa prima di proporre ancora la patta.'},409);
      s.drawOffer={by:s.players[who].id,name:s.players[who].name};s.lastDrawOffer={by:who,ply:s.moves.length};
     }else if(path.endsWith('/accept-draw')||path.endsWith('/reject-draw')){
      if(!s.drawOffer||s.drawOffer.by===s.players[who].id)return json({error:'Non puoi rispondere a questa proposta.'},403);
-     if(path.endsWith('/accept-draw')){s.phase='finished';s.chess={...s.chess,legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
+     if(path.endsWith('/accept-draw')){s.phase='finished';const key=s.checkers?'checkers':'chess';s[key]={...s[key],legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
      s.drawOffer=null;
+    }else if(path.endsWith('/move')&&s.checkers){
+     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
+     const played=playCheckers(s.checkers,b.path),key=checkersKey(played.game);
+     s.positions=s.positions||{};s.positions[key]=(s.positions[key]||0)+1;
+     s.moves.push({...played.move,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});
+     s.drawOffer=null;s.turn=played.game.turn;
+     s.checkers=checkersSnapshot(played.game,played.move,s.positions[key]);
+     if(s.checkers.result)s.phase='finished';
     }else if(path.endsWith('/move')){
      if(!s.chess)return json({error:'Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
@@ -231,17 +246,17 @@ export class Room extends DurableObject {
      s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
      if(game.isGameOver())s.phase='finished';
     }else if(path.endsWith('/pass')){
-     if(s.chess)return json({error:'Negli scacchi devi effettuare una mossa.'},409);
+     if(s.chess||s.checkers)return json({error:'Devi effettuare una mossa.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
      if(s.moves.length>=500)s.phase='finished';
-    }else if(path.endsWith('/finish')){s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};}else bad('Azione non valida.');
+    }else if(path.endsWith('/finish')){s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:'Partita chiusa',result:null};}else bad('Azione non valida.');
     s.revision++;await this.ctx.storage.put('state',s);await this.broadcast(s);return json(this.public(s));
    }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
   });
  }
 
- summary(s){return {room:s.room,number:s.number,archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
   return [...entries.values()].filter(s=>s.archived||s.expires>Date.now()).sort((a,b)=>a.number-b.number);
@@ -309,11 +324,12 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
+   if(body.game!==undefined&&!['chess','checkers'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
    if((await this.lobbyList()).some(g=>!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    const number=(await this.ctx.storage.get('lobbyCounter')||0)+1;
    await this.ctx.storage.put('lobbyCounter',number);
    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));
-   const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room},body:JSON.stringify({name:playerName,number,playerId:user.player})}));
+   const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room},body:JSON.stringify({name:playerName,number,playerId:user.player,game:body.game||'chess'})}));
    if(!response.ok)return response;
    const result=await response.json();
    await this.ctx.storage.put('game:'+room,this.summary(result.state));
@@ -357,3 +373,4 @@ export class Room extends DurableObject {
  if((await this.ctx.storage.get('state'))?.archived)return;
  for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
 }
+
