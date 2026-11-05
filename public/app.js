@@ -1,27 +1,100 @@
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
-const params=new URLSearchParams(location.search);
-const launch=tg?.initDataUnsafe?.start_param||params.get('tgWebAppStartParam')||'';
-let context=launch.startsWith('g_')?launch:(params.get('context')||'');
-const $=id=>document.getElementById(id);let room=new URLSearchParams(location.search).get('room')||(launch.startsWith('r_')?launch.slice(2):null),state,ws,retry,busy=false,credentials={};
+const $=id=>document.getElementById(id);
+let room=null,state=null,ws=null,retry=null,busy=false,credentials={},games=[],lobbyWS=null,lobbyRetry=null,roomEpoch=0;
 function read(key,fallback){try{return JSON.parse(localStorage.getItem(key))||fallback}catch{return fallback}}
-function save(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{throw Error('Il browser non permette di salvare il tuo posto. Abilita la memoria locale prima di giocare.')}}
+function save(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{throw Error('Abilita la memoria locale per conservare il tuo posto.')} }
 $('name').value=read('binotto-name','');
+history.replaceState(null,'',location.pathname);
 function err(s){$('error').textContent=s}
-async function api(action,data){const path=action==='create'?'/api/create':'/api/room/'+room+'/'+action;const r=await fetch(path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+(credentials.token||'')},...(data?{body:JSON.stringify(data)}:{}),signal:AbortSignal.timeout(15000)});const j=await r.json();if(!r.ok)throw Error(j.error||'Errore server');return j}
-function render(s){if(state&&s.revision<state.revision)return;state=s;refreshDebug();$('table').hidden=false;$('entry').hidden=s.phase!=='waiting'||!!credentials.player;$('create').hidden=true;$('inviteNote').hidden=false;const mine=s.players.findIndex(p=>p.id===credentials.player);context=s.context||context;$('newtable').hidden=mine>=0&&s.phase!=='finished';$('newtable').href=context?'/?context='+encodeURIComponent(context):'/';$('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?'Partita conclusa':'Turno di '+s.players[s.turn].name;$('players').replaceChildren();for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=s.players[i]?.name||'Posto libero';$('players').append(el)}$('role').textContent=mine<0?'Stai assistendo.': 'Sei il giocatore '+(mine+1)+'.';$('claim').hidden=s.phase!=='waiting'||mine>=0;$('pass').hidden=s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;$('finish').hidden=s.phase!=='playing'||mine<0;$('expires').textContent='Stanza disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');$('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent='#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}}
-function connect(){clearTimeout(retry);if(ws){ws.onclose=null;ws.close()}ws=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/room/'+room+'/ws');ws.onopen=()=>{$('connection').textContent='● Collegato in diretta';err('')};ws.onmessage=e=>{try{render(JSON.parse(e.data))}catch{err('Aggiornamento non valido.')}};ws.onclose=()=>{$('connection').textContent='○ Collegamento interrotto. Riprovo…';retry=setTimeout(connect,4000)};ws.onerror=()=>{$('connection').textContent='Connessione in attesa…'}}
-function nickname(){const name=$('name').value.trim();if(!name)throw Error('Inserisci il tuo nome.');save('binotto-name',name);return name}
-function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message);if(room)api('state').then(render).catch(()=>{})}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
-action('create',async()=>{save('binotto-probe',true);const j=await api('create',{name:nickname(),context});room=j.state.room;credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);history.replaceState(null,'','?room='+room);render(j.state);connect();});
-action('claim',async()=>{save('binotto-probe',true);const j=await api('claim',{name:nickname()});credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);render(j.state)});
+async function request(path,data){
+ const response=await fetch(path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+(credentials.token||'')},...(data?{body:JSON.stringify(data)}:{}),signal:AbortSignal.timeout(15000)});
+ const result=await response.json();if(!response.ok)throw Error(result.error||'Errore server');return result;
+}
+function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
+function ownedGame(){return games.find(g=>g.phase!=='finished'&&g.players.some(p=>p.id===read('binotto-'+g.room,{}).player))}
+function renderLobby(){
+ const own=ownedGame();$('create').hidden=!!own;$('resume').hidden=!own;
+ if(own){$('resume').textContent='Riprendi Partita '+own.number;$('resume').onclick=()=>openRoom(own.room)}
+ $('games').replaceChildren();$('empty-games').hidden=games.length>0;
+ for(const game of games){
+  const card=document.createElement('article');card.className='card game-row';
+  const heading=document.createElement('h3');heading.textContent='Partita '+game.number;
+  const names=document.createElement('p');names.textContent=game.players.map(p=>p.name).join(' · ')+(game.players.length===1?' · Posto libero':'');
+  const status=document.createElement('p');status.className='hint';status.textContent=game.phase==='waiting'?'In attesa di un avversario':game.phase==='finished'?'Conclusa':'In corso · turno di '+game.players[game.turn].name;
+  const button=document.createElement('button');button.className='alt';
+  const mine=game.players.some(p=>p.id===read('binotto-'+game.room,{}).player);
+  button.textContent=mine?'Riprendi':game.phase==='waiting'?'Entra · gioca o guarda':'Guarda';
+  button.onclick=()=>openRoom(game.room);card.append(heading,names,status,button);$('games').append(card);
+ }
+ refreshDebug();
+}
+function stopRoom(){
+ roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close();ws=null}
+}
+function showLobby(){
+ stopRoom();room=null;state=null;credentials={};$('table').hidden=true;$('lobby').hidden=false;
+ $('expires').textContent='';$('log').replaceChildren();err('');renderLobby();
+}
+async function openRoom(nextRoom){
+ if(busy)return;
+ stopRoom();room=nextRoom;state=null;credentials=read('binotto-'+room,{});const epoch=roomEpoch;
+ err('');
+ try{const s=await api('state');if(epoch!==roomEpoch)return;render(s);connect()}
+ catch(e){if(epoch===roomEpoch){showLobby();err(e.message)}}
+}
+function render(s){
+ if(!room||s.room!==room||(state&&s.revision<state.revision))return;
+ state=s;$('lobby').hidden=true;$('table').hidden=false;
+ const mine=s.players.findIndex(p=>p.id===credentials.player);
+ $('room-number').textContent=s.number?'Partita '+s.number:'Partita';
+ $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?'Partita conclusa':'Turno di '+s.players[s.turn].name;
+ $('players').replaceChildren();
+ for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=s.players[i]?.name||'Posto libero';$('players').append(el)}
+ $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
+ $('join-name').hidden=s.phase!=='waiting'||mine>=0;
+ $('claim').hidden=s.phase!=='waiting'||mine>=0;
+ $('pass').hidden=s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
+ $('finish').hidden=s.phase==='finished'||mine<0;
+ $('newtable').hidden=mine>=0&&s.phase!=='finished';
+ $('expires').textContent='Disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');
+ $('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent='#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}
+ refreshDebug();
+}
+function connect(){
+ clearTimeout(retry);if(!room)return;
+ if(ws){ws.onclose=null;ws.close()}
+ const selected=room,socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/room/'+room+'/ws');ws=socket;
+ socket.onopen=()=>{if(room!==selected)return;$('connection').textContent='● Collegato in diretta';refreshDebug()};
+ socket.onmessage=e=>{if(room!==selected)return;try{render(JSON.parse(e.data))}catch{err('Aggiornamento non valido.')}};
+ socket.onclose=()=>{if(room!==selected)return;$('connection').textContent='○ Riconnessione…';retry=setTimeout(connect,4000)};
+}
+function connectLobby(){
+ clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
+ const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws');lobbyWS=socket;
+ socket.onopen=()=>{$('lobby-connection').textContent='● Elenco in diretta'};
+ socket.onmessage=e=>{try{games=JSON.parse(e.data).games;renderLobby()}catch{err('Elenco non valido.')}};
+ socket.onclose=()=>{$('lobby-connection').textContent='○ Riconnessione elenco…';lobbyRetry=setTimeout(connectLobby,4000)};
+}
+function nickname(field='name'){
+ const value=$(field).value.trim();if(!value)throw Error('Inserisci il tuo nome.');save('binotto-name',value);$('name').value=value;return value;
+}
+function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
+action('create',async()=>{
+ if(ownedGame())throw Error('Hai già una partita aperta: riprendila prima di crearne un’altra.');
+ save('binotto-probe',true);const j=await api('create',{name:nickname()});
+ stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);render(j.state);connect();renderLobby();
+});
+action('claim',async()=>{
+ const own=ownedGame();if(own&&own.room!==room)throw Error('Hai già una partita aperta. Puoi assistere a questa.');
+ const j=await api('claim',{name:nickname('join-name-input')});credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);render(j.state);renderLobby();
+});
 action('pass',async()=>render(await api('pass',{revision:state.revision})));
 action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(await api('finish',{revision:state.revision}))});
-action('invite',async()=>{const link='https://t.me/checkmategame_bot?startapp=r_'+room;try{await navigator.clipboard.writeText(link);err('Invito copiato: mandalo ai tuoi amici.')}catch{$('link').hidden=false;$('link').value=link;$('link').select()}});
-if(room){if(!/^[a-f0-9-]{36}$/.test(room)){err('Invito non valido.');$('create').hidden=true}else{credentials=read('binotto-'+room,{});api('state').then(s=>{render(s);connect()}).catch(e=>err(e.message))}}
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&room)connect()});
-
+$('back-lobby').onclick=showLobby;
+$('newtable').onclick=()=>{showLobby();$('name').focus()};
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Checkmate! 0.3'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Stanza',room||'Nessuna'],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',ws?(['In apertura','Connessa','In chiusura','Chiusa'][ws.readyState]):'Non attiva'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia','Checkmate! 0.4'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
@@ -43,7 +116,7 @@ applyTheme(read('checkmate-theme','dark'));
 document.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{applyTheme(button.dataset.themeChoice);try{save('checkmate-theme',button.dataset.themeChoice)}catch(e){err(e.message)}});
 $('debug-refresh').onclick=async()=>{
  $('debug-result').textContent='Aggiornamento…';
- try{if(room){render(await api('state'));connect();$('debug-result').textContent='Stato aggiornato. Riconnessione avviata.'}else{$('debug-result').textContent='Nessuna stanza aperta.'}}catch(e){$('debug-result').textContent=e.message}refreshDebug();
+ try{if(room){render(await api('state'));connect();$('debug-result').textContent='Stato aggiornato. Riconnessione avviata.'}else{connectLobby();$('debug-result').textContent='Riconnessione alla sala partite avviata.'}}catch(e){$('debug-result').textContent=e.message}refreshDebug();
 };
 function fitViewport(){
  const height=tg?.viewportStableHeight||window.visualViewport?.height||innerHeight;
@@ -51,3 +124,7 @@ function fitViewport(){
 }
 tg?.onEvent('viewportChanged',fitViewport);window.addEventListener('resize',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
 fitViewport();refreshDebug();
+
+$('join-name-input').value=read('binotto-name','');
+request('/api/lobby').then(result=>{games=result.games;renderLobby()}).catch(e=>err(e.message));
+connectLobby();

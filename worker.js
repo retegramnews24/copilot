@@ -47,34 +47,14 @@ async function telegramWebhook(req,env){
   if(!message||message.from?.is_bot||!text)return json({ok:true});
   const match=text.match(/^\/(?:gioca|start)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
   if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
-  const context=await chatContext(message.chat.id,env.BOT_TOKEN);
   const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
    chat_id:message.chat.id,
    text:'🏁 Pronti a giocare? Apri Binottoland per giocare.',
-   reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp='+context}]]}
+   reply_markup:{inline_keyboard:[[{text:'Apri il gioco',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
   });
   if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
   return json({ok:true});
  }catch{return json({ok:true})}
-}
-
-async function signContext(value,token){
- const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(token),{name:'HMAC',hash:'SHA-256'},false,['sign']);
- const bytes=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(value));
- return [...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-async function chatContext(chat,token){
- const value='g_'+String(chat).replace('-','n')+'_'+Math.floor(Date.now()/1000);
- return value+'_'+await signContext(value,token);
-}
-async function contextChat(context,token){
- const m=String(context||'').match(/^g_(n?\d+)_(\d+)_([a-f0-9]{64})$/);
- if(!m||!token)return null;
- const age=Date.now()/1000-Number(m[2]);
- if(age< -60||age>7*86400)return null;
- const value='g_'+m[1]+'_'+m[2];
- if(await signContext(value,token)!==m[3])return null;
- return m[1].replace('n','-');
 }
 
 export default {
@@ -87,35 +67,43 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.2.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'0.4.0'});
+
+  const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
+  if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
+  if(u.pathname==='/api/lobby/ws'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/ws',req));
   if(req.method==='POST'&&u.pathname==='/api/create'){
-   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
-   const room=id();const stub=env.ROOMS.get(env.ROOMS.idFromName(room));
-   let body;try{body=await req.json()}catch{return json({error:'Richiesta non valida.'},400)}
-   const chat=await contextChat(body.context,env.BOT_TOKEN);
-   if(body.context&&!chat)return json({error:'Collegamento al gruppo scaduto. Usa di nuovo /gioca nel gruppo.'},400);
-   const response=await stub.fetch(new Request(u.origin+'/init',{method:'POST',body:JSON.stringify({name:body.name,context:chat?body.context:null}),headers:{'Content-Type':'application/json','X-Room':room}}));
-   return response;
+   const raw=await req.text();
+   if(raw.length>4096)return json({error:'Richiesta troppo grande.'},413);
+   return lobby.fetch(new Request(u.origin+'/lobby/create',{method:'POST',body:raw}));
   }
   const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|pass|finish|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
-  return env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(req);
+
+  const response=await env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(req);
+  if(response.ok&&req.method==='POST'){
+   const result=await response.clone().json();
+   const s=result.state||result;
+   await lobby.fetch(new Request(u.origin+'/lobby/update',{method:'POST',body:JSON.stringify({room:s.room,number:s.number,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires})}));
+  }
+  return response;
  }
 };
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;}
- public(s){return {room:s.room,context:s.context||null,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,created:s.created,expires:s.expires}}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
+ public(s){return {room:s.room,number:s.number||null,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,created:s.created,expires:s.expires}}
  broadcast(s){const msg=JSON.stringify(this.public(s));for(const ws of this.ctx.getWebSockets()){try{ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
   return this.ctx.blockConcurrencyWhile(async()=>{
    try{
     const path=new URL(req.url).pathname;
+    if(path.startsWith('/lobby/'))return this.lobby(req,path);
     let s=await this.ctx.storage.get('state');
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),context:b.context||null,phase:'waiting',players:[{id:id(),name:name(b.name),token}],turn:0,revision:0,moves:[],created:Date.now(),expires:Date.now()+7*86400000};
+     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:id(),name:name(b.name),token}],turn:0,revision:0,moves:[],created:Date.now(),expires:Date.now()+7*86400000};
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s)});
     }
@@ -136,7 +124,7 @@ export class Room extends DurableObject {
     }
     const token=(req.headers.get('Authorization')||'').replace(/^Bearer /,'');const who=s.players.findIndex(p=>p.token===token);
     if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
-    if(s.phase!=='playing')return json({error:'Partita non attiva.'},409);
+    if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
     if(path.endsWith('/pass')){
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
@@ -147,8 +135,61 @@ export class Room extends DurableObject {
    }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
   });
  }
+
+ summary(s){return {room:s.room,number:s.number,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires};}
+ async lobbyList(){
+  const entries=await this.ctx.storage.list({prefix:'game:'});
+  return [...entries.values()].filter(s=>s.expires>Date.now()).sort((a,b)=>a.number-b.number);
+ }
+ async lobbyBroadcast(){
+  const message=JSON.stringify({games:await this.lobbyList()});
+  for(const ws of this.ctx.getWebSockets()){try{ws.send(message)}catch{}}
+ }
+ async lobby(req,path){
+  if(path==='/lobby/list')return json({games:await this.lobbyList()});
+  if(path==='/lobby/ws'){
+   if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
+   if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
+   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);
+   pair[1].send(JSON.stringify({games:await this.lobbyList()}));
+   return new Response(null,{status:101,webSocket:pair[0]});
+  }
+  if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
+  const body=await req.json();
+  if(path==='/lobby/create'){
+   const playerName=name(body.name);
+   const number=(await this.ctx.storage.get('lobbyCounter')||0)+1;
+   await this.ctx.storage.put('lobbyCounter',number);
+   const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));
+   const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room},body:JSON.stringify({name:playerName,number})}));
+   if(!response.ok)return response;
+   const result=await response.json();
+   await this.ctx.storage.put('game:'+room,this.summary(result.state));
+   await this.ctx.storage.setAlarm(Date.now()+3600000);
+   await this.lobbyBroadcast();
+   return json(result);
+  }
+  if(path==='/lobby/update'){
+   const old=await this.ctx.storage.get('game:'+body.room);
+   if(old&&body.revision>=old.revision){
+    await this.ctx.storage.put('game:'+body.room,this.summary({...body,number:old.number}));
+    await this.lobbyBroadcast();
+   }
+   return json({ok:true});
+  }
+  return json({error:'Percorso non trovato.'},404);
+ }
+
  webSocketMessage(ws){ws.close(1008,'Connessione di sola lettura.');}
  webSocketClose(ws,code){ws.close(code===1006?1000:code);}
  webSocketError(ws){ws.close(1011,'Riconnettersi.');}
- async alarm(){for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
+ async alarm(){
+ if(await this.ctx.storage.get('lobbyCounter')!==undefined){
+  const entries=await this.ctx.storage.list({prefix:'game:'});
+  for(const [key,value] of entries){if(value.expires<=Date.now())await this.ctx.storage.delete(key)}
+  await this.lobbyBroadcast();
+  if((await this.lobbyList()).length)await this.ctx.storage.setAlarm(Date.now()+3600000);
+  return;
+ }
+ for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
 }
