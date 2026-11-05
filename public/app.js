@@ -8,7 +8,7 @@ function save(key,value){try{localStorage.setItem(key,JSON.stringify(value))}cat
 $('name').value=read('binotto-name','');
 function err(s){$('error').textContent=s}
 async function api(action,data){const path=action==='create'?'/api/create':'/api/room/'+room+'/'+action;const r=await fetch(path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+(credentials.token||'')},...(data?{body:JSON.stringify(data)}:{}),signal:AbortSignal.timeout(15000)});const j=await r.json();if(!r.ok)throw Error(j.error||'Errore server');return j}
-function render(s){if(state&&s.revision<state.revision)return;state=s;$('table').hidden=false;$('entry').hidden=s.phase!=='waiting'||!!credentials.player;$('create').hidden=true;$('inviteNote').hidden=false;const mine=s.players.findIndex(p=>p.id===credentials.player);context=s.context||context;$('newtable').hidden=mine>=0&&s.phase!=='finished';$('newtable').href=context?'/?context='+encodeURIComponent(context):'/';$('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?'Partita conclusa':'Turno di '+s.players[s.turn].name;$('players').replaceChildren();for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=s.players[i]?.name||'Posto libero';$('players').append(el)}$('role').textContent=mine<0?'Stai assistendo.': 'Sei il giocatore '+(mine+1)+'.';$('claim').hidden=s.phase!=='waiting'||mine>=0;$('pass').hidden=s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;$('finish').hidden=s.phase!=='playing'||mine<0;$('expires').textContent='Stanza disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');$('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent='#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}}
+function render(s){if(state&&s.revision<state.revision)return;state=s;refreshDebug();$('table').hidden=false;$('entry').hidden=s.phase!=='waiting'||!!credentials.player;$('create').hidden=true;$('inviteNote').hidden=false;const mine=s.players.findIndex(p=>p.id===credentials.player);context=s.context||context;$('newtable').hidden=mine>=0&&s.phase!=='finished';$('newtable').href=context?'/?context='+encodeURIComponent(context):'/';$('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?'Partita conclusa':'Turno di '+s.players[s.turn].name;$('players').replaceChildren();for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=s.players[i]?.name||'Posto libero';$('players').append(el)}$('role').textContent=mine<0?'Stai assistendo.': 'Sei il giocatore '+(mine+1)+'.';$('claim').hidden=s.phase!=='waiting'||mine>=0;$('pass').hidden=s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;$('finish').hidden=s.phase!=='playing'||mine<0;$('expires').textContent='Stanza disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');$('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent='#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}}
 function connect(){clearTimeout(retry);if(ws){ws.onclose=null;ws.close()}ws=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/room/'+room+'/ws');ws.onopen=()=>{$('connection').textContent='● Collegato in diretta';err('')};ws.onmessage=e=>{try{render(JSON.parse(e.data))}catch{err('Aggiornamento non valido.')}};ws.onclose=()=>{$('connection').textContent='○ Collegamento interrotto. Riprovo…';retry=setTimeout(connect,4000)};ws.onerror=()=>{$('connection').textContent='Connessione in attesa…'}}
 function nickname(){const name=$('name').value.trim();if(!name)throw Error('Inserisci il tuo nome.');save('binotto-name',name);return name}
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message);if(room)api('state').then(render).catch(()=>{})}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
@@ -19,3 +19,35 @@ action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(
 action('invite',async()=>{const link='https://t.me/checkmategame_bot?startapp=r_'+room;try{await navigator.clipboard.writeText(link);err('Invito copiato: mandalo ai tuoi amici.')}catch{$('link').hidden=false;$('link').value=link;$('link').select()}});
 if(room){if(!/^[a-f0-9-]{36}$/.test(room)){err('Invito non valido.');$('create').hidden=true}else{credentials=read('binotto-'+room,{});api('state').then(s=>{render(s);connect()}).catch(e=>err(e.message))}}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&room)connect()});
+
+function refreshDebug(){
+ const entries=[['Interfaccia','Checkmate! 0.3'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Stanza',room||'Nessuna'],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',ws?(['In apertura','Connessa','In chiusura','Chiusa'][ws.readyState]):'Non attiva'],['Viewport',innerWidth+' × '+innerHeight]];
+ $('debug-info').replaceChildren();
+ for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
+}
+function selectPage(page){
+ document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===page;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$('page-'+tab.dataset.page).hidden=!selected});
+ if(page==='debug')refreshDebug();
+}
+document.querySelectorAll('.tab').forEach((tab,index,tabs)=>{
+ tab.onclick=()=>selectPage(tab.dataset.page);
+ tab.onkeydown=event=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(index+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;tabs[next].focus();selectPage(tabs[next].dataset.page)}
+});
+function applyTheme(theme){
+ if(!['dark','light','slate'].includes(theme))theme='dark';
+ document.documentElement.dataset.theme=theme;
+ document.querySelectorAll('[data-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.themeChoice===theme)));
+ document.querySelector('meta[name="theme-color"]').content=theme==='light'?'#eeece4':theme==='slate'?'#14191f':'#111512';
+}
+applyTheme(read('checkmate-theme','dark'));
+document.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{applyTheme(button.dataset.themeChoice);try{save('checkmate-theme',button.dataset.themeChoice)}catch(e){err(e.message)}});
+$('debug-refresh').onclick=async()=>{
+ $('debug-result').textContent='Aggiornamento…';
+ try{if(room){render(await api('state'));connect();$('debug-result').textContent='Stato aggiornato. Riconnessione avviata.'}else{$('debug-result').textContent='Nessuna stanza aperta.'}}catch(e){$('debug-result').textContent=e.message}refreshDebug();
+};
+function fitViewport(){
+ const height=tg?.viewportStableHeight||window.visualViewport?.height||innerHeight;
+ document.documentElement.style.setProperty('--app-height',height+'px');
+}
+tg?.onEvent('viewportChanged',fitViewport);window.addEventListener('resize',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
+fitViewport();refreshDebug();
