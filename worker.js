@@ -75,7 +75,7 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'0.5.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'0.6.0'});
 
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
@@ -85,21 +85,21 @@ export default {
    if(raw.length>4096)return json({error:'Richiesta troppo grande.'},413);
    return lobby.fetch(new Request(u.origin+'/lobby/create',{method:'POST',body:raw}));
   }
-  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|move|pass|finish|ws)$/);
+  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|move|pass|finish|archive|delete|replay|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
 
   const response=await env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(req);
   if(response.ok&&req.method==='POST'){
    const result=await response.clone().json();
    const s=result.state||result;
-   await lobby.fetch(new Request(u.origin+'/lobby/update',{method:'POST',body:JSON.stringify({room:s.room,number:s.number,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires})}));
+   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires})}));
   }
   return response;
  }
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
- public(s){return {room:s.room,number:s.number||null,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,chess:s.chess||null,created:s.created,expires:s.expires}}
+ public(s){return {room:s.room,number:s.number||null,archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,chess:s.chess||null,created:s.created,expires:s.expires}}
  broadcast(s){const msg=JSON.stringify(this.public(s));for(const ws of this.ctx.getWebSockets()){try{ws.send(msg)}catch{}}}
  async fetch(req){
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
@@ -115,12 +115,18 @@ export class Room extends DurableObject {
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s)});
     }
-    if(!s||s.expires<Date.now())return json({error:'Stanza inesistente o scaduta.'},404);
+    if(!s||(!s.archived&&s.expires<Date.now()))return json({error:'Stanza inesistente o scaduta.'},404);
     if(path.endsWith('/ws')){
      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
      if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
      const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].send(JSON.stringify(this.public(s)));
      return new Response(null,{status:101,webSocket:pair[0]});
+    }
+    if(path.endsWith('/replay')&&req.method==='GET'){
+     if(!s.chess)return json({frames:[]});
+     const game=new Chess(),frames=[{fen:game.fen(),lastMove:null}];
+     for(const entry of s.moves){const m=game.move(entry.san);frames.push({fen:game.fen(),lastMove:{from:m.from,to:m.to}})}
+     return json({room:s.room,revision:s.revision,frames});
     }
     if(path.endsWith('/state')&&req.method==='GET')return json(this.public(s));
     if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
@@ -132,6 +138,19 @@ export class Room extends DurableObject {
     }
     const token=(req.headers.get('Authorization')||'').replace(/^Bearer /,'');const who=s.players.findIndex(p=>p.token===token);
     if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
+    if(path.endsWith('/archive')||path.endsWith('/delete')){
+     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Aggiorna e riprova.'},409);
+     if(path.endsWith('/delete')){
+      const result={room:s.room,number:s.number,deleted:true};
+      await this.ctx.storage.deleteAlarm();await this.ctx.storage.deleteAll();
+      for(const ws of this.ctx.getWebSockets()){try{ws.send(JSON.stringify(result));ws.close(1000,'Partita eliminata')}catch{}}
+      return json(result);
+     }
+     s.archived=true;s.phase='finished';s.expires=null;s.revision++;
+     if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
+     await this.ctx.storage.deleteAlarm();await this.ctx.storage.put('state',s);this.broadcast(s);
+     return json(this.public(s));
+    }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
     if(path.endsWith('/move')){
@@ -156,10 +175,10 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires};}
+ summary(s){return {room:s.room,number:s.number,archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
-  return [...entries.values()].filter(s=>s.expires>Date.now()).sort((a,b)=>a.number-b.number);
+  return [...entries.values()].filter(s=>s.archived||s.expires>Date.now()).sort((a,b)=>a.number-b.number);
  }
  async lobbyBroadcast(){
   const message=JSON.stringify({games:await this.lobbyList()});
@@ -189,6 +208,9 @@ export class Room extends DurableObject {
    await this.lobbyBroadcast();
    return json(result);
   }
+  if(path==='/lobby/remove'){
+   await this.ctx.storage.delete('game:'+body.room);await this.lobbyBroadcast();return json({ok:true});
+  }
   if(path==='/lobby/update'){
    const old=await this.ctx.storage.get('game:'+body.room);
    if(old&&body.revision>=old.revision){
@@ -206,10 +228,11 @@ export class Room extends DurableObject {
  async alarm(){
  if(await this.ctx.storage.get('lobbyCounter')!==undefined){
   const entries=await this.ctx.storage.list({prefix:'game:'});
-  for(const [key,value] of entries){if(value.expires<=Date.now())await this.ctx.storage.delete(key)}
+  for(const [key,value] of entries){if(!value.archived&&value.expires<=Date.now())await this.ctx.storage.delete(key)}
   await this.lobbyBroadcast();
-  if((await this.lobbyList()).length)await this.ctx.storage.setAlarm(Date.now()+3600000);
+  if((await this.lobbyList()).some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+3600000);
   return;
  }
+ if((await this.ctx.storage.get('state'))?.archived)return;
  for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
 }

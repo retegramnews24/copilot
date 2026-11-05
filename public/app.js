@@ -1,6 +1,7 @@
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const $=id=>document.getElementById(id);
 let selectedSquare=null,boardFlipped=null,promotionMove=null;
+let replayFrames=[],replayPly=null,replayTimer=null,replayRevision=null,replayLoading=false;
 const events=[];
 function trace(level,message){
  const safe=String(message).replace(/\b\d{6,}:[A-Za-z0-9_-]{15,}\b/g,'[REDACTED]').replace(/(tgWebAppData|initData|Authorization|token)[=:]\s*[^\s]+/gi,'$1=[REDACTED]').slice(0,400);
@@ -27,8 +28,8 @@ function ownedGame(){return games.find(g=>g.phase!=='finished'&&g.players.some(p
 function renderLobby(){
  const own=ownedGame();$('create').hidden=!!own;$('resume').hidden=!own;
  if(own){$('resume').textContent='Riprendi Partita '+own.number;$('resume').onclick=()=>openRoom(own.room)}
- $('games').replaceChildren();$('empty-games').hidden=games.length>0;
- for(const game of games){
+ $('games').replaceChildren();$('empty-games').hidden=games.some(g=>!g.archived);
+ for(const game of games.filter(g=>!g.archived)){
   const card=document.createElement('article');card.className='card game-row';
   const heading=document.createElement('h3');heading.textContent='Partita '+game.number;
   const names=document.createElement('p');names.textContent=game.players.map(p=>p.name).join(' · ')+(game.players.length===1?' · Posto libero':'');
@@ -38,9 +39,10 @@ function renderLobby(){
   button.textContent=mine?'Riprendi':game.phase==='waiting'?'Entra · gioca o guarda':'Guarda';
   button.onclick=()=>openRoom(game.room);card.append(heading,names,status,button);$('games').append(card);
  }
- refreshDebug();
+ renderArchive();refreshDebug();
 }
 function stopRoom(){
+ stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false;
  selectedSquare=null;promotionMove=null;boardFlipped=null;$('promotion').hidden=true;roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close();ws=null}
 }
 function showLobby(){
@@ -60,7 +62,7 @@ function render(s){
  state=s;$('lobby').hidden=true;$('table').hidden=false;
  const mine=s.players.findIndex(p=>p.id===credentials.player);
  $('room-number').textContent=s.number?'Partita '+s.number:'Partita';
- $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?(s.chess?.reason||'Partita conclusa')+(s.chess?.result?' · '+s.chess.result:''):'Turno di '+s.players[s.turn].name+(s.chess?.check?' · Scacco':'');
+ $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?(s.archived?'Archiviata':s.chess?.reason||'Partita conclusa')+(s.chess?.result?' · '+s.chess.result:''):'Turno di '+s.players[s.turn].name+(s.chess?.check?' · Scacco':'');
  $('players').replaceChildren();
  for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(s.chess?(i===0?'Bianco · ':'Nero · '):'')+(s.players[i]?.name||'Posto libero');$('players').append(el)}
  $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
@@ -69,7 +71,10 @@ function render(s){
  $('pass').hidden=!!s.chess||s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
  $('finish').hidden=s.phase==='finished'||mine<0;
  $('newtable').hidden=mine>=0&&s.phase!=='finished';
- $('expires').textContent='Disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');
+ $('expires').textContent=s.archived?'Archiviata · conservata fino all’eliminazione':'Disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');
+ $('manage-game').hidden=mine<0;$('archive-game').hidden=!!s.archived;
+ $('replay-player').hidden=!s.chess||s.phase!=='finished';
+ if(s.chess&&s.phase==='finished'&&replayRevision!==s.revision&&!replayLoading)loadReplay();
  $('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent=m.san?Math.ceil(m.number/2)+(m.number%2?'. ':'… ')+m.san+' · '+m.by:'#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}
  renderBoard();refreshDebug();
 }
@@ -78,7 +83,7 @@ function connect(){
  if(ws){ws.onclose=null;ws.close()}
  const selected=room,socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/room/'+room+'/ws');ws=socket;
  socket.onopen=()=>{if(room!==selected)return;$('connection').textContent='● Collegato in diretta';trace('WS','Partita collegata');refreshDebug()};
- socket.onmessage=e=>{if(room!==selected)return;try{render(JSON.parse(e.data))}catch{err('Aggiornamento non valido.')}};
+ socket.onmessage=e=>{if(room!==selected)return;try{const s=JSON.parse(e.data);if(s.deleted){showLobby();err('La partita è stata eliminata da un partecipante.');return}render(s)}catch{err('Aggiornamento non valido.')}};
  socket.onclose=()=>{if(room!==selected)return;trace('WS','Partita disconnessa · nuovo tentativo tra 4 s');$('connection').textContent='○ Riconnessione…';retry=setTimeout(connect,4000)};
 }
 function connectLobby(){
@@ -106,15 +111,15 @@ action('pass',async()=>render(await api('pass',{revision:state.revision})));
 action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(await api('finish',{revision:state.revision}))});
 $('back-lobby').onclick=showLobby;
 $('newtable').onclick=()=>{showLobby();$('name').focus()};
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){connectLobby();if(room)connect()}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopReplay();if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Checkmate! 0.5'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.chess?'Scacchi':'Prototipo / sala'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia','Checkmate! 0.6'],['Ambiente',tg?.initData?'Telegram':'Browser'],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.chess?'Scacchi':'Prototipo / sala'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
 function selectPage(page){
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===page;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1;$('page-'+tab.dataset.page).hidden=!selected});
- trace('UI','Pagina '+page);if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
+ if(page!=='game')stopReplay();trace('UI','Pagina '+page);if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
 }
 document.querySelectorAll('.tab').forEach((tab,index,tabs)=>{
  tab.onclick=()=>selectPage(tab.dataset.page);
@@ -156,18 +161,19 @@ function pieceSvg(piece){
 function position(fen){
  const result={};fen.split(' ')[0].split('/').forEach((row,index)=>{let file=0;for(const char of row){if(/\d/.test(char))file+=Number(char);else{result['abcdefgh'[file]+(8-index)]=char;file++}}});return result;
 }
-function canMove(){return state?.phase==='playing'&&state.players[state.turn]?.id===credentials.player&&!busy}
+function canMove(){return replayPly===null&&!state?.archived&&state?.phase==='playing'&&state.players[state.turn]?.id===credentials.player&&!busy}
 function renderBoard(){
  $('chess-area').hidden=!state?.chess;if(!state?.chess)return;
+ const viewChess=replayPly!==null&&replayFrames[replayPly]?{...state.chess,...replayFrames[replayPly],legalMoves:[]}:state.chess;
  const mine=state.players.findIndex(p=>p.id===credentials.player);
  const flipped=boardFlipped===null?mine===1:boardFlipped;
  const files=flipped?'hgfedcba':'abcdefgh',ranks=flipped?'12345678':'87654321';
- const pieces=position(state.chess.fen),targets=(state.chess.legalMoves||[]).filter(m=>m.from===selectedSquare);
+ const pieces=position(viewChess.fen),targets=(viewChess.legalMoves||[]).filter(m=>m.from===selectedSquare);
  $('board').replaceChildren();
  for(let ri=0;ri<8;ri++)for(let fi=0;fi<8;fi++){
   const square=files[fi]+ranks[ri],piece=pieces[square],button=document.createElement('button');
   const dark=('abcdefgh'.indexOf(square[0])+Number(square[1]))%2===1;
-  button.className='square'+(dark?' dark':'')+(piece?' occupied':'')+(selectedSquare===square?' selected':'')+(targets.some(m=>m.to===square)?' target':'')+([state.chess.lastMove?.from,state.chess.lastMove?.to].includes(square)?' last':'');
+  button.className='square'+(dark?' dark':'')+(piece?' occupied':'')+(selectedSquare===square?' selected':'')+(targets.some(m=>m.to===square)?' target':'')+([viewChess.lastMove?.from,viewChess.lastMove?.to].includes(square)?' last':'');
   button.setAttribute('aria-label',square+(piece?' · '+pieceNames[piece.toLowerCase()]+' '+(piece===piece.toUpperCase()?'bianco':'nero'):' · vuota'));
   button.setAttribute('aria-disabled',String(!canMove()));
   if(piece)button.innerHTML=pieceSvg(piece);
@@ -175,19 +181,15 @@ function renderBoard(){
   if(ri===7){const file=document.createElement('span');file.className='coord file';file.textContent=files[fi];button.append(file)}
   button.onclick=()=>selectSquare(square,pieces);$('board').append(button);
  }
- $('board-hint').textContent=state.phase==='waiting'?'In attesa del Nero':state.phase==='finished'?'Partita conclusa':mine<0?'Vista spettatore':canMove()?'Tocca un pezzo, poi la destinazione':'Attendi la mossa avversaria';
+ $('board-hint').textContent=replayPly!==null?'Revisione · posizione '+replayPly+' / '+state.moves.length:state.phase==='waiting'?'In attesa del Nero':state.phase==='finished'?'Partita conclusa':mine<0?'Vista spettatore':canMove()?'Tocca un pezzo, poi la destinazione':'Attendi la mossa avversaria';
  const strip=$('move-history'),atBottom=strip.scrollHeight-strip.scrollTop-strip.clientHeight<20;strip.replaceChildren();
  if(!state.moves.length)strip.textContent='Nessuna mossa.';
- for(let i=0;i<state.moves.length;i+=2){const span=document.createElement('span');span.textContent=(i/2+1)+'. '+state.moves[i].san+(state.moves[i+1]?' '+state.moves[i+1].san:'');strip.append(span)}
+ for(let i=0;i<state.moves.length;i+=2){const span=document.createElement('span');span.textContent=(i/2+1)+'. '+state.moves[i].san+(state.moves[i+1]?' '+state.moves[i+1].san:'');if(replayPly!==null&&replayPly>i&&replayPly<=i+2)span.className='move-current';strip.append(span)}
  if(atBottom)strip.scrollTop=strip.scrollHeight;
- requestAnimationFrame(fitBoard);
+ updateReplayControls();requestAnimationFrame(fitBoard);
 }
 function fitBoard(){
- const page=$('page-game'),table=$('table'),board=$('board');
- if(!state?.chess||page.hidden||table.hidden||!page.clientHeight)return;
- const fixed=table.scrollHeight-board.offsetHeight;
- const available=page.clientHeight-fixed-20;
- board.style.width=Math.min(480,board.parentElement.clientWidth,Math.max(216,available))+'px';
+ if($('board'))$('board').style.width='100%';
 }
 function selectSquare(square,pieces){
  if(!canMove()||promotionMove)return;
@@ -221,7 +223,76 @@ $('clear-terminal').onclick=()=>{events.length=0;$('terminal').textContent='';tr
 $('copy-terminal').onclick=async()=>{try{await navigator.clipboard.writeText(events.join('\n'));$('debug-result').textContent='Log copiato.'}catch{$('debug-result').textContent='Copia non disponibile: puoi selezionare il testo del registro.'}};
 window.addEventListener('error',event=>trace('ERROR',event.message||'Errore JavaScript'));
 window.addEventListener('unhandledrejection',event=>trace('ERROR',event.reason?.message||'Operazione non completata'));
-trace('BOOT','Checkmate! 0.5 · registro sessione attivo');
+
+function renderArchive(){
+ $('archive-games').replaceChildren();
+ const archived=games.filter(g=>g.archived);$('archive-empty').hidden=archived.length>0;
+ for(const game of archived){
+  const article=document.createElement('article');article.className='archive-row';
+  const heading=document.createElement('strong');heading.textContent='Partita '+game.number;
+  const names=document.createElement('p');names.textContent=game.players.map(p=>p.name).join(' · ');
+  const button=document.createElement('button');button.className='alt';button.textContent='Apri e rivedi le mosse';
+  button.onclick=async()=>{await openRoom(game.room);if(room===game.room)selectPage('game')};
+  article.append(heading,names,button);$('archive-games').append(article);
+ }
+}
+function stopReplay(){
+ clearTimeout(replayTimer);replayTimer=null;
+ if($('replay-play')){$('replay-play').textContent='▶';$('replay-play').setAttribute('aria-label','Riproduci mosse')}
+}
+async function loadReplay(){
+ replayLoading=true;const selected=room,epoch=roomEpoch,revision=state.revision;
+ try{
+  const data=await api('replay');
+  if(selected!==room||epoch!==roomEpoch)return;
+  replayFrames=data.frames;replayRevision=revision;
+  replayPly=replayFrames.length?(state.archived?0:replayFrames.length-1):null;
+  trace('REPLAY',replayFrames.length+' posizioni caricate');renderBoard();
+ }catch(e){if(selected===room&&epoch===roomEpoch)err(e.message)}
+ finally{if(selected===room&&epoch===roomEpoch)replayLoading=false}
+}
+function updateReplayControls(){
+ const last=Math.max(0,replayFrames.length-1),ply=replayPly??0;
+ $('replay-slider').max=String(last);$('replay-slider').value=String(ply);
+ $('replay-position').textContent=ply+' / '+last;
+ for(const id of ['replay-first','replay-prev'])$(id).disabled=!replayFrames.length||ply===0;
+ for(const id of ['replay-last','replay-next'])$(id).disabled=!replayFrames.length||ply===last;
+ $('replay-play').disabled=last===0;$('replay-slider').disabled=last===0;
+}
+function seekReplay(ply,manual=true){
+ if(!replayFrames.length)return;if(manual)stopReplay();
+ replayPly=Math.max(0,Math.min(replayFrames.length-1,Number(ply)));
+ selectedSquare=null;renderBoard();
+}
+function replayStep(){
+ if(replayPly>=replayFrames.length-1){stopReplay();return}
+ seekReplay(replayPly+1,false);replayTimer=setTimeout(replayStep,850);
+}
+$('replay-first').onclick=()=>seekReplay(0);
+$('replay-prev').onclick=()=>seekReplay((replayPly??0)-1);
+$('replay-next').onclick=()=>seekReplay((replayPly??0)+1);
+$('replay-last').onclick=()=>seekReplay(replayFrames.length-1);
+$('replay-slider').oninput=event=>seekReplay(event.target.value);
+$('replay-play').onclick=()=>{
+ if(replayTimer){stopReplay();return}
+ if(!replayFrames.length)return;
+ if(replayPly===replayFrames.length-1)seekReplay(0);
+ $('replay-play').textContent='Ⅱ';$('replay-play').setAttribute('aria-label','Pausa');
+ replayTimer=setTimeout(replayStep,850);
+};
+action('archive-game',async()=>{
+ if(!confirm('Archiviare questa partita? Se è in corso, verrà conclusa e spostata in Debug.'))return;
+ stopReplay();render(await api('archive',{revision:state.revision}));
+ const result=await request('/api/lobby');games=result.games;renderLobby();
+ trace('ARCHIVE','Partita archiviata');
+});
+action('delete-game',async()=>{
+ if(!confirm('Eliminare definitivamente questa partita e tutte le sue mosse per tutti?'))return;
+ await api('delete',{revision:state.revision});showLobby();
+ const result=await request('/api/lobby');games=result.games;renderLobby();trace('DELETE','Partita eliminata');
+});
+
+trace('BOOT','Checkmate! 0.6 · registro sessione attivo');
 
 $('join-name-input').value=read('binotto-name','');
 request('/api/lobby').then(result=>{games=result.games;renderLobby()}).catch(e=>err(e.message));
