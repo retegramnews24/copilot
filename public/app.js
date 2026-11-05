@@ -44,7 +44,7 @@ function renderLobby(){
 }
 function stopRoom(){
  stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false;
- $('manage-game').open=false;$('draw-dialog').hidden=true;
+ $('manage-game').open=false;$('draw-dialog').hidden=true;$('draw-response').hidden=true;
  selectedSquare=null;promotionMove=null;boardFlipped=null;$('promotion').hidden=true;roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close();ws=null}
 }
 function showLobby(){
@@ -85,10 +85,16 @@ function render(s){
  $('finish').hidden=s.phase==='finished'||mine<0;
  $('offer-draw').hidden=!s.chess||s.phase!=='playing'||mine<0;
  $('offer-draw').disabled=busy||!!s.drawOffer;
- $('draw-response').hidden=!s.drawOffer||s.phase!=='playing';
+
  $('draw-info').textContent=s.drawOffer?(s.drawOffer.by===credentials.player?'Hai offerto la patta. In attesa dell’avversario.':s.drawOffer.name+' propone la patta.'):'';
  const responder=mine>=0&&s.drawOffer&&s.drawOffer.by!==credentials.player;
- $('accept-draw').hidden=!responder;$('reject-draw').hidden=!responder;
+ const receiving=!!responder&&s.phase==='playing';
+ const newlyReceived=$('draw-response').hidden&&receiving;
+ $('draw-response').hidden=!receiving;
+ $('received-draw-info').textContent=receiving?s.drawOffer.name+' ti offre la patta.':'';
+ $('accept-draw').hidden=!receiving;$('reject-draw').hidden=!receiving;
+ if(receiving){$('draw-dialog').hidden=true;if(newlyReceived)$('reject-draw').focus();}
+ else if(document.activeElement===$('accept-draw')||document.activeElement===$('reject-draw'))$('back-lobby').focus();
  if(s.phase!=='playing')$('draw-dialog').hidden=true;
  $('newtable').hidden=mine>=0&&s.phase!=='finished';
  $('expires').textContent=s.archived?'Archiviata · conservata fino all’eliminazione':'Disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');
@@ -317,6 +323,18 @@ window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('draw-dial
 action('confirm-draw',async()=>{const revision=state.revision;render(await api('offer-draw',{revision}));$('draw-dialog').hidden=true});
 action('accept-draw',async()=>render(await api('accept-draw',{revision:state.revision})));
 action('reject-draw',async()=>render(await api('reject-draw',{revision:state.revision})));
+
+window.addEventListener('keydown',event=>{
+ if(event.key!=='Tab')return;
+ const modal=!$('draw-response').hidden?$('draw-response'):!$('draw-dialog').hidden?$('draw-dialog'):null;
+ if(!modal)return;
+ const buttons=[...modal.querySelectorAll('button')].filter(button=>!button.hidden&&!button.disabled);
+ if(!buttons.length){event.preventDefault();return}
+ const first=buttons[0],last=buttons[buttons.length-1],active=document.activeElement;
+ if(event.shiftKey&&(active===first||!modal.contains(active))){event.preventDefault();last.focus()}
+ else if(!event.shiftKey&&(active===last||!modal.contains(active))){event.preventDefault();first.focus()}
+});
+
 function applyPieceTheme(theme){
  if(!['classic','forest','walnut','blue','plum','graphite'].includes(theme))theme='classic';
  document.documentElement.dataset.pieces=theme;
