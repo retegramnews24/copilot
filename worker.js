@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
+import { radioNowPlaying } from './radio-metadata.js';
 import { initialCheckers, playCheckers, checkersSnapshot, checkersKey } from './checkers.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const id=()=>crypto.randomUUID();
@@ -122,6 +123,7 @@ export default {
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
   const user=await sessionUser(req,env);
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
+  if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));req=new Request(req,{headers:trustedHeaders});
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
@@ -373,4 +375,5 @@ export class Room extends DurableObject {
  if((await this.ctx.storage.get('state'))?.archived)return;
  for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
 }
+
 

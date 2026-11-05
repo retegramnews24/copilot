@@ -12,12 +12,29 @@
  let favorites=(Array.isArray(stored)?stored:[]).map(normalize).filter(Boolean),stations=[],current=normalize(readLocal('binottoland-radio-last',null));
  let loaded=false,loading=false,streamIndex=0,attempt=0,watchdog,wantsPlay=false,pending=false,playbackMessage='',directoryMessage='';
  const saved=Number(readLocal('binottoland-radio-volume',.7));audio.volume=Number.isFinite(saved)?Math.min(1,Math.max(0,saved)):.7;volume.value=String(audio.volume);
+ let track='',metadataEpoch=0,metadataTimer=null,metadataPending=false;
+ const trackBox=$('radio-now-playing'),trackLabel=$('radio-track');
+ function showTrack(title){
+  track=typeof title==='string'?title.trim().slice(0,240):'';trackLabel.textContent=track;
+  trackBox.hidden=!track||!wantsPlay;
+  trackBox.classList.toggle('scrolling',!!track);
+  trackBox.style.setProperty('--track-duration',Math.max(18,Math.min(45,track.length*.32))+'s');
+ }
+ function stopMetadata(clear=true){metadataEpoch++;clearTimeout(metadataTimer);metadataTimer=null;metadataPending=false;if(clear)showTrack('')}
+ async function loadMetadata(){
+  clearTimeout(metadataTimer);metadataTimer=null;
+  if(!wantsPlay||document.hidden||!allowed()||!current||metadataPending||typeof window.binottolandRadioMetadata!=='function')return;
+  const epoch=metadataEpoch,station=current.id;metadataPending=true;
+  try{const data=await window.binottolandRadioMetadata(station);if(epoch===metadataEpoch&&current?.id===station&&wantsPlay)showTrack(data.title)}catch{if(epoch===metadataEpoch)showTrack('')}
+  finally{if(epoch===metadataEpoch){metadataPending=false;if(wantsPlay&&!document.hidden)metadataTimer=setTimeout(loadMetadata,60000)}}
+ }
+ document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMetadata(false);else if(wantsPlay)loadMetadata()});
  const allowed=()=>!$('app-shell').hidden;
  function update(){
   label.textContent=current?current.name:'Radio';
   const favorite=!!current&&favorites.some(s=>s.id===current.id);star.textContent=favorite?'★':'☆';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
   play.textContent=wantsPlay?'Ⅱ':'▶';play.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');play.setAttribute('aria-pressed',String(wantsPlay));play.setAttribute('aria-busy',String(pending));
-  status.textContent=playbackMessage||directoryMessage;
+  status.textContent=playbackMessage||directoryMessage;trackBox.hidden=!track||!wantsPlay;
   if('mediaSession' in navigator){try{navigator.mediaSession.playbackState=wantsPlay&&!pending?'playing':current?'paused':'none'}catch{}}
  }
  function render(){
@@ -35,7 +52,7 @@
   try{
    for(const host of hosts){
     try{
-     const response=await fetch(host+'/json/stations/search?countrycode=IT&hidebroken=true&order=clickcount&reverse=true&limit=24',{signal:AbortSignal.timeout(8000)});
+     const response=await fetch(host+'/json/stations/search?countrycode=IT&hidebroken=true&order=clickcount&reverse=true&limit=200',{signal:AbortSignal.timeout(8000)});
      if(!response.ok)throw Error();const data=await response.json();if(!Array.isArray(data))throw Error();
      const unique=new Map();for(const raw of data){const station=normalize(raw);if(station&&!unique.has(station.id))unique.set(station.id,station)}
      if(!unique.size)throw Error();stations=[...unique.values()];loaded=true;directoryMessage='';return;
@@ -45,7 +62,7 @@
   }finally{loading=false;$('radio-reload').disabled=false;render()}
  }
  function stop(message='Radio in pausa.'){
-  wantsPlay=false;pending=false;attempt++;clearTimeout(watchdog);audio.pause();playbackMessage=message;update();
+  stopMetadata();wantsPlay=false;pending=false;attempt++;clearTimeout(watchdog);audio.pause();playbackMessage=message;update();
  }
  function nextStream(serial=attempt){
   if(serial!==attempt||!wantsPlay)return;clearTimeout(watchdog);
@@ -57,7 +74,7 @@
  }
  async function startStream(){
   if(!current||!allowed())return;
-  const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;audio.pause();audio.src=current.urls[streamIndex];audio.load();playbackMessage='Connessione…';update();armWatchdog(serial);
+  stopMetadata();const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;audio.pause();audio.src=current.urls[streamIndex];audio.load();playbackMessage='Connessione…';update();armWatchdog(serial);
   if('mediaSession' in navigator&&window.MediaMetadata){try{navigator.mediaSession.metadata=new MediaMetadata({title:current.name,artist:'Binottoland · Radio'})}catch{}}
   try{await audio.play();if(serial!==attempt)return;update()}
   catch(error){if(serial!==attempt||!wantsPlay)return;if(error.name==='NotAllowedError')stop('Tocca Play per avviare la radio.');else nextStream(serial)}
@@ -77,8 +94,8 @@
  star.onclick=()=>{if(!allowed()||!current)return;const found=favorites.some(s=>s.id===current.id);favorites=found?favorites.filter(s=>s.id!==current.id):[...favorites,current];saveLocal('binottoland-radio-favorites',favorites);render()};
  volume.oninput=()=>{const value=Number(volume.value);if(!Number.isFinite(value))return;audio.volume=Math.min(1,Math.max(0,value));saveLocal('binottoland-radio-volume',audio.volume)};
  $('radio-reload').onclick=loadStations;
- audio.addEventListener('playing',()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto · '+current.name;update()});
- audio.addEventListener('pause',()=>{if(!pending&&wantsPlay){wantsPlay=false;playbackMessage='Radio in pausa.';clearTimeout(watchdog)}update()});
+ audio.addEventListener('playing',()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto · '+current.name;update();if(!metadataTimer&&!metadataPending)loadMetadata()});
+ audio.addEventListener('pause',()=>{if(!pending&&wantsPlay){wantsPlay=false;stopMetadata();playbackMessage='Radio in pausa.';clearTimeout(watchdog)}update()});
  const buffering=()=>{if(!wantsPlay)return;pending=true;playbackMessage='Buffering…';update();armWatchdog(attempt)};
  audio.addEventListener('waiting',buffering);audio.addEventListener('stalled',buffering);
  audio.addEventListener('error',()=>{if(audio.getAttribute('src')&&wantsPlay)nextStream()});
@@ -86,3 +103,4 @@
  if('mediaSession' in navigator){try{navigator.mediaSession.setActionHandler('play',resume);navigator.mediaSession.setActionHandler('pause',()=>stop());navigator.mediaSession.setActionHandler('stop',()=>stop())}catch{}}
  render();
 })();
+

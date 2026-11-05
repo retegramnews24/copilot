@@ -45,11 +45,11 @@ function makeAvatar(user){
  return avatar;
 }
 function renderLobby(){
- const own=ownedGame();$('create').hidden=!!own;$('create-chess').disabled=!identity||!!own;$('create-chess').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
+ const own=ownedGame();$('create-chess').disabled=!identity||!!own;$('create-chess').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  $('create-checkers').disabled=!identity||!!own;$('create-checkers').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  const active=games.filter(g=>!g.archived);
  const waiting=active.filter(g=>g.phase==='waiting').length,playing=active.filter(g=>g.phase==='playing').length;
- $('lobby-summary').textContent=active.length?waiting+' da giocare · '+playing+' in corso':'Un tavolo, due giocatori. Si comincia qui.';
+ $('lobby-summary').textContent=active.length?waiting+' da giocare · '+playing+' in corso':'';
  document.querySelectorAll('[data-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.filter===tableFilter)));
  const visible=active.filter(g=>tableFilter==='all'||g.phase===tableFilter);
  $('games').replaceChildren();$('empty-games').hidden=visible.length>0;
@@ -156,7 +156,6 @@ function nickname(field='name'){
  const value=identity?.name||'Utente Telegram';if(!value)throw Error('Inserisci il tuo nome.');save('binotto-name',value);$('name').textContent=value;return value;
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
-$('create').onclick=()=>selectPage('games');
 $('open-debug').onclick=()=>selectPage('debug');
 $('back-settings').onclick=()=>selectPage('settings');
 async function createGame(game){
@@ -442,7 +441,7 @@ trace('BOOT','Binottoland 1.1 · registro sessione attivo');
 
 
 async function startSession(password){
- $('create').disabled=true;$('access-submit').disabled=true;$('access-error').textContent='Verifica dell’accesso…';
+ $('access-submit').disabled=true;$('access-error').textContent='Verifica dell’accesso…';
  try{
   if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
   const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,password})});
@@ -450,7 +449,7 @@ async function startSession(password){
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;$('club-gate').hidden=true;$('app-shell').hidden=false;
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chatMessages=payload.messages||[];
-  $('create').disabled=false;renderLobby();connectLobby();
+  renderLobby();connectLobby();
  }catch(e){$('access-error').textContent=e.message;trace('AUTH','Accesso non completato')}finally{$('access-password').value='';$('access-submit').disabled=false}
 }
 function sendPresence(away=document.hidden){
@@ -502,3 +501,6 @@ if(!tg?.initData){$('access-submit').disabled=true;$('access-password').disabled
 
 
 
+
+
+window.binottolandRadioMetadata=stationId=>request('/api/radio/now-playing?station='+encodeURIComponent(stationId));

@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node tests/checkers.test.js"
+    "test": "node tests/checkers.test.js && node tests/radio-metadata.test.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
