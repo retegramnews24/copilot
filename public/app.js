@@ -45,6 +45,7 @@ function makeAvatar(user){
  return avatar;
 }
 function renderLobby(){
+ $('play-labyrinth').disabled=!identity;
  const own=ownedGame();$('create-chess').disabled=!identity||!!own;$('create-chess').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  $('create-checkers').disabled=!identity||!!own;$('create-checkers').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  const active=games.filter(g=>!g.archived);
@@ -505,3 +506,27 @@ if(!tg?.initData){$('access-submit').disabled=true;$('access-password').disabled
 
 window.binottolandRadioMetadata=stationId=>request('/api/radio/now-playing?station='+encodeURIComponent(stationId));
 
+
+
+// Isolated single-player game. No Telegram credentials are sent into the frame.
+const labyrinthOverlay=$('labyrinth-overlay'),labyrinthFrame=$('labyrinth-frame');
+$('play-labyrinth').onclick=()=>{
+ if(!identity)return;
+ $('draw-dialog').hidden=true;$('draw-response').hidden=true;
+ labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html';
+ tg?.BackButton?.show();trace('LAB','Apertura Labyrinth');
+};
+function closeLabyrinth(){
+ if(labyrinthOverlay.hidden)return;
+ labyrinthOverlay.hidden=true;labyrinthFrame.src='about:blank';tg?.BackButton?.hide();
+ $('play-labyrinth').focus();trace('LAB','Ritorno a Binottoland');
+}
+function sendLabyrinthIdentity(){if(!labyrinthOverlay.hidden&&identity)labyrinthFrame.contentWindow?.postMessage({type:'labyrinth:identity',player:identity.id},location.origin)}
+labyrinthFrame.addEventListener('load',sendLabyrinthIdentity);
+window.addEventListener('message',event=>{
+ if(event.origin!==location.origin||event.source!==labyrinthFrame.contentWindow||labyrinthOverlay.hidden)return;
+ if(event.data?.type==='labyrinth:ready')sendLabyrinthIdentity();
+ else if(event.data?.type==='labyrinth:exit')closeLabyrinth();
+ else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
+});
+tg?.onEvent('backButtonClicked',closeLabyrinth);

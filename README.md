@@ -57,3 +57,16 @@ Il catalogo richiede fino a 200 risultati italiani e conserva gli URL HTTPS util
 L'audio rimane diretto tra dispositivo e stazione. L'endpoint autenticato `/api/radio/now-playing?station=UUID` risolve la stazione attraverso Radio Browser e legge solo un breve campione ICY: massimo 10 secondi, 256 KiB e quattro blocchi. Non accetta URL arbitrari dal client; verifica gli indirizzi e i redirect. I risultati hanno una cache breve per isolate e le richieste simultanee alla stessa stazione condividono il probe. Il client aggiorna ogni minuto durante l'ascolto con app visibile; pausa e cambio stazione invalidano le risposte precedenti.
 
 Il pulsante per creare tavoli è nella pagina Giochi. La Lobby conserva elenco, presenti e chat.
+
+
+## Labyrinth · prima versione
+
+Esplorazione individuale in prima persona, avviabile dalla pagina Giochi. Un piano procedurale, una chiave da raccogliere e una porta che conduce al piano successivo. Ogni piano ha un percorso verificato fra ingresso, chiave e uscita. I livelli cambiano mantenendo seed e progressione; non ci sono ancora nemici o cooperativa.
+
+Motore WebGL senza librerie esterne, con renderer Canvas di riserva quando WebGL non è disponibile. Texture e suoni sono generati localmente: carta da parati, moquette, soffitti, lampade, ronzio e passi. Il rendering si ferma in pausa e quando l’app passa in secondo piano.
+
+Comandi PC: WASD/frecce, mouse (o trascinamento se il blocco del puntatore è negato), E/Spazio per interagire, Shift per accelerare, Esc per la pausa. Telefono in orizzontale: joystick sinistro, sguardo a destra, tasto Usa. Sensibilità, dettaglio e audio sono regolabili.
+
+I progressi restano nel localStorage del dispositivo, separati per account Telegram quando aperto da Binottoland. Non sono una classifica verificata dal server. La modalità individuale non crea tavoli multiplayer e non usa il motore a turni. L’iframe riceve solo l’identificativo dell’account, senza token o password, e viene scaricato alla chiusura per liberare audio e grafica.
+
+Verifica automatica: 500 mondi deterministici con percorsi fisicamente percorribili, raccolta chiave/porta, collisioni, confini e ripristino dei salvataggi. Verifica visiva nel browser in modalità Canvas; WebGL hardware e comandi sul vero client Telegram Android restano da provare sul dispositivo.
