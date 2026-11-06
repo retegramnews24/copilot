@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import {projectPoint,Renderer} from '../public/labyrinth/render.js';
 import {worldFor} from '../public/labyrinth/adventure.js';
-const context=new Proxy({createImageData:(w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)}),getImageData:(x,y,w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)}),putImageData(){},fillRect(){}},{get:(o,k)=>k in o?o[k]:()=>{}});
+const context=new Proxy({createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createImageData:(w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)}),getImageData:(x,y,w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)}),putImageData(){},fillRect(){}},{get:(o,k)=>k in o?o[k]:()=>{}});
 globalThis.document={createElement:()=>({width:1,height:1,getContext:()=>context})};globalThis.devicePixelRatio=1;
 let allocated=0,released=0,draws=0;const uniforms=new Map();
 const gl=new Proxy({createBuffer:()=>{allocated++;return {}},deleteBuffer:()=>released++,createShader:()=>({}),createProgram:()=>({}),createTexture:()=>({}),getShaderParameter:()=>true,getProgramParameter:()=>true,getAttribLocation:()=>0,getUniformLocation:(p,n)=>n,

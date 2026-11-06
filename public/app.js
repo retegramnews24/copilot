@@ -550,7 +550,7 @@ window.addEventListener('message',event=>{
  else if(event.data?.type==='labyrinth:net'){const packet=event.data.packet;if(packet&&['pose','action'].includes(packet.type)&&JSON.stringify(packet).length<=2048){if(labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify(packet));else if(packet.type==='action')labPost({type:'labyrinth:packet',packet:{type:'ack',request:packet.request,ok:false,error:'Riconnessione in corso.'}})}}
  else if(event.data?.type==='labyrinth:fullscreen'){enterFullscreen();fitViewport()}
  else if(event.data?.type==='labyrinth:exit')closeLabyrinth();
- else if(event.data?.type==='labyrinth:voice'&&typeof event.data.url==='string'){try{const u=new URL(event.data.url);if(u.protocol==='https:'&&u.hostname==='t.me'&&!u.username&&!u.password){if(tg?.openTelegramLink)tg.openTelegramLink(u.href);else window.open(u.href,'_blank','noopener')}}catch{}}
+
  else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
 });
 tg?.onEvent('backButtonClicked',closeLabyrinth);

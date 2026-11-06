@@ -79,7 +79,7 @@ Arena ovale con una rete elastica da 18,5 × 5,8 metri, panchine, fioriere e lam
 
 Gli altri personaggi sono visibili solo nel proprio piano, con forme morbide, pelle rosa, maglietta e pantaloncini selezionabili in dieci colori distinti; zaino e spada riflettono l’equipaggiamento. Posizioni e rotazioni vengono interpolate. Nomi mostrati solo da vicino, nascosti dietro i muri. Colpo di spada animato e condiviso, con breve recupero; non ci sono ancora nemici, danni o PvP.
 
-PC: WASD/frecce, mouse o trascinamento, E per usare, F/clic sinistro per il colpo, Spazio per saltare, Shift per correre, C per richiudere, Q per lasciare la carta selezionata, Esc per la pausa. Telefono in orizzontale: joystick sinistro movimento, joystick destro visuale; Azione/Colpisci diventa Usa vicino a un oggetto, Salta fra i due comandi di destra. Il menu di pausa permette il ritorno a Binottoland e l’accesso al collegamento alla chat vocale Telegram.
+PC: WASD/frecce, mouse o trascinamento, E per usare, F/clic sinistro per il colpo, Spazio per saltare, Shift per correre, C per richiudere, Q per lasciare la carta selezionata, Esc per la pausa. Telefono in orizzontale: joystick sinistro movimento, joystick destro visuale; Azione/Colpisci diventa Usa vicino a un oggetto, Salta fra i due comandi di destra. Il menu di pausa permette il ritorno a Binottoland. I collegamenti e le impostazioni della chat vocale sono rimossi; le chiamate si gestiscono esternamente.
 
 Gli spettatori possono seguire la visuale di un partecipante oppure scegliere un piano ed esplorare liberamente, senza raccogliere o cambiare nulla. Il selettore rapido dei piani è disattivato per i partecipanti delle spedizioni condivise. La precedente prova individuale resta separata nei salvataggi locali e non viene importata come progresso verificato.
 
@@ -87,7 +87,15 @@ Gli spettatori possono seguire la visuale di un partecipante oppure scegliere un
 
 All’accesso viene richiesto il fullscreen di Telegram dove supportato. safeAreaInset del dispositivo e contentSafeAreaInset di Telegram riservano le rispettive aree in pixel CSS; le variabili vengono ricalcolate su rotazione, resize, cambi delle safe area e fullscreen. Il gioco riceve gli stessi margini dal contenitore. La scena può estendersi sotto le barre, mentre HUD, menu, inventario, joystick e pulsanti rimangono nell’area utilizzabile. Collaudo visivo con una zona Android di 26 px e Telegram di 58 px sopra, più 24 px sotto; questi sono valori di prova, non misure fisse imposte ai telefoni.
 
-Il contenitore mantiene il token di sessione e apre HTTP/WebSocket autenticati: nessuna credenziale viene inviata nell’iframe. Origine e finestra mittente vengono controllate in entrambe le direzioni. Il server ricava il giocatore dall’identità verificata e valida distanze, collisioni, carte, vetrine personali, colori e frequenza dei messaggi; lo spettatore è in sola lettura. Le carte e l’apertura delle vetrine non dipendono dalla fiducia nel client. La chat vocale è un collegamento alla chiamata nativa Telegram, non un accesso al microfono della Mini App.
+Il contenitore mantiene il token di sessione e apre HTTP/WebSocket autenticati: nessuna credenziale viene inviata nell’iframe. Origine e finestra mittente vengono controllate in entrambe le direzioni. Il server ricava il giocatore dall’identità verificata e valida distanze, collisioni, carte, vetrine personali, colori e frequenza dei messaggi; lo spettatore è in sola lettura. Le carte e l’apertura delle vetrine non dipendono dalla fiducia nel client. La Mini App non richiede accesso al microfono.
+
+### Grafica procedurale e prestazioni
+
+Testa con normali morbide, capelli, orecchie e lineamenti; colletto, risvolti, calze e scarpe. Geometrie condivise per tutti i personaggi, dettagli minuti visibili solo da vicino e ombre di contatto leggere. Il renderer Canvas usa versioni direzionali disegnate via codice, con cache LRU di 24 personaggi.
+
+Carta da parati, trama del pavimento, mattoni e lastre sono generati in RGBA da un Worker dedicato al caricamento del piano, quindi riutilizzati. Anteprima immediata di 64 × 64 pixel; materiali finali di 256 × 256. Cache LRU di tre piani, pari a 2,25 MiB per le sole mappe RGBA, esclusi copie GPU, mipmap e altri asset. In assenza di Worker è previsto un fallback asincrono sul thread principale. Non richiede OffscreenCanvas. Cielo, nuvole, vetrine e decorazioni sono disegnati con codice e conservati in cache.
+
+In WebGL i materiali passano alla GPU e gli otto punti luce più vicini vengono aggiornati a intervalli, evitando ordinamenti a ogni fotogramma. Inventario e nomi riutilizzano i nodi DOM. La qualità automatica può ridurre la risoluzione interna fino al 65% dopo un carico sostenuto e recuperarla gradualmente quando il carico scende; le qualità manuali restano fisse. Nessuna promessa di FPS universale: il risultato dipende da telefono, temperatura e WebView. Non vengono creati più Worker del necessario né ridisegnate le texture a ogni fotogramma.
 
 ### Verifica
 
