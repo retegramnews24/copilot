@@ -527,6 +527,7 @@ window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==labyrinthFrame.contentWindow||labyrinthOverlay.hidden)return;
  if(event.data?.type==='labyrinth:ready')sendLabyrinthIdentity();
  else if(event.data?.type==='labyrinth:exit')closeLabyrinth();
+ else if(event.data?.type==='labyrinth:voice'&&typeof event.data.url==='string'){try{const u=new URL(event.data.url);if(u.protocol==='https:'&&u.hostname==='t.me'&&!u.username&&!u.password){if(tg?.openTelegramLink)tg.openTelegramLink(u.href);else window.open(u.href,'_blank','noopener')}}catch{}}
  else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
 });
 tg?.onEvent('backButtonClicked',closeLabyrinth);

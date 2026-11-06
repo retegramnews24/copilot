@@ -1,6 +1,6 @@
 # Binottoland
 
-Mini App Telegram del circolo: una Lobby condivisa con account verificati, presenti, chat e tavoli numerati. Checkmate! (scacchi) e Dama italiana sono disponibili nella stessa Lobby. Backgammon è previsto come prossimo gioco.
+Mini App Telegram del circolo: una Lobby condivisa con account verificati, presenti, chat e tavoli numerati. Checkmate! (scacchi) e Dama italiana sono disponibili nella stessa Lobby. Labyrinth aggiunge un’esplorazione individuale in prima persona.
 
 ## Configurazione privata
 
@@ -59,14 +59,26 @@ L'audio rimane diretto tra dispositivo e stazione. L'endpoint autenticato `/api/
 Il pulsante per creare tavoli è nella pagina Giochi. La Lobby conserva elenco, presenti e chat.
 
 
-## Labyrinth · prima versione
+## Labyrinth · cinque piani e arena (prova individuale)
 
-Esplorazione individuale in prima persona, avviabile dalla pagina Giochi. Un piano procedurale, una chiave da raccogliere e una porta che conduce al piano successivo. Ogni piano ha un percorso verificato fra ingresso, chiave e uscita. I livelli cambiano mantenendo seed e progressione; non ci sono ancora nemici o cooperativa.
+Cinque labirinti procedurali collegati: giallo (illuminazione originale), verde, rosso, blu e nero. Luci, luce ambientale e nebbia diventano progressivamente più scure; gli ultimi piani hanno meno lampade. Nessun nemico o multiplayer in questa versione. La quinta uscita conduce a un cortile esterno con una vetrina e due reti elastiche.
 
-Motore WebGL senza librerie esterne, con renderer Canvas di riserva quando WebGL non è disponibile. Texture e suoni sono generati localmente: carta da parati, moquette, soffitti, lampade, ronzio e passi. Il rendering si ferma in pausa e quando l’app passa in secondo piano.
+Una tasca è visibile da subito. Le keycard giacciono sul pavimento con la banda del colore del piano, senza rotazione o bagliore. La raccolta richiede vicinanza e sguardo verso la carta; il passe-partout nero è ancora meno visibile e compare normalmente nel quinto piano. Una keycard apre la porta e viene consumata. Una porta aperta si attraversa con Usa; Chiudi porta la blocca e fa comparire una sola nuova keycard in un punto casuale raggiungibile. Il passe-partout non si consuma e permette di tornare ai piani precedenti; nella prova sblocca anche le uscite per accelerare il percorso. Le carte si possono lasciare a terra e riprendere; occupano uno slot.
 
-Comandi PC: WASD/frecce, mouse (o trascinamento se il blocco del puntatore è negato), E per interagire, Spazio per saltare, Shift per accelerare, Esc per la pausa. Telefono in orizzontale: joystick sinistro, sguardo a destra, tasti Salta e Usa. Sensibilità, dettaglio e audio sono regolabili.
+Nell’arena, essendo soli, la vetrina non si apre automaticamente: il pulsante è **Apri vetrina**. Si può esplorare e rimbalzare sulle reti prima di aprire. La vetrina contiene uno zaino (porta gli slot totali a cinque) e una spada (occupa uno slot, non ancora utilizzabile). Raccolta unica e apertura sono persistenti. Le reti aumentano l’altezza del salto soltanto all’aperto; i confini restano chiusi.
 
-I progressi restano nel localStorage del dispositivo, separati per account Telegram quando aperto da Binottoland. Non sono una classifica verificata dal server. La modalità individuale non crea tavoli multiplayer e non usa il motore a turni. L’iframe riceve solo l’identificativo dell’account, senza token o password, e viene scaricato alla chiusura per liberare audio e grafica.
+### Prova rapida
 
-Verifica automatica: 500 mondi deterministici con percorsi fisicamente percorribili, raccolta chiave/porta, collisioni, confini e ripristino dei salvataggi. Verifica visiva nel browser in modalità Canvas; WebGL hardware e comandi sul vero client Telegram Android restano da provare sul dispositivo.
+Temporaneamente le nuove esplorazioni partono con un passe-partout. La guida indica il prossimo tratto del percorso effettivamente percorribile verso l’uscita, non una direzione attraverso i muri. Da Pausa → Comandi e impostazioni: guida disattivabile, kit iniziale disattivabile per la prossima nuova esplorazione, viaggio rapido verso ciascun piano o direttamente davanti alla vetrina dell’arena. Questi aiuti sono esplicitamente contrassegnati come prova, non premi o progressi verificati.
+
+Comandi: WASD/frecce, mouse o trascinamento, E/Usa per interagire, Spazio/Salta, Shift/corsa, C/Chiudi porta, Q/Lascia a terra per la carta nello slot selezionato. Esc/Pausa include un pulsante Binottoland accessibile dentro il menu. Telefono in orizzontale con joystick e sguardo separati.
+
+Settings di Binottoland e impostazioni del gioco condividono l’anteprima del personaggio dalle forme arrotondate: pelle rosa, maglietta e pantaloncini separati, dieci colori ciascuno. In questa prova non ci sono altri personaggi in scena. La selezione è locale al dispositivo; il modello visibile agli altri e la sincronizzazione arriveranno con il multiplayer.
+
+Chat vocale nel menu di pausa: salvare il link Telegram alla chiamata del gruppo. Il collegamento è validato HTTPS/t.me e aperto dal contenitore tramite openTelegramLink; la Mini App non avvia chiamate, non gestisce il microfono e non rileva partecipanti vocali. Senza link mostra le indicazioni per entrare dalla chat del gruppo. Audio e voce insieme richiedono una prova sul vero client Telegram.
+
+Motore WebGL senza librerie esterne, fallback Canvas, texture e suoni procedurali. Pausa e background sospendono il ciclo di rendering. I salvataggi v2 sono locali e separati per account Telegram: piani/porte/carte, inventario, vetrina, posizione e tempo; il vecchio progresso viene importato limitando il percorso a cinque piani. Nessuna modifica a segreti, Durable Object o autenticazione. L’iframe riceve soltanto l’identificativo dell’account, mai token o password.
+
+Non ancora implementati: spedizioni nella Lobby, ingressi tardivi, attesa degli altri nell’arena, vetrine per partecipante, timer di disconnessione e caduta delle carte lato server. Queste regole appartengono al prossimo passo multiplayer.
+
+Verifica: test dei labirinti/collisioni e dei cinque piani, unicità carte fra raccolta/apertura/chiusura/abbandono/salvataggio, guida percorribile, inventario e vetrina; prova del flusso DOM e verifica visiva/interazione nel browser con fallback Canvas. WebGL hardware e Telegram Android restano da verificare sul dispositivo.
