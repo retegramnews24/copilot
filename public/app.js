@@ -441,7 +441,7 @@ trace('BOOT','Binottoland 1.1 · registro sessione attivo');
 
 
 async function startSession(password){
- $('access-submit').disabled=true;$('access-error').textContent='> VERIFYING TELEGRAM ID AND ACCESS KEY…';
+ $('access-submit').disabled=true;$('access-error').textContent='Verifica dell’accesso…';
  try{
   if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
   const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,password})});
@@ -449,8 +449,8 @@ async function startSession(password){
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chatMessages=payload.messages||[];
-  renderLobby();$('access-password').blur();$('access-error').textContent='> ACCESS GRANTED. WELCOME TO BINOTTOLAND.';$('club-gate').hidden=true;$('app-shell').hidden=false;window.binottolandTerminalVoice?.('granted');connectLobby();
- }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent='> ACCESS DENIED · '+e.message;window.binottolandTerminalVoice?.('denied');trace('AUTH','Accesso non completato')}finally{$('access-password').value='';$('access-submit').disabled=false}
+  renderLobby();$('access-password').blur();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();
+ }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;trace('AUTH','Accesso non completato')}finally{$('access-password').value='';$('access-submit').disabled=false}
 }
 function sendPresence(away=document.hidden){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room,away}));
