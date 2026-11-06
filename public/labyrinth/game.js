@@ -1,5 +1,5 @@
 import {move,free,restoreProgress,beginJump,CELL} from './core.js';
-import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,openDoor,closeDoor,openShowcase,takeBackpack,takeSword,nextWaypoint,advanceBounce} from './adventure.js';
+import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,openDoor,closeDoor,openShowcase,takeBackpack,takeSword,nextWaypoint,advanceBounce,onSpring,beginAction,advanceAction} from './adventure.js';
 import {Renderer} from './render.js';
 import {readAppearance} from './avatar.js';
 import {Atmosphere} from './audio.js';
@@ -9,29 +9,30 @@ let run=newRun(seed,true),selectedSlot=0,guideEnabled=true,guideClock=0;
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 function read(k,fallback){try{return JSON.parse(localStorage.getItem(k))??fallback}catch{return fallback}}
 function write(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch{}}
-const jumpState={height:0,velocity:0};
+const jumpState={height:0,velocity:0},actionState={remaining:0,cooldown:0};
 const sound=new Atmosphere(read('labyrinth-sound',true));
 function tell(message){try{if(parent!==window)parent.postMessage({type:'labyrinth:trace',message},location.origin)}catch{}}
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;toastTimer=setTimeout(()=>$('toast').textContent='',3000)}
 function updateSound(){$('sound').setAttribute('aria-pressed',String(sound.enabled));$('sound').setAttribute('aria-label',sound.enabled?'Disattiva audio':'Attiva audio');$('sound').textContent=sound.enabled?'♫':'♪̸'}
-function resetInput(){keys.clear();joystick={x:0,y:0,id:null};lookId=null;lastLook=null;dragging=false;$('stick').style.transform='';sprinting=false;$('sprint').setAttribute('aria-pressed','false')}
+function resetInput(){keys.clear();joystick={x:0,y:0,id:null};lookId=null;lastLook=null;dragging=false;$('stick').style.transform='';sprinting=false;actionState.remaining=0;actionState.cooldown=0;document.body.classList.remove('is-striking');$('sprint').setAttribute('aria-pressed','false')}
 function store(){if(!started||!player)return;run.player={x:player.x,z:player.z,yaw:player.yaw,pitch:player.pitch};run.seconds=seconds;run.level=level;write('binottoland-labyrinth-v2-'+playerId,run)}
 function updateInventory(){
  const root=$('inventory');root.replaceChildren();selectedSlot=Math.max(0,Math.min(selectedSlot,capacity(run)-1));
  for(let i=0;i<capacity(run);i++){const id=run.inventory[i],b=document.createElement('button');b.setAttribute('aria-label','Posto '+(i+1)+' · '+(id==='pass'?'Passe-partout':id==='sword'?'Spada':id?'Keycard':'Vuoto'));b.setAttribute('aria-pressed',String(i===selectedSlot));const number=document.createElement('small');number.textContent=i+1;b.append(number);if(id==='pass'||id?.startsWith('key:')){const icon=document.createElement('span');icon.className='card-icon';icon.style.setProperty('--stripe',id==='pass'?'#16181b':worldFor(seed,Number(id.split(':')[1])).palette.stripe);b.append(icon)}else if(id==='sword'){const icon=document.createElement('span');icon.textContent='⚔';b.append(icon)}b.onclick=()=>{selectedSlot=i;updateInventory()};root.append(b)}
  window.dispatchEvent(new CustomEvent('labyrinth:equipment',{detail:{backpack:run.backpack}}));
+ $('hand-view').classList.toggle('with-sword',run.inventory[selectedSlot]==='sword');$('hand-view').style.setProperty('--sleeve',readAppearance().shirt);$('action').textContent=run.inventory[selectedSlot]==='sword'?'Colpisci':'Azione';
  $('drop-item').hidden=!run.inventory[selectedSlot]||run.inventory[selectedSlot]==='sword';
 }
 function syncScene(){hasKey=run.inventory.includes('key:'+level);renderer.scene={appearance:readAppearance(),items:itemsAt(run,world),showcaseOpen:run.showcaseOpen,backpack:run.backpack,swordTaken:run.swordTaken,doorOpen:floorState(run,world).open};}
 function loadWorld(saved=null,back=false){
  jumpState.height=0;jumpState.velocity=0;world=worldFor(seed,level);floorState(run,world);player=saved?.player?{...saved.player}:{...world.spawn,pitch:0};
  if(back){player.x=world.door.x-world.door.dx*1.25;player.z=world.door.z-world.door.dz*1.25;player.yaw=Math.atan2(-world.door.dx,world.door.dz)}
- renderer.load(world);syncScene();$('floor').textContent=world.arena?'ARENA':'PIANO '+String(level).padStart(2,'0')+' · '+world.palette.name.toUpperCase();$('objective').textContent=world.arena?(run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):'Trova la keycard · raggiungi l’uscita';renderer.draw(player,hasKey,0);saveClock=0;bob=0;stepDistance=0;guideClock=1;updateInventory();updateActions();$('test-travel').hidden=!run.test;
+ renderer.load(world);syncScene();$('hand-view').style.filter='brightness('+Math.max(.11,world.palette.brightness*.82)+')';$('floor').textContent=world.arena?'ARENA':'PIANO '+String(level).padStart(2,'0')+' · '+world.palette.name.toUpperCase();$('objective').textContent=world.arena?(run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):'Trova la keycard · raggiungi l’uscita';renderer.draw(player,hasKey,0);saveClock=0;bob=0;stepDistance=0;guideClock=1;updateInventory();updateActions();$('test-travel').hidden=!run.test;
 }
 function loadSaved(){
  let saved=readRun(read('binottoland-labyrinth-v2-'+playerId,null));
  if(!saved){const old=restoreProgress(read('binottoland-labyrinth-'+playerId,null));if(old){saved=newRun(old.seed,true);saved.level=Math.min(5,old.level);saved.seconds=old.seconds;if(saved.level===old.level)saved.player=old.player}}
- run=saved||newRun(seed,read('labyrinth-test-kit',true));seed=run.seed;level=run.level;seconds=run.seconds;loadWorld(saved);$('start').textContent=saved?'Continua · '+(level===6?'Arena':'Piano '+level):'Entra nel labirinto';$('new-run').hidden=!saved;$('saved-info').textContent=run.test?'Prova · passe-partout e guida disponibili':'';return !!saved;
+ run=saved||newRun(seed,true);run.test=true;seed=run.seed;level=run.level;seconds=run.seconds;loadWorld(saved);$('start').textContent=saved?'Continua · '+(level===6?'Arena':'Piano '+level):'Entra nel labirinto';$('new-run').hidden=!saved;$('saved-info').textContent=run.test?'Prova · selezione dei livelli disponibile':'';return !!saved;
 }
 function portrait(){return document.body.classList.contains('touch')&&innerHeight>innerWidth}
 function updateOrientation(){const blocked=playing&&portrait();$('portrait').hidden=!blocked;sound.active(playing&&!blocked);if(!playing)renderer?.draw(player,hasKey,performance.now()/1000)}
@@ -43,14 +44,16 @@ function leave(){store();sound.active(false);if(parent!==window)parent.postMessa
 function tryJump(){if(playing&&!transitioning&&!portrait())beginJump(jumpState)}
 function nearby(a,d=1.8){return Math.hypot(player.x-a.x,player.z-a.z)<d}
 function aimedAt(item){const dx=item.x-player.x,dz=item.z-player.z,d=Math.hypot(dx,dz);return d<.38||(player.pitch<-.35&&(dx*Math.sin(player.yaw)-dz*Math.cos(player.yaw))/Math.max(.001,d)>.72)}
+function facing(item){const dx=item.x-player.x,dz=item.z-player.z;return (dx*Math.sin(player.yaw)-dz*Math.cos(player.yaw))/Math.max(.001,Math.hypot(dx,dz))>.65}
+function strike(){if(!playing||transitioning||portrait())return;if(beginAction(actionState)){document.body.classList.add('is-striking');sound.swish?.()}}
 function target(){
  for(const item of itemsAt(run,world))if(nearby(item,item.type==='pass'?.95:1.25)&&aimedAt(item))return {kind:'card',item,label:item.type==='pass'?'Prendi passe-partout':'Prendi keycard'};
- if(world.arena){if(nearby(world.showcase,2.5)){if(!run.showcaseOpen)return {kind:'showcase',label:'Apri vetrina'};if(!run.backpack)return {kind:'backpack',label:'Prendi zaino'};if(!run.swordTaken)return {kind:'sword',label:'Prendi spada'}}if(nearby(world.door))return {kind:hasPass(run)?'back':'no-back',label:hasPass(run)?'Torna al piano nero':'Per tornare serve il passe-partout'};return null}
+ if(world.arena){if(nearby(world.showcase,2.5)&&facing(world.showcase)){if(!run.showcaseOpen)return {kind:'showcase',label:'Apri vetrina'};if(!run.backpack)return {kind:'backpack',label:'Prendi zaino'};if(!run.swordTaken)return {kind:'sword',label:'Prendi spada'}}if(nearby(world.door))return {kind:hasPass(run)?'back':'no-back',label:hasPass(run)?'Torna al piano nero':'Per tornare serve il passe-partout'};return null}
  if(nearby(world.door))return {kind:floorState(run,world).open?'exit':'door',label:floorState(run,world).open?(level===5?'Entra nell’arena':'Vai al piano successivo'):'Apri porta'};
  if(level>1&&nearby(world.spawn,1))return {kind:hasPass(run)?'back':'no-back',label:hasPass(run)?'Torna al piano precedente':'Per tornare serve il passe-partout'};
  return null;
 }
-function updateActions(){if(!world||!player)return;$('objective').textContent=world.arena?(run.swordTaken?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita';const t=target(),touch=document.body.classList.contains('touch');$('use').disabled=!t;$('hint').textContent=t?(touch?'Usa · ':'E · ')+t.label:'';$('close-door').hidden=world.arena||!floorState(run,world).open||!nearby(world.door,2.2);$('open-case').hidden=!world.arena||run.showcaseOpen;
+function updateActions(){if(!world||!player)return;$('objective').textContent=world.arena?(run.swordTaken?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita';const t=target(),touch=document.body.classList.contains('touch');$('use').disabled=!t;$('hint').textContent=t?(touch?'Usa · ':'E · ')+t.label:'';$('close-door').hidden=world.arena||!floorState(run,world).open||!nearby(world.door,2.2);
  if(!world.arena&&guideEnabled){$('guide').hidden=false;guideClock++;if(guideClock>8){guideClock=0;const q=nextWaypoint(world,player,world.door);if(q){const angle=Math.atan2(q.x-player.x,-(q.z-player.z))-player.yaw;$('guide-arrow').style.transform='rotate('+angle+'rad)';$('guide-text').textContent='Uscita · percorso '+Math.max(1,Math.round(q.steps*CELL))+' m'}}}else $('guide').hidden=true;
 }
 function changeLevel(next,back=false){
@@ -67,10 +70,10 @@ function use(){
  else if(t.kind==='no-back')toast('Puoi tornare indietro solo con il passe-partout.');
  else if(t.kind==='showcase')openCase();
  else if(t.kind==='backpack'){if(takeBackpack(run)){sound.chime();toast('Zaino raccolto · cinque posti disponibili.')}}
- else if(t.kind==='sword'){if(takeSword(run)){sound.chime();toast('Spada raccolta. Per ora non è utilizzabile.')}else toast('Non c’è spazio nello zaino.')}
+ else if(t.kind==='sword'){if(takeSword(run)){sound.chime();selectedSlot=run.inventory.indexOf('sword');toast('Spada raccolta · F, clic o Colpisci.')}else toast('Non c’è spazio nello zaino.')}
  syncScene();updateInventory();updateActions();store();
 }
-function openCase(){if(!playing||transitioning||!world.arena)return;if(openShowcase(run)){sound.chime();toast('Vetrina aperta. Raccogli lo zaino, poi la spada.');$('objective').textContent='Raccogli il tuo equipaggiamento';tell('Arena · vetrina aperta');syncScene();updateActions();store()}}
+function openCase(){if(!playing||transitioning||!world.arena||!nearby(world.showcase,2.5)||!facing(world.showcase))return;if(openShowcase(run)){sound.chime();toast('Vetrina aperta. Raccogli lo zaino, poi la spada.');$('objective').textContent='Raccogli il tuo equipaggiamento';tell('Arena · vetrina aperta');syncScene();updateActions();store()}}
 function shutDoor(){if(!playing||transitioning||world.arena||!nearby(world.door,2.2))return;if(closeDoor(run,world)){toast('Porta richiusa. Una nuova keycard è comparsa sul piano.');syncScene();updateActions();store()}}
 function dropSelected(){if(!playing||transitioning)return;if(drop(run,world,selectedSlot,player)){toast('Carta lasciata a terra. Guarda ai tuoi piedi per riprenderla.');syncScene();updateInventory();updateActions();store()}}
 function tick(now){
@@ -81,10 +84,9 @@ function tick(now){
   const magnitude=Math.hypot(forward,strafe);if(magnitude>1){forward/=magnitude;strafe/=magnitude}
   const fast=keys.has('ShiftLeft')||keys.has('ShiftRight')||sprinting,speed=(fast?3.65:2.15)*dt,oldX=player.x,oldZ=player.z;
   move(world,player,(Math.sin(player.yaw)*forward+Math.cos(player.yaw)*strafe)*speed,(-Math.cos(player.yaw)*forward+Math.sin(player.yaw)*strafe)*speed);
-  if(world.arena&&Math.abs(player.x-world.showcase.x)<1.3&&Math.abs(player.z-world.showcase.z)<.75){player.x=oldX;player.z=oldZ}
   const walked=Math.hypot(player.x-oldX,player.z-oldZ);stepDistance+=walked;bob=walked&&!reduced?Math.sin(seconds*(fast?15:10))*.018:0;
-  advanceBounce(jumpState,dt,world.arena);if(world.arena&&jumpState.height<.05&&jumpState.velocity<=0&&world.nets.some(net=>Math.abs(player.x-net.x)<1.3&&Math.abs(player.z-net.z)<1.3)){jumpState.velocity=9.3;sound.step(true)}if(stepDistance>.82&&jumpState.height<.02){sound.step(fast);stepDistance=0}seconds+=dt;saveClock+=dt;if(saveClock>5){store();saveClock=0}
-  updateActions();
+  advanceBounce(jumpState,dt,world.arena);if(jumpState.height<.05&&jumpState.velocity<=0&&onSpring(world,player)){jumpState.velocity=9.3;sound.step(true)}if(stepDistance>.82&&jumpState.height<.02){sound.step(fast);stepDistance=0}seconds+=dt;saveClock+=dt;if(saveClock>5){store();saveClock=0}
+  advanceAction(actionState,dt);if(actionState.remaining===0)document.body.classList.remove('is-striking');updateActions();
   renderer.draw(player,hasKey,now/1000,bob+jumpState.height);
   if(quality==='auto'&&!autoReduced&&seconds>8){if(raw>.045)slowFrames++;else slowFrames=Math.max(0,slowFrames-1);if(slowFrames>80){renderer.quality='low';autoReduced=true;toast('Dettaglio regolato per una maggiore fluidità.')}}
   if(debug){$('debug').hidden=false;$('debug').textContent='Piano '+level+' · '+Math.round(1/Math.max(raw,.001))+' fps\nx '+player.x.toFixed(2)+' z '+player.z.toFixed(2)+' · chiave '+hasKey+'\n'+canvas.width+' × '+canvas.height}
@@ -93,11 +95,11 @@ function tick(now){
 }
 $('test-travel-go').onclick=()=>{if(!run.test)return;const next=Number($('test-floor').value);if(!Number.isInteger(next)||next<1||next>6)return;const slot=run.inventory.indexOf('key:'+level);if(slot>=0)drop(run,world,slot,player);level=next;run.level=next;loadWorld();if(world.arena){player.x=world.showcase.x;player.z=world.showcase.z+2.2;player.yaw=0;player.pitch=0}resume();toast('Viaggio rapido · prova')};
 $('start').onclick=resume;
-$('new-run').onclick=()=>{if(!confirm('Ricominci da un nuovo labirinto? I progressi di questa esplorazione saranno sostituiti.'))return;seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;run=newRun(seed,$('test-kit').checked);selectedSlot=0;loadWorld();resume()};
-$('menu-leave').onclick=leave;$('open-case').onclick=openCase;$('close-door').onclick=shutDoor;$('drop-item').onclick=dropSelected;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('use').onclick=use;$('jump').onclick=tryJump;
+$('new-run').onclick=()=>{if(!confirm('Ricominci da un nuovo labirinto? I progressi di questa esplorazione saranno sostituiti.'))return;seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;run=newRun(seed,true);selectedSlot=0;loadWorld();resume()};
+$('menu-leave').onclick=leave;$('action').onclick=strike;$('close-door').onclick=shutDoor;$('drop-item').onclick=dropSelected;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('use').onclick=use;$('jump').onclick=tryJump;
 $('sound').onclick=()=>{sound.toggle();sound.active(playing&&!portrait());write('labyrinth-sound',sound.enabled);updateSound()};
 $('sprint').onclick=()=>{sprinting=!sprinting;$('sprint').setAttribute('aria-pressed',String(sprinting))};
-$('guide-toggle').checked=guideEnabled=read('labyrinth-guide',true);$('guide-toggle').onchange=e=>{guideEnabled=e.target.checked;write('labyrinth-guide',guideEnabled);updateActions()};$('test-kit').checked=read('labyrinth-test-kit',true);$('test-kit').onchange=e=>write('labyrinth-test-kit',e.target.checked);
+$('guide-toggle').checked=guideEnabled=read('labyrinth-guide',true);$('guide-toggle').onchange=e=>{guideEnabled=e.target.checked;write('labyrinth-guide',guideEnabled);updateActions()};
 function voiceURL(){const value=$('voice-link').value.trim();try{const u=new URL(value);return u.protocol==='https:'&&u.hostname==='t.me'&&!u.username&&!u.password?u.href:null}catch{return null}}
 $('voice-link').value=read('labyrinth-voice-link','');$('voice-link').onchange=()=>{const url=voiceURL();if(url){write('labyrinth-voice-link',url);$('voice-info').textContent='Collegamento salvato.'}else{$('voice-info').textContent='Inserisci un link Telegram https://t.me/…';write('labyrinth-voice-link','')}};
 $('voice').onclick=()=>{const url=voiceURL();if(url){if(parent!==window)parent.postMessage({type:'labyrinth:voice',url},location.origin);else window.open(url,'_blank','noopener')}else{$('options').open=true;$('voice-info').textContent='Avvia la chat vocale dal gruppo Telegram, poi torna al gioco. Puoi salvare qui il suo link.';$('voice-link').focus()}};
@@ -106,9 +108,9 @@ $('sensitivity').oninput=e=>{sensitivity=Number(e.target.value);write('labyrinth
 $('quality').value=quality=['auto','low','high'].includes(read('labyrinth-quality','auto'))?read('labyrinth-quality','auto'):'auto';
 $('quality').onchange=e=>{quality=e.target.value;renderer.quality=quality;autoReduced=false;write('labyrinth-quality',quality);renderer.draw(player,hasKey,performance.now()/1000)};
 $('fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{toast('Schermo intero gestito da Telegram su questo dispositivo.')}};
-window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(playing)pause();return}if(!playing||transitioning)return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyE','KeyC','KeyQ','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='KeyE'&&!e.repeat)use();if(e.code==='KeyC'&&!e.repeat)shutDoor();if(e.code==='KeyQ'&&!e.repeat)dropSelected();if(e.code==='Space'&&!e.repeat)tryJump()}});
+window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(playing)pause();return}if(!playing||transitioning)return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyE','KeyC','KeyQ','KeyF','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='KeyF'&&!e.repeat)strike();if(e.code==='KeyE'&&!e.repeat)use();if(e.code==='KeyC'&&!e.repeat)shutDoor();if(e.code==='KeyQ'&&!e.repeat)dropSelected();if(e.code==='Space'&&!e.repeat)tryJump()}});
 window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{resetInput();if(playing&&!transitioning)pause()});
-canvas.addEventListener('mousedown',e=>{if(!playing)return;if(e.button===0){dragging=true;pointerLock()}});window.addEventListener('mouseup',()=>dragging=false);
+canvas.addEventListener('mousedown',e=>{if(!playing)return;if(e.button===0){dragging=true;strike();pointerLock()}});window.addEventListener('mouseup',()=>dragging=false);
 window.addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas||dragging)look(e.movementX,e.movementY)});
 document.addEventListener('pointerlockchange',()=>{if(!document.pointerLockElement&&playing&&!transitioning&&!dragging)pause()});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
@@ -130,6 +132,6 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput
 window.addEventListener('message',event=>{if(event.source!==parent||event.origin!==location.origin||event.data?.type!=='labyrinth:identity'||started)return;const id=String(event.data.player||'');if(!/^\d{1,20}$/.test(id)||id===playerId)return;playerId=id;if(renderer)loadSaved()});
 window.addEventListener('pagehide',()=>{store();playing=false;cancelAnimationFrame(raf);clearTimeout(toastTimer);sound.destroy();renderer?.destroy()});
 canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();if(playing)pause();renderer=null;$('start').disabled=true;$('fatal').textContent='La grafica è stata sospesa dal dispositivo. Attendi il ripristino oppure riapri Labyrinth.';tell('Contesto WebGL sospeso')});
-canvas.addEventListener('webglcontextrestored',()=>{try{renderer=new Renderer(canvas);renderer.quality=quality;renderer.load(world);syncScene();renderer.draw(player,hasKey,0);$('fatal').textContent='';$('start').disabled=false;tell('Contesto WebGL ripristinato')}catch(e){$('fatal').textContent=e.message}});
+canvas.addEventListener('webglcontextrestored',()=>{try{renderer=new Renderer(canvas);renderer.quality=quality;renderer.load(world);syncScene();$('hand-view').style.filter='brightness('+Math.max(.11,world.palette.brightness*.82)+')';renderer.draw(player,hasKey,0);$('fatal').textContent='';$('start').disabled=false;tell('Contesto WebGL ripristinato')}catch(e){$('fatal').textContent=e.message}});
 try{renderer=new Renderer(canvas);renderer.quality=quality;loadSaved();updateSound();tell('Motore 3D pronto')}catch(error){$('fatal').textContent=error.message;$('start').disabled=true;$('new-run').hidden=true;$('menu-note').textContent='La grafica 3D richiede WebGL. Puoi tornare a Binottoland e provare da un altro dispositivo.';tell('Avvio non riuscito: '+error.message)}
 if(parent!==window)parent.postMessage({type:'labyrinth:ready'},location.origin);

@@ -42,16 +42,17 @@ export class Renderer{
  load(world){
   const gl=this.gl;for(const m of this.meshes)gl.deleteBuffer(m.buffer);if(this.keyMesh)gl.deleteBuffer(this.keyMesh.buffer);for(const m of this.props||[])gl.deleteBuffer(m.buffer);for(const t of this.textures)gl.deleteTexture(t);this.world=world;
   const wall=new Geometry(),floor=new Geometry(),ceiling=new Geometry(),trim=new Geometry(),frames=new Geometry(),light=new Geometry(),door=new Geometry(),key=new Geometry();
-  for(let z=1;z<world.n-1;z++)for(let x=1;x<world.n-1;x++)if(!world.grid[z*world.n+x]){
+  for(let z=world.arena?0:1;z<(world.arena?world.n:world.n-1);z++)for(let x=world.arena?0:1;x<(world.arena?world.n:world.n-1);x++)if(world.arena||!world.grid[z*world.n+x]){
    const a=x*CELL,b=(x+1)*CELL,c=z*CELL,d=(z+1)*CELL;
    floor.quad([a,0,c],[b,0,c],[b,0,d],[a,0,d],[0,1,0],[x*2,z*2,(x+1)*2,(z+1)*2]);
    if(!world.arena)ceiling.quad([a,HEIGHT,d],[b,HEIGHT,d],[b,HEIGHT,c],[a,HEIGHT,c],[0,-1,0],[x,z,x+1,z+1]);
-   if(world.grid[z*world.n+x-1]){wall.quad([a,0,d],[a,0,c],[a,HEIGHT,c],[a,HEIGHT,d],[1,0,0],[0,0,2,2]);trim.box(a+.018,0,(c+d)/2,.035,.13,CELL)}
-   if(world.grid[z*world.n+x+1]){wall.quad([b,0,c],[b,0,d],[b,HEIGHT,d],[b,HEIGHT,c],[-1,0,0],[0,0,2,2]);trim.box(b-.018,0,(c+d)/2,.035,.13,CELL)}
-   if(world.grid[(z-1)*world.n+x]){wall.quad([a,0,c],[b,0,c],[b,HEIGHT,c],[a,HEIGHT,c],[0,0,1],[0,0,2,2]);trim.box((a+b)/2,0,c+.018,CELL,.13,.035)}
-   if(world.grid[(z+1)*world.n+x]){wall.quad([b,0,d],[a,0,d],[a,HEIGHT,d],[b,HEIGHT,d],[0,0,-1],[0,0,2,2]);trim.box((a+b)/2,0,d-.018,CELL,.13,.035)}
+   if(!world.arena&&world.grid[z*world.n+x-1]){wall.quad([a,0,d],[a,0,c],[a,HEIGHT,c],[a,HEIGHT,d],[1,0,0],[0,0,2,2]);trim.box(a+.018,0,(c+d)/2,.035,.13,CELL)}
+   if(!world.arena&&world.grid[z*world.n+x+1]){wall.quad([b,0,c],[b,0,d],[b,HEIGHT,d],[b,HEIGHT,c],[-1,0,0],[0,0,2,2]);trim.box(b-.018,0,(c+d)/2,.035,.13,CELL)}
+   if(!world.arena&&world.grid[(z-1)*world.n+x]){wall.quad([a,0,c],[b,0,c],[b,HEIGHT,c],[a,HEIGHT,c],[0,0,1],[0,0,2,2]);trim.box((a+b)/2,0,c+.018,CELL,.13,.035)}
+   if(!world.arena&&world.grid[(z+1)*world.n+x]){wall.quad([b,0,d],[a,0,d],[a,HEIGHT,d],[b,HEIGHT,d],[0,0,-1],[0,0,2,2]);trim.box((a+b)/2,0,d-.018,CELL,.13,.035)}
   }
-  for(const p of world.lamps){frames.box(p.x,HEIGHT-.055,p.z,1.18,.04,.34);for(const dz of [-.075,.075])light.quad([p.x-.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz+.025],[p.x-.51,HEIGHT-.06,p.z+dz+.025],[0,-1,0])}
+  if(world.oval){const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,x=o.cx+Math.cos(a)*o.rx,z=o.cz+Math.sin(a)*o.rz,xx=o.cx+Math.cos(b)*o.rx,zz=o.cz+Math.sin(b)*o.rz,n=[-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)];wall.quad([x,0,z],[xx,0,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n,[i/2,0,(i+1)/2,2]);trim.quad([x,HEIGHT-.12,z],[xx,HEIGHT-.12,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n)}}
+  if(!world.arena)for(const p of world.lamps){frames.box(p.x,HEIGHT-.055,p.z,1.18,.04,.34);for(const dz of [-.075,.075])light.quad([p.x-.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz+.025],[p.x-.51,HEIGHT-.06,p.z+dz+.025],[0,-1,0])}
   const p=world.door,basis=doorBasis(p),n=[basis.normalX,0,basis.normalZ],right=[basis.rightX,0,basis.rightZ],v=(dx,y)=>[p.x+right[0]*dx+n[0]*.015,y,p.z+right[2]*dx+n[2]*.015];door.quad(v(-.61,0),v(.61,0),v(.61,2.2),v(-.61,2.2),n);
   key.box(0,.014,0,.24,.012,.15);
   const textures=[this.texture(noiseTexture('wall',world.level)),this.texture(noiseTexture('floor',world.level)),this.texture(noiseTexture('ceiling',world.level)),this.texture(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'))];this.textures=textures;
@@ -72,11 +73,17 @@ export class Renderer{
    glass.quad([c.x-1.02,.23,c.z+.48],[c.x+1.02,.23,c.z+.48],[c.x+1.02,2.1,c.z+.48],[c.x-1.02,2.1,c.z+.48],[0,0,1]);
    pack.sphere(c.x-.5,.9,c.z,.28,.39,.17);pack.box(c.x-.5,.95,c.z+.16,.34,.26,.08);for(const dx of [-.17,.17])guard.box(c.x-.5+dx,1.1,c.z-.15,.04,.34,.04);
    blade.box(c.x+.45,.94,c.z,.065,.8,.025);guard.box(c.x+.45,1.72,c.z,.32,.035,.06);guard.box(c.x+.45,1.75,c.z,.065,.19,.065);
-   for(const net of world.nets){for(const dx of [-1.45,1.45])springs.box(net.x+dx,0,net.z,.1,.48,3.05);for(const dz of [-1.45,1.45])springs.box(net.x,0,net.z+dz,3.05,.48,.1);
-    for(let v=-1.3;v<=1.31;v+=.18){nets.box(net.x+v,.36,net.z,.025,.018,2.6);nets.box(net.x,.36,net.z+v,2.6,.018,.025)}
-    for(let v=-1.3;v<=1.31;v+=.26)for(const side of [-1,1]){springs.box(net.x+v,.32,net.z+side*1.4,.045,.035,.21);springs.box(net.x+side*1.4,.32,net.z+v,.21,.035,.045)}
+   for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth;for(const dx of [-hx,hx])springs.box(net.x+dx,0,net.z,.1,.48,hz*2+.1);for(const dz of [-hz,hz])springs.box(net.x,0,net.z+dz,hx*2+.1,.48,.1);
+    for(let v=-hx+.15;v<hx;v+=.24)nets.box(net.x+v,.36,net.z,.025,.018,hz*2-.25);
+    for(let v=-hz+.15;v<hz;v+=.24)nets.box(net.x,.36,net.z+v,hx*2-.25,.018,.025);
+    for(let v=-hx+.15;v<hx;v+=.35)for(const side of [-1,1])springs.box(net.x+v,.32,net.z+side*(hz-.09),.045,.035,.19);
+    for(let v=-hz+.15;v<hz;v+=.35)for(const side of [-1,1])springs.box(net.x+side*(hx-.09),.32,net.z+v,.19,.035,.045);
    }
    const m=(g,color,emission=0)=>{const mesh=this.mesh(g,null,color,emission);this.props.push(mesh);return mesh};this.caseFrame=m(frame,[.28,.34,.35]);this.caseShelf=m(shelf,[.35,.38,.34]);this.caseGlass=m(glass,[.45,.75,.8],.2);this.pack=m(pack,[.27,.36,.22]);this.blade=m(blade,[.72,.76,.77]);this.guard=m(guard,[.3,.22,.12]);this.net=m(nets,[.17,.23,.23]);this.springs=m(springs,[.38,.4,.39]);
+   const stone=new Geometry(),wood=new Geometry(),green=new Geometry(),metal=new Geometry(),glow=new Geometry(),inlay=new Geometry();
+   for(const d of world.decor){if(d.type==='planter'){stone.box(d.x,0,d.z,1.3,.48,.86);green.sphere(d.x,.38,d.z,.62,.35,.4)}else if(d.type==='bench'){wood.box(d.x,.45,d.z,2.3,.1,.65);wood.box(d.x,.55,d.z-.28,2.3,.55,.08);for(const dx of [-.8,.8])metal.box(d.x+dx,0,d.z,.12,.48,.5)}else{metal.box(d.x,0,d.z,.1,2.65,.1);glow.sphere(d.x,2.58,d.z,.16,.15,.16)}}
+   const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,pt=(angle,r)=>[o.cx+Math.cos(angle)*o.rx*r,.006,o.cz+Math.sin(angle)*o.rz*r];inlay.quad(pt(a,.72),pt(b,.72),pt(b,.727),pt(a,.727),[0,1,0])}
+   this.decorMeshes=[m(stone,[.38,.43,.42]),m(wood,[.37,.27,.17]),m(green,[.21,.34,.22]),m(metal,[.20,.27,.28]),m(glow,[1,.85,.53],.7),m(inlay,[.68,.68,.57])];
   }
 
  }
@@ -88,7 +95,7 @@ export class Renderer{
   this.drawMesh(scene.doorOpen&&!this.world.arena?this.openExit:this.exitMesh,identity());if(this.entryMesh)this.drawMesh(this.entryMesh,identity());
   for(const item of scene.items||[]){const m=identity();m[12]=item.x;m[14]=item.z;this.drawMesh(this.keyMesh,m);this.stripeMesh.color=hexColor(item.color);this.drawMesh(this.stripeMesh,m)}
   if(scene.appearance){const m=identity(),a=player.yaw;m[0]=m[10]=Math.cos(a);m[2]=-Math.sin(a);m[8]=Math.sin(a);m[12]=player.x;m[13]=Math.max(0,bob);m[14]=player.z;this.bodyShirt.color=hexColor(scene.appearance.shirt);this.bodyShorts.color=hexColor(scene.appearance.shorts);for(const mesh of [this.bodySkin,this.bodyShirt,this.bodyShorts,...(scene.backpack?[this.wornPack]:[])])this.drawMesh(mesh,m)}
-  if(this.world.arena){for(const mesh of [this.caseFrame,this.caseShelf,this.net,this.springs])this.drawMesh(mesh,identity());if(!scene.backpack)this.drawMesh(this.pack,identity());if(!scene.swordTaken){this.drawMesh(this.blade,identity());this.drawMesh(this.guard,identity())}
+  if(this.world.arena){for(const mesh of [this.caseFrame,this.caseShelf,this.net,this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());if(!scene.backpack)this.drawMesh(this.pack,identity());if(!scene.swordTaken){this.drawMesh(this.blade,identity());this.drawMesh(this.guard,identity())}
    if(!scene.showcaseOpen){g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE_MINUS_SRC_ALPHA);g.depthMask(false);g.uniform1f(u.uAlpha,.24);this.drawMesh(this.caseGlass,identity());g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND)}
   }
 
@@ -100,7 +107,7 @@ export class Renderer{
 class SoftwareRenderer{
  constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});if(!this.ctx)throw Error('Grafica non disponibile su questo dispositivo.');this.software=true;this.quality='auto';this.depth=[];canvas.style.imageRendering='pixelated';this.resize()}
  resize(){const rect=this.canvas.getBoundingClientRect(),aspect=rect.width/Math.max(1,rect.height),target=this.quality==='high'?640:this.quality==='low'?320:480,w=Math.max(180,Math.min(target,Math.floor(360*aspect))),h=Math.max(100,Math.floor(w/aspect));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.image=this.ctx.createImageData(w,h)}}
- load(world){this.world=world;this.doorAxes=doorBasis(world.door);const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);this.wall=pixels(noiseTexture('wall',world.level));this.floor=pixels(noiseTexture('floor',world.level));this.ceiling=pixels(noiseTexture('ceiling',world.level));this.door=pixels(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'));this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
+ load(world){this.world=world;this.doorAxes=doorBasis(world.door);const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);this.wall=pixels(noiseTexture('wall',world.level));this.floor=pixels(noiseTexture('floor',world.level));this.ceiling=pixels(noiseTexture('ceiling',world.level));this.door=pixels(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'));this.entry=pixels(doorTexture(world.level-1,'INDIETRO'));this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
  draw(p,hasKey,time,bob=0){
   this.resize();const pal=this.world.palette||FLOORS[Math.min(4,this.world.level-1)],fogColor=pal.fog.map(v=>v*255);const w=this.canvas.width,h=this.canvas.height,data=this.image.data,world=this.world,dirX=Math.sin(p.yaw),dirZ=-Math.cos(p.yaw),rightX=Math.cos(p.yaw),rightZ=Math.sin(p.yaw),proj=h/(2*Math.tan(72*Math.PI/360)),eye=1.62+bob,horizon=h/2+Math.tan(p.pitch)*proj,plane=w/(2*proj);
   // Horizontal planes are perspective-correct, not screen-space gradients.
@@ -109,14 +116,14 @@ class SoftwareRenderer{
    for(let x=0;x<w;x++){
     const rayX=dirX+rightX*(x*2/w-1)*plane,rayZ=dirZ+rightZ*(x*2/w-1)*plane,px=p.x+rayX*dist,pz=p.z+rayZ*dist,repeat=ceiling?1:2,tx=((Math.floor(px/CELL*256*repeat)%256)+256)%256,tz=((Math.floor(pz/CELL*256*repeat)%256)+256)%256,t=(tz*256+tx)*4,i=(y*w+x)*4;
     let bright=shade;if(ceiling&&dist<35&&this.lamps.has(Math.floor(pz/CELL)*world.n+Math.floor(px/CELL))){const localX=((px%CELL)+CELL)%CELL-CELL/2,localZ=((pz%CELL)+CELL)%CELL-CELL/2;if(Math.abs(localX)<.51&&(Math.abs(localZ-.075)<.028||Math.abs(localZ+.075)<.028))bright=1.7}
-    const fog=Math.min(.75,dist/55);for(let k=0;k<3;k++)data[i+k]=texture.data[t+k]*bright*softwareLight(pal,k)*(1-fog)+fogColor[k]*fog;data[i+3]=255;if(world.arena&&ceiling){data[i]=74;data[i+1]=99;data[i+2]=114}
+    const fog=Math.min(.75,dist/55);for(let k=0;k<3;k++)data[i+k]=texture.data[t+k]*bright*softwareLight(pal,k)*(1-fog)+fogColor[k]*fog;data[i+3]=255;if(world.arena&&ceiling){const sky=Math.max(0,Math.min(1,y/Math.max(1,horizon)));data[i]=56+sky*40;data[i+1]=81+sky*37;data[i+2]=99+sky*32}else if(world.oval){const o=world.oval,r=Math.hypot((px-o.cx)/o.rx,(pz-o.cz)/o.rz);if(r>.72&&r<.727)for(let k=0;k<3;k++)data[i+k]=[155,160,145][k]*(1-fog)+fogColor[k]*fog}
    }
   }
   for(let x=0;x<w;x++){
    const camera=x*2/w-1,rx=dirX+rightX*camera*plane,rz=dirZ+rightZ*camera*plane,px=p.x/CELL,pz=p.z/CELL;let mx=Math.floor(px),mz=Math.floor(pz),side=0,steps=0;
    const ddx=Math.abs(1/rx),ddz=Math.abs(1/rz),sx=rx<0?-1:1,sz=rz<0?-1:1;let sdX=(rx<0?px-mx:mx+1-px)*ddx,sdZ=(rz<0?pz-mz:mz+1-pz)*ddz;
    while(steps++<world.n*4){if(sdX<sdZ){sdX+=ddx;mx+=sx;side=0}else{sdZ+=ddz;mz+=sz;side=1}if(mx<0||mz<0||mx>=world.n||mz>=world.n||world.grid[mz*world.n+mx])break}
-   const dist=Math.max(.025,(side?sdZ-ddz:sdX-ddx)*CELL);this.depth[x]=dist;
+   let dist=Math.max(.025,(side?sdZ-ddz:sdX-ddx)*CELL);if(world.oval){const o=world.oval,ox=p.x-o.cx,oz=p.z-o.cz,A=rx*rx/(o.rx*o.rx)+rz*rz/(o.rz*o.rz),B=2*(ox*rx/(o.rx*o.rx)+oz*rz/(o.rz*o.rz)),C=ox*ox/(o.rx*o.rx)+oz*oz/(o.rz*o.rz)-1;dist=Math.max(.025,(-B+Math.sqrt(Math.max(0,B*B-4*A*C)))/(2*A))}this.depth[x]=dist;
    const top=horizon-(HEIGHT-eye)*proj/dist,bottom=horizon+eye*proj/dist,hitX=p.x+rx*dist,hitZ=p.z+rz*dist,wallU=((side?hitX:hitZ)/CELL*2)%1;
    const door=world.door,normalDistance=Math.abs((hitX-door.x)*door.dx+(hitZ-door.z)*door.dz),tangent=(hitX-door.x)*this.doorAxes.rightX+(hitZ-door.z)*this.doorAxes.rightZ,isDoor=normalDistance<.1&&Math.abs(tangent)<.61;
    const shade=(side ? .82 : .94)*Math.max(.32,1-dist*.024),fog=Math.min(.65,dist/55);
@@ -132,7 +139,15 @@ class SoftwareRenderer{
   const scene=this.scene||{items:!hasKey?[{...world.keyPosition,color:pal.stripe}]:[]},c=this.ctx;
   for(const item of scene.items||[]){const q=project(item.x,.025,item.z);if(q.depth>.15&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const width=Math.max(1,.24*q.scale),height=Math.max(1,.08*q.scale);c.fillStyle=world.level===5?'#16191a':'#8b8b7b';c.fillRect(q.x-width/2,q.y-height/2,width,height);c.fillStyle=item.color;c.fillRect(q.x-width/2,q.y-height/4,width,height*.3)}}
   if(world.arena){
-   for(const net of world.nets){const pts=[[-1.45,-1.45],[1.45,-1.45],[1.45,1.45],[-1.45,1.45]].map(([x,z])=>project(net.x+x,.36,net.z+z));if(pts.every(q=>q.depth>.15)){c.fillStyle='#273b3d';c.strokeStyle='#71807c';c.lineWidth=2;c.beginPath();pts.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();c.strokeStyle='#91a59a66';c.lineWidth=.5;for(let t=-1.2;t<=1.21;t+=.3){for(const axis of [0,1]){const a=project(net.x+(axis?-1.3:t),.38,net.z+(axis?t:-1.3)),b=project(net.x+(axis?1.3:t),.38,net.z+(axis?t:1.3));c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke()}}}}
+   for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth,pts=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>project(net.x+x,.36,net.z+z));
+    // Clip the net polygon at the near plane so the surface remains visible while standing on it.
+    let poly=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>({x:net.x+x,z:net.z+z})),out=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],da=(a.x-p.x)*dirX+(a.z-p.z)*dirZ,db=(b.x-p.x)*dirX+(b.z-p.z)*dirZ;if(da>=.08)out.push(a);if((da>=.08)!==(db>=.08)){const t=(.08-da)/(db-da);out.push({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t})}}poly=out;
+    if(poly.length>2){const points=poly.map(q=>project(q.x,.36,q.z));c.fillStyle='#233d3d';c.strokeStyle='#8b9890';c.lineWidth=2;c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();c.save();c.clip();c.strokeStyle='#92b1a66b';c.lineWidth=.6;
+     for(let v=-hx;v<=hx;v+=.32)netLine(net.x+v,net.z-hz,net.x+v,net.z+hz);for(let v=-hz;v<=hz;v+=.32)netLine(net.x-hx,net.z+v,net.x+hx,net.z+v);c.restore();
+    }
+   }
+   function netLine(ax,az,bx,bz){let a=project(ax,.38,az),b=project(bx,.38,bz);if(a.depth<.08&&b.depth<.08)return;if(a.depth<.08){const t=(.08-a.depth)/(b.depth-a.depth);ax+=(bx-ax)*t;az+=(bz-az)*t;a=project(ax,.38,az)}else if(b.depth<.08){const t=(.08-b.depth)/(a.depth-b.depth);bx+=(ax-bx)*t;bz+=(az-bz)*t;b=project(bx,.38,bz)}c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke()}
+   for(const d of [...world.decor].sort((a,b)=>Math.hypot(b.x-p.x,b.z-p.z)-Math.hypot(a.x-p.x,a.z-p.z))){const q=project(d.x,0,d.z);if(q.depth<.2||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;c.save();c.translate(q.x,q.y);c.scale(q.scale,q.scale);if(d.type==='planter'){c.fillStyle='#586762';c.fillRect(-.65,-.48,1.3,.48);c.fillStyle='#3a5b3c';c.beginPath();c.ellipse(0,-.65,.6,.35,0,0,Math.PI*2);c.fill()}else if(d.type==='bench'){c.fillStyle='#766047';c.fillRect(-1.15,-.6,2.3,.13);c.fillRect(-1.15,-1.1,2.3,.4);c.fillStyle='#384849';c.fillRect(-.85,-.5,.1,.5);c.fillRect(.75,-.5,.1,.5)}else{c.fillStyle='#344c50';c.fillRect(-.045,-2.65,.09,2.65);c.fillStyle='#e4c88c';c.beginPath();c.ellipse(0,-2.75,.14,.16,0,0,Math.PI*2);c.fill()}c.restore()}
    const box=world.showcase,q=project(box.x,0,box.z);if(q.depth>.2&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const unit=q.scale;c.save();c.translate(q.x,q.y);c.scale(unit,unit);c.fillStyle='#475453';c.fillRect(-1.05,-2.15,2.1,.08);c.fillRect(-1.05,-.18,2.1,.12);c.fillRect(-1.05,-2.15,.06,2.05);c.fillRect(.99,-2.15,.06,2.05);c.fillRect(-1.05,-.92,2.1,.06);
     if(!scene.backpack){c.fillStyle='#647248';c.beginPath();c.roundRect(-.78,-1.65,.56,.7,.12);c.fill();c.strokeStyle='#303c29';c.strokeRect(-.7,-1.28,.4,.23)}
     if(!scene.swordTaken){c.fillStyle='#c0c8c9';c.fillRect(.42,-1.72,.065,.8);c.fillStyle='#6c5030';c.fillRect(.29,-1.78,.32,.04);c.fillRect(.42,-1.95,.065,.17)}

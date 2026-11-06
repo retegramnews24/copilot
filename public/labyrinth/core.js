@@ -27,6 +27,7 @@ export function makeLevel(seed,level=1){
 }
 export function free(world,x,z,radius=RADIUS){
  if(!Number.isFinite(x)||!Number.isFinite(z)||x<radius||z<radius||x>=world.n*CELL-radius||z>=world.n*CELL-radius)return false;
+ if(world.oval){const o=world.oval;if(((x-o.cx)/(o.rx-radius))**2+((z-o.cz)/(o.rz-radius))**2>1)return false;for(const b of world.obstacles||[])if(Math.abs(x-b.x)<b.halfWidth+radius&&Math.abs(z-b.z)<b.halfDepth+radius)return false;return true}
  for(let zz=Math.floor((z-radius)/CELL);zz<=Math.floor((z+radius)/CELL);zz++)for(let xx=Math.floor((x-radius)/CELL);xx<=Math.floor((x+radius)/CELL);xx++){
   if(!world.grid[index(xx,zz,world.n)])continue;
   const px=Math.max(xx*CELL,Math.min(x,(xx+1)*CELL)),pz=Math.max(zz*CELL,Math.min(z,(zz+1)*CELL));if((x-px)**2+(z-pz)**2<radius*radius)return false;
