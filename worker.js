@@ -1,3 +1,4 @@
+import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
 import { radioNowPlaying } from './radio-metadata.js';
@@ -125,6 +126,8 @@ export default {
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));req=new Request(req,{headers:trustedHeaders});
+  const lab=u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
+  if(lab)return env.ROOMS.get(env.ROOMS.idFromName('lab:'+lab[1])).fetch(new Request(u.origin+'/labyrinth/'+lab[2]+u.search,req));
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
@@ -148,10 +151,11 @@ export default {
  }
 };
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,async()=>hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));}
  public(s){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,created:s.created,expires:s.expires}}
  async broadcast(s){const msg=JSON.stringify(this.public(s)),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(msg)}catch{}}}
  async fetch(req){
+  if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
   return this.ctx.blockConcurrencyWhile(async()=>{
    try{
@@ -258,10 +262,10 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
-  return [...entries.values()].filter(s=>s.archived||s.expires>Date.now()).sort((a,b)=>a.number-b.number);
+  return [...entries.values()].filter(s=>s.game==='labyrinth'||s.archived||s.expires>Date.now()).sort((a,b)=>a.number-b.number);
  }
 
  async lobbyPayload(){
@@ -271,9 +275,9 @@ export class Room extends DurableObject {
    const prior=unique.get(a.user.id);if(!prior||a.room)unique.set(a.user.id,a);
   }
   const users=[...unique.values()].map(a=>{
-   const own=games.find(g=>!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===a.user.player));
+   const own=games.find(g=>g.game!=='labyrinth'&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===a.user.player));
    const watching=games.find(g=>g.room===a.room);
-   return {...a.user,status:own?'In partita '+own.number:watching?'Guarda '+watching.number:'In Lobby',game:own?.room||null};
+   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null};
   }).sort((a,b)=>a.name.localeCompare(b.name));
   return {games,users,messages:await this.ctx.storage.get('chat')||[]};
  }
@@ -306,7 +310,7 @@ export class Room extends DurableObject {
   }
   if(path==='/lobby/join'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   if((await this.lobbyList()).some(g=>g.room!==body.room&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta. Puoi guardare le altre.'},409);
+   if((await this.lobbyList()).some(g=>g.game!=='labyrinth'&&g.room!==body.room&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta. Puoi guardare le altre.'},409);
    const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(body.room));
    const response=await stub.fetch(new Request('https://internal/api/room/'+body.room+'/claim',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({name:user.name})}));
    if(response.ok){const result=await response.clone().json();await this.ctx.storage.put('game:'+body.room,this.summary(result.state));await this.lobbyBroadcast()}
@@ -326,10 +330,15 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
-   if((await this.lobbyList()).some(g=>!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
+   if(body.game!==undefined&&!['chess','checkers','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
+   if((await this.lobbyList()).some(g=>g.game!=='labyrinth'&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    const number=(await this.ctx.storage.get('lobbyCounter')||0)+1;
    await this.ctx.storage.put('lobbyCounter',number);
+   if(body.game==='labyrinth'){
+    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName('lab:'+room));
+    const response=await stub.fetch(new Request('https://internal/labyrinth/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,seed:crypto.getRandomValues(new Uint32Array(1))[0]})}));
+    if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
+   }
    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));
    const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room},body:JSON.stringify({name:playerName,number,playerId:user.player,game:body.game||'chess'})}));
    if(!response.ok)return response;
@@ -340,7 +349,7 @@ export class Room extends DurableObject {
    return json(result);
   }
   if(path==='/lobby/remove'){
-   await this.ctx.storage.delete('game:'+body.room);if(!(await this.ctx.storage.list({prefix:'game:'})).size)await this.ctx.storage.put('lobbyCounter',0);await this.lobbyBroadcast();return json({ok:true});
+   await this.ctx.storage.delete('game:'+body.room);await this.lobbyBroadcast();return json({ok:true});
   }
   if(path==='/lobby/update'){
    const old=await this.ctx.storage.get('game:'+body.room);
@@ -354,7 +363,7 @@ export class Room extends DurableObject {
  }
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.ACCESS_PASSWORD||a?.accessTag!==hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD))){ws.close(4001,'Riapri la Mini App');return}if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();if(!this.env.ACCESS_PASSWORD||a?.accessTag!==hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD))){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;
@@ -362,12 +371,13 @@ export class Room extends DurableObject {
    a.seen=Date.now();a.closed=!!b.away;ws.serializeAttachment(a);await this.lobbyBroadcast(false);
   }catch{}
  }
- async webSocketClose(ws,code){const a=ws.deserializeAttachment();if(a?.kind==='lobby'){a.closed=true;ws.serializeAttachment(a);await this.lobbyBroadcast()}ws.close(code===1006?1000:code);}
- webSocketError(ws){ws.close(1011,'Riconnettersi.');}
+ async webSocketClose(ws,code){const a=ws.deserializeAttachment();if(a?.kind==='lab'){await this.lab.close(ws);try{ws.close(code===1006?1000:code)}catch{}return}if(a?.kind==='lobby'){a.closed=true;ws.serializeAttachment(a);await this.lobbyBroadcast()}ws.close(code===1006?1000:code);}
+ webSocketError(ws){if(ws.deserializeAttachment()?.kind==='lab')return this.lab.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
+ if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
  if(await this.ctx.storage.get('lobbyCounter')!==undefined){
   const entries=await this.ctx.storage.list({prefix:'game:'});
-  for(const [key,value] of entries){if(!value.archived&&value.expires<=Date.now())await this.ctx.storage.delete(key)}
+  for(const [key,value] of entries){if(value.game!=='labyrinth'&&!value.archived&&value.expires<=Date.now())await this.ctx.storage.delete(key)}
   await this.lobbyBroadcast();
   if((await this.lobbyList()).some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+3600000);
   return;
@@ -375,5 +385,6 @@ export class Room extends DurableObject {
  if((await this.ctx.storage.get('state'))?.archived)return;
  for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
 }
+
 
 

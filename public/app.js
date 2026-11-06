@@ -1,5 +1,7 @@
+import {safeInsets,applyInsets} from './safe-area.js';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const $=id=>document.getElementById(id);
+let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],tableFilter='all',chatSending=false;
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
@@ -27,9 +29,9 @@ async function request(path,data){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.checkers||state?.chess;
-function ownedGame(){return games.find(g=>g.phase!=='finished'&&g.players.some(p=>p.id===seat(g.room).player))}
+function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&g.phase!=='finished'&&g.players.some(p=>p.id===seat(g.room).player))}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -56,6 +58,12 @@ function renderLobby(){
  $('games').replaceChildren();$('empty-games').hidden=visible.length>0;
  $('empty-games').textContent=active.length?'Nessuna partita in questa sezione.':'Nessun tavolo aperto. Crea la prima partita.';
  for(const game of visible){
+  if(game.game==='labyrinth'){
+   const card=document.createElement('article');card.className='table-card';const title=document.createElement('strong');title.textContent='Spedizione '+game.number+' · Labyrinth';const info=document.createElement('p');info.className='turn-note';info.textContent=(game.online||0)+' collegati · '+(game.arrived||0)+' nell’arena · '+(game.entryLocked?'Ingressi chiusi':'Ingressi aperti');const players=document.createElement('p');players.className='turn-note';players.textContent=game.players.map(p=>p.name).join(' · ');card.append(title,info,players);
+   const mine=game.players.some(p=>p.id===identity?.player);const enter=document.createElement('button');enter.textContent=mine?'Riprendi':game.entryLocked?'Assisti':'Entra';enter.onclick=()=>openLabyrinth(game.room,!mine&&game.entryLocked);card.append(enter);const watch=document.createElement('button');watch.className='alt';watch.textContent='Guarda';watch.onclick=()=>openLabyrinth(game.room,true);card.append(watch);
+   if(mine)for(const [kind,label] of [['archive','Archivia'],['delete','Elimina']]){const b=document.createElement('button');b.className='alt';b.textContent=label;b.onclick=async()=>{if(!confirm(label+' questa spedizione per tutti i partecipanti?'))return;try{await request('/api/labyrinth/'+game.room+'/'+kind,{});const data=await request('/api/lobby');games=data.games;renderLobby()}catch(e){err(e.message)}};card.append(b)}$('games').append(card);continue;
+  }
+
   const card=document.createElement('article');card.className='table-card';
   const title=document.createElement('div');title.className='table-title';
   const heading=document.createElement('strong');heading.textContent='Tavolo '+game.number+' · '+gameTitle(game);
@@ -84,6 +92,7 @@ function showLobby(){
  $('expires').textContent='';$('log').replaceChildren();err('');renderLobby();sendPresence();
 }
 async function openRoom(nextRoom,watchOnly=false){
+ if(games.find(g=>g.room===nextRoom)?.game==='labyrinth')return openLabyrinth(nextRoom,watchOnly);
  if(busy)return;
  stopRoom();room=nextRoom;state=null;credentials=seat(room);const epoch=roomEpoch;
  err('');
@@ -203,9 +212,10 @@ $('debug-refresh').onclick=async()=>{
 };
 function fitViewport(){
  const height=tg?.viewportStableHeight||window.visualViewport?.height||innerHeight;
+ applyInsets(document.documentElement,safeInsets(tg));if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets:safeInsets(tg)},location.origin);
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
-tg?.onEvent('viewportChanged',fitViewport);window.addEventListener('resize',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
+for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
 fitViewport();refreshDebug();
 
 
@@ -441,7 +451,9 @@ trace('BOOT','Binottoland 1.1 · registro sessione attivo');
 
 
 
+function enterFullscreen(){try{if(tg?.requestFullscreen&&!tg.isFullscreen)tg.requestFullscreen()}catch{}}
 async function startSession(password){
+ enterFullscreen();
  $('access-submit').disabled=true;$('access-error').textContent='Verifica dell’accesso…';
  try{
   if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
@@ -454,7 +466,7 @@ async function startSession(password){
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;trace('AUTH','Accesso non completato')}finally{$('access-password').value='';$('access-submit').disabled=false}
 }
 function sendPresence(away=document.hidden){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:labyrinthRoom||room,away}));
 }
 
 function renderSocial(){
@@ -508,26 +520,39 @@ window.binottolandRadioMetadata=stationId=>request('/api/radio/now-playing?stati
 
 
 
-// Isolated single-player game. No Telegram credentials are sent into the frame.
+// Authenticated multiplayer transport stays in this container, never in the iframe.
 const labyrinthOverlay=$('labyrinth-overlay'),labyrinthFrame=$('labyrinth-frame');
-$('play-labyrinth').onclick=()=>{
- if(!identity)return;
- $('draw-dialog').hidden=true;$('draw-response').hidden=true;
- labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html';
- tg?.BackButton?.show();trace('LAB','Apertura Labyrinth');
-};
+function labPost(data){if(!labyrinthOverlay.hidden)labyrinthFrame.contentWindow?.postMessage(data,location.origin)}
+function connectExpedition(){
+ if(!labyrinthRoom||!sessionToken)return;clearTimeout(labyrinthRetry);if(labyrinthSocket){labyrinthSocket.onclose=null;labyrinthSocket.close()}
+ const selected=labyrinthRoom,socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/labyrinth/'+selected+'/ws'+(labyrinthWatch?'?watch=1':''),['checkmate',sessionToken]);labyrinthSocket=socket;
+ socket.onopen=()=>{if(selected!==labyrinthRoom)return;labPost({type:'labyrinth:connection',connected:true});clearInterval(labyrinthBeat);labyrinthBeat=setInterval(()=>{if(socket.readyState===1)socket.send(JSON.stringify({type:'heartbeat'}))},10000);sendPresence()};
+ socket.onmessage=e=>{if(selected!==labyrinthRoom)return;try{const packet=JSON.parse(e.data);if(packet.type==='state'){labyrinthLastState=packet.state;if(packet.state.deleted){closeLabyrinth();err('Spedizione eliminata.');return}}labPost({type:'labyrinth:packet',packet})}catch{trace('LAB','Pacchetto non valido')}};
+ socket.onclose=e=>{if(selected!==labyrinthRoom)return;clearInterval(labyrinthBeat);labPost({type:'labyrinth:connection',connected:false});if(e.code===4000||e.code===4001){labPost({type:'labyrinth:notice',message:e.code===4000?'Spedizione aperta in un’altra finestra.':'Riapri Binottoland per accedere.'});return}labyrinthRetry=setTimeout(connectExpedition,2500)};
+}
+async function openLabyrinth(selected,watch=false){
+ if(!identity||labyrinthOpening)return;labyrinthOpening=true;
+ try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
+ catch(e){err(e.message)}finally{labyrinthOpening=false}
+}
+$('play-labyrinth').onclick=async()=>{if(!identity||labyrinthOpening)return;$('play-labyrinth').disabled=true;try{const result=await request('/api/create',{game:'labyrinth'});await openLabyrinth(result.state.room,false)}catch(e){err(e.message)}finally{$('play-labyrinth').disabled=false}};
 function closeLabyrinth(){
  if(labyrinthOverlay.hidden)return;
- labyrinthOverlay.hidden=true;labyrinthFrame.src='about:blank';tg?.BackButton?.hide();
+ clearTimeout(labyrinthRetry);clearInterval(labyrinthBeat);if(labyrinthSocket){labyrinthSocket.onclose=null;labyrinthSocket.close();labyrinthSocket=null}labyrinthRoom=null;labyrinthLastState=null;try{tg?.enableVerticalSwipes?.()}catch{}
+ labyrinthOverlay.hidden=true;labyrinthFrame.src='about:blank';sendPresence();tg?.BackButton?.hide();
  $('play-labyrinth').focus();trace('LAB','Ritorno a Binottoland');
 }
-function sendLabyrinthIdentity(){if(!labyrinthOverlay.hidden&&identity)labyrinthFrame.contentWindow?.postMessage({type:'labyrinth:identity',player:identity.id},location.origin)}
+function sendLabyrinthIdentity(){if(!labyrinthOverlay.hidden&&identity){labPost({type:'labyrinth:insets',insets:safeInsets(tg)});labPost({type:'labyrinth:multiplayer',room:labyrinthRoom,player:identity.id,watch:labyrinthWatch,state:labyrinthLastState});labPost({type:'labyrinth:connection',connected:labyrinthSocket?.readyState===1})}}
 labyrinthFrame.addEventListener('load',sendLabyrinthIdentity);
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==labyrinthFrame.contentWindow||labyrinthOverlay.hidden)return;
  if(event.data?.type==='labyrinth:ready')sendLabyrinthIdentity();
+ else if(event.data?.type==='labyrinth:net'){const packet=event.data.packet;if(packet&&['pose','action'].includes(packet.type)&&JSON.stringify(packet).length<=2048){if(labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify(packet));else if(packet.type==='action')labPost({type:'labyrinth:packet',packet:{type:'ack',request:packet.request,ok:false,error:'Riconnessione in corso.'}})}}
+ else if(event.data?.type==='labyrinth:fullscreen'){enterFullscreen();fitViewport()}
  else if(event.data?.type==='labyrinth:exit')closeLabyrinth();
  else if(event.data?.type==='labyrinth:voice'&&typeof event.data.url==='string'){try{const u=new URL(event.data.url);if(u.protocol==='https:'&&u.hostname==='t.me'&&!u.username&&!u.password){if(tg?.openTelegramLink)tg.openTelegramLink(u.href);else window.open(u.href,'_blank','noopener')}}catch{}}
  else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
 });
 tg?.onEvent('backButtonClicked',closeLabyrinth);
+
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify({type:'heartbeat'}))});

@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js"
+    "test": "node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js",
+    "test:multiplayer-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/expedition-runtime.test.js .test-bundle/worker.js"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
