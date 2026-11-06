@@ -1,8 +1,8 @@
-import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,pose,act,snapshot,expeditionSummary,participants,STALE,GRACE} from './expedition-model.js';
+import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,pose,act,snapshot,expeditionSummary,participants,ensureKeycards,STALE,GRACE} from './expedition-model.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export class ExpeditionRoom{
  constructor(ctx,env,tag){this.ctx=ctx;this.env=env;this.tag=tag;this.state=null;this.lastSave=0;this.lastBroadcast=0}
- async load(){return this.state||(this.state=await this.ctx.storage.get('expedition'))}
+ async load(){if(!this.state){this.state=await this.ctx.storage.get('expedition');if(this.state&&ensureKeycards(this.state)){this.state.revision++;await this.save()}}return this.state}
  async save(){await this.ctx.storage.put('expedition',this.state);this.lastSave=Date.now()}
  async index(){const s=this.state;if(!s)return;const path=s.deleted?'/lobby/remove':'/lobby/update';await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal'+path,{method:'POST',body:JSON.stringify(expeditionSummary(s))}))}
  async schedule(){const s=this.state;if(!s||s.archived||s.deleted){await this.ctx.storage.deleteAlarm();return}const deadlines=participants(s).map(p=>p.online?p.lastSeen+STALE:(p.offlineAt??Date.now())+GRACE);if(deadlines.length)await this.ctx.storage.setAlarm(Math.max(Date.now()+1000,Math.min(...deadlines)));else await this.ctx.storage.deleteAlarm()}

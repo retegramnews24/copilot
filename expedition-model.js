@@ -3,12 +3,24 @@ import {free,move} from './public/labyrinth/core.js';
 export const GRACE=60000,STALE=45000,MAX_PLAYERS=16;
 const fail=m=>{throw Error(m)},palette=new Set(CLOTHES.map(c=>c[1]));
 export const clothes=a=>({shirt:palette.has(a?.shirt)?a.shirt:CLOTHES[6][1],shorts:palette.has(a?.shorts)?a.shorts:CLOTHES[7][1]});
-export function createExpedition(room,number,seed,user,now){const s={room,number,seed,version:1,game:'labyrinth',created:now,revision:0,players:{},floors:{},entryLocked:false,showcaseOpen:false,archived:false,deleted:false};joinExpedition(s,user,now);return s}
+export function createExpedition(room,number,seed,user,now){const s={room,number,seed,version:1,game:'labyrinth',created:now,revision:0,players:{},floors:{},entryLocked:false,showcaseOpen:false,archived:false,deleted:false};joinExpedition(s,user,now);ensureKeycards(s);return s}
 export function participants(s){return Object.values(s.players).filter(p=>p.counted)}
 export function casePosition(s,p){const w=worldFor(s.seed,6),i=p.caseIndex;return {x:w.showcase.x+[0,3,-3,6][i%4],z:w.showcase.z+Math.floor(i/4)*3.2}}
 export function cases(s){return participants(s).map(p=>({id:p.id,name:p.name,...casePosition(s,p),backpack:p.backpack,swordTaken:p.swordTaken,open:s.showcaseOpen}))}
 export function expeditionWorld(s,level){const w=worldFor(s.seed,level);if(level===6){w.obstacles=w.obstacles.filter(b=>b.type);w.obstacles.push(...cases(s).map(c=>({...c,halfWidth:1.08,halfDepth:.5})))}return w}
 export function runFor(s,p){return {seed:s.seed,level:p.level,inventory:p.inventory,backpack:p.backpack,floors:s.floors,showcaseOpen:s.showcaseOpen,swordTaken:p.swordTaken,test:false}}
+// Initialize shared cards on the server, including persisted rooms from older builds.
+// A held card suppresses ground respawn; repairing missing data must never clone it.
+export function ensureKeycards(s){
+ let changed=false;const people=Object.values(s.players),first=people[0];if(!first)return false;
+ for(let level=1;level<=5;level++){
+  const w=worldFor(s.seed,level),missing=!s.floors[level],f=floorState(runFor(s,first),w);if(missing)changed=true;
+  const held=people.some(p=>p.inventory.includes('key:'+level));
+  if(f.open||held){if(f.key){f.key=null;changed=true}}
+  else if(!f.key||!free(w,f.key.x,f.key.z,.28)){f.key={...w.keyPosition};changed=true}
+ }
+ return changed;
+}
 export function joinExpedition(s,user,now){
  if(s.archived||s.deleted)fail('Spedizione non attiva.');let p=s.players[user.id];
  if(!p){if(s.entryLocked||s.showcaseOpen)fail('Ingressi chiusi: puoi assistere.');const list=Object.values(s.players);if(list.length>=MAX_PLAYERS)fail('Spedizione piena: puoi assistere.');const w=worldFor(s.seed,1);p=s.players[user.id]={id:user.id,name:user.name.slice(0,60),level:1,player:{...w.spawn,pitch:0,height:0},inventory:[],backpack:false,swordTaken:false,appearance:clothes(),caseIndex:list.length,joined:now,online:false,counted:true,lastSeen:now,offlineAt:now,lastMove:now,seq:0};}

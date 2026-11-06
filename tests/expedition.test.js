@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
-import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,GRACE,STALE} from '../expedition-model.js';
+import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,GRACE,STALE} from '../expedition-model.js';
 import {itemsAt,floorState} from '../public/labyrinth/adventure.js';
+import {free,distances,index,CELL} from '../public/labyrinth/core.js';
 const user=i=>({id:String(i),name:'Pilota '+i});let now=1000000;
 const s=createExpedition('room',1,71,user(1),now);for(let i=2;i<=4;i++)joinExpedition(s,user(i),now);for(let i=1;i<=4;i++)connectPlayer(s,String(i),'conn'+i,now);
 const [a,b,c,d]=Object.values(s.players),w=expeditionWorld(s,1),r=runFor(s,a);floorState(r,w);assert.equal(cases(s).length,4);assert.equal(new Set(cases(s).map(c=>c.x+','+c.z)).size,4);
@@ -26,3 +27,14 @@ a.level=1;at(a,w.spawn);a.seq=0;assert.equal(pose(s,a,{seq:1,x:999,z:999,yaw:0,p
 // Nobody online does not delete the expedition or its shared state.
 for(const p of Object.values(s.players)){p.online=false;p.offlineAt=now;p.counted=true}sweep(s,now+GRACE);assert.equal(participants(s).length,0);assert.equal(s.deleted,false);assert.ok(s.floors[1].key);const revived=JSON.parse(JSON.stringify(s));joinExpedition(revived,user(2),now+GRACE+1);assert.equal(revived.players['2'].backpack,true);assert.deepEqual(revived.players['2'].inventory,['sword']);
 console.log('PASS multiplayer: four players, atomic card/door actions, independent floors, creator disconnect, grace/drop/reconnect, solo and grouped arena barriers, personal cases/equipment, bounded poses and persistent empty expeditions.');
+
+// Cards must be authoritative before any pickup, even with two clients and after restore.
+for(let seed=1;seed<=100;seed++){
+ const room=createExpedition('spawn-'+seed,seed,seed,user(1),now);joinExpedition(room,user(2),now);
+ for(let level=1;level<=5;level++){const w=expeditionWorld(room,level);assert.ok(room.floors[level].key);const k=room.floors[level].key;assert.ok(free(w,k.x,k.z,.28));assert.ok(distances(w.grid,w.n,w.start)[index(Math.floor(k.x/CELL),Math.floor(k.z/CELL),w.n)]>=0);for(const p of Object.values(room.players))assert.equal(itemsAt(runFor(room,p),w).filter(i=>i.type==='key').length,1)}
+ assert.equal(ensureKeycards(room),false);
+ const restored=JSON.parse(JSON.stringify(room));restored.floors[1].key=null;restored.floors[2].key={x:-99,z:-99};assert.equal(ensureKeycards(restored),true);assert.ok(restored.floors[1].key);assert.ok(restored.floors[2].key);
+ restored.players['2'].inventory=['key:1'];restored.floors[1].key=null;ensureKeycards(restored);assert.equal(restored.floors[1].key,null);
+ restored.floors[3].open=true;ensureKeycards(restored);assert.equal(restored.floors[3].key,null);
+}
+console.log('PASS shared card spawning: 100 seeds × five floors × two clients, authoritative initial snapshots, missing/invalid spawn repair, no respawn while held or open.');

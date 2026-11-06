@@ -49,10 +49,10 @@ export class Renderer{
   if(world.oval){const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,x=o.cx+Math.cos(a)*o.rx,z=o.cz+Math.sin(a)*o.rz,xx=o.cx+Math.cos(b)*o.rx,zz=o.cz+Math.sin(b)*o.rz,n=[-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)];wall.quad([x,0,z],[xx,0,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n,[i/2,0,(i+1)/2,2]);trim.quad([x,HEIGHT-.12,z],[xx,HEIGHT-.12,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n)}}
   if(!world.arena)for(const p of world.lamps){frames.box(p.x,HEIGHT-.055,p.z,1.18,.04,.34);for(const dz of [-.075,.075])light.quad([p.x-.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz+.025],[p.x-.51,HEIGHT-.06,p.z+dz+.025],[0,-1,0])}
   const p=world.door,basis=doorBasis(p),n=[basis.normalX,0,basis.normalZ],right=[basis.rightX,0,basis.rightZ],v=(dx,y)=>[p.x+right[0]*dx+n[0]*.015,y,p.z+right[2]*dx+n[2]*.015];door.quad(v(-.61,0),v(.61,0),v(.61,2.2),v(-.61,2.2),n);
-  key.box(0,.014,0,.24,.012,.15);
+  key.box(0,.014,0,.32,.012,.20);
   const preview=this.surfaces.preview(world.level),textures=[this.texture(surfaceCanvas(preview.wall)),this.texture(surfaceCanvas(preview.floor)),this.texture(surfaceCanvas(preview.ceiling)),this.texture(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'))];this.textures=textures;this.surfaces.request(world.level).then(maps=>{if(this.closed||generation!==this.generation||!maps)return;for(const [i,key] of ['wall','floor','ceiling'].entries()){gl.bindTexture(gl.TEXTURE_2D,textures[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,surfaceCanvas(maps[key]));gl.generateMipmap(gl.TEXTURE_2D)}this.boundTexture=null;this.surfaces.request(world.level===6?1:world.level+1)});
   this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,world.level===1?[1,.98,.79]:world.palette?.light||[1,.98,.79],world.level===1?1:world.arena?.5:world.level===5?.025:world.level===4?.12:.3),this.mesh(door,textures[3])];this.exitMesh=this.meshes.pop();this.keyMesh=this.mesh(key,null,[.64,.64,.6],0);
-  const stripe=new Geometry();stripe.box(0,.027,-.035,.225,.002,.035);this.stripeMesh=this.mesh(stripe);this.props=[this.stripeMesh,this.exitMesh];
+  const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);this.props=[this.stripeMesh,this.exitMesh];
   const skin=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry();
   for(const x of [-.12,.12]){skin.sphere(x,.04,0,.075,.29,.085);shorts.sphere(x,.51,0,.105,.18,.13)}
   shirt.sphere(0,.78,0,.245,.31,.145);skin.sphere(-.29,.69,0,.07,.27,.075);
@@ -147,7 +147,7 @@ class SoftwareRenderer{
   this.ctx.putImageData(this.image,0,0);
   const project=(x,y,z)=>{const dx=x-p.x,dz=z-p.z,depth=dx*dirX+dz*dirZ;return {x:w/2+(dx*rightX+dz*rightZ)/depth*proj,y:horizon+(eye-y)/depth*proj,depth,scale:proj/depth}};
   const scene=this.scene||{items:!hasKey?[{...world.keyPosition,color:pal.stripe}]:[]},c=this.ctx;
-  for(const item of scene.items||[]){const q=project(item.x,.025,item.z);if(q.depth>.15&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const width=Math.max(1,.24*q.scale),height=Math.max(1,.08*q.scale);c.fillStyle=world.level===5?'#16191a':'#8b8b7b';c.fillRect(q.x-width/2,q.y-height/2,width,height);c.fillStyle=item.color;c.fillRect(q.x-width/2,q.y-height/4,width,height*.3)}}
+  for(const item of scene.items||[]){const q=project(item.x,.025,item.z);if(q.depth>.15&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const width=Math.max(1,.32*q.scale),height=Math.max(1,.10*q.scale);c.fillStyle=world.level===5?'#16191a':'#8b8b7b';c.fillRect(q.x-width/2,q.y-height/2,width,height);c.fillStyle=item.color;c.fillRect(q.x-width/2,q.y-height/4,width,height*.3)}}
   if(world.arena){
    for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth,pts=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>project(net.x+x,.36,net.z+z));
     // Clip the net polygon at the near plane so the surface remains visible while standing on it.
