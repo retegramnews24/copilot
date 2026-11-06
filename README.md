@@ -65,7 +65,7 @@ Esplorazione individuale in prima persona, avviabile dalla pagina Giochi. Un pia
 
 Motore WebGL senza librerie esterne, con renderer Canvas di riserva quando WebGL non è disponibile. Texture e suoni sono generati localmente: carta da parati, moquette, soffitti, lampade, ronzio e passi. Il rendering si ferma in pausa e quando l’app passa in secondo piano.
 
-Comandi PC: WASD/frecce, mouse (o trascinamento se il blocco del puntatore è negato), E/Spazio per interagire, Shift per accelerare, Esc per la pausa. Telefono in orizzontale: joystick sinistro, sguardo a destra, tasto Usa. Sensibilità, dettaglio e audio sono regolabili.
+Comandi PC: WASD/frecce, mouse (o trascinamento se il blocco del puntatore è negato), E per interagire, Spazio per saltare, Shift per accelerare, Esc per la pausa. Telefono in orizzontale: joystick sinistro, sguardo a destra, tasti Salta e Usa. Sensibilità, dettaglio e audio sono regolabili.
 
 I progressi restano nel localStorage del dispositivo, separati per account Telegram quando aperto da Binottoland. Non sono una classifica verificata dal server. La modalità individuale non crea tavoli multiplayer e non usa il motore a turni. L’iframe riceve solo l’identificativo dell’account, senza token o password, e viene scaricato alla chiusura per liberare audio e grafica.
 

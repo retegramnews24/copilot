@@ -49,3 +49,18 @@ export function restoreProgress(raw){
  const world=makeLevel(raw.seed,raw.level),p=raw.player||{},valid=free(world,p.x,p.z);
  return {seed:raw.seed,level:raw.level,hasKey:raw.hasKey===true,seconds:Number.isFinite(raw.seconds)?Math.max(0,Math.min(raw.seconds,1e8)):0,player:{x:valid?p.x:world.spawn.x,z:valid?p.z:world.spawn.z,yaw:Number.isFinite(p.yaw)?p.yaw:world.spawn.yaw,pitch:Number.isFinite(p.pitch)?Math.max(-1.15,Math.min(1.15,p.pitch)):0}};
 }
+
+// A readable door's U axis points to the viewer's right from inside the room.
+export function doorBasis(door){return {rightX:-door.dz,rightZ:door.dx,normalX:-door.dx,normalZ:-door.dz}}
+export function beginJump(state){
+ if(state.height>.001||state.velocity>0)return false;
+ state.height=0;state.velocity=4.1;return true;
+}
+export function advanceJump(state,dt){
+ if(!Number.isFinite(dt)||dt<=0)return state;
+ dt=Math.min(dt,.1);const gravity=13,ceiling=HEIGHT-1.8;
+ state.height+=state.velocity*dt-.5*gravity*dt*dt;state.velocity-=gravity*dt;
+ if(state.height>=ceiling){state.height=ceiling;state.velocity=Math.min(0,state.velocity)}
+ if(state.height<=0){state.height=0;state.velocity=0}
+ return state;
+}

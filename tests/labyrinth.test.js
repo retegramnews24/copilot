@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {makeLevel,distances,index,CELL,VERSION,move,free,interaction,restoreProgress} from '../public/labyrinth/core.js';
+import {makeLevel,distances,index,CELL,VERSION,move,free,interaction,restoreProgress,doorBasis,beginJump,advanceJump,HEIGHT} from '../public/labyrinth/core.js';
 function path(world,start,end){const ds=distances(world.grid,world.n,start);assert.ok(ds[end]>=0);const result=[end];let p=end;while(p!==start){const x=p%world.n,z=Math.floor(p/world.n);p=[[1,0],[-1,0],[0,1],[0,-1]].map(([a,b])=>index(x+a,z+b,world.n)).find(i=>ds[i]===ds[p]-1);assert.notEqual(p,undefined);result.unshift(p)}return result}
 function walk(world,player,cells){for(const cell of cells){const x=(cell%world.n+.5)*CELL,z=(Math.floor(cell/world.n)+.5)*CELL;for(let j=0;j<80&&Math.hypot(x-player.x,z-player.z)>.001;j++){const dx=x-player.x,dz=z-player.z,length=Math.hypot(dx,dz),scale=Math.min(1,.15/length);move(world,player,dx*scale,dz*scale)}assert.ok(Math.hypot(x-player.x,z-player.z)<.01);assert.ok(free(world,player.x,player.z))}}
 for(let seed=0;seed<100;seed++)for(const level of [1,2,4,8,20]){
@@ -17,3 +17,17 @@ const recovered=restoreProgress({...saved,player:{x:0,z:NaN,pitch:Infinity,yaw:I
 assert.equal(restoreProgress({...saved,hasKey:'false'}).hasKey,false);const p={...world.spawn};move(world,p,Infinity,0);assert.equal(p.x,world.spawn.x);
 assert.notDeepEqual(makeLevel(71,1).grid,makeLevel(71,2).grid);
 console.log('PASS Labyrinth: 500 deterministic levels, connected rooms, closed boundaries, physically walkable key/exit routes, locked/unlocked door, anti-tunnelling and validated save recovery.');
+
+// Read the door from inside, in every cardinal orientation.
+for(const [dx,dz,rx,rz] of [[0,-1,1,0],[1,0,0,1],[0,1,-1,0],[-1,0,0,-1]]){
+ const basis=doorBasis({dx,dz});assert.equal(basis.rightX||0,rx);assert.equal(basis.rightZ||0,rz);
+ const yaw=Math.atan2(dx,-dz),cameraRight=[Math.cos(yaw),Math.sin(yaw)];assert.ok(cameraRight[0]*basis.rightX+cameraRight[1]*basis.rightZ>.999);
+ assert.equal(basis.normalX||0,-dx||0);assert.equal(basis.normalZ||0,-dz||0);
+}
+for(const hz of [20,30,60,120]){
+ const state={height:0,velocity:0};assert.equal(beginJump(state),true);let peak=0,airborne=0;
+ for(let i=0;i<hz;i++){advanceJump(state,1/hz);peak=Math.max(peak,state.height);if(state.height>0){airborne++;assert.equal(beginJump(state),false)}}
+ assert.ok(peak>.60&&peak<.67);assert.ok(airborne/hz>.55&&airborne/hz<.70);assert.equal(state.height,0);assert.equal(state.velocity,0);assert.equal(beginJump(state),true);
+}
+const ceiling={height:HEIGHT-1.81,velocity:100};advanceJump(ceiling,.1);assert.ok(ceiling.height<=HEIGHT-1.8);assert.equal(ceiling.velocity,0);
+console.log('PASS correction: door UV direction faces the viewer in all four orientations; jump rises and lands consistently, blocks double jumps and respects ceiling height.');

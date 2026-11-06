@@ -1,4 +1,4 @@
-import {CELL,HEIGHT,random} from './core.js';
+import {CELL,HEIGHT,random,doorBasis} from './core.js';
 const VS=`attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aUV;uniform mat4 uViewProjection;uniform mat4 uModel;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;void main(){vec4 p=uModel*vec4(aPosition,1.);vPosition=p.xyz;vNormal=mat3(uModel)*aNormal;vUV=aUV;gl_Position=uViewProjection*p;}`;
 const FS=`precision mediump float;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;uniform sampler2D uTexture;uniform vec3 uColor;uniform vec3 uCamera;uniform vec3 uLights[8];uniform float uEmission;uniform float uTime;void main(){vec3 n=normalize(vNormal);vec3 light=vec3(.29,.275,.215);for(int i=0;i<8;i++){vec3 d=uLights[i]-vPosition;float r=dot(d,d);float diffuse=max(dot(n,normalize(d)),.025);light+=vec3(1.,.96,.77)*diffuse*1.15/(1.+r*.22);}vec3 c=texture2D(uTexture,vUV).rgb*uColor; c*=mix(light,vec3(1.1),uEmission);float fog=1.-exp(-pow(length(vPosition-uCamera)/18.,1.55));c=mix(c,vec3(.20,.18,.115),clamp(fog,0.,.92));gl_FragColor=vec4(pow(max(c,vec3(0.)),vec3(.94)),1.);}`;
 const FOG=[51,46,29];
@@ -50,18 +50,18 @@ export class Renderer{
    if(world.grid[(z+1)*world.n+x]){wall.quad([b,0,d],[a,0,d],[a,HEIGHT,d],[b,HEIGHT,d],[0,0,-1],[0,0,2,2]);trim.box((a+b)/2,0,d-.018,CELL,.13,.035)}
   }
   for(const p of world.lamps){frames.box(p.x,HEIGHT-.055,p.z,1.18,.04,.34);for(const dz of [-.075,.075])light.quad([p.x-.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz+.025],[p.x-.51,HEIGHT-.06,p.z+dz+.025],[0,-1,0])}
-  const p=world.door,n=[-p.dx,0,-p.dz],right=[p.dz,0,-p.dx],v=(dx,y)=>[p.x+right[0]*dx+n[0]*.015,y,p.z+right[2]*dx+n[2]*.015];door.quad(v(-.61,0),v(.61,0),v(.61,2.2),v(-.61,2.2),n);
+  const p=world.door,basis=doorBasis(p),n=[basis.normalX,0,basis.normalZ],right=[basis.rightX,0,basis.rightZ],v=(dx,y)=>[p.x+right[0]*dx+n[0]*.015,y,p.z+right[2]*dx+n[2]*.015];door.quad(v(-.61,0),v(.61,0),v(.61,2.2),v(-.61,2.2),n);
   // A compact raised key with an actual 3D bow, shaft and two teeth.
   const steps=24;for(let i=0;i<steps;i++){const a=i/steps*Math.PI*2,b=(i+1)/steps*Math.PI*2;for(const z of [-.028,.028])key.quad([Math.cos(a)*.15,Math.sin(a)*.15,z],[Math.cos(b)*.15,Math.sin(b)*.15,z],[Math.cos(b)*.09,Math.sin(b)*.09,z],[Math.cos(a)*.09,Math.sin(a)*.09,z],[0,0,z>0?1:-1]);key.quad([Math.cos(a)*.15,Math.sin(a)*.15,-.028],[Math.cos(b)*.15,Math.sin(b)*.15,-.028],[Math.cos(b)*.15,Math.sin(b)*.15,.028],[Math.cos(a)*.15,Math.sin(a)*.15,.028],[Math.cos(a),Math.sin(a),0])}
   key.box(.29,-.028,0,.36,.056,.056);key.box(.39,-.14,0,.055,.12,.056);key.box(.48,-.12,0,.055,.1,.056);
   const textures=[this.texture(noiseTexture('wall',world.level)),this.texture(noiseTexture('floor',world.level)),this.texture(noiseTexture('ceiling',world.level)),this.texture(doorTexture(world.level))];this.textures=textures;
-  this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,[1,.98,.79],1),this.mesh(door,textures[3])];this.keyMesh=this.mesh(key,null,[1,.73,.18],.65);
+  this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,[1,.98,.79],1),this.mesh(door,textures[3])];this.keyMesh=this.mesh(key,null,[1,.78,.22],1);
  }
  draw(player,hasKey,time,bob=0){
   this.resize();const g=this.gl,u=this.uniforms,{matrix,eye}=cameraMatrix(player,this.canvas.width/this.canvas.height,bob);g.clear(g.COLOR_BUFFER_BIT|g.DEPTH_BUFFER_BIT);g.useProgram(this.program);g.uniformMatrix4fv(u.uViewProjection,false,matrix);g.uniform3fv(u.uCamera,eye);g.uniform1f(u.uTime,time);
   const nearest=this.world.lamps.map(p=>({p,d:(p.x-player.x)**2+(p.z-player.z)**2})).sort((a,b)=>a.d-b.d).slice(0,8),lights=new Float32Array(24).fill(9999);nearest.forEach(({p},i)=>lights.set([p.x,p.y,p.z],i*3));g.uniform3fv(u['uLights[0]'],lights);
   for(const mesh of this.meshes)this.drawMesh(mesh,identity());
-  if(!hasKey){const m=identity(),angle=time*.7;m[0]=m[10]=Math.cos(angle);m[2]=-Math.sin(angle);m[8]=Math.sin(angle);m[12]=this.world.keyPosition.x;m[13]=1.05+Math.sin(time*2)*.045;m[14]=this.world.keyPosition.z;this.drawMesh(this.keyMesh,m)}
+  if(!hasKey){const m=identity(),angle=time*.7,scale=1.35;m[0]=m[10]=Math.cos(angle)*scale;m[2]=-Math.sin(angle)*scale;m[8]=Math.sin(angle)*scale;m[5]=scale;m[12]=this.world.keyPosition.x;m[13]=1.15+Math.sin(time*2)*.055;m[14]=this.world.keyPosition.z;this.drawMesh(this.keyMesh,m)}
  }
  drawMesh(m,model){const g=this.gl,u=this.uniforms;g.bindBuffer(g.ARRAY_BUFFER,m.buffer);for(let i=0;i<3;i++){g.enableVertexAttribArray(this.attrs[i]);g.vertexAttribPointer(this.attrs[i],i===2?2:3,g.FLOAT,false,32,i===0?0:i===1?12:24)}g.bindTexture(g.TEXTURE_2D,m.texture);g.uniformMatrix4fv(u.uModel,false,model);g.uniform3fv(u.uColor,m.color);g.uniform1f(u.uEmission,m.emission);g.drawArrays(g.TRIANGLES,0,m.count)}
  destroy(){const g=this.gl;for(const m of this.meshes)g.deleteBuffer(m.buffer);if(this.keyMesh)g.deleteBuffer(this.keyMesh.buffer);for(const t of this.textures)g.deleteTexture(t);g.deleteTexture(this.white);g.deleteProgram(this.program)}
@@ -70,7 +70,7 @@ export class Renderer{
 class SoftwareRenderer{
  constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});if(!this.ctx)throw Error('Grafica non disponibile su questo dispositivo.');this.software=true;this.quality='auto';this.depth=[];canvas.style.imageRendering='pixelated';this.resize()}
  resize(){const rect=this.canvas.getBoundingClientRect(),aspect=rect.width/Math.max(1,rect.height),target=this.quality==='high'?640:this.quality==='low'?320:480,w=Math.max(180,Math.min(target,Math.floor(360*aspect))),h=Math.max(100,Math.floor(w/aspect));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.image=this.ctx.createImageData(w,h)}}
- load(world){this.world=world;const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);this.wall=pixels(noiseTexture('wall',world.level));this.floor=pixels(noiseTexture('floor',world.level));this.ceiling=pixels(noiseTexture('ceiling',world.level));this.door=pixels(doorTexture(world.level));this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
+ load(world){this.world=world;this.doorAxes=doorBasis(world.door);const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);this.wall=pixels(noiseTexture('wall',world.level));this.floor=pixels(noiseTexture('floor',world.level));this.ceiling=pixels(noiseTexture('ceiling',world.level));this.door=pixels(doorTexture(world.level));this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
  draw(p,hasKey,time,bob=0){
   this.resize();const w=this.canvas.width,h=this.canvas.height,data=this.image.data,world=this.world,dirX=Math.sin(p.yaw),dirZ=-Math.cos(p.yaw),rightX=Math.cos(p.yaw),rightZ=Math.sin(p.yaw),proj=h/(2*Math.tan(72*Math.PI/360)),eye=1.62+bob,horizon=h/2+Math.tan(p.pitch)*proj,plane=w/(2*proj);
   // Horizontal planes are perspective-correct, not screen-space gradients.
@@ -88,7 +88,7 @@ class SoftwareRenderer{
    while(steps++<world.n*4){if(sdX<sdZ){sdX+=ddx;mx+=sx;side=0}else{sdZ+=ddz;mz+=sz;side=1}if(mx<0||mz<0||mx>=world.n||mz>=world.n||world.grid[mz*world.n+mx])break}
    const dist=Math.max(.025,(side?sdZ-ddz:sdX-ddx)*CELL);this.depth[x]=dist;
    const top=horizon-(HEIGHT-eye)*proj/dist,bottom=horizon+eye*proj/dist,hitX=p.x+rx*dist,hitZ=p.z+rz*dist,wallU=((side?hitX:hitZ)/CELL*2)%1;
-   const door=world.door,normalDistance=Math.abs((hitX-door.x)*door.dx+(hitZ-door.z)*door.dz),tangent=(hitX-door.x)*door.dz-(hitZ-door.z)*door.dx,isDoor=normalDistance<.1&&Math.abs(tangent)<.61;
+   const door=world.door,normalDistance=Math.abs((hitX-door.x)*door.dx+(hitZ-door.z)*door.dz),tangent=(hitX-door.x)*this.doorAxes.rightX+(hitZ-door.z)*this.doorAxes.rightZ,isDoor=normalDistance<.1&&Math.abs(tangent)<.61;
    const shade=(side ? .82 : .94)*Math.max(.32,1-dist*.024),fog=Math.min(.65,dist/55);
    for(let y=Math.max(0,Math.ceil(top));y<Math.min(h,Math.ceil(bottom));y++){
     const worldY=eye+(horizon-y)*dist/proj,atDoor=isDoor&&worldY<2.2,texture=atDoor?this.door:this.wall,tx=atDoor?Math.max(0,Math.min(255,Math.floor((tangent/.61*.5+.5)*256))):((Math.floor(wallU*256)%256)+256)%256,ty=atDoor?Math.max(0,Math.min(511,Math.floor((1-worldY/2.2)*512))):((Math.floor((1-worldY/HEIGHT)*512)%256)+256)%256,t=(ty*256+tx)*4,i=(y*w+x)*4;
@@ -97,7 +97,7 @@ class SoftwareRenderer{
    }
   }
   this.ctx.putImageData(this.image,0,0);
-  if(!hasKey){const dx=world.keyPosition.x-p.x,dz=world.keyPosition.z-p.z,depth=dx*dirX+dz*dirZ,lateral=dx*rightX+dz*rightZ;if(depth>.15){const cx=w/2+lateral/depth*proj,cy=horizon+(eye-1.05-Math.sin(time*2)*.045)/depth*proj,size=.52*proj/depth;if(cx>=0&&cx<w&&depth<this.depth[Math.floor(cx)]){const c=this.ctx;c.save();c.translate(cx,cy);c.scale(size,size);c.strokeStyle='#f2d675';c.lineWidth=.065;c.shadowColor='#f2d675';c.shadowBlur=5;c.beginPath();c.arc(-.2,0,.18,0,Math.PI*2);c.moveTo(-.02,0);c.lineTo(.45,0);c.moveTo(.25,0);c.lineTo(.25,.16);c.moveTo(.4,0);c.lineTo(.4,.16);c.stroke();c.restore()}}}
+  if(!hasKey){const dx=world.keyPosition.x-p.x,dz=world.keyPosition.z-p.z,depth=dx*dirX+dz*dirZ,lateral=dx*rightX+dz*rightZ;if(depth>.15){const cx=w/2+lateral/depth*proj,cy=horizon+(eye-1.15-Math.sin(time*2)*.055)/depth*proj,size=.70*proj/depth;if(cx>=0&&cx<w&&depth<this.depth[Math.floor(cx)]){const c=this.ctx;c.save();c.translate(cx,cy);c.scale(size,size);c.strokeStyle='#f2d675';c.lineWidth=.065;c.shadowColor='#f2d675';c.shadowBlur=10;c.beginPath();c.arc(-.2,0,.18,0,Math.PI*2);c.moveTo(-.02,0);c.lineTo(.45,0);c.moveTo(.25,0);c.lineTo(.25,.16);c.moveTo(.4,0);c.lineTo(.4,.16);c.stroke();c.restore()}}}
  }
  destroy(){}
 }
