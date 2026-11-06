@@ -1,4 +1,4 @@
-import {safeInsets,applyInsets} from './safe-area.js';
+import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 const $=id=>document.getElementById(id);
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
@@ -211,11 +211,11 @@ $('debug-refresh').onclick=async()=>{
  try{const health=await request('/api/health');trace('HEALTH','Server '+health.version);if(room){render(await api('state'));connect();$('debug-result').textContent='Stato aggiornato. Riconnessione avviata.'}else{connectLobby();$('debug-result').textContent='Riconnessione alla sala partite avviata.'}}catch(e){$('debug-result').textContent=e.message}refreshDebug();
 };
 function fitViewport(){
- const height=tg?.viewportStableHeight||window.visualViewport?.height||innerHeight;
+ const height=viewportHeight(tg,{innerHeight,visualHeight:window.visualViewport?.height,fullscreen:!!document.fullscreenElement});
  applyInsets(document.documentElement,safeInsets(tg));if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets:safeInsets(tg)},location.origin);
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
-for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
+for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
 fitViewport();refreshDebug();
 
 

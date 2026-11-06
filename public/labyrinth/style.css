@@ -15,3 +15,8 @@
 .spectating #hand-view,.spectating #inventory,.spectating #drop-item{display:none!important}
 
 .quiet,#jump,#action,#sprint{backdrop-filter:none;background:linear-gradient(145deg,#263129dd,#172019dc);box-shadow:inset 0 1px 0 #f3edca14,0 3px 10px #0002}.menu-card{background:linear-gradient(145deg,#29352af5,#141f19f7);box-shadow:inset 0 1px 0 #efe6bd13,0 24px 70px #0007}#inventory button{background:linear-gradient(145deg,#29352ade,#162219e6);box-shadow:inset 0 1px 0 #fff1,0 2px 6px #0002;backdrop-filter:none}#inventory button[aria-pressed=true]{border-color:#d8d0a2;box-shadow:inset 0 0 0 1px #d8d0a222,0 2px 6px #0002}#look-pad,#joystick{background:radial-gradient(circle at 42% 35%,#3c4a342b,#0d170e75);box-shadow:inset 0 1px 0 #e4dfb814}#stick,#look-stick{background:radial-gradient(circle at 35% 28%,#c7c39a66,#6c7d5d66)}#remote-labels span{border:1px solid #d9d4b32b;box-shadow:0 2px 4px #0003}.floor-label{font-weight:600}
+
+/* Anchor scene and desktop HUD to the same CSS viewport, independent of render scale. */
+#scene{position:fixed;inset:0;width:100%;height:100%;max-width:none;margin:0}
+body:not(.touch) #hud{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:start}
+body:not(.touch) #hud>#leave{justify-self:start}body:not(.touch) #hud>.floor-label{justify-self:center;min-width:0}body:not(.touch) #hud>.hud-buttons{justify-self:end}

@@ -1,4 +1,11 @@
-import assert from 'node:assert/strict';import {safeInsets,applyInsets} from '../public/safe-area.js';
+import assert from 'node:assert/strict';import {safeInsets,applyInsets,viewportHeight} from '../public/safe-area.js';
 const tg={platform:'android',isFullscreen:true,safeAreaInset:{top:26,bottom:24,left:0,right:0},contentSafeAreaInset:{top:58,bottom:0,left:0,right:0}},r=safeInsets(tg);assert.equal(r.top.system+r.top.content,84);assert.equal(r.bottom.system+r.bottom.content,24);const css=new Map();applyInsets({style:{setProperty:(k,v)=>css.set(k,v)}},r);assert.equal(css.get('--system-safe-top'),'26px');assert.equal(css.get('--content-safe-top'),'58px');assert.equal(css.get('--system-safe-bottom'),'24px');
 assert.equal(safeInsets({platform:'android',isFullscreen:true}).top.content,56);assert.equal(safeInsets({platform:'tdesktop',isFullscreen:true}).top.content,0);assert.equal(safeInsets(null).bottom.system,0);assert.equal(safeInsets({safeAreaInset:{top:Infinity}}).top.system,0);applyInsets({style:{setProperty:(k,v)=>css.set(k,v)}},{top:{system:-10,content:999}});assert.equal(css.get('--system-safe-top'),'26px');
 console.log('PASS safe areas: separate Android/Telegram insets, fullscreen fallback, desktop/no-Telegram behavior, invalid values rejected.');
+
+assert.equal(viewportHeight({platform:'tdesktop',viewportStableHeight:600},{innerHeight:2160,visualHeight:2160}),2160);
+assert.equal(viewportHeight({platform:'tdesktop',viewportStableHeight:600},{innerHeight:1080,visualHeight:1080}),1080);
+assert.equal(viewportHeight({platform:'android',viewportStableHeight:760},{innerHeight:800,visualHeight:800}),760);
+assert.equal(viewportHeight({platform:'android',viewportStableHeight:760},{innerHeight:2160,visualHeight:2160,fullscreen:true}),2160);
+assert.equal(viewportHeight(null,{innerHeight:1440,visualHeight:NaN}),1440);
+console.log('PASS viewport sizing: desktop 4K/200% CSS dimensions ignore stale Telegram height; mobile stable height preserved and native fullscreen follows actual viewport.');
