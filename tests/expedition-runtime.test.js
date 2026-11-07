@@ -41,5 +41,22 @@ try{
  assert.equal(fourState.connect4.result,'1-0');assert.equal(fourState.phase,'finished');assert.equal((await call(30,'/api/room/'+fourRoom+'/replay')).data.frames.length,8);
  assert.equal((await call(32,'/api/room/'+fourRoom+'/archive',{revision:fourState.revision})).status,403);assert.equal((await call(30,'/api/room/'+fourRoom+'/archive',{revision:fourState.revision})).status,200);
  console.log('PASS Forza 4 runtime: create, two seats, spectator live updates/read-only permissions, turn/column validation, win, replay and archive.');
+ const unoMade=await call(40,'/api/create',{game:'uno'});assert.equal(unoMade.status,200);const unoRoom=unoMade.data.state.room;
+ assert.equal((await call(40,'/api/room/'+unoRoom+'/start',{revision:0})).status,409);
+ for(let id=41;id<=47;id++)assert.equal((await call(id,'/api/room/'+unoRoom+'/claim',{})).status,200);
+ assert.equal((await call(49,'/api/room/'+unoRoom+'/claim',{})).status,409);
+ let unoState=(await call(40,'/api/room/'+unoRoom+'/state')).data;
+ assert.equal((await call(41,'/api/room/'+unoRoom+'/start',{revision:unoState.revision})).status,409);
+ const unoClients=[];for(const id of [40,41,48]){const res=await mf.dispatchFetch('https://unit.test/api/room/'+unoRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const client={ws:res.webSocket,packets:[],waiters:[]};client.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);client.packets.push(p);for(const fn of [...client.waiters])fn(p)});client.ws.accept();sockets.push(client.ws);unoClients.push(client)}
+ const started=await call(40,'/api/room/'+unoRoom+'/start',{revision:unoState.revision});assert.equal(started.status,200);unoState=started.data;assert.equal(unoState.uno.hand.length,7);assert.equal(unoState.players.length,8);
+ const ids=[];for(let id=40;id<=47;id++){const view=(await call(id,'/api/room/'+unoRoom+'/state')).data.uno;assert.equal(view.hand.length,7);ids.push(...view.hand.map(c=>c.id));assert.ok(!('deck' in view)&&!('hands' in view))}assert.equal(new Set(ids).size,56);
+ const spec=(await call(48,'/api/room/'+unoRoom+'/state')).data.uno;assert.deepEqual(spec.hand,[]);assert.deepEqual(spec.legalMoves,[]);
+ for(let i=0;i<unoClients.length;i++){const packet=await until(unoClients[i],p=>p.phase==='playing');assert.equal(packet.uno.hand.length,i===2?0:7);assert.ok(!('deck' in packet.uno)&&!('hands' in packet.uno))}
+ assert.equal((await call(48,'/api/room/'+unoRoom+'/move',{kind:'draw',revision:unoState.revision})).status,403);
+ const action=unoState.uno.legalMoves.length?{kind:'play',card:unoState.uno.legalMoves[0],color:'red'}:{kind:'draw'};
+ const moved=await call(40,'/api/room/'+unoRoom+'/move',{...action,revision:unoState.revision});assert.equal(moved.status,200);const hidden=await until(unoClients[2],p=>p.revision===moved.data.revision);assert.deepEqual(hidden.uno.hand,[]);assert.ok(!JSON.stringify(hidden.moves).includes('"card":'));
+ assert.deepEqual((await call(48,'/api/room/'+unoRoom+'/replay')).data.frames,[]);
+ assert.equal((await call(40,'/api/room/'+unoRoom+'/archive',{revision:moved.data.revision})).status,200);assert.deepEqual((await call(48,'/api/room/'+unoRoom+'/state')).data.uno.hand,[]);
+ console.log('PASS UNO runtime: 2–8 seat staging, creator start, full-table rejection, per-account HTTP/WebSocket hands, spectator privacy before/after archive, legal actions and no hidden replay.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and monotonic lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}
