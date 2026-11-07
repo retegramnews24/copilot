@@ -5,9 +5,9 @@ export function surfacePixels(kind,level,size=SURFACE_SIZE){
  const data=new Uint8ClampedArray(size*size*4),arena=level===6,neutral=level>1;
  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
   const u=x/size*256,v=y/size*256,i=(y*size+x)*4,n=hash(Math.floor(u),Math.floor(v),level*701),broad=hash(Math.floor(u/32),Math.floor(v/32),level*193),fine=(n-.5)*(kind==='floor'?12:5);let rgb;
-  if(kind==='wall'&&arena){const row=Math.floor(v/32),bx=(u+(row%2)*32)%64,by=v%32,mortar=bx<2||by<2,edge=bx<4||by<4?8:bx>61||by>29?-8:0,brick=hash(Math.floor((u+(row%2)*32)/64),row,88)*13;const value=mortar?104:151+brick+edge+fine;rgb=[value*.93,value,value*.98];}
+  if(kind==='wall'&&arena){const row=Math.floor(v/32),bx=(u+(row%2)*32)%64,by=v%32,mortar=bx<2||by<2,edge=bx<4||by<4?8:bx>61||by>29?-8:0,brick=hash(Math.floor((u+(row%2)*32)/64),row,88)*13;const value=mortar?132:190+brick+edge+fine;rgb=[value,value*.87,value*.71];}
   else if(kind==='wall'){const column=u%32,diamond=Math.abs(Math.sin(u/16*Math.PI)*Math.cos(v/24*Math.PI)),seam=column<1.4?-12:column<2.5?4:0,patina=(broad-.5)*10,motif=diamond>.86?-8:0,grain=fine+seam+patina+motif;rgb=neutral?[171+grain,174+grain,170+grain]:[186+grain,176+grain,120+grain];}
-  else if(kind==='floor'&&arena){const row=Math.floor(v/64),cx=(u+(row%2)*32)%64,cy=v%64,grout=cx<1.4||cy<1.4,edge=cx<3||cy<3?5:cx>61||cy>61?-4:0,value=grout?82:116+hash(Math.floor((u+(row%2)*32)/64),row,193)*11+fine*.4+edge;rgb=[value*.95,value,value*.98];}
+  else if(kind==='floor'&&arena){const grain=hash(u,v,193)*16+hash(Math.floor(u/12),Math.floor(v/9),29)*10,value=191+grain+fine*.6;rgb=[value,value*.83,value*.61];}
   else if(kind==='floor'){const weave=((Math.floor(u)%2)^(Math.floor(v)%2))?2:-2,wear=(broad-.5)*5,grain=fine+weave+wear;rgb=neutral?[97+grain,99+grain,97+grain]:[110+grain,99+grain,69+grain];}
   else {const seam=u<1.3||v<1.3,lip=u<3||v<3?5:0,value=(seam?116:181)+fine*.55+lip+(broad-.5)*3;rgb=neutral?[value,value+1,value-2]:[value+3,value+1,value-15];}
   for(let k=0;k<3;k++)data[i+k]=rgb[k];data[i+3]=255;

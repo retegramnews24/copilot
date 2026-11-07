@@ -178,7 +178,8 @@ lab.Atmosphere=class{constructor(enabled){this.enabled=enabled}active(){}resume(
 const oldRun={...labAdventure.newRun(41),level:4,inventoryLayout:undefined,inventory:['key:4','pass']};
 const storageKey='binottoland-labyrinth-v2-guest';
 lab.localStorage.setItem(storageKey,JSON.stringify(oldRun));
-lab.eval((await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\n/gm,''));
+lab.eval((await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\n/gm,'')+
+ '\nwindow.__labTest={tick:()=>tick(lastTime+16),action:()=>actionState.remaining};');
 assert.equal(labGet('fullscreen'),null);assert.equal(labGet('sprint'),null);assert.equal(labGet('hand-view'),null);
 assert.equal(labGet('new-run').hidden,false);
 const initialSlots=labGet('inventory').querySelectorAll('button');
@@ -200,6 +201,15 @@ assert.deepEqual(JSON.parse(lab.localStorage.getItem(storageKey)).inventory,['pa
 assert.equal(labGet('health-meter').value,100);
 labGet('scene').dispatchEvent(new lab.MouseEvent('mousedown',{button:2,cancelable:true}));
 assert.equal(labGet('guard').getAttribute('aria-pressed'),'true');
+lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'KeyF'}));
+assert.ok(lab.__labTest.action()>0,'Attacks work while guarding');
+lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'ControlLeft'}));
+lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'true');
+lab.dispatchEvent(new lab.KeyboardEvent('keyup',{code:'ControlLeft'}));
+lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'false');
+labGet('crouch').click();lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'true');
+labGet('crouch').click();lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'false');
+
 lab.dispatchEvent(new lab.MouseEvent('mouseup',{button:2}));
 assert.equal(labGet('guard').getAttribute('aria-pressed'),'false');
 labGet('guard').dispatchEvent(new lab.Event('pointerdown',{cancelable:true}));

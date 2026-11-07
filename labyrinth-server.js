@@ -5,7 +5,7 @@ export class ExpeditionRoom{
  async load(){if(!this.state){this.state=await this.ctx.storage.get('expedition');if(this.state&&ensureKeycards(this.state)){this.state.revision++;await this.save()}}return this.state}
  async save(){await this.ctx.storage.put('expedition',this.state);this.lastSave=Date.now()}
  async index(){const s=this.state;if(!s)return;const path=s.deleted?'/lobby/remove':'/lobby/update';await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal'+path,{method:'POST',body:JSON.stringify(expeditionSummary(s))}))}
- async schedule(){const s=this.state;if(!s||s.archived||s.deleted){await this.ctx.storage.deleteAlarm();return}const deadlines=participants(s).map(p=>p.online?p.lastSeen+STALE:(p.offlineAt??Date.now())+GRACE);if(deadlines.length)await this.ctx.storage.setAlarm(Math.max(Date.now()+1000,Math.min(...deadlines)));else await this.ctx.storage.deleteAlarm()}
+ async schedule(){const s=this.state;if(!s||s.archived||s.deleted){await this.ctx.storage.deleteAlarm();return}const deadlines=participants(s).map(p=>Math.min(p.standsUntil??Infinity,p.online?p.lastSeen+STALE:(p.offlineAt??Date.now())+GRACE));if(deadlines.length){const next=Math.max(Date.now()+50,Math.min(...deadlines));if(await this.ctx.storage.getAlarm()!==next)await this.ctx.storage.setAlarm(next)}else await this.ctx.storage.deleteAlarm()}
  async broadcast(force=true){const now=Date.now();if(!force&&now-this.lastBroadcast<110)return;this.lastBroadcast=now;const tag=await this.tag(),message=JSON.stringify({type:'state',state:snapshot(this.state),serverTime:now});for(const ws of this.ctx.getWebSockets()){try{if(ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}}
  async fetch(req){return this.ctx.blockConcurrencyWhile(async()=>{try{
  const path=new URL(req.url).pathname,user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');let s=await this.load(),now=Date.now();
@@ -23,7 +23,7 @@ export class ExpeditionRoom{
  }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},409)}})}
  async message(ws,message){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load();if(!s||s.deleted)return;const a=ws.deserializeAttachment();try{
  if(typeof message!=='string'||message.length>2048)return;const b=JSON.parse(message),p=s.players[a.id],now=Date.now();if(!a.rateAt||now-a.rateAt>=1000){a.rateAt=now;a.messages=0}if(++a.messages>32)return;ws.serializeAttachment(a);if(!a.watch&&(!p||p.connection!==a.connection))return;
- if(sweep(s,now)){await this.save();await this.index()}
+ if(sweep(s,now)){await this.save();await this.index();await this.schedule();await this.broadcast()}
  if(b.type==='heartbeat'){const wasOnline=p?.online;if(!a.watch&&!s.archived){if(wasOnline)p.lastSeen=now;else connectPlayer(s,a.id,a.connection,now);if(now-this.lastSave>5000||!wasOnline)await this.save();if(!wasOnline)await this.index();await this.schedule()}await this.broadcast();return}
  if(a.watch||s.archived)throw Error('Stai assistendo.');
  if(b.type==='pose'){

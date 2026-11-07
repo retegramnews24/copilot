@@ -45,30 +45,30 @@ body:not(.playing) #health,.spectating #health,body:not(.playing) #inventory-ove
 @keyframes damage-pulse{0%{opacity:1}100%{opacity:0}}
 
 #inventory-overlay{
- position:fixed;left:50%;bottom:calc(var(--ui-safe-bottom) + 8px);transform:translateX(-50%);
- z-index:4;display:grid;justify-items:center;gap:4px;pointer-events:none
+ position:fixed;left:calc((100% + var(--ui-safe-left) - var(--ui-safe-right))/2);bottom:calc(var(--ui-safe-bottom) + 8px);transform:translateX(-50%);
+ z-index:4;display:grid;justify-items:center;gap:6px;pointer-events:none
 }
-#inventory{position:static;transform:none;display:grid;justify-items:center;gap:4px}
-.inventory-slots,.worn-gear{display:flex;align-items:end;gap:4px;pointer-events:auto}
+#inventory{position:static;transform:none;display:grid;justify-items:center;gap:6px}
+.inventory-slots,.worn-gear{display:flex;align-items:end;gap:6px;pointer-events:auto}
 .inventory-slots:first-child{grid-row:3}
 .bag-slots{grid-row:2}
-.worn-gear{grid-row:1;gap:3px}
+.worn-gear{grid-row:1}
 #inventory .inventory-slot{
- position:relative;width:39px;height:38px;padding:9px 1px 0;border:1px solid #b6b59a6b;border-radius:6px;
- background:linear-gradient(145deg,#29352ade,#162219e6);display:grid;place-items:center;font-size:20px
+ position:relative;width:57px;height:50px;padding:13px 1px 0;border:1px solid #b6b59a6b;border-radius:6px;
+ background:linear-gradient(145deg,#29352ade,#162219e6);display:grid;place-items:center;font-size:24px
 }
 #inventory .inventory-slot[data-hand=true]{border-color:#dac486b8}
 #inventory .inventory-slot:disabled{opacity:.58}
 #inventory .inventory-slot small{
- position:absolute;top:3px;left:0;right:0;text-align:center;font-size:7px;line-height:1;color:#e6ddbf
+ position:absolute;top:4px;left:0;right:0;text-align:center;font-size:10px;line-height:1;color:#e6ddbf
 }
 #inventory .inventory-slot>span{margin:0}
-#inventory .worn-gear .inventory-slot{width:34px;height:32px;font-size:16px}
+#inventory .worn-gear .inventory-slot{width:53px;height:43px;font-size:21px}
 .mini-avatar{
- display:block;width:35px;height:60px;border-radius:6px;background:radial-gradient(ellipse at 50% 58%,#49564b,#1c271de6);
+ display:block;width:46px;height:76px;border-radius:6px;background:radial-gradient(ellipse at 50% 58%,#49564b,#1c271de6);
  border:1px solid #b6b59a65;object-fit:contain
 }
-#drop-item{position:static;transform:none;height:22px;pointer-events:auto}
+#drop-item{position:static;transform:none;height:27px;font-size:12px;pointer-events:auto}
 #guard{
  position:absolute;right:calc(var(--ui-safe-right) + var(--stick-size) + 55px);bottom:calc(var(--control-floor) + 68px);
  width:46px;height:46px;border-radius:50%;border:1px solid #b8c7ac91;background:linear-gradient(145deg,#263129dd,#172019dc);
@@ -76,10 +76,39 @@ body:not(.playing) #health,.spectating #health,body:not(.playing) #inventory-ove
 }
 #guard[aria-pressed=true]{background:#52694a;border-color:#e0eccf}
 .guarding #crosshair{border-color:#c5d9ad;box-shadow:0 0 4px #8dbe71}
-.spectating #guard{display:none}
-@media(max-width:700px){
- #inventory .inventory-slot{width:31px;height:32px}
- #inventory .worn-gear .inventory-slot{width:29px;height:28px}
- .mini-avatar{width:30px;height:51px}
+.spectating #guard,.spectating #crouch{display:none}
+#jump,#guard{bottom:calc(var(--control-floor) + 66px)}
+#inventory .card-icon{width:31px;height:21px}
+#health{font-size:12px}
+#inventory-overlay #hint{position:static;transform:none;max-width:min(51vw,360px);padding:5px 10px;font-size:13px;line-height:1.25}
+#stands{
+ position:fixed;left:50%;bottom:calc(var(--ui-safe-bottom) + 25px);transform:translateX(-50%);
+ margin:0;padding:7px 14px;border:1px solid #dfbb80a0;border-radius:9px;background:#2d231bdf;
+ color:#fff1d3;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums;z-index:6;pointer-events:none
 }
-@media(max-height:360px){#guard{bottom:calc(var(--control-floor) + 52px)}}
+body:not(.playing) #stands,.in-stands #inventory-overlay,.in-stands #crosshair,
+.in-stands #joystick,.in-stands #jump,.in-stands #action,.in-stands #guard,.in-stands #crouch{display:none}
+#crouch{
+ position:absolute;left:calc(var(--ui-safe-left) + 22px);bottom:calc(var(--control-floor) + var(--stick-size) + 9px);
+ width:53px;height:44px;border-radius:14px;border:1px solid #b8c7ac91;background:linear-gradient(145deg,#263129dd,#172019dc);
+ color:var(--ink);font-size:11px;pointer-events:auto;touch-action:manipulation
+}
+#crouch[aria-pressed=true]{background:#52694a;border-color:#e0eccf}
+@media(max-width:800px){
+ .touch #inventory .inventory-slot{width:43px;height:43px;font-size:21px}
+ .touch #inventory .worn-gear .inventory-slot{width:41px;height:36px;font-size:18px}
+ .touch .mini-avatar{width:37px;height:60px}
+ .touch #inventory,.touch .inventory-slots,.touch .worn-gear{gap:4px}
+ .touch #inventory .card-icon{width:26px;height:18px}
+}
+@media(max-width:670px){
+ .touch #action{right:calc(var(--ui-safe-right) + 21px);bottom:calc(var(--control-floor) + var(--stick-size) + 8px);width:50px;height:50px}
+ .touch #jump{right:calc(var(--ui-safe-right) + 75px);bottom:calc(var(--control-floor) + var(--stick-size) + 11px)}
+ .touch #guard{right:calc(var(--ui-safe-right) + 22px);bottom:calc(var(--control-floor) + var(--stick-size) + 62px)}
+}
+@media(max-width:540px), (max-height:330px){
+ .touch #inventory .inventory-slot{width:38px;height:38px}
+ .touch #inventory .inventory-slot small{font-size:9px}
+ .touch #inventory .worn-gear .inventory-slot{width:35px;height:33px}
+ .touch .mini-avatar{width:32px;height:51px}
+}

@@ -8,17 +8,23 @@ export const FLOORS=[
  {name:'Blu',stripe:'#426ab5',light:[.16,.3,1],ambient:[.014,.023,.055],fog:[.005,.01,.027],power:.47,visibility:9,brightness:.26},
  {name:'Nero',stripe:'#191b1e',light:[.62,.68,.74],ambient:[.008,.01,.014],fog:[.002,.003,.005],power:.21,visibility:7,brightness:.105}
 ];
-export const ARENA_LIGHT={name:'Arena',stripe:'#b8c4a5',light:[1,.94,.8],ambient:[.52,.57,.60],fog:[.29,.39,.45],power:1,visibility:65,brightness:1};
+export const ARENA_LIGHT={name:'Colosseo',stripe:'#cead73',light:[1,.92,.78],ambient:[.78,.69,.55],fog:[.65,.60,.51],power:.65,visibility:88,brightness:1};
+export const STANDS_WAIT=5000, CROUCH_OFFSET=.46;
 export const CLOTHES=[['Panna','#eee4c9'],['Giallo','#e5be43'],['Arancio','#d6813c'],['Corallo','#cf514d'],['Rosa','#d58da9'],['Viola','#8662b1'],['Celeste','#66b8cf'],['Blu','#3c62a3'],['Verde','#529766'],['Antracite','#333b42']];
 export const centre=(i,n)=>({x:(i%n+.5)*CELL,z:(Math.floor(i/n)+.5)*CELL});
 export function makeArena(seed){
  const n=17,grid=new Uint8Array(n*n),cx=n*CELL/2,cz=n*CELL/2,rx=20,rz=17.6;
  for(let z=0;z<n;z++)for(let x=0;x<n;x++)if(((x+.5)*CELL-cx)**2/rx**2+((z+.5)*CELL-cz)**2/rz**2>1)grid[index(x,z,n)]=1;
  const spawn={x:cx,z:cz+rz-3.6},showcase={x:cx,z:cz-rz+5.8},nets=[{x:cx,z:cz+2.2,halfWidth:9.25,halfDepth:2.9}],decor=[];
- for(let i=0;i<12;i++){const angle=i/12*Math.PI*2,x=cx+Math.cos(angle)*rx*.86,z=cz+Math.sin(angle)*rz*.86;if(Math.abs(x-cx)<3)continue;decor.push({x,z,type:i%3===0?'bench':i%3===1?'planter':'lamp'})}
- const obstacles=[{x:showcase.x,z:showcase.z,halfWidth:1.08,halfDepth:.5},...decor.filter(d=>d.type!=='lamp').map(d=>({...d,halfWidth:d.type==='bench'?1.15:.65,halfDepth:.43}))];
- return {seed,level:6,arena:true,n,grid,rooms:[],start:index(Math.floor(spawn.x/CELL),Math.floor(spawn.z/CELL),n),spawn:{...spawn,yaw:0},exit:0,key:0,keyPosition:{x:-99,z:-99},door:{x:cx,z:cz+rz-.025,dx:0,dz:1},lamps:[{...showcase,y:5},{...spawn,y:5},...decor.filter(d=>d.type==='lamp').map(d=>({...d,y:2.7}))],showcase,nets,decor,obstacles,oval:{cx,cz,rx,rz}};
+ for(let i=0;i<12;i++){const angle=i/12*Math.PI*2,x=cx+Math.cos(angle)*rx*.86,z=cz+Math.sin(angle)*rz*.86;if(Math.abs(x-cx)<3)continue;decor.push({x,z,type:i%2?'amphora':'brazier'})}
+ const obstacles=[{x:showcase.x,z:showcase.z,halfWidth:1.08,halfDepth:.5},...decor.map(d=>({...d,halfWidth:.47,halfDepth:.47}))];
+ return {seed,level:6,arena:true,n,grid,rooms:[],start:index(Math.floor(spawn.x/CELL),Math.floor(spawn.z/CELL),n),spawn:{...spawn,yaw:0},exit:0,key:0,keyPosition:{x:-99,z:-99},door:{x:cx,z:cz+rz-.025,dx:0,dz:1},lamps:[{...showcase,y:5},{...spawn,y:5},...decor.filter(d=>d.type==='brazier').map(d=>({...d,y:1.8}))],showcase,nets,decor,obstacles,oval:{cx,cz,rx,rz}};
 
+}
+export function standsView(world,seat=0){
+ const {cx,cz,rx,rz}=world.oval,angle=Math.PI/2+(seat%5-2)*.16;
+ const x=cx+Math.cos(angle)*(rx+3.05),z=cz+Math.sin(angle)*(rz+3.05);
+ return {x,z,yaw:Math.atan2(cx-x,z-cz),pitch:-.25,height:3.1};
 }
 export function worldFor(seed,level){const w=level===6?makeArena(seed):makeLevel(seed,level);if(level>1&&level<6)w.lamps=w.lamps.filter((p,i)=>{const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL),cell=index(x,z,w.n);return cell===w.exit||((x+z)%4===2&&(level<4||i%(level===5?4:2)===0))});w.palette=level===6?ARENA_LIGHT:FLOORS[level-1];w.frames=placeFrames(w,CELL,distances,random);w.mirrors=placeMirrors(w);return w}
 export function newRun(seed,test=true){return {version:2,seed:seed>>>0,level:1,seconds:0,player:null,inventory:[],inventoryLayout:2,health:100,kitRemoved:true,backpack:false,floors:{},showcaseOpen:false,swordTaken:false,test};}

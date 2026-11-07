@@ -1,11 +1,12 @@
 import {SurfaceBank} from './materials.js';
 import {avatarSprite,skyCanvas,shadowCanvas,litColor,decorSprite,showcaseSprite} from './visuals.js';
 import {CELL,HEIGHT,random,doorBasis,forwardVector,DOOR_HALF,DOOR_HEIGHT,free} from './core.js';
-import {FLOORS,ARENA_LIGHT,worldFor} from './adventure.js';
+import {FLOORS,ARENA_LIGHT,CROUCH_OFFSET,worldFor} from './adventure.js';
 import {framePose,FRAME_WIDTH,FRAME_LENGTH} from './traps.js';
 import {mirrorCorners,mirrorSide,reflectPoint} from './mirrors.js';
+import {colosseumMeshes,crowdSeats,arcadeTile,ARCADE_TOP,ARCH_BAYS,CROWD_COLORS,STONE_HEIGHT} from './colosseum.js';
 import {armPose,between,limbModel} from './character.js';
-const VS=`attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aUV;uniform mat4 uViewProjection;uniform mat4 uModel;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;void main(){vec4 p=uModel*vec4(aPosition,1.);vPosition=p.xyz;vec3 x=uModel[0].xyz,y=uModel[1].xyz,z=uModel[2].xyz;vNormal=x*aNormal.x/dot(x,x)+y*aNormal.y/dot(y,y)+z*aNormal.z/dot(z,z);vUV=aUV;gl_Position=uViewProjection*p;}`;
+const VS=`attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aUV;uniform mat4 uViewProjection;uniform mat4 uModel;uniform float uCrowd;uniform mediump float uTime;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;void main(){vec4 p=uModel*vec4(aPosition,1.);float sway=uCrowd*sin(uTime*1.8+aPosition.x*1.38+aPosition.z*1.78);p.x+=sway*.035;p.y+=sway*.024;vPosition=p.xyz;vec3 x=uModel[0].xyz,y=uModel[1].xyz,z=uModel[2].xyz;vNormal=x*aNormal.x/dot(x,x)+y*aNormal.y/dot(y,y)+z*aNormal.z/dot(z,z);vUV=aUV;gl_Position=uViewProjection*p;}`;
 const FS=`precision mediump float;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;uniform sampler2D uTexture;uniform vec3 uColor;uniform vec3 uCamera;uniform vec3 uLights[8];uniform float uEmission;uniform float uTime;uniform vec3 uAmbient;uniform vec3 uTint;uniform vec3 uFog;uniform float uPower;uniform float uVisibility;uniform float uAlpha;uniform float uSky;uniform vec4 uClip;uniform vec2 uMirrorScale;void main(){if(dot(vec4(vPosition,1.),uClip)<0.)discard;if(uMirrorScale.x>0.){vec3 reflected=texture2D(uTexture,gl_FragCoord.xy*uMirrorScale).rgb;gl_FragColor=vec4(reflected*.93+vec3(.035,.048,.055),1.);return;}if(uSky>.5){gl_FragColor=texture2D(uTexture,vUV);return;}vec3 n=normalize(vNormal);vec3 light=uAmbient;for(int i=0;i<8;i++){vec3 d=uLights[i]-vPosition;float r=dot(d,d);float diffuse=max(dot(n,normalize(d)),.025);light+=uTint*diffuse*uPower/(1.+r*.22);}vec4 tex=texture2D(uTexture,vUV);vec3 c=tex.rgb*uColor; c*=mix(light,vec3(1.1),uEmission);float fog=1.-exp(-pow(length(vPosition-uCamera)/uVisibility,1.55));c=mix(c,uFog,clamp(fog,0.,.92));gl_FragColor=vec4(pow(max(c,vec3(0.)),vec3(.94)),uAlpha*tex.a);}`;
 const identity=()=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
 function multiply(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)o[c*4+r]+=a[k*4+r]*b[c*4+k];return o}
@@ -74,6 +75,7 @@ function portalCanvas(world){
 export function avatarTransform(p,height=0){
  const model=identity(),dir=forwardVector(p.yaw);
  model[0]=model[10]=-dir.z;model[2]=dir.x;model[8]=-dir.x;
+ if(p.crouch)model[5]=.72;
  model[12]=p.x;model[13]=height;model[14]=p.z;
  return model;
 }
@@ -109,7 +111,7 @@ export class Renderer{
   this.anisotropy=this.anisotropic?Math.min(4,gl.getParameter(this.anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT)):1;
   const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error('Shader non disponibile: '+gl.getShaderInfoLog(s));return s};
   const program=gl.createProgram();gl.attachShader(program,compile(gl.VERTEX_SHADER,VS));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,FS));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Renderer non disponibile.');this.program=program;gl.useProgram(program);
-  this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky','uClip','uMirrorScale'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
+  this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky','uCrowd','uClip','uMirrorScale'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
   gl.uniform1f(this.uniforms.uAlpha,1);const white=document.createElement('canvas');white.width=white.height=1;white.getContext('2d').fillRect(0,0,1,1);const ctx=white.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1,1);this.white=this.texture(white);this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.meshes=[];this.textures=[];this.quality='auto';this.resize();
  }
  texture(canvas){const g=this.gl,t=g.createTexture();g.bindTexture(g.TEXTURE_2D,t);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,canvas);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR_MIPMAP_LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.REPEAT);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.REPEAT);if(this.anisotropy>1)g.texParameterf(g.TEXTURE_2D,this.anisotropic.TEXTURE_MAX_ANISOTROPY_EXT,this.anisotropy);g.generateMipmap(g.TEXTURE_2D);return t}
@@ -141,23 +143,29 @@ export class Renderer{
    if(!world.arena&&world.grid[(z-1)*world.n+x]&&!doorway(x,z,0,-1)){wall.quad([a,0,c],[b,0,c],[b,HEIGHT,c],[a,HEIGHT,c],[0,0,1],[0,0,2,2]);skirting(a,c+.014,b,c+.014,[0,0,1])}
    if(!world.arena&&world.grid[(z+1)*world.n+x]&&!doorway(x,z,0,1)){wall.quad([b,0,d],[a,0,d],[a,HEIGHT,d],[b,HEIGHT,d],[0,0,-1],[0,0,2,2]);skirting(b,d-.014,a,d-.014,[0,0,-1])}
   }
-  if(world.oval){const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,x=o.cx+Math.cos(a)*o.rx,z=o.cz+Math.sin(a)*o.rz,xx=o.cx+Math.cos(b)*o.rx,zz=o.cz+Math.sin(b)*o.rz,n=[-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)];wall.quad([x,0,z],[xx,0,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n,[i/2,0,(i+1)/2,2]);trim.quad([x,HEIGHT-.12,z],[xx,HEIGHT-.12,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n)}}
+  if(world.oval){const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,x=o.cx+Math.cos(a)*o.rx,z=o.cz+Math.sin(a)*o.rz,xx=o.cx+Math.cos(b)*o.rx,zz=o.cz+Math.sin(b)*o.rz,n=[-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)];wall.quad([x,0,z],[xx,0,zz],[xx,STONE_HEIGHT-.3,zz],[x,STONE_HEIGHT-.3,z],n,[i/2,0,(i+1)/2,2]);trim.quad([x,STONE_HEIGHT-.37,z],[xx,STONE_HEIGHT-.37,zz],[xx,STONE_HEIGHT-.29,zz],[x,STONE_HEIGHT-.29,z],n)}}
   if(!world.arena)for(const p of world.lamps){frames.box(p.x,HEIGHT-.055,p.z,1.18,.04,.34);for(const dz of [-.075,.075])light.quad([p.x-.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz+.025],[p.x-.51,HEIGHT-.06,p.z+dz+.025],[0,-1,0])}
   const p=world.door,basis=doorBasis(p),n=[basis.normalX,0,basis.normalZ],right=[basis.rightX,0,basis.rightZ],v=(dx,y)=>[p.x+right[0]*dx+n[0]*.015,y,p.z+right[2]*dx+n[2]*.015];door.quad(v(-.61,0),v(.61,0),v(.61,2.2),v(-.61,2.2),n);
   key.box(0,.014,0,.32,.012,.20);
   const preview=this.surfaces.preview(world.level),textures=[this.texture(surfaceCanvas(preview.wall)),this.texture(surfaceCanvas(preview.floor)),this.texture(surfaceCanvas(preview.ceiling)),this.texture(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'))];this.textures=textures;this.surfaces.request(world.level).then(maps=>{if(this.closed||generation!==this.generation||!maps)return;for(const [i,key] of ['wall','floor','ceiling'].entries()){gl.bindTexture(gl.TEXTURE_2D,textures[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,surfaceCanvas(maps[key]));gl.generateMipmap(gl.TEXTURE_2D)}this.boundTexture=null;this.surfaces.request(world.level===6?1:world.level+1)});
   this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,world.level===1?[1,.98,.79]:world.palette?.light||[1,.98,.79],world.level===1?1:world.arena?.5:world.level===5?.025:world.level===4?.12:.3),this.mesh(door,textures[3])];this.exitMesh=this.meshes.pop();this.keyMesh=this.mesh(key,null,[.64,.64,.6],0);
   const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);this.props=[this.stripeMesh,this.exitMesh];
-  const legs=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry();
+  const legs=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry(),packRoll=new Geometry();
   for(const x of [-.119,.119]){
    legs.sphere(x,.105,-.016,.069,.265,.079);
    shorts.sphere(x,.50,.008,.112,.186,.135);
   }
   shirt.sphere(0,.77,.008,.242,.303,.149);shirt.sphere(0,1.07,0,.23,.15,.143);
-  wornPack.sphere(0,.78,.217,.234,.286,.138);
+  wornPack.box(0,.79,.23,.37,.43,.24);
+  wornPack.sphere(0,1.105,.285,.20,.063,.102,5,10);
+  for(const x of [-.10,.10]){
+   packRoll.box(x,.83,.357,.034,.32,.018);
+   packRoll.box(x,.96,-.123,.034,.31,.02);
+  }
+  packRoll.sphere(0,1.20,.25,.23,.062,.081,5,10);
   this.bodySkin=this.mesh(legs,null,[.86,.60,.51]);this.bodyShirt=this.mesh(shirt);this.bodyShorts=this.mesh(shorts);
-  this.wornPack=this.mesh(wornPack,null,[.27,.36,.22]);
-  this.props.push(this.bodySkin,this.bodyShirt,this.bodyShorts,this.wornPack);
+  this.wornPack=this.mesh(wornPack,null,[.41,.24,.13]);this.packRoll=this.mesh(packRoll,null,[.70,.59,.40]);
+  this.props.push(this.bodySkin,this.bodyShirt,this.bodyShorts,this.wornPack,this.packRoll);
   const head=new Geometry(),hair=new Geometry(),eyes=new Geometry(),accent=new Geometry(),shoes=new Geometry(),soles=new Geometry();
   head.sphere(0,1.34,0,.173,.204,.155);head.sphere(0,1.275,0,.081,.094,.075,5,8);
   for(const sign of [-1,1]){
@@ -184,36 +192,60 @@ export class Renderer{
   upper.sphere(0,-.10,0,.069,.62,.071,8,15);lower.sphere(0,-.14,0,.058,.625,.061,7,12);
   sleeve.sphere(0,-.26,0,.092,.69,.092,7,12);
   hand.sphere(0,-.19,0,.057,.66,.049,7,12);hand.sphere(.037,.07,-.022,.025,.43,.023,6,10);
-  blade.box(0,.13,0,.045,.55,.023);
-  blade.quad([-.023,.68,.012],[.023,.68,.012],[0,.77,.005],[-.023,.68,.012],[0,0,1]);
-  blade.quad([.023,.68,-.012],[-.023,.68,-.012],[0,.77,-.005],[.023,.68,-.012],[0,0,-1]);
-  hilt.box(0,.09,0,.19,.033,.057);hilt.box(0,-.11,0,.039,.20,.041);
+  for(const face of [-1,1]){
+   const z=face*.014,normal=[0,0,face];
+   blade.quad([-.055,.105,z],[.055,.105,z],[.041,.48,z],[-.041,.48,z],normal);
+   blade.quad([-.041,.48,z],[.041,.48,z],[0,.64,0],[0,.64,0],normal);
+   blade.quad([-.054,.11,z],[0,.11,z*1.6],[0,.58,z*1.1],[-.04,.48,z],[-.15,0,face]);
+  }
+  hilt.sphere(0,.07,0,.096,.026,.040,5,10);
+  hilt.box(0,-.104,0,.036,.18,.036);
+  hilt.sphere(0,-.147,0,.045,.04,.04,5,9);
   this.upperArm=this.mesh(upper,null,[.88,.63,.54]);this.lowerArm=this.mesh(lower,null,[.88,.63,.54]);
   this.sleeve=this.mesh(sleeve);this.hand=this.mesh(hand,null,[.93,.69,.60]);
   this.swordBlade=this.mesh(blade,null,[.76,.81,.81],.36);this.swordHilt=this.mesh(hilt,null,[.52,.37,.19]);
   this.props.push(this.remoteHead,this.remoteHair,this.remoteEyes,this.bodyAccent,this.bodyShoes,this.shoeSoles,this.hips,this.thigh,this.shin,this.upperArm,this.lowerArm,this.sleeve,this.hand,this.swordBlade,this.swordHilt);
-  const helmet=new Geometry(),armor=new Geometry(),plateTrim=new Geometry(),shield=new Geometry(),boss=new Geometry(),straps=new Geometry();
-  helmet.ellipsoid(0,1.28,.003,.196,.284,.18,7,14,b=>1.64+.31*Math.sin(b));
-  helmet.sphere(0,1.625,-.09,.185,.027,.105,5,12);
-  armor.sphere(0,.81,-.077,.237,.279,.114,8,14);
-  armor.sphere(0,.84,.077,.229,.255,.103,7,12);
-  for(const side of [-1,1]){
-   armor.sphere(side*.209,1.21,-.002,.093,.064,.134,6,10);
-   plateTrim.sphere(side*.13,1.23,-.136,.021,.065,.035,5,8);
-   plateTrim.sphere(side*.15,.94,-.149,.074,.015,.041,5,10);
+  const helmet=new Geometry(),crest=new Geometry(),armor=new Geometry(),plateTrim=new Geometry();
+  const shield=new Geometry(),shieldPaint=new Geometry(),boss=new Geometry(),straps=new Geometry();
+  helmet.ellipsoid(0,1.28,.003,.198,.284,.181,7,14,b=>1.64+.31*Math.sin(b));
+  helmet.sphere(0,1.625,-.09,.188,.027,.105,5,12);
+  helmet.sphere(0,1.57,.10,.203,.030,.11,5,10);
+  for(const side of [-1,1])helmet.sphere(side*.169,1.47,-.025,.034,.085,.08,5,10);
+  crest.sphere(0,1.827,.018,.045,.070,.186,5,11);
+  for(let row=0;row<5;row++){
+   const y=.82+row*.087,width=.209+row*.005;
+   armor.sphere(0,y,-.081,width,.055,.111,4,11);
+   armor.sphere(0,y,.076,width,.055,.097,4,11);
   }
-  plateTrim.sphere(0,.96,-.173,.039,.079,.031,6,10);
-  shield.sphere(0,-.32,-.045,.233,.32,.068,9,16);
-  boss.sphere(0,-.086,-.105,.089,.086,.039,6,12);
-  boss.sphere(0,-.285,-.054,.205,.285,.045,7,14);
-  for(const x of [-.082,.071])straps.sphere(x,-.153,.025,.023,.15,.031,6,9);
-  this.helmet=this.mesh(helmet,null,[.40,.52,.56],.2);
-  this.armor=this.mesh(armor,null,[.40,.52,.56],.18);
-  this.armorTrim=this.mesh(plateTrim,null,[.67,.54,.30],.25);
-  this.shieldRim=this.mesh(shield,null,[.68,.55,.32],.24);
-  this.shieldFace=this.mesh(boss,null,[.32,.43,.44],.27);
-  this.shieldStraps=this.mesh(straps,null,[.30,.23,.16],.13);
-  this.props.push(this.helmet,this.armor,this.armorTrim,this.shieldRim,this.shieldFace,this.shieldStraps);
+  for(const side of [-1,1]){
+   for(let layer=0;layer<3;layer++)armor.sphere(side*(.18+layer*.018),1.24-layer*.045,0,.087,.04,.126,4,9);
+   plateTrim.box(side*.105,.865,-.195,.022,.38,.014);
+   for(let row=0;row<4;row++)plateTrim.sphere(side*.106,.885+row*.087,-.208,.017,.015,.013,4,7);
+  }
+  // Curved rectangular scutum, with separate bronze rim and painted boards.
+  const board=(geo,width,halfHeight,offset)=>{
+   for(let i=0;i<8;i++){
+    const a=(i/4-1)*width,b=((i+1)/4-1)*width;
+    const z=x=>-.12+1.65*x*x+offset;
+    geo.quad([a,-halfHeight,z(a)],[b,-halfHeight,z(b)],[b,halfHeight,z(b)],[a,halfHeight,z(a)],[0,0,-1]);
+   }
+  };
+  board(shield,.23,.33,0);board(shieldPaint,.205,.302,-.008);board(shieldPaint,.205,.302,.008);
+  boss.sphere(0,-.066,-.128,.068,.066,.047,6,10);
+  for(const side of [-1,1])for(const y of [-.17,.17]){
+   const x=side*.158;boss.sphere(x,y-.023,-.102,.033,.022,.012,4,7);
+   boss.quad([x-.024,y,-.107],[x+.024,y,-.107],[side*.055,y*.46,-.132],[side*.075,y*.46,-.132],[0,0,-1]);
+  }
+  for(const x of [-.075,.07])straps.sphere(x,-.116,-.079,.023,.118,.033,6,9);
+  this.helmet=this.mesh(helmet,null,[.69,.52,.29],.23);
+  this.crest=this.mesh(crest,null,[.63,.16,.11],.24);
+  this.armor=this.mesh(armor,null,[.66,.64,.54],.18);
+  this.armorTrim=this.mesh(plateTrim,null,[.72,.49,.25],.25);
+  this.shieldRim=this.mesh(shield,null,[.69,.49,.23],.24);
+  this.shieldFace=this.mesh(shieldPaint,null,[.56,.12,.09],.24);
+  this.shieldBoss=this.mesh(boss,null,[.81,.62,.30],.27);
+  this.shieldStraps=this.mesh(straps,null,[.29,.17,.08],.13);
+  this.props.push(this.helmet,this.crest,this.armor,this.armorTrim,this.shieldRim,this.shieldFace,this.shieldBoss,this.shieldStraps);
   const mirrorRims=new Geometry();
   this.mirrorPanels=(world.mirrors||[]).map(mirror=>{
    const panel=new Geometry(),rim=mirrorCorners(mirror,.055),vertices=mirrorCorners(mirror).map(p=>[p.x,p.y,p.z]),normal=[mirror.nx,0,mirror.nz];
@@ -243,23 +275,38 @@ export class Renderer{
   if(!world.arena&&world.level>1){const entry=new Geometry(),ep={x:world.spawn.x-CELL/2+.06,z:world.spawn.z,dx:-1,dz:0},eb=doorBasis(ep),ev=(u,y)=>[ep.x+eb.rightX*u+.02,y,ep.z+eb.rightZ*u];entry.quad(ev(-.61,0),ev(.61,0),ev(.61,2.2),ev(-.61,2.2),[1,0,0]);const et=this.texture(doorTexture(world.level-1,'INDIETRO'));this.textures.push(et);this.entryMesh=this.mesh(entry,et);this.props.push(this.entryMesh)}else this.entryMesh=null;
   if(world.arena){
    const sky=new Geometry(),r=45,low=-20,high=40;sky.quad([-r,low,-r],[r,low,-r],[r,high,-r],[-r,high,-r],[0,0,1]);sky.quad([r,low,-r],[r,low,r],[r,high,r],[r,high,-r],[-1,0,0]);sky.quad([r,low,r],[-r,low,r],[-r,high,r],[r,high,r],[0,0,-1]);sky.quad([-r,low,r],[-r,low,-r],[-r,high,-r],[-r,high,r],[1,0,0]);sky.quad([-r,high,-r],[r,high,-r],[r,high,r],[-r,high,r],[0,-1,0]);this.skyMesh=this.mesh(sky,this.texture(skyCanvas()),[1,1,1],1);this.textures.push(this.skyMesh.texture);this.props.push(this.skyMesh);
-   const frame=new Geometry(),shelf=new Geometry(),glass=new Geometry(),pack=new Geometry(),blade=new Geometry(),guard=new Geometry(),nets=new Geometry(),springs=new Geometry();const c=world.showcase;
+   const frame=new Geometry(),shelf=new Geometry(),glass=new Geometry(),nets=new Geometry(),springs=new Geometry();const c=world.showcase;
    for(const dx of [-1.05,1.05])for(const dz of [-.48,.48])frame.box(c.x+dx,0,c.z+dz,.065,2.15,.065);
    frame.box(c.x,2.1,c.z,2.18,.08,1.05);frame.box(c.x,.1,c.z,2.18,.12,1.05);shelf.box(c.x,.85,c.z,2.04,.07,.94);shelf.box(c.x,.2,c.z-.47,2.02,1.87,.025);
    glass.quad([c.x-1.02,.23,c.z+.48],[c.x+1.02,.23,c.z+.48],[c.x+1.02,2.1,c.z+.48],[c.x-1.02,2.1,c.z+.48],[0,0,1]);
-   pack.sphere(c.x-.5,.9,c.z,.28,.39,.17);pack.box(c.x-.5,.95,c.z+.16,.34,.26,.08);for(const dx of [-.17,.17])guard.box(c.x-.5+dx,1.1,c.z-.15,.04,.34,.04);
-   blade.box(c.x+.45,.94,c.z,.065,.8,.025);guard.box(c.x+.45,1.72,c.z,.32,.035,.06);guard.box(c.x+.45,1.75,c.z,.065,.19,.065);
    for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth;for(const dx of [-hx,hx])springs.box(net.x+dx,0,net.z,.1,.48,hz*2+.1);for(const dz of [-hz,hz])springs.box(net.x,0,net.z+dz,hx*2+.1,.48,.1);
     for(let v=-hx+.15;v<hx;v+=.24)nets.box(net.x+v,.36,net.z,.025,.018,hz*2-.25);
     for(let v=-hz+.15;v<hz;v+=.24)nets.box(net.x,.36,net.z+v,hx*2-.25,.018,.025);
     for(let v=-hx+.15;v<hx;v+=.35)for(const side of [-1,1])springs.box(net.x+v,.32,net.z+side*(hz-.09),.045,.035,.19);
     for(let v=-hz+.15;v<hz;v+=.35)for(const side of [-1,1])springs.box(net.x+side*(hx-.09),.32,net.z+v,.19,.035,.045);
    }
-   const m=(g,color,emission=0)=>{const mesh=this.mesh(g,null,color,emission);this.props.push(mesh);return mesh};this.caseFrame=m(frame,[.28,.34,.35]);this.caseShelf=m(shelf,[.35,.38,.34]);this.caseGlass=m(glass,[.45,.75,.8],.2);this.pack=m(pack,[.27,.36,.22]);this.blade=m(blade,[.72,.76,.77]);this.guard=m(guard,[.3,.22,.12]);this.net=m(nets,[.17,.28,.25]);this.springs=m(springs,[.51,.59,.57]);
-   const stone=new Geometry(),wood=new Geometry(),green=new Geometry(),metal=new Geometry(),glow=new Geometry(),inlay=new Geometry();
-   for(const d of world.decor){if(d.type==='planter'){stone.box(d.x,0,d.z,1.3,.48,.86);for(let i=0;i<7;i++){const a=i/7*Math.PI*2;green.sphere(d.x+Math.cos(a)*.32,.40,d.z+Math.sin(a)*.2,.3,.22,.23,5,8)}stone.box(d.x,.43,d.z,1.38,.075,.94)}else if(d.type==='bench'){wood.box(d.x,.45,d.z,2.3,.1,.65);for(let i=0;i<3;i++)wood.box(d.x,.62+i*.16,d.z-.28,2.3,.105,.08);for(const dx of [-.8,.8])metal.box(d.x+dx,0,d.z,.12,.48,.5)}else{metal.box(d.x,0,d.z,.1,2.65,.1);glow.sphere(d.x,2.58,d.z,.15,.14,.15,5,8);metal.box(d.x,2.83,d.z,.34,.045,.34);metal.box(d.x,2.57,d.z,.27,.04,.27)}}
-   const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,pt=(angle,r)=>[o.cx+Math.cos(angle)*o.rx*r,.006,o.cz+Math.sin(angle)*o.rz*r];inlay.quad(pt(a,.72),pt(b,.72),pt(b,.727),pt(a,.727),[0,1,0])}
-   this.decorMeshes=[m(stone,[.38,.43,.42]),m(wood,[.37,.27,.17]),m(green,[.21,.34,.22]),m(metal,[.20,.27,.28]),m(glow,[1,.85,.53],.7),m(inlay,[.68,.68,.57])];
+   const m=(g,color,emission=0)=>{const mesh=this.mesh(g,null,color,emission);this.props.push(mesh);return mesh};this.caseFrame=m(frame,[.40,.27,.15]);this.caseShelf=m(shelf,[.47,.31,.18]);this.caseGlass=m(glass,[.78,.67,.5],.2);this.net=m(nets,[.45,.31,.19]);this.springs=m(springs,[.60,.39,.21]);
+   const architecture=colosseumMeshes(world,Geometry),{seats,stairs,wall,cornice,recess,archStone,cloth,gold,crowd,heads}=architecture;
+   this.colosseum=[
+    m(seats,[.77,.65,.49],.18),m(stairs,[.65,.53,.39]),m(wall,[.84,.71,.54],.14),
+    m(cornice,[.92,.81,.63],.21),m(recess,[.36,.28,.22]),m(archStone,[.93,.79,.58],.25),
+    m(cloth,[.56,.11,.085],.21),m(gold,[.85,.64,.29],.24)
+   ];
+   this.crowd=crowd.map((group,index)=>m(group,hexColor(CROWD_COLORS[index]),.16));
+   this.crowd.push(m(heads,[.72,.51,.34],.16));
+   const clay=new Geometry(),metal=new Geometry(),flame=new Geometry();
+   for(const d of world.decor){
+    if(d.type==='amphora'){
+     clay.sphere(d.x,.02,d.z,.34,.41,.31,6,11);
+     clay.sphere(d.x,.71,d.z,.155,.10,.148,5,9);
+     for(const sign of [-1,1])clay.sphere(d.x+sign*.296,.52,d.z,.066,.137,.062,5,8);
+    }else{
+     for(const sign of [-1,1])metal.box(d.x+sign*.22,0,d.z,.07,.9,.11);
+     metal.sphere(d.x,.75,d.z,.37,.11,.37,5,11);
+     flame.sphere(d.x,.93,d.z,.21,.15,.20,5,8);
+    }
+   }
+   this.decorMeshes=[m(clay,[.69,.32,.20]),m(metal,[.37,.25,.15]),m(flame,[1,.52,.17],.90)];
   }
 
  }
@@ -313,7 +360,7 @@ export class Renderer{
   const clip=reflected?[reflected.nx,0,reflected.nz,-(reflected.x*reflected.nx+reflected.z*reflected.nz)-.008]:[0,0,0,1];
   g.uniform4fv(u.uClip,clip);g.uniform2f(u.uMirrorScale,0,0);
   if(time-this.lightClock>.12||Math.hypot(player.x-(this.lightX||0),player.z-(this.lightZ||0))>.65){const nearest=this.world.lamps.map(p=>({p,d:(p.x-player.x)**2+(p.z-player.z)**2})).sort((a,b)=>a.d-b.d).slice(0,8),lights=new Float32Array(24).fill(9999);nearest.forEach(({p},i)=>lights.set([p.x,p.y,p.z],i*3));g.uniform3fv(u['uLights[0]'],lights);this.lightClock=time;this.lightX=player.x;this.lightZ=player.z}
-  g.uniform1f(u.uSky,0);if(this.world.arena){g.disable(g.DEPTH_TEST);g.depthMask(false);g.uniform1f(u.uSky,1);const sky=identity();sky[12]=player.x;sky[14]=player.z;this.drawMesh(this.skyMesh,sky);g.uniform1f(u.uSky,0);g.depthMask(true);g.enable(g.DEPTH_TEST)}
+  g.uniform1f(u.uCrowd,0);g.uniform1f(u.uSky,0);if(this.world.arena){g.disable(g.DEPTH_TEST);g.depthMask(false);g.uniform1f(u.uSky,1);const sky=identity();sky[12]=player.x;sky[14]=player.z;this.drawMesh(this.skyMesh,sky);g.uniform1f(u.uSky,0);g.depthMask(true);g.enable(g.DEPTH_TEST)}
   for(const mesh of this.meshes)this.drawMesh(mesh,identity());
   this.drawMesh(scene.doorOpen&&!this.world.arena?this.openExit:this.exitMesh,identity());if(this.entryMesh)this.drawMesh(this.entryMesh,identity());
   for(const frame of this.world.frames||[]){
@@ -334,7 +381,7 @@ export class Renderer{
    }
   }
   if(scene.appearance&&(reflected||player.pitch<-.45||scene.weapon||scene.shield||scene.guard||scene.swing)){
-   const me={...scene,player:{...player,height:Math.max(0,bob)}};
+   const me={...scene,player:{...player,height:Math.max(0,bob+(player.crouch?CROUCH_OFFSET:0))}};
    if(reflected){
     g.uniform3fv(u.uAmbient,pal.ambient.map(value=>Math.max(value,.24)));
     this.drawAvatar(me,scene.swing||0,scene.walk||0,false);
@@ -358,16 +405,23 @@ export class Renderer{
     g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND);
    }
   }
-  if(this.world.arena){for(const mesh of [this.net,this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());const boxes=scene.cases||[{...this.world.showcase,...scene,open:scene.showcaseOpen}];
-   for(const box of boxes){const model=identity();model[12]=box.x-this.world.showcase.x;model[14]=box.z-this.world.showcase.z;for(const mesh of [this.caseFrame,this.caseShelf])this.drawMesh(mesh,model);if(!box.backpack)this.drawMesh(this.pack,model);if(!box.swordTaken){this.drawMesh(this.blade,model);this.drawMesh(this.guard,model)}
+  if(this.world.arena){
+   for(const mesh of this.colosseum)this.drawMesh(mesh,identity());
+   g.uniform1f(u.uCrowd,scene.stillCrowd?0:1);
+   for(const mesh of this.crowd)this.drawMesh(mesh,identity());
+   g.uniform1f(u.uCrowd,0);
+   for(const mesh of [this.net,this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());const boxes=scene.cases||[{...this.world.showcase,...scene,open:scene.showcaseOpen}];
+   for(const box of boxes){const model=identity();model[12]=box.x-this.world.showcase.x;model[14]=box.z-this.world.showcase.z;for(const mesh of [this.caseFrame,this.caseShelf])this.drawMesh(mesh,model);
     const show=(meshes,x,y,scale)=>{
      const item=identity();item[0]=item[10]=-scale;item[5]=scale;
      item[12]=box.x+x;item[13]=y;item[14]=box.z+.04;
      for(const mesh of meshes)this.drawMesh(mesh,item);
     };
-    if(!box.helmet)show([this.helmet],-.68,-.48,.57);
+    if(!box.backpack)show([this.wornPack,this.packRoll],-.55,.36,.69);
+    if(!box.swordTaken)show([this.swordBlade,this.swordHilt],.47,1.18,.99);
+    if(!box.helmet)show([this.helmet,this.crest],-.68,-.48,.57);
     if(!box.armor)show([this.armor,this.armorTrim],0,-.21,.55);
-    if(!box.shieldTaken)show([this.shieldRim,this.shieldFace],.69,.54,.74);
+    if(!box.shieldTaken)show([this.shieldRim,this.shieldFace,this.shieldBoss],.69,.54,.74);
     if(!box.open){g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE_MINUS_SRC_ALPHA);g.depthMask(false);g.uniform1f(u.uAlpha,.24);this.drawMesh(this.caseGlass,model);g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND)}
    }
   }
@@ -395,10 +449,10 @@ export class Renderer{
   if(!firstPerson){
    this.drawMesh(this.bodyShirt,model);
    if(avatar.armor){this.drawMesh(this.armor,model);this.drawMesh(this.armorTrim,model)}
-   if(avatar.backpack)this.drawMesh(this.wornPack,model);
+   if(avatar.backpack){this.drawMesh(this.wornPack,model);this.drawMesh(this.packRoll,model)}
    const head=headTransform(model,p.pitch||0);
    for(const mesh of [this.remoteHead,this.remoteHair,...(details?[this.remoteEyes]:[])])this.drawMesh(mesh,head);
-   if(avatar.helmet)this.drawMesh(this.helmet,head);
+   if(avatar.helmet){this.drawMesh(this.helmet,head);this.drawMesh(this.crest,head)}
   }
   if(firstPerson&&!drawBody&&!avatar.weapon&&!avatar.shield&&!avatar.guard&&!swing)return;
   for(const side of [-1,1]){
@@ -410,10 +464,10 @@ export class Renderer{
    this.drawMesh(this.hand,multiply(model,limbModel(wrist,between(wrist,elbow,-.30))));
    if(side===-1&&avatar.shield){
     const shield=identity();shield[12]=wrist[0];shield[13]=wrist[1]-.04;shield[14]=wrist[2]-.063;
-    const held=multiply(model,shield);this.drawMesh(this.shieldRim,held);this.drawMesh(this.shieldFace,held);this.drawMesh(this.shieldStraps,held);
+    const held=multiply(model,shield);this.drawMesh(this.shieldRim,held);this.drawMesh(this.shieldFace,held);this.drawMesh(this.shieldBoss,held);this.drawMesh(this.shieldStraps,held);
    }
    if(side===1&&avatar.weapon==='sword'){
-    const weapon=identity(),tilt=avatar.guard?-.93:-.42-Math.sin(Math.PI*swing/.42)*.86;
+    const weapon=identity(),tilt=avatar.guard&&!swing?-.93:-.42-Math.sin(Math.PI*swing/.42)*.86;
     weapon[5]=weapon[10]=Math.cos(tilt);weapon[6]=Math.sin(tilt);weapon[9]=-weapon[6];
     weapon[12]=wrist[0];weapon[13]=wrist[1];weapon[14]=wrist[2]-.045;
     const held=multiply(model,weapon);this.drawMesh(this.swordBlade,held);this.drawMesh(this.swordHilt,held);
@@ -427,7 +481,7 @@ export class Renderer{
 class SoftwareRenderer{
  constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});if(!this.ctx)throw Error('Grafica non disponibile su questo dispositivo.');this.software=true;this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.quality='auto';this.depth=[];canvas.style.imageRendering='auto';this.resize()}
  resize(){const rect=this.canvas.getBoundingClientRect(),aspect=rect.width/Math.max(1,rect.height),target=this.quality==='high'?640:this.quality==='low'?320:480,w=Math.max(180,Math.floor(Math.min(target,360*aspect)*Math.max(.65,Math.min(1,this.resolutionScale||1)))),h=Math.max(100,Math.floor(w/aspect));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.image=this.ctx.createImageData(w,h)}}
- load(world){this.world=world;const generation=++this.generation;this.doorAxes=doorBasis(world.door);const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),maps=this.surfaces.preview(world.level);this.wall=maps.wall;this.floor=maps.floor;this.ceiling=maps.ceiling;this.surfaces.request(world.level).then(m=>{if(this.closed||generation!==this.generation||!m)return;this.wall=m.wall;this.floor=m.floor;this.ceiling=m.ceiling;this.surfaces.request(world.level===6?1:world.level+1)});this.door=pixels(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'));this.entry=pixels(doorTexture(world.level-1,'INDIETRO'));this.sky=pixels(skyCanvas());this.portal=world.arena?null:pixels(portalCanvas(world));this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
+ load(world){this.world=world;const generation=++this.generation;this.doorAxes=doorBasis(world.door);const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),maps=this.surfaces.preview(world.level);this.wall=maps.wall;this.floor=maps.floor;this.ceiling=maps.ceiling;this.surfaces.request(world.level).then(m=>{if(this.closed||generation!==this.generation||!m)return;this.wall=m.wall;this.floor=m.floor;this.ceiling=m.ceiling;this.surfaces.request(world.level===6?1:world.level+1)});this.door=pixels(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'));this.entry=pixels(doorTexture(world.level-1,'INDIETRO'));this.sky=pixels(skyCanvas());this.portal=world.arena?null:pixels(portalCanvas(world));this.arcade=world.arena?pixels(arcadeTile()):null;this.crowd=world.arena?crowdSeats(world):[];this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
 
  draw(p,hasKey,time,bob=0){
   this.resize();const pal=this.world.palette||FLOORS[Math.min(4,this.world.level-1)],fogColor=pal.fog.map(v=>v*255);const w=this.canvas.width,h=this.canvas.height,data=this.image.data,world=this.world,dirX=Math.sin(p.yaw),dirZ=-Math.cos(p.yaw),rightX=Math.cos(p.yaw),rightZ=Math.sin(p.yaw),proj=h/(2*Math.tan(72*Math.PI/360)),eye=1.62+bob,horizon=h/2+Math.tan(p.pitch)*proj,plane=w/(2*proj);
@@ -444,8 +498,28 @@ class SoftwareRenderer{
    const camera=x*2/w-1,rx=dirX+rightX*camera*plane,rz=dirZ+rightZ*camera*plane,px=p.x/CELL,pz=p.z/CELL;let mx=Math.floor(px),mz=Math.floor(pz),side=0,steps=0;
    const ddx=Math.abs(1/rx),ddz=Math.abs(1/rz),sx=rx<0?-1:1,sz=rz<0?-1:1;let sdX=(rx<0?px-mx:mx+1-px)*ddx,sdZ=(rz<0?pz-mz:mz+1-pz)*ddz;
    while(steps++<world.n*4){if(sdX<sdZ){sdX+=ddx;mx+=sx;side=0}else{sdZ+=ddz;mz+=sz;side=1}if(mx<0||mz<0||mx>=world.n||mz>=world.n||world.grid[mz*world.n+mx])break}
-   let dist=Math.max(.025,(side?sdZ-ddz:sdX-ddx)*CELL);if(world.oval){const o=world.oval,ox=p.x-o.cx,oz=p.z-o.cz,A=rx*rx/(o.rx*o.rx)+rz*rz/(o.rz*o.rz),B=2*(ox*rx/(o.rx*o.rx)+oz*rz/(o.rz*o.rz)),C=ox*ox/(o.rx*o.rx)+oz*oz/(o.rz*o.rz)-1;dist=Math.max(.025,(-B+Math.sqrt(Math.max(0,B*B-4*A*C)))/(2*A))}this.depth[x]=dist;
-   const top=horizon-(HEIGHT-eye)*proj/dist,bottom=horizon+eye*proj/dist,hitX=p.x+rx*dist,hitZ=p.z+rz*dist,wallU=((side?hitX:hitZ)/CELL*2)%1;
+   let dist=Math.max(.025,(side?sdZ-ddz:sdX-ddx)*CELL);
+   let wallHeight=HEIGHT;
+   if(world.oval){
+    const o=world.oval,ox=p.x-o.cx,oz=p.z-o.cz;
+    const distance=margin=>{
+     const a=o.rx+margin,b=o.rz+margin,A=(rx/a)**2+(rz/b)**2,B=2*(ox*rx/a**2+oz*rz/b**2),C=(ox/a)**2+(oz/b)**2-1;
+     return (-B+Math.sqrt(Math.max(0,B*B-4*A*C)))/(2*A);
+    };
+    dist=Math.max(.025,distance(0));wallHeight=STONE_HEIGHT-.30;
+    const far=Math.max(.025,distance(5.93)),hitAngle=Math.atan2((oz+rz*far)/(o.rz+5.93),(ox+rx*far)/(o.rx+5.93));
+    const bay=((hitAngle/(2*Math.PI)+1)*ARCH_BAYS)%ARCH_BAYS,arcade=this.arcade;
+    const tx=Math.min(127,Math.floor((bay%1)*128)),fog=Math.min(.49,far/130),scale=proj/far;
+    for(let y=Math.max(0,Math.ceil(horizon-(ARCADE_TOP-eye)*scale));y<Math.min(h,Math.ceil(horizon+(eye-2.15)*scale));y++){
+     const height=eye+(horizon-y)/scale,ty=Math.max(0,Math.min(255,Math.floor((1-(height-2.15)/(ARCADE_TOP-2.15))*256)));
+     const t=(ty*128+tx)*4,i=(y*w+x)*4;
+     const banner=Math.floor(bay)%4===0&&tx>51&&tx<76&&height>5.9&&height<8.4;
+     const border=banner&&(height<6.07||height>8.19||tx>61&&tx<67&&height>6.9&&height<7.5);
+     for(let k=0;k<3;k++)data[i+k]=(banner?(border?[217,174,85]:[137,39,29])[k]:arcade.data[t+k])*(1-fog)+fogColor[k]*fog;
+    }
+   }
+   this.depth[x]=dist;
+   const top=horizon-(wallHeight-eye)*proj/dist,bottom=horizon+eye*proj/dist,hitX=p.x+rx*dist,hitZ=p.z+rz*dist,wallU=((side?hitX:hitZ)/CELL*2)%1;
    const door=world.door,normalDistance=Math.abs((hitX-door.x)*door.dx+(hitZ-door.z)*door.dz),tangent=(hitX-door.x)*this.doorAxes.rightX+(hitZ-door.z)*this.doorAxes.rightZ,isDoor=normalDistance<.1&&Math.abs(tangent)<.61;
    const shade=(side ? .82 : .94)*Math.max(.32,1-dist*.024),fog=Math.min(.65,dist/55);
    for(let y=Math.max(0,Math.ceil(top));y<Math.min(h,Math.ceil(bottom));y++){
@@ -475,10 +549,18 @@ class SoftwareRenderer{
    c.beginPath();corners.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();
   }
   if(world.arena){
+   for(const person of this.crowd){
+    const sway=scene.stillCrowd?0:Math.sin(time*1.8+person.x*1.38+person.z*1.78);
+    const q=project(person.x+sway*.035,person.y+sway*.024,person.z);
+    if(q.depth<.65||q.x<0||q.x>=w)continue;
+    const width=person.width*q.scale,height=person.height*q.scale;
+    c.fillStyle=CROWD_COLORS[person.color];c.fillRect(q.x-width*.5,q.y-height,width,height);
+    c.fillStyle='#b99068';c.fillRect(q.x-q.scale*.09,q.y-height-q.scale*.18,q.scale*.18,q.scale*.18);
+   }
    for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth,pts=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>project(net.x+x,.36,net.z+z));
     // Clip the net polygon at the near plane so the surface remains visible while standing on it.
     let poly=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>({x:net.x+x,z:net.z+z})),out=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],da=(a.x-p.x)*dirX+(a.z-p.z)*dirZ,db=(b.x-p.x)*dirX+(b.z-p.z)*dirZ;if(da>=.08)out.push(a);if((da>=.08)!==(db>=.08)){const t=(.08-da)/(db-da);out.push({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t})}}poly=out;
-    if(poly.length>2){const points=poly.map(q=>project(q.x,.36,q.z));c.fillStyle='#233d3d';c.strokeStyle='#8b9890';c.lineWidth=2;c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();c.save();c.clip();c.strokeStyle='#92b1a66b';c.lineWidth=.6;
+    if(poly.length>2){const points=poly.map(q=>project(q.x,.36,q.z));c.fillStyle='#775234';c.strokeStyle='#b39265';c.lineWidth=2;c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();c.save();c.clip();c.strokeStyle='#dcbb7d77';c.lineWidth=.6;
      for(let v=-hx;v<=hx;v+=.32)netLine(net.x+v,net.z-hz,net.x+v,net.z+hz);for(let v=-hz;v<=hz;v+=.32)netLine(net.x-hx,net.z+v,net.x+hx,net.z+v);c.restore();
     }
    }
@@ -486,7 +568,26 @@ class SoftwareRenderer{
    for(const d of [...world.decor].sort((a,b)=>Math.hypot(b.x-p.x,b.z-p.z)-Math.hypot(a.x-p.x,a.z-p.z))){const q=project(d.x,0,d.z);if(q.depth<.2||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const sprite=decorSprite(d.type,pal);c.drawImage(sprite.canvas,q.x-sprite.width*q.scale/2,q.y-sprite.height*q.scale,sprite.width*q.scale,sprite.height*q.scale)}
    for(const box of scene.cases||[{...world.showcase,...scene,open:scene.showcaseOpen}]){const q=project(box.x,0,box.z);if(q.depth>.2&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const sprite=showcaseSprite(box,pal);c.drawImage(sprite,q.x-1.21*q.scale,q.y-2.32*q.scale,2.42*q.scale,2.36*q.scale)}}
   }
-  for(const remote of [...(scene.players||[])].sort((a,b)=>Math.hypot(b.player.x-p.x,b.player.z-p.z)-Math.hypot(a.player.x-p.x,a.player.z-p.z))){const r=remote.player,q=project(r.x,r.height||0,r.z);if(q.depth<.25||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const angle=Math.atan2(p.x-r.x,-(p.z-r.z))-r.yaw,view=Math.round(angle/(Math.PI/4)),sprite=avatarSprite(remote.appearance,remote.backpack,view,pal,{...remote,weapon:null});c.save();c.translate(q.x,q.y);c.scale(q.scale,q.scale);c.fillStyle='#0003';c.beginPath();c.ellipse(0,.005,.28,.065,0,0,Math.PI*2);c.fill();c.imageSmoothingEnabled=true;c.drawImage(sprite,-.58,-1.92,1.16,1.92);if(remote.weapon==='sword'&&!remote.guard){const age=((scene.serverNow||Date.now())-(remote.actionAt||0))/1000;c.strokeStyle=litColor('#b8c4c8',pal);c.lineWidth=.035;c.beginPath();c.moveTo(.28,-.79);c.lineTo(age>=0&&age<.42?-.28:.32,age>=0&&age<.42?-1.18:-1.6);c.stroke();c.strokeStyle=litColor('#8b713e',pal);c.lineWidth=.06;c.beginPath();c.moveTo(.19,-.94);c.lineTo(.39,-.94);c.stroke()}c.restore()}
+  for(const remote of [...(scene.players||[])].sort((a,b)=>Math.hypot(b.player.x-p.x,b.player.z-p.z)-Math.hypot(a.player.x-p.x,a.player.z-p.z))){
+   const r=remote.player,q=project(r.x,r.height||0,r.z);
+   if(q.depth<.25||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;
+   const angle=Math.atan2(p.x-r.x,-(p.z-r.z))-r.yaw,view=Math.round(angle/(Math.PI/4));
+   const age=((scene.serverNow||Date.now())-(remote.actionAt||0))/1000,attacking=age>=0&&age<.42;
+   const sprite=avatarSprite(remote.appearance,remote.backpack,view,pal,{...remote,weapon:attacking?null:remote.weapon});
+   c.save();c.translate(q.x,q.y);c.scale(q.scale,q.scale*(r.crouch?.72:1));c.fillStyle='#0003';
+   c.beginPath();c.ellipse(0,.005,.28,.065,0,0,Math.PI*2);c.fill();
+   c.imageSmoothingEnabled=true;c.drawImage(sprite,-.58,-1.92,1.16,1.92);
+   if(attacking){
+    const reach=Math.sin(age/.42*Math.PI),x=-.28+reach*.21,y=-.94-reach*.26;
+    c.lineCap='round';c.lineWidth=.105;c.strokeStyle=litColor('#e5b09a',pal);
+    c.beginPath();c.moveTo(-.25,-1.15);c.lineTo(x,y);c.stroke();
+    if(remote.weapon==='sword'){
+     c.lineWidth=.073;c.strokeStyle=litColor('#d4d8ca',pal);
+     c.beginPath();c.moveTo(x,y);c.lineTo(x-.25*reach,y-.54);c.stroke();
+    }
+   }
+   c.restore();
+  }
 
 
   if(scene.appearance)this.drawLocalArm(p,bob,scene,pal,project);
@@ -507,7 +608,7 @@ class SoftwareRenderer{
    const glass=c.createLinearGradient(0,top,0,bottom);glass.addColorStop(0,'#5d706f');glass.addColorStop(.57,'#384a4c');glass.addColorStop(1,'#45524e');
    c.fillStyle=glass;c.fillRect(0,top,w,bottom-top);
    const observer=reflectPoint(mirror,p),players=[...(scene.players||[])];
-   if(scene.appearance)players.push({...scene,player:{...p,height:Math.max(0,bob)}});
+   if(scene.appearance)players.push({...scene,player:{...p,height:Math.max(0,bob+(p.crouch?CROUCH_OFFSET:0))}});
    players.sort((a,b)=>mirrorSide(mirror,b.player)-mirrorSide(mirror,a.player));
    for(const avatar of players){
     const pose=avatar.player,distance=mirrorSide(mirror,pose);
@@ -519,7 +620,7 @@ class SoftwareRenderer{
     if(q.depth<.15||(r.x-p.x)*dirX+(r.z-p.z)*dirZ<=0)continue;
     const view=(Math.atan2(observer.x-pose.x,-(observer.z-pose.z))-pose.yaw)/(Math.PI/4);
     const sprite=avatarSprite(avatar.appearance,avatar.backpack,view,pal,avatar);
-    c.save();c.translate(q.x,q.y);c.scale(-q.scale,q.scale);
+    c.save();c.translate(q.x,q.y);c.scale(-q.scale,q.scale*(pose.crouch?.72:1));
     c.drawImage(sprite,-.58,-1.92,1.16,1.92);c.restore();
    }
    c.restore();
@@ -527,8 +628,8 @@ class SoftwareRenderer{
  }
  drawLocalArm(p,bob,scene,pal,project){
   if(!scene.weapon&&!scene.shield&&!scene.guard&&!scene.swing&&p.pitch>-.45)return;
-  const c=this.ctx,sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),height=Math.max(0,bob);
-  const toScreen=([x,y,z])=>project(p.x+cy*x-sy*z,y+height,p.z+sy*x+cy*z);
+  const c=this.ctx,sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),height=Math.max(0,bob+(p.crouch?CROUCH_OFFSET:0));
+  const toScreen=([x,y,z])=>project(p.x+cy*x-sy*z,y*(p.crouch?.72:1)+height,p.z+sy*x+cy*z);
   const segment=(from,to,width,color)=>{
    let a=toScreen(from),b=toScreen(to);
    if(a.depth<=.09&&b.depth<=.09)return;
@@ -545,12 +646,12 @@ class SoftwareRenderer{
    const sleeveEnd=between(shoulder,elbow,.58),fingers=between(wrist,elbow,-.25);
    segment(shoulder,sleeveEnd,.17,scene.appearance.shirt);
    segment(sleeveEnd,elbow,.125,'#d29c88');segment(elbow,wrist,.108,'#d29c88');segment(wrist,fingers,.10,'#e0ab97');
-   if(side===1&&scene.weapon==='sword')segment(wrist,[wrist[0],wrist[1]+.69,wrist[2]-.16],.044,'#c1ccce');
+   if(side===1&&scene.weapon==='sword')segment(wrist,[wrist[0],wrist[1]+.56,wrist[2]-.16],.083,'#d4d8ca');
    if(side===-1&&scene.shield){
     const q=toScreen([wrist[0],wrist[1]-.04,wrist[2]-.11]);
     if(q.depth>.1){
-     c.beginPath();c.ellipse(q.x,q.y,q.scale*.19,q.scale*.25,0,0,Math.PI*2);
-     c.fillStyle=litColor('#506b71',pal,1.25);c.fill();c.strokeStyle=litColor('#b3a16d',pal,1.2);
+     c.beginPath();c.roundRect(q.x-q.scale*.2,q.y-q.scale*.27,q.scale*.4,q.scale*.54,q.scale*.035);
+     c.fillStyle=litColor('#8f362a',pal,1.25);c.fill();c.strokeStyle=litColor('#c4a068',pal,1.2);
      c.lineWidth=q.scale*.024;c.stroke();
     }
    }

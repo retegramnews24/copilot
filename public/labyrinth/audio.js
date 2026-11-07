@@ -1,13 +1,42 @@
 export class Atmosphere{
- constructor(enabled=true){this.enabled=enabled;this.running=false;this.ctx=null}
+ constructor(enabled=true){this.enabled=enabled;this.running=false;this.arena=false;this.ctx=null}
  init(){if(this.ctx)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;try{
   const c=this.ctx=new AC(),master=this.master=c.createGain();master.gain.value=0;master.connect(c.destination);
-  const hum=c.createGain();hum.gain.value=.035;hum.connect(master);for(const f of [55,110,165]){const o=c.createOscillator();o.type='sine';o.frequency.value=f;o.connect(hum);o.start()}
+  const maze=this.mazeAmbience=c.createGain();maze.gain.value=this.arena?0:1;maze.connect(master);
+  const arena=this.arenaAmbience=c.createGain();arena.gain.value=this.arena?1:0;arena.connect(master);
+  const hum=c.createGain();hum.gain.value=.035;hum.connect(maze);for(const f of [55,110,165]){const o=c.createOscillator();o.type='sine';o.frequency.value=f;o.connect(hum);o.start()}
   const buffer=c.createBuffer(1,c.sampleRate*2,c.sampleRate),data=buffer.getChannelData(0);let last=0;for(let i=0;i<data.length;i++){last=(last+(Math.random()*2-1)*.08)/1.03;data[i]=last}this.noiseBuffer=buffer;
-  const wind=c.createBufferSource();wind.buffer=buffer;wind.loop=true;const filter=c.createBiquadFilter();filter.type='lowpass';filter.frequency.value=650;const gain=c.createGain();gain.gain.value=.025;wind.connect(filter);filter.connect(gain);gain.connect(master);wind.start();
+  const wind=c.createBufferSource();wind.buffer=buffer;wind.loop=true;const filter=c.createBiquadFilter();filter.type='lowpass';filter.frequency.value=650;const gain=c.createGain();gain.gain.value=.025;wind.connect(filter);filter.connect(gain);gain.connect(maze);wind.start();
+  const rate=12000,duration=10,crowd=c.createBuffer(1,rate*duration,rate),voices=crowd.getChannelData(0);
+  let air=0,low=0;
+  for(let i=0;i<voices.length;i++){
+   const t=i/rate,phase=t*Math.PI*2/duration,noise=Math.random()*2-1;
+   air+=(noise-air)*.35;low+=(air-low)*.09;
+   const swell=.6+.19*Math.sin(phase*3)+.12*Math.sin(phase*7+.8);
+   voices[i]=(air-low)*swell;
+  }
+  for(const [start,length,pitch,volume] of [[.75,.92,157,.026],[2.42,.55,233,.020],[4.35,1.14,189,.032],[4.63,.83,271,.022],[7.38,.64,205,.026],[8.28,.9,146,.024]]){
+   for(let i=Math.round(start*rate);i<(start+length)*rate;i++){
+    const t=i/rate-start,phase=2*Math.PI*(pitch*t+18*t*t);
+    const envelope=Math.sin(Math.PI*t/length)**2;
+    voices[i]+=volume*envelope*(Math.sin(phase)+.38*Math.sin(phase*2)+.21*Math.sin(phase*3));
+   }
+  }
+  const murmur=c.createBufferSource();murmur.buffer=crowd;murmur.loop=true;
+  const distance=c.createBiquadFilter();distance.type='bandpass';distance.frequency.value=840;distance.Q.value=.57;
+  const crowdGain=c.createGain();crowdGain.gain.value=.34;
+  murmur.connect(distance);distance.connect(crowdGain);crowdGain.connect(arena);murmur.start();
  }catch{this.ctx=null}}
  resume(){if(!this.enabled)return;this.init();this.ctx?.resume().catch(()=>{});this.active(this.running)}
  active(value){this.running=value;if(this.ctx)this.master.gain.setTargetAtTime(this.enabled&&value ? .7 : 0,this.ctx.currentTime,.1)}
+ setArena(value){
+  if(this.arena===value)return;
+  this.arena=value;
+  if(this.ctx){
+   this.mazeAmbience.gain.setTargetAtTime(value?0:1,this.ctx.currentTime,.24);
+   this.arenaAmbience.gain.setTargetAtTime(value?1:0,this.ctx.currentTime,.24);
+  }
+ }
  toggle(){this.enabled=!this.enabled;if(this.enabled)this.resume();this.active(this.running);return this.enabled}
  layer({duration,volume,attack=.009,from,to=from,type='sine',noise=false,delay=0}){
   if(!this.enabled||!this.running||!this.ctx)return;
@@ -27,10 +56,10 @@ export class Atmosphere{
   if(noise)source.start(t,Math.random()*1.3);else source.start(t);
   source.stop(t+duration+.01);
  }
- step(fast=false){
+ step(fast=false,quiet=false){
   const pitch=.85+Math.random()*.32;
-  this.layer({noise:true,type:'lowpass',from:(fast?660:495)*pitch,to:290,duration:fast?.12:.16,volume:fast?.19:.12});
-  this.layer({from:95*pitch,to:44,duration:.087,volume:fast?.072:.04});
+  this.layer({noise:true,type:'lowpass',from:(this.arena?920:fast?660:495)*pitch,to:this.arena?410:290,duration:fast?.12:.16,volume:quiet?.065:fast?.19:.12});
+  this.layer({from:95*pitch,to:44,duration:.087,volume:quiet?.025:fast?.072:.04});
  }
  jump(spring=false){
   this.layer({noise:true,type:'bandpass',from:480,to:spring?1500:950,duration:.15,volume:.14});

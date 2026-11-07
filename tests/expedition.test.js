@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,GRACE,STALE} from '../expedition-model.js';
-import {itemsAt,floorState} from '../public/labyrinth/adventure.js';
+import {itemsAt,floorState,STANDS_WAIT,standsView} from '../public/labyrinth/adventure.js';
 import {free,distances,index,CELL,PLAYER_CLEARANCE} from '../public/labyrinth/core.js';
+import {ExpeditionRoom} from '../labyrinth-server.js';
 import {framePose} from '../public/labyrinth/traps.js';
 const user=i=>({id:String(i),name:'Pilota '+i});let now=1000000;
 const s=createExpedition('room',1,71,user(1),now);for(let i=2;i<=4;i++)joinExpedition(s,user(i),now);for(let i=1;i<=4;i++)connectPlayer(s,String(i),'conn'+i,now);
@@ -105,12 +106,45 @@ guard(true);hit();assert.equal(defender.health,79);
 Object.assign(defender,{inventory:[null,'shield'],helmet:true,armor:true});
 guard(true);hit();assert.equal(defender.health,77);
 guard(false);hit();assert.equal(defender.health,75);
+attacker.guard=true;hit();assert.equal(defender.health,73,'The right hand attacks while the left stays on guard');
+assert.equal(attacker.guard,true);
 defender.health=2;const beforeWarp=defender.warp||0;
-hit();assert.equal(defender.health,100);assert.equal(defender.impact.fatal,true);
+hit();assert.equal(defender.health,0);assert.equal(defender.impact.fatal,true);
 assert.equal(defender.warp,beforeWarp+1);assert.equal(defender.level,6);
+assert.deepEqual(defender.player,standsView(arena,defender.caseIndex));
+assert.equal(defender.standsUntil,now+STANDS_WAIT);
+assert.throws(()=>act(duel,defender,{kind:'strike'},now+100),/spalti/);
+const seat={...defender.player};
+assert.equal(pose(duel,defender,{seq:defender.seq+1,x:10,z:10,yaw:1,pitch:.3,height:5,crouch:true,guard:true},now+200),true);
+assert.deepEqual(defender.player,{...seat,yaw:1,pitch:.3});
+assert.equal(defender.guard,false);
+const end=defender.standsUntil;sweep(duel,end-1);assert.equal(defender.standsUntil,end);
+const saved=JSON.parse(JSON.stringify(duel));sweep(saved,end);assert.equal(saved.players['2'].health,100);
+assert.equal(sweep(duel,end),true);now=end;
+assert.equal(defender.standsUntil,undefined);assert.equal(defender.health,100);assert.equal(defender.warp,beforeWarp+2);
 assert.equal(defender.player.x,arena.spawn.x);assert.equal(defender.player.z,arena.spawn.z);
 assert.deepEqual(defender.inventory,[null,'shield']);assert.equal(defender.helmet,true);assert.equal(defender.armor,true);
 at(defender,{x:origin.x,z:origin.z-1});hit();assert.equal(defender.health,100,'Brief spawn protection applies');
 at(defender,{x:origin.x,z:origin.z-1});defender.player.height=2;hit();hit();assert.equal(defender.health,100,'A jumping player beyond the reach is missed');
 assert.equal(act(duel,attacker,{kind:'strike'},now+5),false);
-console.log('PASS Labyrinth combat: authoritative weapon, frontal blocks, exact damage, protected same-floor respawn, intact gear and cooldown.');
+assert.equal(pose(duel,defender,{seq:defender.seq+1,x:defender.player.x,z:defender.player.z,yaw:0,pitch:0,height:0,crouch:true},now+10),true);
+assert.equal(defender.player.crouch,true);
+assert.equal(pose(duel,defender,{seq:defender.seq+1,x:defender.player.x+.65,z:defender.player.z,yaw:0,pitch:0,height:0,crouch:true},now+140),false);
+console.log('PASS Labyrinth combat: guarded attacks, five seconds in the stands with head-only movement, persistent respawn, crouch speed and intact gear.');
+
+let scheduled,stored,broadcast;
+const ctx={storage:{
+ getAlarm:async()=>scheduled,setAlarm:async value=>{scheduled=value},
+ put:async(_key,value)=>{stored=structuredClone(value)}
+},blockConcurrencyWhile:task=>task(),getWebSockets:()=>[{deserializeAttachment:()=>({accessTag:'test'}),send:payload=>{broadcast=JSON.parse(payload)}}]};
+const env={ROOMS:{idFromName:()=>'',get:()=>({fetch:async()=>({ok:true})})}};
+const expedition=new ExpeditionRoom(ctx,env,async()=>'test');
+expedition.state=duel;
+const wallClock=Date.now();
+for(const p of Object.values(duel.players))p.lastSeen=wallClock;
+defender.standsUntil=wallClock+STANDS_WAIT;defender.health=0;
+await expedition.schedule();assert.equal(scheduled,defender.standsUntil);
+defender.standsUntil=wallClock-1;
+await expedition.alarm();
+assert.equal(stored.players['2'].health,100);assert.equal(stored.players['2'].standsUntil,undefined);
+assert.equal(broadcast.state.players.find(p=>p.id==='2').health,100);

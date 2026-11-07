@@ -1,4 +1,4 @@
-import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,FRAME_DAMAGE} from './public/labyrinth/adventure.js';
+import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,FRAME_DAMAGE,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
 import {crossedDoor,free,move,RADIUS} from './public/labyrinth/core.js';
 import {struckFrame,settledFrames,triggerFrames} from './public/labyrinth/traps.js';
 export const GRACE=60000,STALE=45000,MAX_PLAYERS=16;
@@ -41,7 +41,7 @@ export function joinExpedition(s,user,now){
  p.counted=true;barrier(s);s.revision++;return p;
 }
 export function barrier(s){
- const arena=expeditionWorld(s,6);for(const p of Object.values(s.players))if(p.level===6&&!free(arena,p.player.x,p.player.z))relocate(p,arena.spawn,p.lastMove);
+ const arena=expeditionWorld(s,6);for(const p of Object.values(s.players))if(p.level===6&&!p.standsUntil&&!free(arena,p.player.x,p.player.z))relocate(p,arena.spawn,p.lastMove);
  if(s.showcaseOpen||s.archived)return;const members=participants(s),arrived=members.filter(p=>p.level===6);
  if(arrived.length&&members.length>1){s.entryLocked=true;if(arrived.length===members.length&&members.every(p=>p.online)){s.showcaseOpen=true;s.entryLocked=true}}
  else if(members.length<=1)s.entryLocked=false;
@@ -49,11 +49,14 @@ export function barrier(s){
 export function connectPlayer(s,id,connection,now){const p=s.players[id];if(!p)return;p.online=true;p.guard=false;p.counted=true;p.offlineAt=null;p.lastSeen=now;p.lastMove=now;p.connection=connection;barrier(s);s.revision++}
 export function disconnectPlayer(s,id,connection,now){const p=s.players[id];if(!p||p.connection!==connection)return;p.online=false;p.guard=false;p.offlineAt=now;s.revision++;barrier(s)}
 export function sweep(s,now){if(s.archived||s.deleted)return false;let changed=false;for(const p of Object.values(s.players)){
+ if(p.standsUntil&&now>=p.standsUntil){
+  delete p.standsUntil;relocate(p,expeditionWorld(s,6).spawn,now);p.health=100;p.protectedUntil=now+1250;changed=true;
+ }
  if(p.online&&now-p.lastSeen>=STALE){p.online=false;p.guard=false;p.offlineAt=p.lastSeen+STALE;changed=true}
  if(!p.online&&p.counted&&now-(p.offlineAt??now)>=GRACE){const w=expeditionWorld(s,p.level),r=runFor(s,p);for(let i=p.inventory.length-1;i>=0;i--)if(p.inventory[i]!=='sword')drop(r,w,i,free(w,p.player.x,p.player.z)?p.player:w.spawn);p.counted=false;changed=true}
  }if(changed){barrier(s);s.revision++}return changed}
 function relocate(p,position,now){
- p.player={...position,pitch:0,height:0};
+ p.player={height:0,pitch:0,...position};
  p.guard=false;
  p.lastMove=now;
  p.warp=(p.warp||0)+1;
@@ -62,15 +65,22 @@ export function pose(s,p,b,now){
  if(s.archived||!p.online||!Number.isInteger(b.seq)||b.seq<=p.seq)return false;
  if((b.level!==undefined&&b.level!==p.level)||(b.warp!==undefined&&b.warp!==(p.warp||0)))return false;
  if(![b.x,b.z,b.yaw,b.pitch].every(Number.isFinite))return false;
+ const yaw=Math.atan2(Math.sin(b.yaw),Math.cos(b.yaw)),pitch=Math.max(-1.15,Math.min(1.15,b.pitch));
+ if(p.standsUntil){
+  p.seq=b.seq;p.lastSeen=now;p.lastMove=now;
+  Object.assign(p.player,{yaw,pitch});
+  return true;
+ }
  const previous=p.player,dx=b.x-previous.x,dz=b.z-previous.z,distance=Math.hypot(dx,dz);
  const elapsed=Math.max(.025,Math.min(.7,(now-p.lastMove)/1000));
+ const speed=previous.crouch&&b.crouch===true?1.55:4.1;
  p.lastSeen=now;
- if(distance>4.1*elapsed+.16)return false;
+ if(distance>speed*elapsed+.16)return false;
 
  const w=expeditionWorld(s,p.level),floor=floorState(runFor(s,p),w);
  const height=Number.isFinite(b.height)?Math.max(0,Math.min(w.arena?7.2:.92,b.height)):0;
- const people=Object.values(s.players).filter(other=>other!==p&&other.online&&other.level===p.level).map(other=>other.player);
- const candidate={...previous,height};
+ const people=Object.values(s.players).filter(other=>other!==p&&other.online&&!other.standsUntil&&other.level===p.level).map(other=>other.player);
+ const candidate={...previous,height,crouch:b.crouch===true&&height<.06};
  move(w,candidate,dx,dz,{doorOpen:floor.open,people,frames:settledFrames(w,floor,now),height,fromHeight:previous.height||0});
  p.seq=b.seq;
  const triggered=triggerFrames(w,floor,candidate,now);
@@ -85,7 +95,7 @@ export function pose(s,p,b,now){
   p.level++;relocate(p,expeditionWorld(s,p.level).spawn,now);barrier(s);s.revision++;
   return 'level';
  }
- p.player={...candidate,yaw:Math.atan2(Math.sin(b.yaw),Math.cos(b.yaw)),pitch:Math.max(-1.15,Math.min(1.15,b.pitch))};
+ p.player={...candidate,yaw,pitch};
  p.guard=b.guard===true;
  p.lastMove=now;
  if(triggered||frame){s.revision++;return 'trap'}
@@ -94,17 +104,18 @@ export function pose(s,p,b,now){
 const near=(p,t,d)=>Math.hypot(p.player.x-t.x,p.player.z-t.z)<d;
 const facing=(p,t)=>{const dx=t.x-p.player.x,dz=t.z-p.player.z;return (dx*Math.sin(p.player.yaw)-dz*Math.cos(p.player.yaw))/Math.max(.001,Math.hypot(dx,dz))>.65};
 function strike(s,p,w,floor,now){
- if(p.guard||now-(p.actionAt??-Infinity)<550)return false;
+ if(now-(p.actionAt??-Infinity)<550)return false;
  const kind=equipment(p).weapon||'fist',reach=kind==='sword'?1.8:1.25;
  const from=p.player;
- const candidates=Object.values(s.players).filter(other=>other!==p&&other.online&&other.level===p.level)
+ const candidates=Object.values(s.players).filter(other=>other!==p&&other.online&&!other.standsUntil&&other.level===p.level)
   .map(other=>({other,distance:Math.hypot(other.player.x-from.x,other.player.z-from.z)}))
   .sort((a,b)=>a.distance-b.distance);
  p.actionAt=now;
  for(const {other,distance} of candidates){
   if(distance>reach)break;
   const to=other.player;
-  if(Math.abs((from.height||0)-(to.height||0))>.85||!facing(p,to))continue;
+  const stanceHeight=position=>(position.height||0)-(position.crouch?CROUCH_OFFSET:0);
+  if(Math.abs(stanceHeight(from)-stanceHeight(to))>.85||!facing(p,to))continue;
   let clear=true;
   for(let t=.05;t<1;t+=.05){
    if(!free(w,from.x+(to.x-from.x)*t,from.z+(to.z-from.z)*t,.04,floor.open)){clear=false;break}
@@ -115,7 +126,12 @@ function strike(s,p,w,floor,now){
   const impact=takeDamage(other,kind,damage,now,p.id);
   if(impact){
    impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||damage===2&&kind==='sword');
-   if(impact.fatal)relocate(other,w.spawn,now);
+   if(impact.fatal){
+    if(w.arena){
+     other.health=0;other.standsUntil=now+STANDS_WAIT;
+     relocate(other,standsView(w,other.caseIndex),now);
+    }else relocate(other,w.spawn,now);
+   }
   }
   break;
  }
@@ -124,6 +140,7 @@ function strike(s,p,w,floor,now){
 function aimCard(p,t){return near(p,t,.38)||(p.player.pitch<-.35&&facing(p,t))}
 export function act(s,p,b,now){
  if(!p||!p.online||s.archived||s.deleted)fail('Non puoi agire in questa spedizione.');
+ if(p.standsUntil&&b.kind!=='appearance')fail('Sei sugli spalti. Attendi il rientro.');
  const w=expeditionWorld(s,p.level),r=runFor(s,p);floorState(r,w);
  if(b.kind==='pickup'){const item=itemsAt(r,w).find(i=>i.id===b.item);if(!item||!near(p,item,item.type==='pass'?.95:1.25)||!aimCard(p,item))fail('Avvicinati alla carta e guardala.');if(pickup(r,w,item.id)!=='ok')fail('Inventario pieno o carta già raccolta.');}
  else if(b.kind==='drop'){if(!Number.isInteger(b.slot)||!drop(r,w,b.slot,p.player))fail('Oggetto non lasciabile.');}
