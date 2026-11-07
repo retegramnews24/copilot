@@ -24,13 +24,22 @@ try{
   if(s.turn!==0)s=await until(c,p=>p.turn===0&&p.revision>s.revision);
   s=(await call(uid,'/api/room/'+room+'/state')).data;const v=s.naval||s.briscola||s[game]||s.chess;if(mode==='tutorial'){assert.ok(s.tutorial.text);assert.ok(s.tutorial.action)}const a=chooseAction(game,v,0);let moved=await call(uid,'/api/room/'+room+'/move',{...a,revision:s.revision});assert.equal(moved.status,200,game+' '+JSON.stringify(moved));
   const before=moved.data.revision;if(game==='scarabeo')await until(c,p=>p.revision>before);else if(moved.data.turn!==0||game==='naval'&&!moved.data.naval.ready[1])await until(c,p=>p.revision>before);
-  const latest=(await call(uid,'/api/room/'+room+'/state')).data;assert.ok(latest.revision>=before);console.log('PASS runtime solo',mode,game);
+  const latest=(await call(uid,'/api/room/'+room+'/state')).data;assert.ok(latest.revision>=before);
+  if(mode==='ai'&&game==='chess'){
+   const position={...moved.data.chess,moves:moved.data.moves};
+   const strong=chooseAction(game,position,1,true),tutorialMove=chooseAction(game,position,1);
+   assert.notDeepEqual(strong,tutorialMove);
+   assert.equal(latest.moves.at(-1).from,strong.from);
+   assert.equal(latest.moves.at(-1).to,strong.to);
+  }
+  console.log('PASS runtime solo',mode,game);
  }
  // Four-seat human Scopa, atomic private projections and join bounds.
  const four=await call(3000,'/api/create',{game:'scopa'}),fourRoom=four.data.state.room;assert.equal(four.status,200);for(let i=1;i<4;i++)assert.equal((await call(3000+i,'/api/room/'+fourRoom+'/claim',{})).status,200);assert.equal((await call(3004,'/api/room/'+fourRoom+'/claim',{})).status,409);let fourState=(await call(3000,'/api/room/'+fourRoom+'/state')).data;fourState=(await call(3000,'/api/room/'+fourRoom+'/start',{revision:fourState.revision})).data;assert.equal(fourState.scopa.hand.length,3);assert.equal(fourState.scopa.table.length,4);assert.deepEqual((await call(3999,'/api/room/'+fourRoom+'/state')).data.scopa.hand,[]);const take=fourState.scopa.legalMoves[0];assert.equal((await call(3001,'/api/room/'+fourRoom+'/move',{...take,revision:fourState.revision})).status,403);assert.equal((await call(3000,'/api/room/'+fourRoom+'/move',{...take,revision:fourState.revision})).status,200);
  // Complete real two-player result, deduplication, deletion and persistence.
  let made=await call(2000,'/api/create',{game:'connect4'}),r=made.data.state.room,s=(await call(2001,'/api/room/'+r+'/claim',{})).data.state;
  for(const column of [0,0,1,1,2,2,3]){const result=await call(s.turn===0?2000:2001,'/api/room/'+r+'/move',{column,revision:s.revision});assert.equal(result.status,200);s=result.data}
+ assert.equal(s.expires-s.finishedAt,5*60*1000);
  for(let i=0;i<3;i++)await call(2000,'/api/room/'+r+'/state');let leaders=(await call(2000,'/api/leaderboard')).data.leaders;assert.equal(leaders.find(p=>p.id==='tg:2000').wins,1);assert.equal(leaders.find(p=>p.id==='tg:2000').games.connect4,1);assert.ok(!leaders.some(p=>p.id.startsWith('bot:')));
  assert.equal((await call(2002,'/api/room/'+r+'/rematch',{revision:s.revision})).status,403);
  const again=await call(2000,'/api/room/'+r+'/rematch',{revision:s.revision});
@@ -52,6 +61,13 @@ try{
  assert.equal((await call(2000,'/api/room/'+r+'/delete',{revision:second.revision})).status,200);
  leaders=(await call(2000,'/api/leaderboard')).data.leaders;
  assert.equal(leaders.find(p=>p.id==='tg:2000').wins,2);
+ const toKeep=(await call(2200,'/api/create',{game:'scopa'})).data.state;
+ const keepPath='/api/room/'+toKeep.room;
+ const closed=(await call(2200,keepPath+'/finish',{revision:toKeep.revision})).data;
+ const kept=await call(2200,keepPath+'/archive',{revision:closed.revision});
+ assert.equal(kept.status,200);
+ assert.equal(kept.data.archived,true);
+ assert.equal(kept.data.expires,null);
  const solo=(await call(2100,'/api/create',{game:'scopa',mode:'tutorial',seats:4})).data.state;
  const finished=(await call(2100,'/api/room/'+solo.room+'/finish',{revision:solo.revision})).data;
  const soloAgain=await call(2100,'/api/room/'+solo.room+'/rematch',{revision:finished.revision});
@@ -61,6 +77,7 @@ try{
  assert.equal(soloAgain.data.state.players.filter(p=>p.bot).length,3);
 
  for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();mf=new Miniflare(options);leaders=(await call(2000,'/api/leaderboard')).data.leaders;assert.equal(leaders.find(p=>p.id==='tg:2000').wins,2);assert.equal((await call(2000,'/api/leaderboard?mode=ai')).data.leaders.some(p=>p.id==='tg:2000'),false);
+ assert.equal((await call(2200,keepPath+'/state')).data.archived,true);
  assert.equal((await call(2000,'/api/create',{game:'cluedo'})).status,400);assert.equal((await call(2000,'/api/create',{game:'scopa',mode:'invalid'})).status,400);assert.equal((await call(2002,'/api/create',{game:'scopa',mode:'ai',target:3})).status,400);
  console.log('PASS ranking runtime: authenticated result, HTTP deduplication, deletion survival, SQLite restart, AI isolation, Cluedo removed, solo tournament rejected.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

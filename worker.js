@@ -157,14 +157,17 @@ export default {
   if(response.ok&&(req.method==='POST'||match[2]==='state')){
    const result=await response.clone().json();
    const s=result.state||result;
-   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires})}));
+   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,finishedAt:s.finishedAt})}));
   }
   return response;
  }
 };
+const FINISHED_TABLE_TTL=5*60*1000;
+const needsRetention=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived&&!table.finishedAt;
+
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));}
- public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
+ public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires,finishedAt:s.finishedAt}}
  newTable(room,b,token){
   const game=b.game??'chess';
   const s={
@@ -204,7 +207,18 @@ export class Room extends DurableObject {
  tutorialView(s){const seat=0,view=this.public({...s,mode:'ai'},s.players[0].id),g=view.naval||view.briscola||view[s.game]||view.chess;const can=s.scarabeo?.pending?s.scarabeo.pending.by!==0&&!Object.hasOwn(s.scarabeo.pending.votes,0):s.naval?.phase==='placement'?!s.naval.ready[0]:s.turn===0;return can?tutorial(s.game,g,seat,s.moves.length):{title:'Turno dell’AI',text:'Osserva la risposta dell’avversario. Poi potrai scegliere liberamente o provare la mossa suggerita.',reason:g.lastEvent||'',action:null};}
  botSeat(s){if(s.phase!=='playing'||!['ai','tutorial'].includes(s.mode))return -1;if(s.scarabeo?.pending)return s.players.findIndex((p,i)=>p.bot&&i!==s.scarabeo.pending.by&&!Object.hasOwn(s.scarabeo.pending.votes,i));if(s.naval?.phase==='placement')return s.players.findIndex((p,i)=>p.bot&&!s.naval.ready[i]);return s.players[s.turn]?.bot?s.turn:-1;}
  async record(s){for(const result of resultsFor(s))await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/result',{method:'POST',body:JSON.stringify(result)}));}
- async saveState(s){await this.ctx.storage.put('state',s);await this.record(s);if(!s.archived)await this.ctx.storage.setAlarm(this.botSeat(s)>=0?Date.now()+650:s.expires);}
+ async saveState(s){
+  if(needsRetention(s)){
+   s.finishedAt=Date.now();
+   s.expires=s.finishedAt+FINISHED_TABLE_TTL;
+  }
+  await this.ctx.storage.put('state',s);
+  await this.record(s);
+  if(!s.archived){
+   const nextBot=this.botSeat(s)>=0?Date.now()+650:Infinity;
+   await this.ctx.storage.setAlarm(Math.min(nextBot,s.expires));
+  }
+ }
  async syncLobby(s){await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(this.summary(this.public(s)))}));}
  applyMove(s,who,b){
     if(s.naval||s.briscola){
@@ -262,6 +276,14 @@ export class Room extends DurableObject {
      return json({token,player:s.players[0].id,state:this.public(s,viewer)});
     }
     if(!s||(!s.archived&&s.expires<Date.now()))return json({error:'Stanza inesistente o scaduta.'},404);
+    if(path==='/retention'&&req.method==='POST'){
+     if(needsRetention(s)){
+      s.revision++;
+      await this.saveState(s);
+      await this.broadcast(s);
+     }
+     return json(this.summary(this.public(s)));
+    }
     if(path.endsWith('/ws')){
      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
      if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
@@ -282,7 +304,15 @@ export class Room extends DurableObject {
      return json({room:s.room,revision:s.revision,frames});
     }
     if(path.endsWith('/state')&&req.method==='GET'){
-     await this.record(s);if(this.botSeat(s)>=0)await this.ctx.storage.setAlarm(Date.now()+650);
+     if(needsRetention(s)){
+      s.revision++;
+      await this.saveState(s);
+      await this.broadcast(s);
+     }else{
+      await this.record(s);
+      if(this.botSeat(s)>=0&&await this.ctx.storage.getAlarm()===null)
+       await this.ctx.storage.setAlarm(Math.min(Date.now()+650,s.expires));
+     }
      const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null'),legacy=req.headers.get('X-Player-Token');
      const old=s.players.find(p=>!p.id.startsWith('tg:')&&legacy&&p.token===legacy);
      if(user&&old&&!s.players.some(p=>p.id===user.player)){
@@ -366,7 +396,7 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,finishedAt:s.finishedAt,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
   return [...entries.values()].filter(s=>s.game!=='cluedo'&&(s.game==='labyrinth'||s.archived||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
@@ -392,9 +422,28 @@ export class Room extends DurableObject {
   const message=JSON.stringify(payload),tag=await telegramAccessTag(this.env);
   for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
  }
+ async migrateRetention(games){
+  if(this.migratingRetention)return;
+  this.migratingRetention=true;
+  try{
+   for(const game of games.slice(0,12)){
+    const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(game.room));
+    const result=await stub.fetch(new Request('https://internal/retention',{method:'POST'}));
+    if(!result.ok)continue;
+    const summary=await result.json();
+    const lobby=this.env.ROOMS.get(this.ctx.id);
+    await lobby.fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(summary)}));
+   }
+  }finally{this.migratingRetention=false;}
+ }
  async lobby(req,path){
   if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&g.game!=='labyrinth'&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
-  if(path==='/lobby/list')return json(await this.lobbyPayload());
+  if(path==='/lobby/list'){
+   const payload=await this.lobbyPayload();
+   const old=payload.games.filter(game=>game.game!=='labyrinth'&&needsRetention(game));
+   if(old.length)this.ctx.waitUntil(this.migrateRetention(old));
+   return json(payload);
+  }
   if(path==='/lobby/ws'){
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
    if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
@@ -475,16 +524,56 @@ export class Room extends DurableObject {
  async alarm(){
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
  if(await this.ctx.storage.get('lobbyCounter')!==undefined){
-  const entries=await this.ctx.storage.list({prefix:'game:'});
-  for(const [key,value] of entries){if(value.game!=='labyrinth'&&!value.archived&&value.expires<=Date.now())await this.ctx.storage.delete(key)}
-  await this.lobbyBroadcast();
-  if((await this.lobbyList()).some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+3600000);
-  return;
+  return this.ctx.blockConcurrencyWhile(async()=>{
+   const entries=await this.ctx.storage.list({prefix:'game:'});
+   for(const [key,value] of entries){
+    if(value.game!=='labyrinth'&&!value.archived&&value.expires<=Date.now())await this.ctx.storage.delete(key);
+   }
+   await this.lobbyBroadcast();
+   const games=await this.lobbyList();
+   const old=games.filter(game=>game.game!=='labyrinth'&&needsRetention(game));
+   if(old.length)this.ctx.waitUntil(this.migrateRetention(old));
+   if(games.some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+(old.length>12?30000:3600000));
+  });
  }
- const s=await this.ctx.storage.get('state');if(s?.archived)return;
- if(s&&s.expires>Date.now()){return this.ctx.blockConcurrencyWhile(async()=>{const current=await this.ctx.storage.get('state'),who=this.botSeat(current);if(who>=0){const v=this.public(current,current.players[who].id),g=v.naval||v.briscola||v[current.game]||v.chess;const action=chooseAction(current.game,g,who);if(!action)throw Error('AI: nessuna azione disponibile');this.applyMove(current,who,action);settleSeries(current);current.revision++;await this.saveState(current);await this.broadcast(current);await this.syncLobby(current);}else await this.ctx.storage.setAlarm(current.expires);});}
+ return this.ctx.blockConcurrencyWhile(async()=>{
+  const current=await this.ctx.storage.get('state');
+  if(!current||current.archived)return;
+  if(current.expires<=Date.now()){
+   await this.ctx.storage.deleteAll();
+   const message=JSON.stringify({room:current.room,deleted:true,expired:true});
+   for(const ws of this.ctx.getWebSockets()){
+    try{ws.send(message);ws.close(1000,'Tavolo scaduto.');}catch{}
+   }
+   const lobby=this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+   this.ctx.waitUntil(lobby.fetch(new Request('https://internal/lobby/remove',{method:'POST',body:JSON.stringify({room:current.room})})));
+   return;
+  }
+  const who=this.botSeat(current);
+  if(who<0){
+   await this.ctx.storage.setAlarm(current.expires);
+   return;
+  }
+  const v=this.public(current,current.players[who].id);
+  const view=v.naval||v.briscola||v[current.game]||v.chess;
+  const strong=current.mode==='ai';
+  // Cards already captured were publicly played. The strategy receives no private opposing cards.
+  const captured=current.scopa?.captured||current.briscola?.captured;
+  let botView=view;
+  if(strong&&captured)botView={...view,seenCards:captured.flat()};
+  else if(strong&&current.chess)botView={...view,moves:current.moves};
+  else if(strong&&current.checkers)botView={...view,positions:current.positions};
 
- for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
+  const action=chooseAction(current.game,botView,who,strong);
+  if(!action)throw Error('AI: nessuna azione disponibile');
+  this.applyMove(current,who,action);
+  settleSeries(current);
+  current.revision++;
+  await this.saveState(current);
+  await this.broadcast(current);
+  await this.syncLobby(current);
+ });
+ }
 }
 
 
