@@ -52,6 +52,12 @@ L'audio rimane diretto tra dispositivo e stazione. L'endpoint autenticato `/api/
 Il pulsante per creare tavoli è nella pagina Giochi. La Lobby conserva elenco, presenti e chat.
 
 
+## Moto Trial · Platform 2D
+
+Dalla pagina Giochi si apre un percorso in singolo. La moto resta al centro della visuale mentre il canyon scorre. Ogni nuovo percorso genera cinque tratti collegati da discese e tornanti alternati. Le bandierine segnano i checkpoint. Dopo una caduta si può riprendere dall’ultimo tratto raggiunto. Il traguardo mostra il tempo e il numero di cadute.
+
+Frecce o WASD per accelerare, frenare e bilanciare la moto. Spazio inverte la direzione mantenendo lo slancio. Su telefono si può tenere premuto Gas e toccare Gira con un altro dito. Dal menu di pausa si può riprendere o generare un altro percorso. La grafica è vettoriale, disegnata su Canvas.
+
 ## Labyrinth · spedizioni multiplayer
 
 Dalla pagina Giochi si crea una spedizione numerata; nella Lobby gli altri possono entrare o assistere. Il creatore è il primo partecipante, ma non ospita la partita: ogni spedizione vive in un Durable Object distinto, tramite il binding ROOMS già configurato. Non servono nuove migrazioni, binding o segreti. Le spedizioni vuote non scadono e rimangono nella Lobby fino all’archiviazione o eliminazione da parte di un partecipante. La numerazione non riparte cancellando l’ultimo tavolo.

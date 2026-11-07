@@ -346,7 +346,9 @@ $('debug-refresh').onclick=async()=>{
 };
 function fitViewport(){
  const height=viewportHeight(tg,{innerHeight,visualHeight:window.visualViewport?.height,fullscreen:!!document.fullscreenElement});
- applyInsets(document.documentElement,safeInsets(tg));if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets:safeInsets(tg)},location.origin);
+ const insets=safeInsets(tg);applyInsets(document.documentElement,insets);
+ if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets},location.origin);
+ sendMotoInsets(insets);
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
 for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
@@ -745,7 +747,33 @@ window.addEventListener('message',event=>{
 
  else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
 });
-tg?.onEvent('backButtonClicked',closeLabyrinth);
+function sendMotoInsets(insets=safeInsets(tg)){
+ if(!$('moto-trial-overlay').hidden)$('moto-trial-frame').contentWindow?.postMessage({type:'moto-trial:insets',insets},location.origin);
+}
+const motoOverlay=$('moto-trial-overlay'),motoFrame=$('moto-trial-frame'),motoLaunch=$('play-moto-trial');
+function closeMotoTrial(){
+ if(motoOverlay.hidden)return;
+ motoOverlay.hidden=true;
+ motoFrame.src='about:blank';
+ tg?.BackButton?.hide();
+ try{tg?.enableVerticalSwipes?.()}catch{}
+ motoLaunch.focus();
+}
+motoLaunch.onclick=()=>{
+ if(!motoOverlay.hidden)return;
+ enterFullscreen();
+ try{tg?.disableVerticalSwipes?.()}catch{}
+ motoOverlay.hidden=false;
+ motoFrame.src='/moto-trial/index.html';
+ tg?.BackButton?.show();
+};
+motoFrame.addEventListener('load',()=>sendMotoInsets());
+window.addEventListener('message',event=>{
+ if(motoOverlay.hidden||event.origin!==location.origin||event.source!==motoFrame.contentWindow)return;
+ if(event.data?.type==='moto-trial:ready')sendMotoInsets();
+ else if(event.data?.type==='moto-trial:exit')closeMotoTrial();
+});
+tg?.onEvent('backButtonClicked',()=>{if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
 
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify({type:'heartbeat'}))});
 
