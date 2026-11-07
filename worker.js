@@ -277,7 +277,7 @@ export class Room extends DurableObject {
   const users=[...unique.values()].map(a=>{
    const own=games.find(g=>g.game!=='labyrinth'&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===a.user.player));
    const watching=games.find(g=>g.room===a.room);
-   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null};
+   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
   }).sort((a,b)=>a.name.localeCompare(b.name));
   return {games,users,messages:await this.ctx.storage.get('chat')||[]};
  }

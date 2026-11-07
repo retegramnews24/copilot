@@ -143,7 +143,7 @@ function render(s){
  $('replay-player').hidden=!boardState()||s.phase!=='finished';
  if(boardState()&&s.phase==='finished'&&replayRevision!==s.revision&&!replayLoading)loadReplay();
  $('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent=m.san?Math.ceil(m.number/2)+(m.number%2?'. ':'… ')+m.san+' · '+m.by:'#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}
- renderBoard();refreshDebug();sendPresence();
+ renderSpectators();renderBoard();refreshDebug();sendPresence();
 }
 function connect(){
  clearTimeout(retry);if(!room)return;
@@ -469,7 +469,18 @@ function sendPresence(away=document.hidden){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:labyrinthRoom||room,away}));
 }
 
+function renderSpectators(){
+ const output=$('spectators');if(!output)return;
+ if(!state||!room||(!state.chess&&!state.checkers)){output.hidden=true;return}
+ output.hidden=false;
+ if(lobbyWS?.readyState!==1){output.textContent='Spettatori · collegamento…';return}
+ const seated=new Set(state.players.map(p=>p.id)),seen=new Set(),watchers=onlineUsers.filter(u=>u.viewingRoom===room&&!seated.has(u.player)&&!seen.has(u.id)&&seen.add(u.id));
+ // Include the local spectator immediately, before its presence round trip.
+ if(identity&&!document.hidden&&!seated.has(identity.player)&&!seen.has(identity.id))watchers.push(identity);
+ output.textContent=watchers.length?(watchers.length===1?'Assiste':'Assistono')+' · '+watchers.map(u=>u.name+(u.id===identity?.id?' (tu)':'')).join(', '):'Nessuno spettatore';
+}
 function renderSocial(){
+ renderSpectators();
  const connected=lobbyWS?.readyState===1&&!document.hidden;
  const users=onlineUsers.slice();
  if(connected&&identity&&!users.some(user=>user.id===identity.id)){

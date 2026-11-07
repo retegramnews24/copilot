@@ -23,5 +23,13 @@ try{
  assert.equal((await call(5,'/api/labyrinth/'+room+'/archive',{})).status,403);assert.equal((await call(1,'/api/labyrinth/'+room+'/archive',{})).status,200);await until(watcher,p=>p.type==='state'&&p.state.archived);assert.equal((await call(2,'/api/lobby')).data.games.find(g=>g.room===room).archived,true);
  for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();mf=new Miniflare(options);const restored=await call(1,'/api/labyrinth/'+room+'/state');assert.equal(restored.status,200);assert.equal(restored.data.state.archived,true);assert.equal(restored.data.state.players[0].appearance.shirt,'#cf514d');
  assert.equal((await call(2,'/api/labyrinth/'+room+'/delete',{})).status,200);assert.equal((await call(1,'/api/lobby')).data.games.length,0);const next=await call(1,'/api/create',{game:'labyrinth'});assert.equal(next.data.state.number,2,'Numbers do not restart after deleting the last table');
+ // Spectator presence identifies the viewed table independently from an owned game.
+ const chess=await call(20,'/api/create',{game:'chess'}),dama=await call(22,'/api/create',{game:'checkers'});
+ const lobbyRes=await mf.dispatchFetch('https://unit.test/api/lobby/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(21)}});assert.equal(lobbyRes.status,101);
+ const spectator={ws:lobbyRes.webSocket,packets:[],waiters:[]};spectator.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);spectator.packets.push(p);for(const fn of [...spectator.waiters])fn(p)});spectator.ws.accept();sockets.push(spectator.ws);
+ for(const table of [chess.data.state,dama.data.state]){spectator.ws.send(JSON.stringify({type:'presence',room:table.room,away:false}));const packet=await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.viewingRoom===table.room));assert.equal(packet.users.filter(u=>u.id==='21').length,1)}
+ spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.viewingRoom===null));
+ spectator.ws.send(JSON.stringify({type:'presence',room:dama.data.state.room,away:true}));await until(spectator,p=>p.users&&!p.users.some(u=>u.id==='21'));
+ console.log('PASS spectator presence: live chess/checkers table changes, unique identity, Lobby return and away removal.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and monotonic lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}
