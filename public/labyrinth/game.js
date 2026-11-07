@@ -9,7 +9,7 @@ import {avatarSprite} from './visuals.js';
 import {Atmosphere} from './audio.js';
 const $=id=>document.getElementById(id),canvas=$('scene'),keys=new Set(),coarse=matchMedia('(pointer: coarse)').matches,debug=new URLSearchParams(location.search).get('debug')==='1';
 let playerId='guest',seed=crypto.getRandomValues(new Uint32Array(1))[0],level=1,world,player,hasKey=false,seconds=0,started=false,playing=false,transitioning=false,renderer,raf=0,lastTime=0,saveClock=0,stepDistance=0,bob=0,walk=0,quality='auto',sensitivity=1,joystick={x:0,y:0,id:null},lookId=null,lastLook=null,lookVector={x:0,y:0},dragging=false,cursorFree=false,releasingCursor=false,toastTimer=0,frameBudget=new FrameBudget();
-let tutorialBox=null,trapNotice=null,guarding=false,touchCrouch=false,healthFlash=0;
+let tutorialBox=null,trapNotice=null,guarding=false,guardPointer=null,touchCrouch=false,lastTouchAction=-Infinity,healthFlash=0;
 const tutorialMode=new URLSearchParams(location.search).get('tutorial')==='1';
 let run=newRun(seed,true),guideEnabled=true,guideClock=0;
 let multiplayer=null,networkConnected=false,networkBusy=false,requestId=0,poseSeq=0,netClock=0,remoteClock=0,caseSignature='',remoteViews=new Map(),followId='';
@@ -22,7 +22,7 @@ const sound=new Atmosphere(read('labyrinth-sound',true));
 function tell(message){try{if(parent!==window)parent.postMessage({type:'labyrinth:trace',message},location.origin)}catch{}}
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;toastTimer=setTimeout(()=>$('toast').textContent='',3000)}
 function updateSound(){$('sound').setAttribute('aria-pressed',String(sound.enabled));$('sound').setAttribute('aria-label',sound.enabled?'Disattiva audio':'Attiva audio');$('sound').textContent=sound.enabled?'♫':'♪̸'}
-function resetInput(){keys.clear();touchCrouch=false;if(player)player.crouch=false;updateCrouchButton();setGuard(false);walk=0;joystick={x:0,y:0,id:null};lookId=null;lastLook=null;lookVector={x:0,y:0};$('look-stick').style.transform='';dragging=false;$('stick').style.transform='';actionState.remaining=0;actionState.cooldown=0;}
+function resetInput(){keys.clear();touchCrouch=false;if(player)player.crouch=false;updateCrouchButton();guardPointer=null;setGuard(false);walk=0;joystick={x:0,y:0,id:null};lookId=null;lastLook=null;lookVector={x:0,y:0};$('look-stick').style.transform='';dragging=false;$('stick').style.transform='';actionState.remaining=0;actionState.cooldown=0;}
 function store(){if(multiplayer)return;if(!started||!player)return;run.player={x:player.x,z:player.z,yaw:player.yaw,pitch:player.pitch};run.seconds=seconds;run.level=level;write('binottoland-labyrinth-v2-'+playerId+(tutorialMode?'-tutorial':''),run)}
 const gearIcons={sword:'⚔',shield:'⛨',helmet:'◕',armor:'✦',backpack:'▣'};
 function cardInHand(){return [0,1].find(i=>run.inventory[i]==='pass'||run.inventory[i]?.startsWith('key:'))}
@@ -171,7 +171,7 @@ function target(){
  return null;
 }
 function textIfChanged(id,value){const node=$(id);if(node.textContent!==value)node.textContent=value}
-function updateActions(){if(!world||!player)return;const open=!world.arena&&floorState(run,world).open;updateTutorial();textIfChanged('objective',world.arena?(SHOWCASE_GEAR.every(([id])=>hasGear(run,id))?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):open?'Uscita aperta · attraversa la porta':hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita');const holder=multiplayer?.state.players.find(p=>p.id!==playerId&&p.inventory.includes('key:'+level));if(!world.arena&&!hasKey&&!hasPass(run)&&!open&&holder)textIfChanged('objective','Keycard raccolta da '+holder.name);const t=target(),touch=document.body.classList.contains('touch');$('action').disabled=!!multiplayer&&(multiplayer.watch||!networkConnected||multiplayer.state.archived);$('action').textContent=t?(t.kind==='waiting'?'Attendi':'Usa'):'Colpisci';$('action').setAttribute('aria-label',t?t.label:'Colpisci');textIfChanged('hint',t?(touch?'Usa · ':'E · ')+t.label:open&&nearby(world.door,2.2)?'Attraversa la porta':'');
+function updateActions(){if(!world||!player)return;const open=!world.arena&&floorState(run,world).open;updateTutorial();textIfChanged('objective',world.arena?(SHOWCASE_GEAR.every(([id])=>hasGear(run,id))?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):open?'Uscita aperta · attraversa la porta':hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita');const holder=multiplayer?.state.players.find(p=>p.id!==playerId&&p.inventory.includes('key:'+level));if(!world.arena&&!hasKey&&!hasPass(run)&&!open&&holder)textIfChanged('objective','Keycard raccolta da '+holder.name);const t=guarding?null:target(),touch=document.body.classList.contains('touch');$('action').disabled=!!multiplayer&&(multiplayer.watch||!networkConnected||multiplayer.state.archived);$('action').textContent=t?(t.kind==='waiting'?'Attendi':'Usa'):'Colpisci';$('action').setAttribute('aria-label',t?t.label:'Colpisci');textIfChanged('hint',t?(touch?'Usa · ':'E · ')+t.label:open&&nearby(world.door,2.2)?'Attraversa la porta':'');
  if(!world.arena&&guideEnabled){$('guide').hidden=false;guideClock++;if(guideClock>8){guideClock=0;const destination=tutorialMode&&!hasKey&&!hasPass(run)&&!open?itemsAt(run,world).find(i=>i.type==='key')||world.door:world.door;const q=nextWaypoint(world,player,destination);if(q){const angle=Math.atan2(q.x-player.x,-(q.z-player.z))-player.yaw;$('guide-arrow').style.transform='rotate('+angle+'rad)';$('guide-text').textContent=(tutorialMode&&!hasKey&&!hasPass(run)&&!open?'Keycard':'Uscita')+' · percorso '+Math.max(1,Math.round(q.steps*CELL))+' m'}}}else $('guide').hidden=true;
 }
 function crossLevel(){
@@ -271,7 +271,17 @@ $('new-run-start').onclick=()=>{
  seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;healthFlash=0;run=newRun(seed,true);
  loadWorld();resume();
 };
-$('menu-leave').onclick=leave;$('action').onclick=()=>target()?use():strike();$('drop-item').onclick=dropHeld;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=tryJump;
+const actionButton=$('action');
+function pressAction(){if(guarding||!target())strike();else use()}
+actionButton.addEventListener('pointerdown',e=>{
+ if(e.pointerType!=='touch'||actionButton.disabled)return;
+ e.preventDefault();lastTouchAction=performance.now();pressAction();
+});
+actionButton.onclick=e=>{
+ if(e.pointerType==='touch'||e.detail>0&&performance.now()-lastTouchAction<700)return;
+ pressAction();
+};
+$('menu-leave').onclick=leave;$('drop-item').onclick=dropHeld;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=tryJump;
 $('sound').onclick=()=>{sound.toggle();sound.active(playing&&!portrait());write('labyrinth-sound',sound.enabled);updateSound()};
 $('guide-toggle').checked=guideEnabled=read('labyrinth-guide',true);$('guide-toggle').onchange=e=>{guideEnabled=e.target.checked;write('labyrinth-guide',guideEnabled);updateActions()};
 $('sensitivity').value=String(sensitivity=Math.max(.4,Math.min(2.2,Number(read('labyrinth-sensitivity',1))||1)));
@@ -289,8 +299,14 @@ canvas.addEventListener('mousedown',e=>{
 });
 window.addEventListener('mouseup',e=>{if(e.button===0)dragging=false;if(e.button===2)setGuard(false)});
 const guardButton=$('guard');
-guardButton.addEventListener('pointerdown',e=>{e.preventDefault();guardButton.setPointerCapture?.(e.pointerId);setGuard(true)});
-for(const event of ['pointerup','pointercancel','lostpointercapture'])guardButton.addEventListener(event,()=>setGuard(false));
+guardButton.addEventListener('pointerdown',e=>{
+ if(guardPointer!==null)return;
+ e.preventDefault();setGuard(true);
+ if(guarding){guardPointer=e.pointerId;guardButton.setPointerCapture?.(e.pointerId)}
+});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])guardButton.addEventListener(event,e=>{
+ if(e.pointerId===guardPointer){guardPointer=null;setGuard(false)}
+});
 window.addEventListener('mousemove',e=>{if(!cursorFree&&(document.pointerLockElement===canvas||dragging))look(e.movementX,e.movementY)});
 document.addEventListener('pointerlockchange',()=>{
  if(cursorFree){

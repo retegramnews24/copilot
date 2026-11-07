@@ -179,7 +179,7 @@ const oldRun={...labAdventure.newRun(41),level:4,inventoryLayout:undefined,inven
 const storageKey='binottoland-labyrinth-v2-guest';
 lab.localStorage.setItem(storageKey,JSON.stringify(oldRun));
 lab.eval((await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\n/gm,'')+
- '\nwindow.__labTest={tick:()=>tick(lastTime+16),action:()=>actionState.remaining};');
+ '\nwindow.__labTest={tick:()=>tick(lastTime+16),action:()=>actionState.remaining,resetSwing:()=>{actionState.remaining=actionState.cooldown=0}};');
 assert.equal(labGet('fullscreen'),null);assert.equal(labGet('sprint'),null);assert.equal(labGet('hand-view'),null);
 assert.equal(labGet('new-run').hidden,false);
 const initialSlots=labGet('inventory').querySelectorAll('button');
@@ -212,9 +212,14 @@ labGet('crouch').click();lab.__labTest.tick();assert.equal(labGet('crouch').getA
 
 lab.dispatchEvent(new lab.MouseEvent('mouseup',{button:2}));
 assert.equal(labGet('guard').getAttribute('aria-pressed'),'false');
-labGet('guard').dispatchEvent(new lab.Event('pointerdown',{cancelable:true}));
+const touchPointer=(type,id,isPrimary)=>Object.assign(new lab.Event(type,{cancelable:true}),{pointerId:id,pointerType:'touch',isPrimary});
+labGet('guard').dispatchEvent(touchPointer('pointerdown',1,true));
 assert.equal(labGet('guard').getAttribute('aria-pressed'),'true');
-labGet('guard').dispatchEvent(new lab.Event('pointercancel'));
+lab.__labTest.resetSwing();
+labGet('action').dispatchEvent(touchPointer('pointerdown',2,false));
+assert.ok(lab.__labTest.action()>0,'A second touch can strike while the first holds guard');
+assert.equal(labGet('guard').getAttribute('aria-pressed'),'true');
+labGet('guard').dispatchEvent(touchPointer('pointercancel',1,true));
 assert.equal(labGet('guard').getAttribute('aria-pressed'),'false');
 lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'Escape'}));
 labGet('new-run').click();labGet('new-run-start').click();
