@@ -33,7 +33,7 @@ async function request(path,data,keepalive=false){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola siciliana':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
 const staged=g=>['uno','scarabeo','scopa','naval','briscola','briscola5'].includes(g?.game);
 const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:10}:{min:2,max:2});

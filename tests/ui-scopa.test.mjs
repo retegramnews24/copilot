@@ -8,6 +8,8 @@ import {tutorial} from '../table-ai.js';
 import * as labCore from '../public/labyrinth/core.js';
 import * as labAdventure from '../public/labyrinth/adventure.js';
 import * as labTraps from '../public/labyrinth/traps.js';
+import {renderBriscola} from '../public/sea-cards-ui.js';
+import {sicilianSVG} from '../public/sicilian-cards.js';
 import {FrameBudget} from '../public/labyrinth/performance.js';
 const source=await fs.readFile('public/app.js','utf8'),bundle=await build({stdin:{contents:source+'\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};',resolveDir:process.cwd()+'/public'},bundle:true,write:false,format:'iife',platform:'browser'});
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
@@ -139,6 +141,25 @@ assert.equal(chat.scrollTop,700);
 assert.match(chat.lastElementChild.textContent,/Ultimo/);
 assert.equal(get('chat-form').previousElementSibling,chat);
 assert.deepEqual(errors,[]);dom.window.close();console.log('PASS UI: Scopa cards and captures, live tutorial, 5-seat solo setup, disabled solo tournaments, leaderboard text safety and out-of-turn human word validation, repeated creation, active tables, both rankings, latest chat and result dismissal.');
+const layout=new JSDOM(await fs.readFile('public/index.html','utf8'));
+for(const card of layout.window.document.querySelectorAll('.catalog-card')){
+ const header=card.querySelector('.catalog-card-title');
+ assert.ok(header.querySelector('.catalog-icon')&&header.querySelector('h3'));
+}
+globalThis.document=layout.window.document;
+for(const variant of ['classic','called']){
+ const hand=[10,3,8,1,9,2,7,4].slice(0,variant==='classic'?3:8).map(rank=>({rank,suit:1,id:rank+9}));
+ if(variant==='classic')hand[2]={rank:1,suit:1,id:10};
+ renderBriscola({variant,phase:'play',hand,callOptions:[],trick:[],lastEvent:'In corso'}, {players:[{name:'Uno'},{name:'Due'}],seat:0,active:true});
+ const cards=[...globalThis.document.querySelectorAll('#briscola-hand button')].map(node=>node.getAttribute('aria-label').split(' ')[0]);
+ assert.deepEqual(cards,variant==='classic'?['Asso','3','Re']:['Asso','3','Re','Cavallo','Fante','7','4','2']);
+}
+delete globalThis.document;
+layout.window.close();
+for(const rank of [8,9,10]){
+ const card=sicilianSVG({rank,suit:1});
+ assert.equal((card.match(new RegExp('>'+rank+'</text>','g'))||[]).length,2);
+}
 // Telegram embeds Labyrinth in a sandbox where native confirm is suppressed.
 const labDom=new JSDOM(await fs.readFile('public/labyrinth/index.html','utf8'),{url:'https://unit.test/labyrinth/index.html',runScripts:'outside-only',pretendToBeVisual:true});
 const lab=labDom.window,labGet=id=>lab.document.getElementById(id);
@@ -148,15 +169,21 @@ lab.confirm=()=>{throw Error('Native confirmation is unavailable')};
 lab.readAppearance=()=>({shirt:'#66b8cf',shorts:'#3c62a3'});
 lab.Renderer=class{load(world){this.world=world}draw(){}};
 lab.Atmosphere=class{constructor(enabled){this.enabled=enabled}active(){}resume(){}};
-const oldRun={...labAdventure.newRun(41),level:4,inventory:['key:4']};
+const oldRun={...labAdventure.newRun(41),level:4,inventory:['key:4','pass']};
 const storageKey='binottoland-labyrinth-v2-guest';
 lab.localStorage.setItem(storageKey,JSON.stringify(oldRun));
 lab.eval((await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\n/gm,''));
-assert.equal(labGet('fullscreen'),null);
+assert.equal(labGet('fullscreen'),null);assert.equal(labGet('sprint'),null);assert.equal(labGet('hand-view'),null);
 assert.equal(labGet('new-run').hidden,false);
+assert.equal(labGet('inventory').children.length,2);
+assert.equal(labGet('inventory').children[0].getAttribute('aria-label'),'Mano · Keycard');
+assert.equal(labGet('inventory').children[1].getAttribute('aria-label'),'Tasca · Passe-partout');
 labGet('new-run').click();assert.equal(labGet('new-run-confirm').hidden,false);
 labGet('new-run-cancel').click();assert.equal(labGet('new-run-confirm').hidden,true);
 assert.equal(JSON.parse(lab.localStorage.getItem(storageKey)).level,4);
+labGet('start').click();labGet('inventory').children[1].click();
+assert.deepEqual(JSON.parse(lab.localStorage.getItem(storageKey)).inventory,['pass','key:4']);
+lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'Escape'}));
 labGet('new-run').click();labGet('new-run-start').click();
 assert.equal(labGet('menu').hidden,true);
 const restarted=JSON.parse(lab.localStorage.getItem(storageKey));

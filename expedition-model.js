@@ -1,4 +1,4 @@
-import {worldFor,floorState,itemsAt,pickup,drop,openDoor,capacity,hasPass,CLOTHES} from './public/labyrinth/adventure.js';
+import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeSword,hasPass,CLOTHES} from './public/labyrinth/adventure.js';
 import {crossedDoor,free,move,RADIUS} from './public/labyrinth/core.js';
 import {frameStrike,settledFrames,triggerFrames} from './public/labyrinth/traps.js';
 export const GRACE=60000,STALE=45000,MAX_PLAYERS=16;
@@ -23,7 +23,12 @@ export function ensureKeycards(s){
  let changed=false;const people=Object.values(s.players),first=people[0];if(!first)return false;
  for(let level=1;level<=5;level++){
   const w=expeditionWorld(s,level),missing=!s.floors[level],f=floorState(runFor(s,first),w);if(missing)changed=true;
-  const held=people.some(p=>p.inventory.includes('key:'+level));
+  const key='key:'+level;
+  if(f.open)for(const p of people){
+   const slot=p.inventory.indexOf(key);
+   if(slot>=0){p.inventory.splice(slot,1);changed=true}
+  }
+  const held=people.some(p=>p.inventory.includes(key));
   if(f.open||held){if(f.key){f.key=null;changed=true}}
   else if(!f.key||!free(w,f.key.x,f.key.z,.28)){f.key={...w.keyPosition};changed=true}
  }
@@ -76,7 +81,7 @@ export function pose(s,p,b,now){
   return 'level';
  }
  p.player={...candidate,yaw:Math.atan2(Math.sin(b.yaw),Math.cos(b.yaw)),pitch:Math.max(-1.15,Math.min(1.15,b.pitch))};
- p.weapon=p.inventory.includes('sword')&&b.weapon==='sword'?'sword':null;
+ p.weapon=p.inventory[0]==='sword'?'sword':null;
  p.lastMove=now;
  if(triggered){s.revision++;return 'trap'}
  return Math.hypot(candidate.x-b.x,candidate.z-b.z)>.025?'clipped':true;
@@ -87,19 +92,26 @@ function aimCard(p,t){return near(p,t,.38)||(p.player.pitch<-.35&&facing(p,t))}
 export function act(s,p,b,now){
  if(!p||!p.online||s.archived||s.deleted)fail('Non puoi agire in questa spedizione.');
  const w=expeditionWorld(s,p.level),r=runFor(s,p);floorState(r,w);
- if(b.kind==='pickup'){const item=itemsAt(r,w).find(i=>i.id===b.item);if(!item||!near(p,item,item.type==='pass'?.95:1.25)||!aimCard(p,item))fail('Avvicinati alla carta e guardala.');if(pickup(r,w,item.id)!=='ok')fail('Tasca piena o carta già raccolta.');}
+ if(b.kind==='pickup'){const item=itemsAt(r,w).find(i=>i.id===b.item);if(!item||!near(p,item,item.type==='pass'?.95:1.25)||!aimCard(p,item))fail('Avvicinati alla carta e guardala.');if(pickup(r,w,item.id)!=='ok')fail('Inventario pieno o carta già raccolta.');}
  else if(b.kind==='drop'){if(!Number.isInteger(b.slot)||!drop(r,w,b.slot,p.player))fail('Oggetto non lasciabile.');}
- else if(b.kind==='open'){if(w.arena||!near(p,w.door,1.9)||!openDoor(r,w))fail('Serve la keycard vicino alla porta.');}
+ else if(b.kind==='equip'){if((b.item!==undefined&&r.inventory[b.slot]!==b.item)||!putInHand(r,b.slot))fail('Questo posto è vuoto.');}
+ else if(b.kind==='open'){
+  if(w.arena||!near(p,w.door,1.9)||!openDoor(r,w))fail('Avvicinati alla porta con la keycard del piano o il passe-partout.');
+  for(const other of Object.values(s.players)){
+   const slot=other.inventory.indexOf('key:'+p.level);
+   if(slot>=0)other.inventory.splice(slot,1);
+  }
+ }
  else if(b.kind==='back'){const entrance=w.arena?w.door:w.spawn;if(p.level<=1||!hasPass(r)||!near(p,entrance,w.arena?1.9:1.1))fail('Per tornare serve il passe-partout.');const slot=p.inventory.indexOf('key:'+p.level);if(slot>=0)drop(r,w,slot,p.player);p.level--;const previous=expeditionWorld(s,p.level);relocate(p,{x:previous.door.x-previous.door.dx*1.25,z:previous.door.z-previous.door.dz*1.25,yaw:Math.atan2(-previous.door.dx,previous.door.dz)},now);}
  else if(['showcase','backpack','sword'].includes(b.kind)){
  const box=casePosition(s,p);if(p.level!==6||!near(p,box,2.5)||!facing(p,box))fail('Avvicinati alla tua vetrina.');
  if(b.kind==='showcase'){if(s.showcaseOpen)fail('Vetrina già aperta.');if(participants(s).length!==1)fail('Attendi gli altri partecipanti.');s.showcaseOpen=true;s.entryLocked=true;}
  if(b.kind==='backpack'){if(!s.showcaseOpen||p.backpack)fail('Zaino non disponibile.');p.backpack=true;}
- if(b.kind==='sword'){if(!s.showcaseOpen||p.swordTaken||p.inventory.length>=capacity(r))fail('Spada non disponibile o inventario pieno.');p.swordTaken=true;p.inventory.push('sword');p.weapon='sword';}
+ if(b.kind==='sword'){if(!takeSword(r))fail('Spada non disponibile o inventario pieno.');p.swordTaken=true;}
  }
  else if(b.kind==='appearance')p.appearance=clothes(b.appearance);
- else if(b.kind==='strike'){if(now-(p.actionAt||0)<550)return false;p.actionAt=now;p.weapon=p.inventory.includes('sword')&&b.weapon==='sword'?'sword':null;}
- else fail('Azione non valida.');s.revision++;return true;
+ else if(b.kind==='strike'){if(now-(p.actionAt||0)<550)return false;p.actionAt=now;}
+ else fail('Azione non valida.');p.weapon=p.inventory[0]==='sword'?'sword':null;s.revision++;return true;
 }
 export function snapshot(s){return {room:s.room,number:s.number,seed:s.seed,revision:s.revision,created:s.created,archived:s.archived,deleted:s.deleted,entryLocked:s.entryLocked,showcaseOpen:s.showcaseOpen,floors:s.floors,cases:cases(s),players:Object.values(s.players).map(({connection,lastMove,...p})=>p),grace:GRACE}}
 export function expeditionSummary(s){return {room:s.room,number:s.number,game:'labyrinth',archived:s.archived,phase:s.archived?'finished':s.entryLocked?'playing':'waiting',players:Object.values(s.players).map(p=>({id:'tg:'+p.id,name:p.name})),turn:0,revision:s.revision,created:s.created,expires:null,online:participants(s).filter(p=>p.online).length,arrived:participants(s).filter(p=>p.level===6).length,entryLocked:s.entryLocked}}

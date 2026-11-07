@@ -61,3 +61,24 @@ for(let seed=1;seed<=100;seed++){
  restored.floors[3].open=true;ensureKeycards(restored);assert.equal(restored.floors[3].key,null);
 }
 console.log('PASS shared card spawning: 100 seeds × five floors × two clients, authoritative initial snapshots, missing/invalid spawn repair, no respawn while held or open.');
+
+const masterRoom=createExpedition('master',1,415,user(1),now);
+const holder=masterRoom.players['1'];joinExpedition(masterRoom,user(2),now);
+const teammate=masterRoom.players['2'];
+connectPlayer(masterRoom,holder.id,'master-1',now);connectPlayer(masterRoom,teammate.id,'master-2',now);
+const blackFloor=expeditionWorld(masterRoom,5);
+holder.level=teammate.level=5;
+at(holder,masterRoom.floors[5].pass,-1);act(masterRoom,holder,{kind:'pickup',item:'pass'},now);
+at(teammate,blackFloor.keyPosition,-1);act(masterRoom,teammate,{kind:'pickup',item:'key:5'},now);
+at(holder,{x:blackFloor.door.x-blackFloor.door.dx*.8,z:blackFloor.door.z-blackFloor.door.dz*.8});
+act(masterRoom,holder,{kind:'open'},now);
+assert.ok(masterRoom.floors[5].open);assert.equal(masterRoom.floors[5].key,null);
+assert.deepEqual(holder.inventory,['pass']);assert.deepEqual(teammate.inventory,[]);
+const green=expeditionWorld(masterRoom,2);holder.level=2;
+at(holder,green.keyPosition,-1);act(masterRoom,holder,{kind:'pickup',item:'key:2'},now);
+assert.deepEqual(holder.inventory,['pass','key:2']);
+act(masterRoom,holder,{kind:'equip',slot:1},now);
+assert.deepEqual(holder.inventory,['key:2','pass']);assert.throws(()=>act(masterRoom,holder,{kind:'equip',slot:2},now));
+at(holder,{x:green.door.x-green.door.dx*.8,z:green.door.z-green.door.dz*.8});
+act(masterRoom,holder,{kind:'open'},now);assert.deepEqual(holder.inventory,['pass']);assert.ok(masterRoom.floors[2].open);
+console.log('PASS master key and hand slot: reusable black door access, obsolete shared key removal and authoritative equip.');

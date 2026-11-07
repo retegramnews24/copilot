@@ -60,7 +60,7 @@ Fino a 16 partecipanti per spedizione e 40 connessioni complessive includendo sp
 
 ### Regole condivise e persistenza
 
-Cinque labirinti deterministici con lo stesso seed per tutti: giallo, verde, rosso, blu e nero progressivamente più scuri. Ogni giocatore cambia piano indipendentemente. Una sola keycard di uscita per piano chiuso, a terra o nell’inventario di una persona. Le carte dei cinque piani vengono inizializzate dal server alla creazione; al caricamento delle partite salvate si ripristinano gli spawn mancanti o fuori dal pavimento, senza duplicare carte già in inventario. Le carte a terra sono leggermente più grandi; se la carta del piano è già in mano a un compagno, l’obiettivo ne mostra il nome. Il server valida la raccolta e consuma la carta quando apre la porta. La porta rimane aperta per tutti e mostra un’anteprima dell’ingresso successivo. Attraversare la soglia fa avanzare automaticamente. Il passe-partout nero giace nel quinto piano, occupa uno slot, non si consuma e serve per tornare ai piani precedenti.
+Cinque labirinti deterministici con lo stesso seed per tutti: giallo, verde, rosso, blu e nero progressivamente più scuri. Ogni giocatore cambia piano indipendentemente. Una sola keycard di uscita per piano chiuso, a terra o nell’inventario di una persona. Le carte dei cinque piani vengono inizializzate dal server alla creazione; al caricamento delle partite salvate si ripristinano gli spawn mancanti o fuori dal pavimento, senza duplicare carte già in inventario. Le carte a terra sono leggermente più grandi; se la carta del piano è già in mano a un compagno, l’obiettivo ne mostra il nome. Il server valida la raccolta e consuma la carta quando apre la porta. La porta rimane aperta per tutti e mostra un’anteprima dell’ingresso successivo. Attraversare la soglia fa avanzare automaticamente. Il passe-partout nero giace nel quinto piano, occupa uno slot, si può riusare per aprire qualsiasi porta dei piani, compresa quella nera, e per tornare indietro.
 
 Disconnessione: 60 secondi per rientrare; allo scadere le carte cadono sull’ultimo piano e nella posizione valida del giocatore, che viene tolto dal conteggio dell’arena. La perdita silenziosa di rete viene rilevata dopo 45 secondi senza heartbeat, quindi parte lo stesso periodo. Una vecchia connessione non può scollegare o muovere quella più recente dello stesso account. Equipaggiamento e progressi individuali si ritrovano rientrando; le carte già cadute non vengono duplicate. Se sparisce il creatore, gli altri continuano. Se spariscono tutti, lo stato rimane salvato.
 
@@ -68,11 +68,13 @@ Porte, carte, inventari, cambi di piano e attivazione dei quadri vengono salvati
 
 Dal secondo al quinto piano, alcuni quadri oscillano prima di cadere quando un giocatore si avvicina. Il quadro caduto poggia contro la parete opposta. Si supera con un salto sul lato più basso. Chi viene colpito durante la caduta riparte dall’ingresso del piano con il proprio inventario.
 
+Ogni piano del labirinto ha tre specchi a parete. Quello visibile più vicino riflette la stanza e i personaggi con il motore WebGL. Il renderer 2D usa riflessi dei personaggi semplificati.
+
 ### Arena, personaggi e comandi
 
-Arena ovale con una rete elastica da 18,5 × 5,8 metri, panchine, fioriere e lampioni. Una vetrina personale per partecipante attivo, con assegnazione stabile. Apertura simultanea e definitiva quando arriva l’ultimo del gruppo; in singolo apertura manuale solo da vicino con E/Usa. Ogni persona prende il proprio zaino (cinque slot totali) e la propria spada. Non è possibile svuotare la vetrina di un altro. Se una nuova vetrina compare dove c’è qualcuno, il server lo riposiziona in un punto libero.
+Arena ovale con una rete elastica da 18,5 × 5,8 metri, panchine, fioriere e lampioni. Una vetrina personale per partecipante attivo, con assegnazione stabile. Apertura simultanea e definitiva quando arriva l’ultimo del gruppo; in singolo apertura manuale solo da vicino con E/Usa. Ogni persona prende il proprio zaino (sei posti totali, inclusi mano e tasca) e la propria spada. Non è possibile svuotare la vetrina di un altro. Se una nuova vetrina compare dove c’è qualcuno, il server lo riposiziona in un punto libero.
 
-Gli altri personaggi sono visibili solo nel proprio piano, con forme morbide, pelle rosa, maglietta e pantaloncini selezionabili in dieci colori distinti; zaino e spada riflettono l’equipaggiamento. Posizioni e rotazioni vengono interpolate. Il corpo ruota con la visuale e la testa segue anche l’inclinazione. I giocatori dello stesso piano collidono tra loro e possono separarsi se compaiono nello stesso punto. Nomi mostrati solo da vicino, nascosti dietro i muri. Colpo di spada animato e condiviso, con breve recupero; i colpi tra giocatori sono solo visivi.
+Gli altri personaggi sono visibili solo nel proprio piano, con forme morbide, pelle rosa, maglietta e pantaloncini selezionabili in dieci colori distinti; zaino e spada riflettono l’equipaggiamento. Posizioni e rotazioni vengono interpolate. Il corpo ruota con la visuale e la testa segue anche l’inclinazione. Le braccia sono articolate dalla spalla alla mano e sostengono la spada. In prima persona, abbassando lo sguardo si vedono anche le gambe e le scarpe. I giocatori dello stesso piano collidono tra loro e possono separarsi se compaiono nello stesso punto. Nomi mostrati solo da vicino, nascosti dietro i muri. Colpo di spada animato e condiviso, con breve recupero; i colpi tra giocatori sono solo visivi.
 
 PC: WASD/frecce, mouse o trascinamento, E per usare, F/clic sinistro per il colpo, Spazio per saltare, Shift per correre, Q per lasciare la carta selezionata, Esc per la pausa. Telefono in orizzontale: joystick sinistro movimento, joystick destro visuale; Azione/Colpisci diventa Usa vicino a un oggetto, Salta fra i due comandi di destra. Il menu di pausa permette il ritorno a Binottoland. I collegamenti e le impostazioni della chat vocale sono rimossi; le chiamate si gestiscono esternamente.
 
@@ -124,7 +126,7 @@ Prima di creare un gioco da tavolo si sceglie partita veloce o torneo al raggiun
 
 
 
-## Battaglia navale e Briscola siciliana
+## Battaglia navale e Briscola
 
 Battaglia navale: due persone, oceani 10 × 10 e cinque navi da 5/4/3/3/2 caselle. Posizionamento manuale o casuale, conferma indipendente dal turno, navi dritte senza sovrapposizioni; possono toccarsi. Un tiro per turno anche dopo un centro. Il nome della nave colpita, l’affondamento e la vittoria sono calcolati sul server. Ogni account riceve soltanto la propria flotta; gli spettatori ricevono acqua, colpi e navi già affondate. Nessun replay rivela le posizioni nascoste. Riferimento: https://instructions.hasbro.com/api/download/A3264_en-in_battleship.pdf .
 
