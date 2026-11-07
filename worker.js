@@ -145,7 +145,7 @@ export default {
    if(raw.length>4096)return json({error:'Richiesta troppo grande.'},413);
    return lobby.fetch(new Request(u.origin+'/lobby/create',{method:'POST',body:raw,headers:{'X-Checkmate-User':JSON.stringify(user)}}));
   }
-  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|start|rematch|next-round|move|pass|finish|archive|delete|replay|offer-draw|accept-draw|reject-draw|ws)$/);
+  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|start|rematch|next-round|move|pass|finish|archive|dismiss|delete|replay|offer-draw|accept-draw|reject-draw|ws)$/);
   if(!match)return json({error:'Percorso non trovato.'},404);
 
   if(match[2]==='claim'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/join',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room:match[1]})}));
@@ -157,17 +157,16 @@ export default {
   if(response.ok&&(req.method==='POST'||match[2]==='state')){
    const result=await response.clone().json();
    const s=result.state||result;
-   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,finishedAt:s.finishedAt})}));
+   if(match[2]!=='dismiss'||s.deleted)await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires})}));
   }
   return response;
  }
 };
-const FINISHED_TABLE_TTL=5*60*1000;
-const needsRetention=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived&&!table.finishedAt;
+const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived;
 
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));}
- public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires,finishedAt:s.finishedAt}}
+ public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
  newTable(room,b,token){
   const game=b.game??'chess';
   const s={
@@ -208,16 +207,37 @@ export class Room extends DurableObject {
  botSeat(s){if(s.phase!=='playing'||!['ai','tutorial'].includes(s.mode))return -1;if(s.scarabeo?.pending)return s.players.findIndex((p,i)=>p.bot&&i!==s.scarabeo.pending.by&&!Object.hasOwn(s.scarabeo.pending.votes,i));if(s.naval?.phase==='placement')return s.players.findIndex((p,i)=>p.bot&&!s.naval.ready[i]);return s.players[s.turn]?.bot?s.turn:-1;}
  async record(s){for(const result of resultsFor(s))await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/result',{method:'POST',body:JSON.stringify(result)}));}
  async saveState(s){
-  if(needsRetention(s)){
-   s.finishedAt=Date.now();
-   s.expires=s.finishedAt+FINISHED_TABLE_TTL;
+  if(concluded(s)){
+   s.expires=null;
+   delete s.finishedAt;
   }
   await this.ctx.storage.put('state',s);
   await this.record(s);
-  if(!s.archived){
+  if(s.archived||concluded(s))await this.ctx.storage.deleteAlarm();
+  else{
    const nextBot=this.botSeat(s)>=0?Date.now()+650:Infinity;
    await this.ctx.storage.setAlarm(Math.min(nextBot,s.expires));
   }
+ }
+ hasResultViewer(s,{socket,player}={}){
+  const seats=new Set(s.players.filter(p=>!p.bot).map(p=>p.id));
+  return this.ctx.getWebSockets().some(ws=>{
+   const viewer=ws.deserializeAttachment()?.player;
+   return ws!==socket&&ws.readyState===1&&viewer!==player&&seats.has(viewer);
+  });
+ }
+ async removeTable(s,reason){
+  const result={room:s.room,number:s.number,deleted:true,reason};
+  await this.ctx.storage.deleteAlarm();
+  await this.ctx.storage.deleteAll();
+  for(const ws of this.ctx.getWebSockets()){
+   try{ws.send(JSON.stringify(result));ws.close(1000,'Partita eliminata');}catch{}
+  }
+  return result;
+ }
+ notifyTableRemoved(room){
+  const lobby=this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+  this.ctx.waitUntil(lobby.fetch(new Request('https://internal/lobby/remove',{method:'POST',body:JSON.stringify({room})})));
  }
  async syncLobby(s){await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(this.summary(this.public(s)))}));}
  applyMove(s,who,b){
@@ -275,12 +295,19 @@ export class Room extends DurableObject {
      await this.saveState(s);
      return json({token,player:s.players[0].id,state:this.public(s,viewer)});
     }
-    if(!s||(!s.archived&&s.expires<Date.now()))return json({error:'Stanza inesistente o scaduta.'},404);
-    if(path==='/retention'&&req.method==='POST'){
-     if(needsRetention(s)){
+    if(!s){
+     if(path.endsWith('/dismiss')&&req.method==='POST')return json({left:true});
+     return json({error:'Stanza inesistente o scaduta.'},404);
+    }
+    if(activeTable(s)&&s.expires<Date.now())return json({error:'Stanza inesistente o scaduta.'},404);
+    if(path==='/tidy-result'&&req.method==='POST'){
+     if(concluded(s)&&s.expires!==null){
+      if(!this.hasResultViewer(s)){
+       await this.record(s);
+       return json(await this.removeTable(s,'dismissed'));
+      }
       s.revision++;
       await this.saveState(s);
-      await this.broadcast(s);
      }
      return json(this.summary(this.public(s)));
     }
@@ -304,7 +331,7 @@ export class Room extends DurableObject {
      return json({room:s.room,revision:s.revision,frames});
     }
     if(path.endsWith('/state')&&req.method==='GET'){
-     if(needsRetention(s)){
+     if(concluded(s)&&s.expires!==null){
       s.revision++;
       await this.saveState(s);
       await this.broadcast(s);
@@ -332,6 +359,11 @@ export class Room extends DurableObject {
     }
     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');const legacy=req.headers.get('X-Player-Token');const who=s.players.findIndex(p=>p.id===user?.player||(!p.id.startsWith('tg:')&&legacy&&p.token===legacy));
     if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
+    if(path.endsWith('/dismiss')){
+     if(!concluded(s)||(s.matchId||null)!==(b.matchId||null))return json({left:true});
+     if(this.hasResultViewer(s,{player:s.players[who].id}))return json({left:true});
+     return json(await this.removeTable(s,'dismissed'));
+    }
     if(path.endsWith('/rematch')){
      if(s.phase!=='finished'||activeTable(s)||b.revision!==s.revision)
       return json({error:'La partita è cambiata o deve ancora concludersi.'},409);
@@ -349,12 +381,7 @@ export class Room extends DurableObject {
     }
     if(path.endsWith('/archive')||path.endsWith('/delete')){
      if(b.revision!==s.revision)return json({error:'La partita è cambiata. Aggiorna e riprova.'},409);
-     if(path.endsWith('/delete')){
-      const result={room:s.room,number:s.number,deleted:true};
-      await this.ctx.storage.deleteAlarm();await this.ctx.storage.deleteAll();
-      for(const ws of this.ctx.getWebSockets()){try{ws.send(JSON.stringify(result));ws.close(1000,'Partita eliminata')}catch{}}
-      return json(result);
-     }
+     if(path.endsWith('/delete'))return json(await this.removeTable(s,'manual'));
      if(s.series){s.series.done=true;s.series.cancelled=true}s.archived=true;s.phase='finished';s.expires=null;s.revision++;
      if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
      if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:s.checkers.reason||'Archiviata'};
@@ -396,21 +423,23 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,finishedAt:s.finishedAt,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
-  return [...entries.values()].filter(s=>s.game!=='cluedo'&&(s.game==='labyrinth'||s.archived||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
+  return [...entries.values()].filter(s=>s.game!=='cluedo'&&(s.game==='labyrinth'||!activeTable(s)||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
  }
 
- async lobbyPayload(){
-  const games=await this.lobbyList(),unique=new Map(),tag=await telegramAccessTag(this.env);
+ async lobbyPayload(allGames){
+  const tables=allGames??await this.lobbyList();
+  const games=tables.filter(g=>g.archived||activeTable(g));
+  const unique=new Map(),tag=await telegramAccessTag(this.env);
   for(const ws of this.ctx.getWebSockets()){
    const a=ws.deserializeAttachment();if(!tag||!a||a.accessTag!==tag||a.kind!=='lobby'||a.closed||Date.now()-a.seen>65000)continue;
    const prior=unique.get(a.user.id);if(!prior||a.room)unique.set(a.user.id,a);
   }
   const users=[...unique.values()].map(a=>{
    const own=games.find(g=>g.game!=='labyrinth'&&activeTable(g)&&g.players.some(p=>p.id===a.user.player));
-   const watching=games.find(g=>g.room===a.room);
+   const watching=tables.find(g=>g.room===a.room);
    return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
   }).sort((a,b)=>a.name.localeCompare(b.name));
   const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()];return {games,users,messages:await this.ctx.storage.get('chat')||[],leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai')};
@@ -422,27 +451,28 @@ export class Room extends DurableObject {
   const message=JSON.stringify(payload),tag=await telegramAccessTag(this.env);
   for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
  }
- async migrateRetention(games){
-  if(this.migratingRetention)return;
-  this.migratingRetention=true;
+ async tidyLegacyResults(games){
+  if(this.tidyingResults)return;
+  this.tidyingResults=true;
   try{
    for(const game of games.slice(0,12)){
     const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(game.room));
-    const result=await stub.fetch(new Request('https://internal/retention',{method:'POST'}));
+    const result=await stub.fetch(new Request('https://internal/tidy-result',{method:'POST'}));
     if(!result.ok)continue;
     const summary=await result.json();
     const lobby=this.env.ROOMS.get(this.ctx.id);
-    await lobby.fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(summary)}));
+    const action=summary.deleted?'remove':'update';
+    await lobby.fetch(new Request('https://internal/lobby/'+action,{method:'POST',body:JSON.stringify(summary)}));
    }
-  }finally{this.migratingRetention=false;}
+  }finally{this.tidyingResults=false;}
  }
  async lobby(req,path){
-  if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&g.game!=='labyrinth'&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
+  if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&g.game!=='labyrinth'&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);if(u.searchParams.get('mode')==='both')return json({leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai'),pending:pending.length>8});return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
   if(path==='/lobby/list'){
-   const payload=await this.lobbyPayload();
-   const old=payload.games.filter(game=>game.game!=='labyrinth'&&needsRetention(game));
-   if(old.length)this.ctx.waitUntil(this.migrateRetention(old));
-   return json(payload);
+   const games=await this.lobbyList();
+   const old=games.filter(game=>concluded(game)&&game.expires!==null);
+   if(old.length)this.ctx.waitUntil(this.tidyLegacyResults(old));
+   return json(await this.lobbyPayload(games));
   }
   if(path==='/lobby/ws'){
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
@@ -519,7 +549,23 @@ export class Room extends DurableObject {
    a.seen=Date.now();a.closed=!!b.away;ws.serializeAttachment(a);await this.lobbyBroadcast(false);
   }catch{}
  }
- async webSocketClose(ws,code){const a=ws.deserializeAttachment();if(a?.kind==='lab'){await this.lab.close(ws);try{ws.close(code===1006?1000:code)}catch{}return}if(a?.kind==='lobby'){a.closed=true;ws.serializeAttachment(a);await this.lobbyBroadcast()}ws.close(code===1006?1000:code);}
+ async webSocketClose(ws,code){
+  const attachment=ws.deserializeAttachment();
+  if(attachment?.kind==='lab'){
+   await this.lab.close(ws);
+  }else if(attachment?.kind==='lobby'){
+   attachment.closed=true;ws.serializeAttachment(attachment);await this.lobbyBroadcast();
+  }else if(attachment?.player&&(code===1000||code===1001)){
+   await this.ctx.blockConcurrencyWhile(async()=>{
+    const s=await this.ctx.storage.get('state');
+    if(s&&concluded(s)&&s.players.some(p=>p.id===attachment.player)&&!this.hasResultViewer(s,{socket:ws})){
+     await this.removeTable(s,'dismissed');
+     this.notifyTableRemoved(s.room);
+    }
+   });
+  }
+  try{ws.close(code===1006?1000:code);}catch{}
+ }
  webSocketError(ws){if(ws.deserializeAttachment()?.kind==='lab')return this.lab.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
@@ -527,26 +573,28 @@ export class Room extends DurableObject {
   return this.ctx.blockConcurrencyWhile(async()=>{
    const entries=await this.ctx.storage.list({prefix:'game:'});
    for(const [key,value] of entries){
-    if(value.game!=='labyrinth'&&!value.archived&&value.expires<=Date.now())await this.ctx.storage.delete(key);
+    if(value.game!=='labyrinth'&&activeTable(value)&&value.expires<=Date.now())await this.ctx.storage.delete(key);
    }
    await this.lobbyBroadcast();
    const games=await this.lobbyList();
-   const old=games.filter(game=>game.game!=='labyrinth'&&needsRetention(game));
-   if(old.length)this.ctx.waitUntil(this.migrateRetention(old));
+   const old=games.filter(game=>concluded(game)&&game.expires!==null);
+   if(old.length)this.ctx.waitUntil(this.tidyLegacyResults(old));
    if(games.some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+(old.length>12?30000:3600000));
   });
  }
  return this.ctx.blockConcurrencyWhile(async()=>{
   const current=await this.ctx.storage.get('state');
   if(!current||current.archived)return;
+  if(concluded(current)){
+   if(!this.hasResultViewer(current)){
+    await this.removeTable(current,'dismissed');
+    this.notifyTableRemoved(current.room);
+   }else await this.saveState(current);
+   return;
+  }
   if(current.expires<=Date.now()){
-   await this.ctx.storage.deleteAll();
-   const message=JSON.stringify({room:current.room,deleted:true,expired:true});
-   for(const ws of this.ctx.getWebSockets()){
-    try{ws.send(message);ws.close(1000,'Tavolo scaduto.');}catch{}
-   }
-   const lobby=this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
-   this.ctx.waitUntil(lobby.fetch(new Request('https://internal/lobby/remove',{method:'POST',body:JSON.stringify({room:current.room})})));
+   await this.removeTable(current,'expired');
+   this.notifyTableRemoved(current.room);
    return;
   }
   const who=this.botSeat(current);
@@ -570,6 +618,11 @@ export class Room extends DurableObject {
   settleSeries(current);
   current.revision++;
   await this.saveState(current);
+  if(concluded(current)&&!this.hasResultViewer(current)){
+   await this.removeTable(current,'dismissed');
+   this.notifyTableRemoved(current.room);
+   return;
+  }
   await this.broadcast(current);
   await this.syncLobby(current);
  });

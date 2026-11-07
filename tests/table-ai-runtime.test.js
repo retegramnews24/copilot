@@ -39,7 +39,8 @@ try{
  // Complete real two-player result, deduplication, deletion and persistence.
  let made=await call(2000,'/api/create',{game:'connect4'}),r=made.data.state.room,s=(await call(2001,'/api/room/'+r+'/claim',{})).data.state;
  for(const column of [0,0,1,1,2,2,3]){const result=await call(s.turn===0?2000:2001,'/api/room/'+r+'/move',{column,revision:s.revision});assert.equal(result.status,200);s=result.data}
- assert.equal(s.expires-s.finishedAt,5*60*1000);
+ assert.equal(s.expires,null);
+ assert.ok(!(await call(2000,'/api/lobby')).data.games.some(game=>game.room===r));
  for(let i=0;i<3;i++)await call(2000,'/api/room/'+r+'/state');let leaders=(await call(2000,'/api/leaderboard')).data.leaders;assert.equal(leaders.find(p=>p.id==='tg:2000').wins,1);assert.equal(leaders.find(p=>p.id==='tg:2000').games.connect4,1);assert.ok(!leaders.some(p=>p.id.startsWith('bot:')));
  assert.equal((await call(2002,'/api/room/'+r+'/rematch',{revision:s.revision})).status,403);
  const again=await call(2000,'/api/room/'+r+'/rematch',{revision:s.revision});
@@ -58,9 +59,37 @@ try{
  for(const column of [0,0,1,1,2,2,3]){
   second=(await call(second.turn===0?2000:2001,'/api/room/'+r+'/move',{column,revision:second.revision})).data;
  }
- assert.equal((await call(2000,'/api/room/'+r+'/delete',{revision:second.revision})).status,200);
+ assert.equal((await call(2002,'/api/room/'+r+'/dismiss',{matchId:second.matchId})).status,403);
+ assert.equal((await call(2000,'/api/room/'+r+'/dismiss',{matchId:null})).data.left,true);
+ const other=await mf.dispatchFetch('https://unit.test/api/room/'+r+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(2001)}});
+ assert.equal(other.status,101);
+ const otherClient={ws:other.webSocket,packets:[],waiters:[]};
+ otherClient.ws.addEventListener('message',event=>{
+  const packet=JSON.parse(event.data);
+  otherClient.packets.push(packet);
+  for(const fn of [...otherClient.waiters])fn(packet);
+ });
+ otherClient.ws.accept();sockets.push(otherClient.ws);
+ await until(otherClient,packet=>packet.phase==='finished');
+ assert.equal((await call(2000,'/api/room/'+r+'/dismiss',{matchId:second.matchId})).data.left,true);
+ assert.equal((await call(2001,'/api/room/'+r+'/state')).status,200);
+ assert.equal((await call(2001,'/api/room/'+r+'/dismiss',{matchId:second.matchId})).data.deleted,true);
+ await until(otherClient,packet=>packet.deleted===true);
+ assert.equal((await call(2000,'/api/room/'+r+'/state')).status,404);
  leaders=(await call(2000,'/api/leaderboard')).data.leaders;
  assert.equal(leaders.find(p=>p.id==='tg:2000').wins,2);
+ const closing=(await call(2199,'/api/create',{game:'scopa'})).data.state;
+ const closePath='/api/room/'+closing.room;
+ const closeSocket=await mf.dispatchFetch('https://unit.test'+closePath+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(2199)}});
+ assert.equal(closeSocket.status,101);closeSocket.webSocket.accept();sockets.push(closeSocket.webSocket);
+ assert.equal((await call(2199,closePath+'/finish',{revision:closing.revision})).status,200);
+ closeSocket.webSocket.close(1000,'Uscita dal risultato');
+ let status=200;
+ for(let attempt=0;attempt<50&&status!==404;attempt++){
+  status=(await call(2199,closePath+'/state')).status;
+  if(status!==404)await new Promise(resolve=>setTimeout(resolve,20));
+ }
+ assert.equal(status,404);
  const toKeep=(await call(2200,'/api/create',{game:'scopa'})).data.state;
  const keepPath='/api/room/'+toKeep.room;
  const closed=(await call(2200,keepPath+'/finish',{revision:toKeep.revision})).data;
@@ -68,6 +97,7 @@ try{
  assert.equal(kept.status,200);
  assert.equal(kept.data.archived,true);
  assert.equal(kept.data.expires,null);
+ assert.equal((await call(2200,keepPath+'/dismiss',{matchId:null})).data.left,true);
  const solo=(await call(2100,'/api/create',{game:'scopa',mode:'tutorial',seats:4})).data.state;
  const finished=(await call(2100,'/api/room/'+solo.room+'/finish',{revision:solo.revision})).data;
  const soloAgain=await call(2100,'/api/room/'+solo.room+'/rematch',{revision:finished.revision});
