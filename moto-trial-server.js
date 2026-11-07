@@ -1,4 +1,4 @@
-import {makeCourse} from './public/moto-trial/physics.js';
+import {COURSE_VERSION, makeCourse} from './public/moto-trial/physics.js';
 
 const LIMIT = 8, EMPTY_GRACE = 60_000;
 const json = (data, status = 200) => Response.json(data, {status, headers: {'Cache-Control': 'no-store'}});
@@ -30,7 +30,7 @@ export class MotoTrialRoom {
   }
 
   state(room) {
-    return {room: room.room, number: room.number, seed: room.seed, players: this.players()};
+    return {room: room.room, number: room.number, seed: room.seed, courseVersion: room.courseVersion ?? 1, players: this.players()};
   }
 
   summary(room) {
@@ -62,7 +62,7 @@ export class MotoTrialRoom {
       if (path === '/moto-trial/init' && req.method === 'POST' && !room) {
         const {room: id, number, seed} = await req.json(), course = makeCourse(seed);
         const points = course.tiers.flatMap(tier => tier.points.map(p => p.x));
-        room = {room: id, number, seed, created: Date.now(), revision: 0,
+        room = {room: id, number, seed, courseVersion: COURSE_VERSION, created: Date.now(), revision: 0,
           bounds: {min: Math.min(...points), max: Math.max(...points), bottom: course.bottom}};
         await this.ctx.storage.put('moto-trial', room);
         await this.ctx.storage.setAlarm(Date.now() + EMPTY_GRACE);

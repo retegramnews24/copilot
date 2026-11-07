@@ -1,4 +1,4 @@
-import {AXLE, WHEEL, ground} from './physics.js';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=2';
 
 const THEMES = [
   {sky: ['#193345', '#eaa46d', '#f6d399'], haze: '#96736d', far: '#615c68', near: '#43515a', rock: '#573c37', face: '#724b3d', top: '#d49a66', rim: '#f2c183', dust: '#f4c893'},
@@ -34,7 +34,8 @@ function sky(c, w, h, course, bike, theme) {
   theme.sky.forEach((color, i) => gradient.addColorStop(i * .5, color));
   c.fillStyle = gradient;
   c.fillRect(0, 0, w, h);
-  const sunX = w * .74 - (bike.x - 4) * .12, sunY = h * .25 - bike.y * .18;
+  const depthShift = Math.min(Math.max(0, bike.y), h * .25);
+  const sunX = w * .74 - (bike.x - 4) * .12, sunY = h * .25 - depthShift * .18;
   disc(c, sunX, sunY, h * .091, '#fff0bb33');
   disc(c, sunX, sunY, h * .074, '#ffe5ad');
   for (const [i, fill] of [theme.haze, theme.far, theme.near].entries()) {
@@ -42,7 +43,7 @@ function sky(c, w, h, course, bike, theme) {
     const offset = bike.x * depth * 1.8 + course.seed % 997;
     for (let x = 0; x < w + stride; x += stride) {
       const u = (x + offset) / Math.max(260, w);
-      const y = h * (.57 + i * .124) - bike.y * depth * .4 +
+      const y = h * (.57 + i * .124) - depthShift * depth * .4 +
         Math.sin(u * 9 + i) * h * .095 + Math.cos(u * 22 - i * 3) * h * .049;
       ridge.push([x, y]);
     }
@@ -108,7 +109,7 @@ function motorcycle(c, bike, time, color) {
   c.lineJoin = 'round';
   c.lineCap = 'round';
   for (const x of [-AXLE, AXLE]) {
-    disc(c, x, 0, WHEEL + .024, '#211f28');
+    disc(c, x, 0, WHEEL, '#211f28');
     disc(c, x, 0, WHEEL - .075, '#b0a7a0');
     disc(c, x, 0, WHEEL - .113, '#38363f');
     for (let i = 0; i < 6; i++) {
@@ -133,10 +134,11 @@ function motorcycle(c, bike, time, color) {
   line(c, [hip, shoulder], jersey, .195);
   line(c, [shoulder, [.22 + shift * .5, -.90], [.49, -.84]], '#304551', .125);
   line(c, [shoulder, [.22 + shift * .5, -.90], [.49, -.84]], '#a8e6d4', .064);
-  disc(c, shoulder[0] + .14, shoulder[1] - .20, .22, '#252834');
-  disc(c, shoulder[0] + .14, shoulder[1] - .218, .173, '#fff0c9');
-  polygon(c, [[shoulder[0] + .06, shoulder[1] - .248], [shoulder[0] + .36, shoulder[1] - .248],
-    [shoulder[0] + .35, shoulder[1] - .10], [shoulder[0] + .23, shoulder[1] - .09]], '#384e5a');
+  const hx = HELMET.x + shift, hy = HELMET.y;
+  disc(c, hx, hy, HELMET.radius, '#252834');
+  disc(c, hx, hy - .018, .173, '#fff0c9');
+  polygon(c, [[hx - .08, hy - .048], [hx + .22, hy - .048],
+    [hx + .21, hy + .10], [hx + .09, hy + .11]], '#384e5a');
   c.restore();
 }
 
@@ -151,12 +153,13 @@ export function drawTrial(c, width, height, course, bike, time, reduced, riders 
   const reach = width / scale * .53, below = height / scale * .6;
   for (const [i, tier] of course.tiers.entries()) {
     if (tier.points[0].x > bike.x + reach || tier.points.at(-1).x < bike.x - reach ||
-        !tier.points.some(p => Math.abs(p.y - bike.y) < below + 3)) continue;
+        tier.top > bike.y + below + 3 || tier.bottom < bike.y - below - 3) continue;
     ledge(c, tier, theme);
     sign(c, tier.marker, ground(tier, tier.marker), tier.direction, true);
-    const x = i === 4 ? course.finish : tier.end - 4 * tier.direction;
+    const isLast = i === course.tiers.length - 1;
+    const x = isLast ? course.finish : tier.end - 4 * tier.direction;
     const y = ground(tier, x);
-    if (i === 4) gate(c, x, y);
+    if (isLast) gate(c, x, y);
     else sign(c, x, y, tier.direction);
   }
   if (!reduced && bike.onGround && Math.abs(bike.vx) > 2 && bike.status === 'ride') {

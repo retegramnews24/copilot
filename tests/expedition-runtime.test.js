@@ -123,6 +123,7 @@ try{
  const rider2=await connect(202,race.room,false,'moto-trial');
  const raceState=(await until(rider1,p=>p.type==='state'&&p.state.players.length===2)).state;
  assert.equal(raceState.seed,race.seed);
+ assert.equal(raceState.courseVersion,2);
  assert.equal((await call(202,'/api/moto-trial/'+race.room+'/state')).data.state.seed,race.seed);
  assert.equal(new Set(raceState.players.map(p=>p.color)).size,2);
  assert.equal((await call(202,'/api/lobby')).data.games.find(g=>g.room===race.room).online,2);

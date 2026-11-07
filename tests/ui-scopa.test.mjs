@@ -290,6 +290,11 @@ await new Promise(resolve=>setTimeout(resolve,1180));
 assert.equal(trial.__trialTest.seed(),crashedSeed);
 assert.equal(trial.__trialTest.bike().x,4);
 assert.equal(trial.__trialTest.mode(),'ride');
+trial.__trialTest.bike().status='finish';
+trial.__trialTest.tick();
+assert.equal(trialGet('primary').textContent,'Nuovo percorso');
+trialGet('primary').click();
+assert.notEqual(trial.__trialTest.seed(),crashedSeed);
 trialDom.window.close();
 console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and random restart.');
 

@@ -1,7 +1,7 @@
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=2';
 import {TrialAudio} from './audio.js';
-import {drawTrial} from './render.js';
+import {drawTrial} from './render.js?v=2';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -76,7 +76,7 @@ function receiveRace(data) {
   self = state.players.find(p => p.id === data.player) || self;
   if (newRace) {
     remote.clear();
-    course = makeCourse(state.seed);
+    course = makeCourse(state.seed, state.courseVersion ?? 1);
     bike = resetBike(course);
   }
   const members = state.players.filter(p => p.id !== data.player);
@@ -140,7 +140,7 @@ function setMode(next) {
   $('controls').hidden = next !== 'ride';
   $('key-hints').hidden = next !== 'ride';
   $('pause').disabled = next !== 'ride';
-  $('new-course').hidden = next === 'ready' || multiplayer;
+  $('new-course').hidden = next === 'ready' || next === 'finish' || multiplayer;
   $('intro-controls').hidden = next !== 'ready';
   if (next === 'ride') {
     canvas.focus({preventScroll: true});
@@ -151,7 +151,7 @@ function setMode(next) {
       ready: ['Moto Trial', 'Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Bilancia la moto sulle rampe per evitare di ribaltarti.', 'Parti'],
       paused: ['In pausa', multiplayer ? 'Gli altri piloti possono continuare a correre.' : 'Riprendi dallo stesso punto o genera un altro percorso.', 'Riprendi'],
       crash: ['Caduta', 'Ripartenza dall’inizio dello stesso percorso.', 'Riparti subito'],
-      finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), 'Riprova lo stesso percorso']
+      finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), multiplayer ? 'Riprova lo stesso percorso' : 'Nuovo percorso']
     }[next];
     $('title').textContent = title;
     $('description').textContent = description;
@@ -185,7 +185,7 @@ function primary() {
   if (multiplayer && mode === 'ready' && !connected) return;
   audio.resume();
   if (mode === 'crash') retryAfterFall();
-  else if (mode === 'finish') restart();
+  else if (mode === 'finish') restart(true);
   else setMode('ride');
 }
 
