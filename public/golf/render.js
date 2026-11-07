@@ -1,6 +1,12 @@
 import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWall } from './courses.js?v=3';
 
-const NEAR=.35, pitch=.18, cp=Math.cos(pitch), sp=Math.sin(pitch);
+import { rotateVector } from './roll.js';
+
+const NEAR=.35, ORBIT_DISTANCE=Math.hypot(7.3,2.95), ORBIT_OFFSET=Math.atan2(2.95,7.3)-.18;
+const DIMPLES=Array.from({length:56},(_,i)=>{
+  const y=1-(2*i+1)/56, ring=Math.sqrt(1-y*y), a=i*Math.PI*(3-Math.sqrt(5));
+  return [ring*Math.cos(a),y,ring*Math.sin(a)];
+});
 const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
 const quad=(x,z,w,d,y=0)=>[[x,z,y],[x+w,z,y],[x+w,z+d,y],[x,z+d,y]];
 const circle=(x,z,r,y=0,segments=24)=>Array.from({length:segments},(_,i)=>{
@@ -12,9 +18,10 @@ export function aimDirection(yaw,dx,dy){
   return Math.atan2(Math.sin(yaw)*forward+Math.cos(yaw)*side,Math.cos(yaw)*forward-Math.sin(yaw)*side);
 }
 
-function viewFor(width,height,{x,z,yaw}){
-  const fx=Math.cos(yaw),fz=Math.sin(yaw);
-  const eyeX=x-fx*7.3,eyeZ=z-fz*7.3,eyeY=2.95;
+function viewFor(width,height,{x,z,yaw,pitch}){
+  const fx=Math.cos(yaw),fz=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
+  const tilt=pitch+ORBIT_OFFSET, along=Math.cos(tilt), above=Math.sin(tilt);
+  const eyeX=x-fx*ORBIT_DISTANCE*along,eyeZ=z-fz*ORBIT_DISTANCE*along,eyeY=ORBIT_DISTANCE*above;
   const focal=Math.min(height*.96,width*1.3), centerY=height*.43;
   const transform=([x,z,y])=>{
     const dx=x-eyeX,dz=z-eyeZ,dy=y-eyeY,forward=dx*fx+dz*fz;
@@ -39,7 +46,11 @@ function viewFor(width,height,{x,z,yaw}){
     }
     return clipped.map(project);
   };
-  return {point,polygon,horizon:centerY-focal*sp/cp,depth:world=>transform(world)[2]};
+  const ballVector=([x,y,z])=>{
+    const forward=x*fx+z*fz;
+    return [z*fx-x*fz,-(y*along+forward*above),y*above-forward*along];
+  };
+  return {point,polygon,ballVector,horizon:centerY-focal*sp/cp,depth:world=>transform(world)[2]};
 }
 
 function backdrop(ctx,w,h,horizon,yaw){
@@ -59,19 +70,32 @@ function backdrop(ctx,w,h,horizon,yaw){
   }
 }
 
-function paintBall(ctx,p,r,palette,own){
+function paintBall(ctx,p,r,palette,own,rotation,view){
   const {x,y}=p;
+  const vector=local=>view.ballVector(rotateVector(rotation,local));
+  const [poleX,poleY,poleDepth]=vector([0,1,0]);
+  const cap=clamp(poleDepth,-1,1);
   ctx.save();
   ctx.fillStyle=palette[0];ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.clip();
-  ctx.fillRect(x-r,y-r,2*r,r);
-  ctx.fillStyle=palette[1];ctx.fillRect(x-r,y,2*r,r);
+  ctx.fillStyle=palette[1];ctx.fillRect(x-r,y-r,2*r,2*r);
+  ctx.save();ctx.translate(x,y);ctx.rotate(Math.atan2(poleY,poleX));
+  // In the image plane the sphere's equator projects to half an ellipse.
+  ctx.beginPath();ctx.moveTo(0,-r);
+  for(let i=1;i<24;i++){
+    const angle=i*Math.PI/24;
+    ctx.lineTo(-cap*r*Math.sin(angle),-r*Math.cos(angle));
+  }
+  ctx.lineTo(0,r);ctx.lineTo(r,r);ctx.lineTo(r,-r);ctx.closePath();
+  ctx.fillStyle=palette[0];ctx.fill();ctx.restore();
   const lighting=ctx.createRadialGradient(x-r*.35,y-r*.42,0,x-r*.12,y-r*.16,r*1.25);
   lighting.addColorStop(0,'#ffffffdf');lighting.addColorStop(.36,'#ffffff24');lighting.addColorStop(.67,'#080f1b00');lighting.addColorStop(1,'#080f1bcc');
   ctx.fillStyle=lighting;ctx.fillRect(x-r,y-r,2*r,2*r);
   if(r>6){
     ctx.fillStyle='#101a302c';
-    for(let row=-2;row<=2;row++)for(let col=-2;col<=2;col++){
-      ctx.beginPath();ctx.arc(x+(col+(row%2)*.5)*r*.36,y+row*r*.34,r*.075,0,Math.PI*2);ctx.fill();
+    for(const dimple of DIMPLES){
+      const [dx,dy,front]=vector(dimple);
+      if(front<.17)continue;
+      ctx.beginPath();ctx.arc(x+dx*r,y+dy*r,r*(.032+.038*front),0,Math.PI*2);ctx.fill();
     }
   }
   ctx.restore();
@@ -184,7 +208,7 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
     const r=clamp(radius*p.size,3,34)*(1-ball.sink*.88);
     const palette=ballColors(ball.appearance,ball.color);
     poly(circle(ball.x,ball.z,radius*1.25,.032,12),'#1c35296b');
-    paintBall(ctx,p,r,palette,ball.id===self);
+    paintBall(ctx,p,r,palette,ball.id===self,ball.rotation,view);
     if(ball.id!==self&&!ball.sink)labels.push({p,r,name:ball.name,color:palette[0]});
   });
   surfaces.sort((a,b)=>b.d-a.d).forEach(({draw})=>draw());

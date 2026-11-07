@@ -1,11 +1,13 @@
-import { COURSES, COURSE_VERSION, courseFor, BALL_KEY, ballColors, validBallColors } from './courses.js?v=3';
+import { COURSES, COURSE_VERSION, courseFor, RADIUS, BALL_KEY, ballColors, validBallColors } from './courses.js?v=3';
 import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=3';
-import { aimDirection, drawCourse } from './render.js?v=3';
+import { aimDirection, drawCourse } from './render.js?v=4';
+import { upright, rollBy } from './roll.js';
 import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});
 const online=new URLSearchParams(location.search).get('online')==='1';
-let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null;
+let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null, orbit=null;
+const ballRolls=new Map();
 try{appearance=JSON.parse(localStorage.getItem(BALL_KEY));}catch{}
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
 const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},location.origin);
@@ -16,7 +18,7 @@ const canShoot=()=>!!(player()&&state.phase==='playing'&&!player().done&&!busy&&
 const angle=()=>value('aim')*Math.PI/180;
 function resetAim(course){
   $('aim').value=String(Math.round(Math.atan2(course.cup[1]-course.tee[1],course.cup[0]-course.tee[0])*180/Math.PI));
-  $('power').value='43';drag=null;
+  $('power').value='43';drag=null;orbit=null;ballRolls.clear();
 }
 
 function solo(){
@@ -48,7 +50,8 @@ function sound(type){
   }catch{}
 }
 function shoot(){
-  if(!canShoot())return;
+  if(!canShoot()||orbit)return;
+  if(!camera.free)camera.targetYaw=angle();
   sound('shot');
   action('shot',{hole:state.hole,strokes:player().strokes,angle:angle(),power:value('power')/100});
 }
@@ -105,13 +108,32 @@ function positionAt(p,now){
     Math.min(1,(elapsed-index*50)/Math.max(1,shot.duration-index*50)):t-index;
   return a.map((x,i)=>x+(next[i]-x)*fraction);
 }
+function rotationAt(p,now,[x,z],radius){
+  if(!p.shot)return upright;
+  const {at,duration,until,samples,penalty}=p.shot;
+  let roll=ballRolls.get(p.id);
+  if(roll?.at!==at||roll?.stroke!==p.strokes){
+    const initial=roll?.stroke===p.strokes-1 ? roll.rest : upright;
+    const rotations=[initial];
+    for(let i=1;i<samples.length;i++){
+      const [x,z]=samples[i], [prevX,prevZ]=samples[i-1];
+      rotations.push(rollBy(rotations[i-1],x-prevX,z-prevZ,radius));
+    }
+    roll={at,stroke:p.strokes,rotations,rest:penalty?initial:rotations.at(-1)};
+    ballRolls.set(p.id,roll);
+  }
+  if(now>=until)return roll.rest;
+  if(now>=at+duration)return roll.rotations.at(-1);
+  const index=Math.min(samples.length-2,Math.floor(Math.max(0,now-at)/50));
+  return rollBy(roll.rotations[index],x-samples[index][0],z-samples[index][1],radius);
+}
 const putText=(id,text)=>{const node=$(id);if(node.textContent!==text)node.textContent=text;};
 function draw(stamp=performance.now()){
   if(state&&!online)advanceMatch(state,time());
   const course=courseFor(state?.hole??0,state ? state.courseVersion : COURSE_VERSION), now=time();
   if(hole!==(state?.hole??0)||camera?.course!==course){
     hole=state?.hole??0;resetAim(course);
-    camera={course,x:course.tee[0],z:course.tee[1],yaw:angle()};
+    camera={course,x:course.tee[0],z:course.tee[1],yaw:angle(),targetYaw:angle(),pitch:.18,free:false};
   }
   const dt=Math.max(.001,Math.min(.1,(stamp-lastFrame)/1000));
   lastFrame=stamp;
@@ -124,7 +146,7 @@ function draw(stamp=performance.now()){
   putText('course',course.name);
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');
-  putText('tip',course.tip+'  ·  Trascina verso il bersaglio e rilascia, oppure usa i comandi.');
+  putText('tip',course.tip+'  ·  Trascina verso il bersaglio per tirare. Su PC, tieni premuto il destro per ruotare la visuale.');
   const progress=p?'Colpi '+p.strokes+'/'+LIMIT:'';
   const notice=p?.shot?.penalty&&p.shot.until>now&&now>=p.shot.at+p.shot.duration?'Acqua · ritorno all’ultimo punto':
     p?.shot?.sunk&&now>=p.shot.at+p.shot.duration?'In buca! · '+progress:p?.done?'Buca chiusa · '+progress:progress;
@@ -138,16 +160,17 @@ function draw(stamp=performance.now()){
     const w=Math.round(width*scale),h=Math.round(height*scale);
     if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
     ctx.setTransform(scale,0,0,scale,0,0);
+    const radius=RADIUS*(course.scale??1);
     const balls=(state?.players||[]).flatMap(p=>{
       const pos=positionAt(p,now);
-      return pos?[{id:p.id,name:p.name,color:p.color,appearance:p.appearance,x:pos[0],z:pos[1],sink:pos[2]||0}]:[];
+      return pos?[{id:p.id,name:p.name,color:p.color,appearance:p.appearance,x:pos[0],z:pos[1],sink:pos[2]||0,rotation:rotationAt(p,now,pos,radius)}]:[];
     });
     const [x,z]=p ? positionAt(p,now)??p.position : course.tee;
     const follow=1-Math.exp(-dt*17);
     camera.x+=(x-camera.x)*follow;
     camera.z+=(z-camera.z)*follow;
-    if(!drag){
-      const delta=angle()-camera.yaw;
+    if(!drag&&!orbit){
+      const delta=camera.targetYaw-camera.yaw;
       camera.yaw+=Math.atan2(Math.sin(delta),Math.cos(delta))*(1-Math.exp(-dt*11));
     }
     drawCourse(ctx,width,height,course,balls,me,available,angle(),value('power')/100,
@@ -164,25 +187,47 @@ function aimDrag(e){
   $('power').value=String(Math.min(100,Math.max(1,Math.round(length/Math.min(150,canvas.clientWidth*.34)*100))));
   return true;
 }
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{
-  if(!canShoot()||e.button!==0||drag)return;
-  drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:camera.yaw};
+  if(drag||orbit)return;
+  if(e.button===2){
+    e.preventDefault();
+    orbit={id:e.pointerId,x:e.clientX,y:e.clientY};
+  }else if(e.button===0&&canShoot()){
+    drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:camera.yaw};
+  }else return;
   canvas.setPointerCapture?.(e.pointerId);
 });
-canvas.addEventListener('pointermove',e=>{if(drag?.id===e.pointerId)aimDrag(e);});
-canvas.addEventListener('pointerup',e=>{
-  if(drag?.id!==e.pointerId)return;
-  const moved=aimDrag(e);drag=null;if(moved)shoot();
+canvas.addEventListener('pointermove',e=>{
+  if(orbit?.id===e.pointerId){
+    if(!(e.buttons&2)){orbit=null;return;}
+    camera.yaw+=(e.clientX-orbit.x)*.008;
+    camera.targetYaw=camera.yaw;camera.free=true;
+    camera.pitch=Math.max(.07,Math.min(.64,camera.pitch-(e.clientY-orbit.y)*.006));
+    orbit.x=e.clientX;orbit.y=e.clientY;
+  }else if(drag?.id===e.pointerId)aimDrag(e);
 });
-for(const event of ['pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{if(drag?.id===e.pointerId)drag=null;});
+canvas.addEventListener('pointerup',e=>{
+  if(orbit?.id===e.pointerId)orbit=null;
+  if(drag?.id!==e.pointerId)return;
+  const moved=e.button===0&&aimDrag(e);drag=null;if(moved)shoot();
+});
+for(const event of ['pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{
+  if(orbit?.id===e.pointerId)orbit=null;
+  if(drag?.id===e.pointerId)drag=null;
+});
+window.addEventListener('blur',()=>{drag=null;orbit=null;});
+function followAim(){camera.targetYaw=angle();camera.free=false;}
+$('aim').addEventListener('input',followAim);
 window.addEventListener('keydown',e=>{
-  if(e.target.matches?.('input,button')||!canShoot())return;
+  if(e.target.matches?.('input,button')||!canShoot()||orbit)return;
   const {code}=e;
   if(!['ArrowLeft','ArrowRight','KeyA','KeyD','ArrowUp','ArrowDown','KeyW','KeyS','Space'].includes(code))return;
   e.preventDefault();
   if(code==='Space'){if(!e.repeat)shoot();return;}
   if(['ArrowLeft','ArrowRight','KeyA','KeyD'].includes(code)){
     $('aim').value=String((value('aim')+180+360+(['ArrowRight','KeyD'].includes(code)?3:-3))%360-180);
+    followAim();
   }else $('power').value=String(value('power')+(['ArrowUp','KeyW'].includes(code)?3:-3));
 });
 function leave(){if(parent!==window)post('exit');else location.href='/';}

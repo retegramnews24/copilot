@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict';
 import { COURSES, COURSE_VERSION, courseFor, ballColors } from '../public/golf/courses.js';
+import { upright, rollBy, rotateVector } from '../public/golf/roll.js';
 import { simulateShot } from '../public/golf/physics.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, HOLE_TIME, BREAK } from '../public/golf/match.js';
+
+const quarter=Math.PI*.24/2;
+const rolled=rollBy(upright,quarter,0,.24);
+const near=(a,b)=>assert.ok(a.every((value,i)=>Math.abs(value-b[i])<1e-9));
+near(rotateVector(rolled,[0,1,0]),[1,0,0]);
+near(rollBy(rolled,-quarter,0,.24),upright);
+near(rotateVector(rollBy(upright,0,quarter,.24),[0,1,0]),[0,0,1]);
 
 const routes=[
   [],

@@ -83,7 +83,7 @@ w.fetch=beforeRaceFetch;
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=3');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=4');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -418,17 +418,34 @@ function golfFixture(search='',appearance=null){
  const instance=new JSDOM(golfHtml,{url:'https://unit.test/golf/'+search,runScripts:'outside-only',pretendToBeVisual:true});
  const win=instance.window,find=id=>win.document.getElementById(id),green=find('green');
  Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
- const labels=[],arcs=[];
+ const labels=[],arcs=[],rotations=[];
  const gradient=()=>({addColorStop(){}});
  green.getContext=()=>new Proxy({arc(){arcs.push(this.fillStyle);},createLinearGradient:gradient,createRadialGradient:gradient,
-   measureText:name=>({width:name.length*6}),fillText:name=>labels.push(name)},{get:(target,key)=>target[key]??(()=>{})});
+   measureText:name=>({width:name.length*6}),fillText:name=>labels.push(name),rotate:angle=>rotations.push(angle)},{get:(target,key)=>target[key]??(()=>{})});
  if(appearance)win.localStorage.setItem('binotto-golf-ball',JSON.stringify(appearance));
  win.eval(golfBundle.outputFiles[0].text);
- return {instance,win,find,green,labels,arcs};
+ return {instance,win,find,green,labels,arcs,rotations};
 }
 const golf=golfFixture('',['#a11293','#197b61']);
 assert.equal(golf.find('course').textContent,'Pride Park');
 assert.ok(golf.arcs.includes('#a11293'));
+const pointer=(event,button,buttons,x,y)=>golf.green.dispatchEvent(Object.assign(
+ new golf.win.MouseEvent(event,{clientX:x,clientY:y,button,buttons,cancelable:true}),{pointerId:1}));
+const {yaw,pitch}=golf.win.__golf.camera();
+const beforeAim=golf.find('aim').value;
+assert.equal(pointer('contextmenu',2,0,340,220),false);
+pointer('pointerdown',2,2,340,220);
+pointer('pointermove',-1,2,440,190);
+pointer('pointerup',2,0,440,190);
+golf.win.__golf.draw(golf.win.performance.now()+100);
+assert.ok(golf.win.__golf.camera().yaw>yaw+.5);
+assert.ok(golf.win.__golf.camera().pitch>pitch+.1);
+assert.equal(golf.find('aim').value,beforeAim);
+assert.equal(golf.win.__golf.state().players[0].strokes,0);
+pointer('pointerdown',2,2,440,190);
+pointer('pointermove',-1,2,340,220);
+pointer('pointerup',2,0,340,220);
+const initialRotation=golf.rotations.at(-1);
 for(const [event,x,y] of [['pointerdown',340,220],['pointerup',340,155]]){
  golf.green.dispatchEvent(Object.assign(new golf.win.MouseEvent(event,{clientX:x,clientY:y,button:0}),{pointerId:1}));
 }
@@ -436,8 +453,9 @@ const putt=golf.win.__golf.state().players[0].shot;
 assert.equal(putt.sunk,true,'Drag forward to reach the cup');
 const teeX=golf.win.__golf.camera().x;
 golf.win.Date.now=()=>putt.at+1000;
-golf.win.__golf.draw(golf.win.performance.now()+100);
+golf.win.__golf.draw(golf.win.performance.now()+200);
 assert.ok(golf.win.__golf.camera().x>teeX+3,'The camera follows the rolling ball');
+assert.notEqual(golf.rotations.at(-1),initialRotation,'The color seam follows the ball rotation');
 golf.find('scores').click();assert.equal(golf.find('card').hidden,false);
 golf.find('scores').click();assert.equal(golf.find('card').hidden,true);
 golf.instance.window.close();
@@ -453,7 +471,7 @@ golfOnline.win.__golf.draw();
 assert.ok(golfOnline.labels.includes('Amico'));
 assert.ok(golfOnline.arcs.includes('#a11293'),'Opponents are drawn before their first putt');
 golfOnline.instance.window.close();
-console.log('PASS Golf UI: hub launch, forward drag, cup capture and opponents visible at the tee.');
+console.log('PASS Golf UI: hub launch, right-button orbit, rolling ball, forward drag, cup capture and visible opponents.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
