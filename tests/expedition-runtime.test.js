@@ -61,8 +61,9 @@ try{
  for(let id=41;id<=47;id++)assert.equal((await call(id,'/api/room/'+unoRoom+'/claim',{})).status,200);
  assert.equal((await call(49,'/api/room/'+unoRoom+'/claim',{})).status,409);
  let unoState=(await call(40,'/api/room/'+unoRoom+'/state')).data;
- assert.equal((await call(41,'/api/room/'+unoRoom+'/start',{revision:unoState.revision})).status,409);
+ assert.equal((await call(41,'/api/room/'+unoRoom+'/start',{revision:unoState.revision})).status,403);
  const unoClients=[];for(const id of [40,41,48]){const res=await mf.dispatchFetch('https://unit.test/api/room/'+unoRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const client={ws:res.webSocket,packets:[],waiters:[]};client.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);client.packets.push(p);for(const fn of [...client.waiters])fn(p)});client.ws.accept();sockets.push(client.ws);unoClients.push(client)}
+ assert.equal((await call(40,'/api/room/'+unoRoom+'/start',{revision:0})).status,409);
  const started=await call(40,'/api/room/'+unoRoom+'/start',{revision:unoState.revision});assert.equal(started.status,200);unoState=started.data;assert.equal(unoState.uno.hand.length,7);assert.equal(unoState.players.length,8);
  const ids=[];for(let id=40;id<=47;id++){const view=(await call(id,'/api/room/'+unoRoom+'/state')).data.uno;assert.equal(view.hand.length,7);ids.push(...view.hand.map(c=>c.id));assert.ok(!('deck' in view)&&!('hands' in view))}assert.equal(new Set(ids).size,56);
  const spec=(await call(48,'/api/room/'+unoRoom+'/state')).data.uno;assert.deepEqual(spec.hand,[]);assert.deepEqual(spec.legalMoves,[]);

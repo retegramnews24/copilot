@@ -3,6 +3,7 @@ import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
+if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],tableFilter='all',chatSending=false;
@@ -92,6 +93,7 @@ function renderLobby(){
 document.querySelectorAll('[data-filter]').forEach(button=>button.onclick=()=>{tableFilter=button.dataset.filter;renderLobby()});
 
 function stopRoom(){
+ $('start-error').textContent='';
  stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false;
  $('manage-game').open=false;$('draw-dialog').hidden=true;$('draw-response').hidden=true;
  capturePath=[];selectedSquare=null;promotionMove=null;boardFlipped=null;$('promotion').hidden=true;roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close();ws=null}
@@ -112,7 +114,6 @@ async function openRoom(nextRoom,watchOnly=false){
   $('name').textContent=playerName;
   try{
    const j=await api('claim',{name:playerName});
-   save('binotto-'+nextRoom,{token:j.token,player:j.player});
    if(epoch!==roomEpoch)return;credentials={token:j.token,player:j.player};s=j.state;
   }catch(e){if(epoch!==roomEpoch)return;s=await api('state');trace('CLAIM',e.message)}
  }
@@ -123,7 +124,7 @@ async function openRoom(nextRoom,watchOnly=false){
 function render(s){
  if(!room||s.room!==room||(state&&s.revision<state.revision))return;
  if(!state||s.revision!==state.revision){capturePath=[];selectedSquare=null;promotionMove=null;$('promotion').hidden=true;trace('STATE','Partita '+s.number+' · '+s.phase+' · rev '+s.revision)}
- if(state?.series&&s.series&&state.series.round!==s.series.round){stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false}
+ if(state&&(state.matchId!==s.matchId||state.series?.round!==s.series?.round)){stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false}
  state=s;$('lobby').hidden=true;$('table').hidden=false;
  const mine=s.players.findIndex(p=>p.id===credentials.player);
  $('room-number').textContent=(s.number?'Tavolo '+s.number+' · '+gameTitle(s):gameTitle(s))+(s.mode==='tutorial'?' · Tutorial':s.mode==='ai'?' · Singolo AI':'');
@@ -138,7 +139,12 @@ function render(s){
  if(s.naval?.winner!==null&&s.naval?.winner!==undefined&&s.phase==='finished')$('status').textContent='Vince '+s.players[s.naval.winner].name;
  if(s.briscola&&s.phase==='playing'&&s.briscola.phase!=='play')$('status').textContent=(s.briscola.phase==='auction'?'Asta · ':'Scelta della briscola · ')+s.players[s.turn].name;
  if(s.briscola?.winners.length&&s.phase==='finished')$('status').textContent='Vincono '+s.briscola.winners.map(i=>s.players[i].name).join(' + ');
- renderSeries(s,mine);$('start-group').hidden=!staged(s)||s.phase!=='waiting'||mine!==0;$('start-group').disabled=busy||s.players.length<gameLimits(s).min;
+ renderSeries(s,mine);
+ const start=$('start-group'),minPlayers=gameLimits(s).min;
+ start.hidden=!staged(s)||s.phase!=='waiting'||mine!==0;
+ start.disabled=start.hidden||busy||s.players.length<minPlayers;
+ start.textContent=s.players.length<minPlayers?'In attesa di almeno '+minPlayers+' giocatori':'Avvia partita';
+ if(start.hidden)$('start-error').textContent='';
  $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
 
  $('pass').hidden=!!boardState()||s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
@@ -156,7 +162,7 @@ function render(s){
  if(receiving){$('draw-dialog').hidden=true;if(newlyReceived)$('reject-draw').focus();}
  else if(document.activeElement===$('accept-draw')||document.activeElement===$('reject-draw'))$('back-lobby').focus();
  if(s.phase!=='playing')$('draw-dialog').hidden=true;
- $('newtable').hidden=mine>=0&&ongoing(s);
+ $('newtable').hidden=mine<0||s.phase!=='finished'||ongoing(s);
  $('expires').textContent=s.archived?'Archiviata · conservata fino all’eliminazione':'Disponibile fino al '+new Date(s.expires).toLocaleString('it-IT');
  $('manage-game').hidden=mine<0;$('archive-game').hidden=!!s.archived;
  $('replay-player').hidden=staged(s)||!boardState()||s.phase!=='finished';
@@ -181,41 +187,86 @@ function connectLobby(){
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
  socket.onclose=()=>{trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
-function nickname(field='name'){
- const value=identity?.name||'Utente Telegram';if(!value)throw Error('Inserisci il tuo nome.');save('binotto-name',value);$('name').textContent=value;return value;
-}
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>selectPage('debug');
 $('back-settings').onclick=()=>selectPage('settings');
-async function createTable(game,target=1,mode='people',seats=2){
+async function createTable(game,target,mode,seats){
  if(ownedGame())throw Error('Hai già una partita aperta: riprendila prima di crearne un’altra.');
- save('binotto-probe',true);const j=await api('create',{name:nickname(),game,target,mode,seats});
- stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};save('binotto-'+room,credentials);selectPage('game');render(j.state);connect();renderLobby();
+ const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});
+ stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};
+ selectPage('game');render(j.state);connect();renderLobby();
 }
 let pendingCreation=null,creationFocus=null;
-async function createGame(game){pendingCreation=game;creationFocus=document.activeElement;$('creation-title').textContent='Nuovo tavolo · '+gameTitle({game});$('creation-mode').value='1';$('creation-opponents').value='people';updateCreation();$('creation-dialog').hidden=false;$('creation-mode').focus()}
-function updateCreation(){const single=$('creation-opponents').value!=='people',lim=gameLimits({game:pendingCreation});$('creation-mode').disabled=single;if(single)$('creation-mode').value='1';$('creation-seats-row').hidden=!single;const select=$('creation-seats'),prior=Number(select.value);select.replaceChildren();for(let n=lim.min;n<=lim.max;n++){const o=document.createElement('option');o.value=n;o.textContent=n+' posti · tu + '+(n-1)+' AI';select.append(o)}if(prior>=lim.min&&prior<=lim.max)select.value=prior;$('solo-words-note').hidden=!(single&&pendingCreation==='scarabeo');}
+function createGame(game){
+ if(busy)return;
+ pendingCreation=game;creationFocus=document.activeElement;
+ $('creation-title').textContent='Nuovo tavolo · '+gameTitle({game});
+ $('creation-mode').value='1';$('creation-opponents').value='people';$('creation-error').textContent='';
+ const {min,max}=gameLimits({game}),select=$('creation-seats');
+ select.replaceChildren();
+ for(let n=min;n<=max;n++){
+  const option=document.createElement('option');
+  option.value=n;option.textContent=n+' posti · tu + '+(n-1)+' AI';select.append(option);
+ }
+ updateCreation();$('creation-dialog').hidden=false;$('creation-opponents').focus();
+}
+function updateCreation(){
+ const mode=$('creation-opponents').value,single=mode!=='people';
+ $('creation-format').hidden=single;$('creation-mode').disabled=single;
+ $('creation-seats-row').hidden=!single;
+ $('solo-words-note').hidden=!(single&&pendingCreation==='scarabeo');
+ $('confirm-creation').textContent=mode==='ai'?'Avvia partita':mode==='tutorial'?'Avvia tutorial':'Crea tavolo';
+}
 $('creation-opponents').onchange=updateCreation;
-action('confirm-creation',async()=>{const game=pendingCreation;pendingCreation=null;$('creation-dialog').hidden=true;if(game)await createTable(game,Number($('creation-mode').value),$('creation-opponents').value,Number($('creation-seats').value))});
-$('cancel-creation').onclick=()=>{pendingCreation=null;$('creation-dialog').hidden=true;creationFocus?.focus()};
+action('confirm-creation',async()=>{
+ if(!pendingCreation)return;
+ const mode=$('creation-opponents').value;
+ const controls=['creation-opponents','creation-mode','creation-seats','cancel-creation'];
+ for(const id of controls)$(id).disabled=true;
+ $('creation-error').textContent='';
+ $('confirm-creation').textContent='Creazione…';
+ try{
+  await createTable(pendingCreation,mode==='people'?Number($('creation-mode').value):1,mode,Number($('creation-seats').value));
+  pendingCreation=null;$('creation-dialog').hidden=true;
+ }catch(e){
+  $('creation-error').textContent=e.message;trace('ERROR',e.message);
+ }finally{
+  for(const id of controls)$(id).disabled=false;
+  updateCreation();
+ }
+});
+$('cancel-creation').onclick=()=>{if(busy)return;pendingCreation=null;$('creation-dialog').hidden=true;creationFocus?.focus()};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('creation-dialog').hidden)$('cancel-creation').click()});
-action('create-naval',()=>createGame('naval'));action('create-briscola',()=>createGame('briscola'));action('create-briscola5',()=>createGame('briscola5'));
-action('create-scarabeo',()=>createGame('scarabeo'));action('create-scopa',()=>createGame('scopa'));
-action('start-group',async()=>render(await api('start',{revision:state.revision})));
+for(const game of ['naval','briscola','briscola5','scarabeo','scopa','chess','checkers','connect4','uno']){
+ $('create-'+game).onclick=()=>createGame(game);
+}
+action('start-group',async()=>{
+ const selected=room;
+ $('start-error').textContent='';
+ try{
+  render(await api('start',{revision:state.revision}));
+ }catch(e){
+  if(room!==selected)return;
+  try{render(await api('state'))}catch{}
+  if(room===selected&&state?.phase==='waiting')$('start-error').textContent=e.message;
+ }
+});
 action('next-round',async()=>render(await api('next-round',{revision:state.revision})));
 function renderSeries(s,mine){const q=s.series,root=$('series-status');root.hidden=!q;$('next-round').hidden=!q||q.done||s.phase!=='finished'||mine!==0;if(!q)return;root.textContent=(q.cancelled?'Torneo interrotto':q.done?'Torneo vinto da '+(q.winners||[q.winner]).map(i=>s.players[i].name).join(' + '):'Torneo · prima persona a '+q.target+' vittorie · manche '+q.round)+' · '+s.players.map((p,i)=>p.name+' '+(q.wins[i]||0)).join(' / ')}
-action('create-chess',()=>createGame('chess'));
-action('create-checkers',()=>createGame('checkers'));
-action('create-connect4',()=>createGame('connect4'));
-action('create-uno',()=>createGame('uno'));
-action('start-uno',async()=>render(await api('start',{revision:state.revision})));
 $('uno-draw').onclick=()=>sendMove({kind:'draw',revision:state.revision});
 $('uno-pass').onclick=()=>sendMove({kind:'pass',revision:state.revision});
 
 action('pass',async()=>render(await api('pass',{revision:state.revision})));
 action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(await api('finish',{revision:state.revision}))});
 $('back-lobby').onclick=showLobby;
-$('newtable').onclick=()=>{showLobby();$('name').focus()};
+action('newtable',async()=>{
+ if(!state||$('newtable').hidden)return;
+ if(!confirm('Eliminare definitivamente questa partita e iniziarne una nuova con le stesse impostazioni?'))return;
+ const selected=room;
+ const j=await api('rematch',{revision:state.revision});
+ if(room!==selected)return;
+ credentials={token:j.token,player:j.player};render(j.state);
+});
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true)}if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
  const entries=[['Interfaccia','Binottoland 1.1'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.naval?'Battaglia navale':state?.briscola?'Briscola':state?.scarabeo?'Scarabeo':state?.scopa?'Scopa':state?.uno?'UNO':state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
@@ -274,9 +325,9 @@ function position(fen){
 function canMove(){if(replayPly!==null||state?.archived||state?.phase!=='playing'||busy)return false;const me=state.players.findIndex(p=>p.id===credentials.player);if(me<0)return false;if(state.scarabeo?.pending)return state.scarabeo.pending.by!==me&&!Object.hasOwn(state.scarabeo.pending.votes,me);if(state.naval?.phase==='placement')return !state.naval.ready[me];return state.turn===me}
 function renderBoard(){
  $('naval-area').hidden=!state?.naval;$('briscola-area').hidden=!state?.briscola;
- if(state?.naval||state?.briscola){$('chess-area').hidden=true;$('uno-area').hidden=true;$('scarabeo-area').hidden=true;$('scopa-area').hidden=true;const ctx={active:canMove(),playing:state.phase==='playing',seat:state.players.findIndex(p=>p.id===credentials.player),players:state.players,room,round:state.series?.round||1,player:identity?.id,busy,game:state.game,move:a=>sendMove({...a,revision:state.revision})};if(state.naval)renderNaval(state.naval,ctx);else renderBriscola(state.briscola,ctx);return}
+ if(state?.naval||state?.briscola){$('chess-area').hidden=true;$('uno-area').hidden=true;$('scarabeo-area').hidden=true;$('scopa-area').hidden=true;const ctx={active:canMove(),playing:state.phase==='playing',seat:state.players.findIndex(p=>p.id===credentials.player),players:state.players,room:state.matchId||room,round:state.series?.round||1,player:identity?.id,busy,game:state.game,move:a=>sendMove({...a,revision:state.revision})};if(state.naval)renderNaval(state.naval,ctx);else renderBriscola(state.briscola,ctx);return}
  $('scarabeo-area').hidden=!state?.scarabeo;$('scopa-area').hidden=!state?.scopa;
- if(state?.scarabeo||state?.scopa){$('chess-area').hidden=true;$('uno-area').hidden=true;const ctx={active:canMove(),playing:state.phase==='playing',seat:state.players.findIndex(p=>p.id===credentials.player),players:state.players,room,round:state.series?.round||1,player:identity?.id,busy,move:a=>sendMove({...a,revision:state.revision})};if(state.scarabeo)renderScarabeo(state.scarabeo,ctx);else renderScopa(state.scopa,ctx);return}
+ if(state?.scarabeo||state?.scopa){$('chess-area').hidden=true;$('uno-area').hidden=true;const ctx={active:canMove(),playing:state.phase==='playing',seat:state.players.findIndex(p=>p.id===credentials.player),players:state.players,room:state.matchId||room,round:state.series?.round||1,player:identity?.id,busy,move:a=>sendMove({...a,revision:state.revision})};if(state.scarabeo)renderScarabeo(state.scarabeo,ctx);else renderScopa(state.scopa,ctx);return}
  $('uno-area').hidden=!state?.uno;if(state?.uno){$('chess-area').hidden=true;renderUno();return}
  $('move-strip').hidden=!!state?.checkers||!!state?.connect4;
  $('board').classList.toggle('connect4-board',!!state?.connect4);$('flip-board').hidden=!!state?.connect4;
@@ -320,7 +371,6 @@ const unoNames={red:'Rosso',yellow:'Giallo',green:'Verde',blue:'Blu'},unoSymbols
 function unoCard(card,button=false){const el=document.createElement(button?'button':'div');el.className='uno-card '+(card.color||'wild');el.textContent=unoSymbols[card.value]||card.value;el.setAttribute('aria-label',(unoNames[card.color]||'Jolly')+' · '+(unoSymbols[card.value]||card.value));return el}
 function renderUno(){
  const u=state.uno,mine=state.players.findIndex(p=>p.id===credentials.player),waiting=state.phase==='waiting',active=canMove();
- $('start-uno').hidden=true;$('start-uno').disabled=busy||state.players.length<2;
  $('uno-message').textContent=waiting?state.players.length+'/8 giocatori · '+(mine===0?'Avvia quando siete pronti.':'Attendi che il creatore avvii.'):u.lastEvent;
  $('uno-top').replaceChildren(unoCard(u.top));$('uno-active-color').textContent='Colore · '+unoNames[u.color];$('uno-active-color').dataset.color=u.color;
  $('uno-draw').hidden=waiting||mine<0||state.phase==='finished';$('uno-draw').disabled=!active||!u.canDraw;
