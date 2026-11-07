@@ -1,3 +1,4 @@
+import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo,renderCluedo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
@@ -30,10 +31,10 @@ async function request(path,data){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='scarabeo'?'Scarabeo':g?.game==='cluedo'?'Cluedo':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
-const boardState=()=>state?.scarabeo||state?.cluedo||state?.uno||state?.connect4||state?.checkers||state?.chess;
-const staged=g=>['uno','scarabeo','cluedo'].includes(g?.game);
-const gameLimits=g=>g?.limits||(g?.game==='scarabeo'?{min:2,max:4}:g?.game==='cluedo'?{min:3,max:6}:g?.game==='uno'?{min:2,max:8}:{min:2,max:2});
+const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola siciliana':g?.game==='scarabeo'?'Scarabeo':g?.game==='cluedo'?'Cluedo':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.cluedo||state?.uno||state?.connect4||state?.checkers||state?.chess;
+const staged=g=>['uno','scarabeo','cluedo','naval','briscola','briscola5'].includes(g?.game);
+const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:g?.game==='briscola'?{min:2,max:4}:g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola siciliana':g?.game==='scarabeo'?{min:2,max:4}:g?.game==='cluedo'?{min:3,max:6}:g?.game==='uno'?{min:2,max:8}:{min:2,max:2});
 const ongoing=g=>!g.archived&&(g.phase!=='finished'||g.series&&!g.series.done);
 function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 
@@ -56,7 +57,7 @@ function renderLobby(){
  $('create-checkers').disabled=!identity||!!own;$('create-checkers').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  $('create-connect4').disabled=!identity||!!own;$('create-connect4').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  $('create-uno').disabled=!identity||!!own;$('create-uno').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
- for(const id of ['create-scarabeo','create-cluedo']){$(id).disabled=!identity||!!own;$(id).textContent=own?'Hai già un tavolo aperto':'Crea tavolo'}
+ for(const id of ['create-scarabeo','create-cluedo','create-naval','create-briscola','create-briscola5']){$(id).disabled=!identity||!!own;$(id).textContent=own?'Hai già un tavolo aperto':'Crea tavolo'}
  const active=games.filter(g=>!g.archived);
  const waiting=active.filter(g=>g.phase==='waiting').length,playing=active.filter(g=>g.phase==='playing').length;
  $('lobby-summary').textContent=active.length?waiting+' da giocare · '+playing+' in corso':'';
@@ -127,11 +128,15 @@ function render(s){
  $('room-number').textContent=s.number?'Tavolo '+s.number+' · '+gameTitle(s):gameTitle(s);
  $('status').textContent=s.phase==='waiting'?(staged(s)?'In attesa dell’avvio · '+s.players.length+'/'+gameLimits(s).max:'In attesa di un avversario'):s.phase==='finished'?(s.archived?'Archiviata':boardState()?.reason||'Partita conclusa')+(boardState()?.result&&!staged(s)?' · '+boardState().result:''):(mine===s.turn?'Tocca a te':'Tocca a '+s.players[s.turn].name)+(s.chess?.check?' · Scacco':'');
  $('players').replaceChildren();
- for(let i=0;i<(staged(s)?s.players.length:2);i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(staged(s)?'':boardState()?(s.connect4?(i===0?'Rosso · ':'Giallo · '):(i===0?'Bianco · ':'Nero · ')):'')+(s.players[i]?.name||'Posto libero');if(staged(s)){const g=boardState();el.textContent+=' · '+(s.scarabeo?(g.scores[i]||0)+' pt · '+(g.counts[i]||0)+' lettere':(g.counts[i]||0)+' carte')+(s.cluedo?.eliminated[i]?' · escluso':'')}$('players').append(el)}
+ for(let i=0;i<(staged(s)?s.players.length:2);i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(staged(s)?'':boardState()?(s.connect4?(i===0?'Rosso · ':'Giallo · '):(i===0?'Bianco · ':'Nero · ')):'')+(s.players[i]?.name||'Posto libero');if(staged(s)){const g=boardState();el.textContent+=' · '+(s.naval?(g.ready[i]?'Flotta pronta':'Prepara flotta')+' · '+(5-g.sunk[i])+' navi':s.scarabeo?(g.scores[i]||0)+' pt · '+(g.counts[i]||0)+' lettere':(g.counts[i]||0)+' carte'+(s.briscola&&s.players.length===4?' · coppia '+(i%2?'B':'A'):''))+(s.cluedo?.eliminated[i]?' · escluso':'')}$('players').append(el)}
  $('players').classList.toggle('group-players',staged(s));
  if(s.uno?.winner!==null&&s.uno?.winner!==undefined&&s.phase==='finished')$('status').textContent='Vince '+s.players[s.uno.winner].name;
  if(s.scarabeo?.winners.length===1&&s.phase==='finished')$('status').textContent='Vince '+s.players[s.scarabeo.winners[0]].name+' · '+s.scarabeo.scores[s.scarabeo.winners[0]]+' punti';
  if(s.cluedo?.winner!==null&&s.cluedo?.winner!==undefined&&s.phase==='finished')$('status').textContent='Vince '+s.players[s.cluedo.winner].name;
+ if(s.naval&&s.phase==='playing'&&s.naval.phase==='placement')$('status').textContent='Posizionate le flotte';
+ if(s.naval?.winner!==null&&s.naval?.winner!==undefined&&s.phase==='finished')$('status').textContent='Vince '+s.players[s.naval.winner].name;
+ if(s.briscola&&s.phase==='playing'&&s.briscola.phase!=='play')$('status').textContent=(s.briscola.phase==='auction'?'Asta · ':'Scelta della briscola · ')+s.players[s.turn].name;
+ if(s.briscola?.winners.length&&s.phase==='finished')$('status').textContent='Vincono '+s.briscola.winners.map(i=>s.players[i].name).join(' + ');
  renderSeries(s,mine);$('start-group').hidden=!staged(s)||s.phase!=='waiting'||mine!==0;$('start-group').disabled=busy||s.players.length<gameLimits(s).min;
  $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
 
@@ -191,10 +196,11 @@ async function createGame(game){pendingCreation=game;creationFocus=document.acti
 action('confirm-creation',async()=>{const game=pendingCreation;pendingCreation=null;$('creation-dialog').hidden=true;if(game)await createTable(game,Number($('creation-mode').value))});
 $('cancel-creation').onclick=()=>{pendingCreation=null;$('creation-dialog').hidden=true;creationFocus?.focus()};
 window.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('creation-dialog').hidden)$('cancel-creation').click()});
+action('create-naval',()=>createGame('naval'));action('create-briscola',()=>createGame('briscola'));action('create-briscola5',()=>createGame('briscola5'));
 action('create-scarabeo',()=>createGame('scarabeo'));action('create-cluedo',()=>createGame('cluedo'));
 action('start-group',async()=>render(await api('start',{revision:state.revision})));
 action('next-round',async()=>render(await api('next-round',{revision:state.revision})));
-function renderSeries(s,mine){const q=s.series,root=$('series-status');root.hidden=!q;$('next-round').hidden=!q||q.done||s.phase!=='finished'||mine!==0;if(!q)return;root.textContent=(q.cancelled?'Torneo interrotto':q.done?'Torneo vinto da '+s.players[q.winner].name:'Torneo · prima persona a '+q.target+' vittorie · manche '+q.round)+' · '+s.players.map((p,i)=>p.name+' '+(q.wins[i]||0)).join(' / ')}
+function renderSeries(s,mine){const q=s.series,root=$('series-status');root.hidden=!q;$('next-round').hidden=!q||q.done||s.phase!=='finished'||mine!==0;if(!q)return;root.textContent=(q.cancelled?'Torneo interrotto':q.done?'Torneo vinto da '+(q.winners||[q.winner]).map(i=>s.players[i].name).join(' + '):'Torneo · prima persona a '+q.target+' vittorie · manche '+q.round)+' · '+s.players.map((p,i)=>p.name+' '+(q.wins[i]||0)).join(' / ')}
 action('create-chess',()=>createGame('chess'));
 action('create-checkers',()=>createGame('checkers'));
 action('create-connect4',()=>createGame('connect4'));
@@ -209,7 +215,7 @@ $('back-lobby').onclick=showLobby;
 $('newtable').onclick=()=>{showLobby();$('name').focus()};
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true)}if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Binottoland 1.1'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.scarabeo?'Scarabeo':state?.cluedo?'Cluedo':state?.uno?'UNO':state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia','Binottoland 1.1'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.naval?'Battaglia navale':state?.briscola?'Briscola':state?.scarabeo?'Scarabeo':state?.cluedo?'Cluedo':state?.uno?'UNO':state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
@@ -264,6 +270,8 @@ function position(fen){
 }
 function canMove(){return replayPly===null&&!state?.archived&&state?.phase==='playing'&&state.players[state.turn]?.id===credentials.player&&!busy}
 function renderBoard(){
+ $('naval-area').hidden=!state?.naval;$('briscola-area').hidden=!state?.briscola;
+ if(state?.naval||state?.briscola){$('chess-area').hidden=true;$('uno-area').hidden=true;$('scarabeo-area').hidden=true;$('cluedo-area').hidden=true;const ctx={active:canMove(),playing:state.phase==='playing',seat:state.players.findIndex(p=>p.id===credentials.player),players:state.players,room,round:state.series?.round||1,player:identity?.id,busy,game:state.game,move:a=>sendMove({...a,revision:state.revision})};if(state.naval)renderNaval(state.naval,ctx);else renderBriscola(state.briscola,ctx);return}
  $('scarabeo-area').hidden=!state?.scarabeo;$('cluedo-area').hidden=!state?.cluedo;
  if(state?.scarabeo||state?.cluedo){$('chess-area').hidden=true;$('uno-area').hidden=true;const ctx={active:canMove(),seat:state.players.findIndex(p=>p.id===credentials.player),players:state.players,room,round:state.series?.round||1,player:identity?.id,busy,move:a=>sendMove({...a,revision:state.revision})};if(state.scarabeo)renderScarabeo(state.scarabeo,ctx);else renderCluedo(state.cluedo,ctx);return}
  $('uno-area').hidden=!state?.uno;if(state?.uno){$('chess-area').hidden=true;renderUno();return}

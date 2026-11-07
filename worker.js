@@ -1,3 +1,5 @@
+import {initialNaval,playNaval,navalView} from './naval.js';
+import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
 import {initialScarabeo,playScarabeo,scarabeoView} from './scarabeo.js';
 import {initialCluedo,playCluedo,cluedoView} from './cluedo.js';
 import {stagedGame,limits,activeTable,createSeries,settleSeries} from './match-series.js';
@@ -157,8 +159,8 @@ export default {
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,async()=>hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));}
- public(s,viewer=null){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,cluedo:s.cluedo?cluedoView(s.cluedo,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
- resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno')s.uno=initialUno(s.players.length);else if(s.game==='scarabeo')s.scarabeo=initialScarabeo(s.players.length);else if(s.game==='cluedo')s.cluedo=initialCluedo(s.players.length);else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
+ public(s,viewer=null){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,cluedo:s.cluedo?cluedoView(s.cluedo,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
+ resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno')s.uno=initialUno(s.players.length);else if(s.game==='scarabeo')s.scarabeo=initialScarabeo(s.players.length);else if(s.game==='cluedo')s.cluedo=initialCluedo(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
  async broadcast(s){const tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
@@ -172,7 +174,7 @@ export class Room extends DurableObject {
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],series:createSeries(b.target),game:['checkers','connect4','uno','scarabeo','cluedo'].includes(b.game)?b.game:'chess',chess:['checkers','connect4','uno','scarabeo','cluedo'].includes(b.game)?null:chessSnapshot(new Chess()),...(b.game==='scarabeo'?{scarabeo:initialScarabeo()}:{}),...(b.game==='cluedo'?{cluedo:initialCluedo()}:{}),...(b.game==='uno'?{uno:initialUno()}:{}),...(b.game==='connect4'?{connect4:initialConnect4()}:{}),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
+     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],series:createSeries(b.target),game:['checkers','connect4','uno','scarabeo','cluedo','naval','briscola','briscola5'].includes(b.game)?b.game:'chess',chess:['checkers','connect4','uno','scarabeo','cluedo','naval','briscola','briscola5'].includes(b.game)?null:chessSnapshot(new Chess()),...(b.game==='naval'?{naval:initialNaval()}:{}),...(['briscola','briscola5'].includes(b.game)?{briscola:initialBriscola()}:{}),...(b.game==='scarabeo'?{scarabeo:initialScarabeo()}:{}),...(b.game==='cluedo'?{cluedo:initialCluedo()}:{}),...(b.game==='uno'?{uno:initialUno()}:{}),...(b.game==='connect4'?{connect4:initialConnect4()}:{}),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s,viewer)});
     }
@@ -250,6 +252,9 @@ export class Room extends DurableObject {
      if(!s.drawOffer||s.drawOffer.by===s.players[who].id)return json({error:'Non puoi rispondere a questa proposta.'},403);
      if(path.endsWith('/accept-draw')){s.phase='finished';const key=s.connect4?'connect4':s.checkers?'checkers':'chess';s[key]={...s[key],legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
      s.drawOffer=null;
+    }else if(path.endsWith('/move')&&(s.naval||s.briscola)){
+     const key=s.naval?'naval':'briscola',next=s.naval?playNaval(s.naval,who,b):playBriscola(s.briscola,who,b);s[key]=next;s.turn=next.turn;
+     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
     }else if(path.endsWith('/move')&&(s.scarabeo||s.cluedo)){
      const key=s.scarabeo?'scarabeo':'cluedo',next=s.scarabeo?playScarabeo(s.scarabeo,who,b):playCluedo(s.cluedo,who,b);s[key]=next;s.turn=next.turn;
      s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
@@ -280,7 +285,7 @@ export class Room extends DurableObject {
      s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
      if(game.isGameOver())s.phase='finished';
     }else if(path.endsWith('/pass')){
-     if(s.chess||s.checkers||s.connect4||s.uno||s.scarabeo||s.cluedo)return json({error:'Devi effettuare una mossa.'},409);
+     if(s.chess||s.checkers||s.connect4||s.uno||s.scarabeo||s.cluedo||s.naval||s.briscola)return json({error:'Devi effettuare una mossa.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
      if(s.moves.length>=500)s.phase='finished';
@@ -358,7 +363,7 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','cluedo','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
+   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','cluedo','naval','briscola','briscola5','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
    if((await this.lobbyList()).some(g=>g.game!=='labyrinth'&&activeTable(g)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    createSeries(body.target);
    const number=(await this.ctx.storage.get('lobbyCounter')||0)+1;
