@@ -1,4 +1,4 @@
-import {fixedCourse} from './courses.js?v=8';
+import {fixedCourse} from './courses.js?v=9';
 import {HEAD_RADIUS, helmetPosition} from './rider.js?v=6';
 
 export const WHEEL = .38;
@@ -17,7 +17,7 @@ function random(seed) {
   };
 }
 
-export const COURSE_VERSION = 7;
+export const COURSE_VERSION = 8;
 
 // X-Moto Classic: original.xml, Scene.h and BikePlayer.cpp.
 const CLASSIC_STEP = .01, CLASSIC_SPEED = .6;
@@ -222,14 +222,12 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 function findLanding(course, bike, from, leaving) {
   const angleDelta = wrap(bike.angle - from.angle);
   let firstHit = null;
-  const current = course.tiers[bike.tier], solidLedges = course.version >= 7;
+  const current = course.tiers[bike.tier], solidLedges = course.version >= 6;
   const next = bike.tier + 1;
   const last = solidLedges ? course.tiers.length - 1 : Math.min(next, course.tiers.length - 1);
   for (let i = bike.tier; i <= last; i++) {
-    // Lower decks are solid even if landing on them would skip the route.
-    const onRoute = i === bike.tier || i === next && (course.version < 3 ||
-      (bike.x - current.end) * current.direction >= -AXLE && (!current.jump || bike.clearedJump));
-    if (!solidLedges && !onRoute) continue;
+    if (!solidLedges && i === next && course.version >= 3 &&
+        ((bike.x - current.end) * current.direction < -AXLE || current.jump && !bike.clearedJump)) continue;
     const tier = course.tiers[i];
     const reach = course.version >= 6 ? 2.6 : 1.6;
     if (Math.max(from.y, bike.y) + reach < tier.top || Math.min(from.y, bike.y) - reach > tier.bottom ||
@@ -264,7 +262,7 @@ function findLanding(course, bike, from, leaving) {
           if (gap(mid) >= 0) high = mid;
           else low = mid;
         }
-        if (!firstHit || high < firstHit.t) firstHit = {...at(high), t: high, tier: i, onRoute};
+        if (!firstHit || high < firstHit.t) firstHit = {...at(high), t: high, tier: i};
         break;
       }
       previous = distance;
@@ -387,15 +385,6 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
         // The wheel met the side of a ledge from below. Stop the horizontal motion.
         bike.x = from.x;
         bike.vx = 0;
-      } else if (!hit.onRoute) {
-        bike.x = hit.x;
-        bike.y = hit.wheels;
-        bike.angle = wrap(hit.angle);
-        bike.lean = hit.lean;
-        bike.vx = bike.vy = 0;
-        bike.onGround = true;
-        bike.missedLanding = true;
-        bike.status = 'offCourse';
       } else {
         const landing = course.tiers[hit.tier], angle = terrainAngle(landing, hit.x);
         bike.x = hit.x;
@@ -448,9 +437,13 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
   if (bike.status === 'ride' && bike.y > course.bottom) bike.status = 'offCourse';
   if (bike.status === 'ride' && bike.tier === course.tiers.length - 1) {
     const last = course.tiers.at(-1);
-    const crossed = (from.x - course.finish) * last.direction < 0;
-    if ((bike.x - course.finish) * last.direction >= 0 &&
-        (bike.onGround || crossed && Math.abs(bike.y - ground(last, course.finish)) < 3)) {
+    const before = (from.x - course.finish) * last.direction;
+    const past = (bike.x - course.finish) * last.direction;
+    const gateHeight = ground(last, course.finish);
+    const reached = course.version >= 8
+      ? before !== past && before * past <= 0 && Math.abs(bike.y - gateHeight) < 3
+      : past >= 0 && (bike.onGround || before < 0 && Math.abs(bike.y - gateHeight) < 3);
+    if (reached) {
       bike.status = 'finish';
     }
   }

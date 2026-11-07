@@ -4,8 +4,7 @@ import {makeCourse, ground, bikeSupport, helmetSupport, COURSE_VERSION, resetBik
 import {helmetPosition,riderPose} from '../public/moto-trial/rider.js';
 import {FIXED_COURSES} from '../public/moto-trial/courses.js';
 
-function drive(course) {
-  const bike = resetBike(course);
+function drive(course, bike = resetBike(course)) {
   const landings = [];
   let airSteps = 0, lean = 0, jumps = 0;
   let steps = 0;
@@ -238,14 +237,32 @@ assert.ok(earlyCoast.x<current.tiers[0].jump.landing,'The front tyre lands befor
 const below = current.tiers[1];
 const missX = current.tiers[0].jump.lip + 1.2;
 const incoming = {...resetBike(current),x:missX,y:ground(below,missX)-3.5,vy:9,onGround:false};
-const missed = {...incoming}, headFirst = {...incoming,angle:Math.PI};
+const missed = {...incoming,vx:2}, headFirst = {...incoming,angle:Math.PI};
 for (const bike of [missed,headFirst]) {
-  for(let i=0;i<500&&bike.status==='ride';i++)stepBike(current,bike,{});
+  for(let i=0;i<500&&bike.status==='ride'&&!bike.onGround;i++)stepBike(current,bike,{});
 }
-assert.equal(missed.status,'offCourse');
-assert.equal(missed.missedLanding,true);
-assert.equal(missed.tier,0,'The lower deck stops the bike without skipping a section');
+assert.equal(missed.status,'ride');
+assert.equal(missed.onGround,true);
+assert.equal(missed.tier,1,'Landing on the lower deck adopts it as the new route');
+assert.equal(missed.vx,2,'Safe landings preserve horizontal motion');
 assert.equal(missed.y,bikeSupport(below,missed.x,missed.angle,missed.leftSpring,missed.rightSpring));
+assert.equal(drive(current,{...missed}).bike.status,'finish','The rider can finish from the lower route');
 assert.equal(headFirst.status,'crash','Helmet contact still counts when it occurs on the lower deck');
 assert.ok(Math.abs(headFirst.y-helmetSupport(below,headFirst.x,headFirst.angle,headFirst.facing,headFirst.lean,COURSE_VERSION))<.01);
-console.log('PASS Moto Trial first ramp: early coast, front tyre contact, solid lower deck and helmet-only crash.');
+
+const skipCourse = {version:COURSE_VERSION,tiers:[flat(-4,0,0),flat(4,6,4),flat(-8,20,9)],finish:15,bottom:24};
+const skip = {...resetBike(skipCourse),x:12,y:0,vx:1,onGround:false};
+for(let i=0;i<500&&!skip.onGround&&skip.status==='ride';i++)stepBike(skipCourse,skip,{});
+assert.equal(skip.status,'ride');
+assert.equal(skip.tier,2,'A safe landing can skip multiple decks');
+const pastGate = {...resetBike(skipCourse),x:17,y:8.62,tier:2,vx:0};
+stepBike(skipCourse,pastGate,{});
+assert.equal(pastGate.status,'ride','Being beyond the flag is not a finish');
+Object.assign(pastGate,{x:15.04,vx:-8,facing:-1});
+stepBike(skipCourse,pastGate,{throttle:true});
+assert.equal(pastGate.status,'finish','The flag can be crossed from either side');
+
+assert.equal(current.tiers[1].start,makeCourse(1,7).tiers[1].start+8);
+assert.ok(ground(current.tiers[1],current.tiers[1].recovery)!==null);
+assert.equal(makeCourse(10).tiers.filter(tier=>tier.recovery!==undefined).length,1);
+console.log('PASS Moto Trial alternate routes: front tyre contact, recovery from lower decks, finish from either direction and helmet-only crash.');

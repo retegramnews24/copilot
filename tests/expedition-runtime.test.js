@@ -131,7 +131,7 @@ try{
  const rider2=await connect(202,race.room,false,'moto-trial');
  const raceState=(await until(rider1,p=>p.type==='state'&&p.state.players.length===2)).state;
  assert.equal(raceState.seed,race.seed);
- assert.equal(raceState.courseVersion,7);
+ assert.equal(raceState.courseVersion,8);
  assert.equal(raceState.seed,1);
  assert.equal(raceState.campaign,true);
  assert.equal(raceState.courseName,'Campagna Moto Trial');
@@ -157,7 +157,7 @@ try{
  rider1.ws.send(JSON.stringify({...pose,seq:2,mode:'finish'}));
  await new Promise(resolve=>setTimeout(resolve,80));
  assert.equal((await call(201,'/api/moto-trial/'+race.room+'/state')).data.state.players.find(p=>p.id==='tg:201').stage,1);
- rider1.ws.send(JSON.stringify({...pose,seq:3,x:intro.finish,y:ground(intro.tiers.at(-1),intro.finish)-.4,
+ rider1.ws.send(JSON.stringify({...pose,seq:3,x:intro.finish-intro.tiers.at(-1).direction*.1,y:ground(intro.tiers.at(-1),intro.finish)-.4,
    tier:intro.tiers.length-1,mode:'finish'}));
  const progressed=(await until(rider1,p=>p.type==='state'&&p.state.players.some(p=>p.id==='tg:201'&&p.stage===2))).state;
  assert.equal(progressed.players.find(p=>p.id==='tg:202').stage,1);

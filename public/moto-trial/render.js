@@ -1,4 +1,4 @@
-import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=8';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=9';
 
 import {riderPose, HEAD_RADIUS, SUSPENSION} from './rider.js?v=6';
 
@@ -237,6 +237,7 @@ export function drawTrial(c, width, height, course, bike, time, reduced, riders 
       sign(c, warning, ground(tier, warning), tier.direction, false, tier.jump.short);
     } else ledge(c, tier.points, theme);
     sign(c, tier.marker, ground(tier, tier.marker), tier.direction, true);
+    if (tier.recovery !== undefined) sign(c, tier.recovery, ground(tier, tier.recovery), tier.direction);
     const isLast = i === course.tiers.length - 1;
     const x = isLast ? course.finish : tier.end - 4 * tier.direction;
     const y = ground(tier, x);

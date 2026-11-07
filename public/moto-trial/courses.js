@@ -34,6 +34,19 @@ const CAMPAIGN = [...CAMPAIGN_START, FIXED_COURSES[3], FIXED_COURSES[5], FIXED_C
 const INTRO = {...CAMPAIGN[0], rows: [
   ['roll', 3.9, 3.1, 8, 28], ...CAMPAIGN[0].rows.slice(1)
 ]};
+// Extra runout behind selected downhill landings leaves room to brake and turn.
+const RECOVERY_RUNUP = [
+  [0, 8, 8, 8],
+  [0, 7, 6, 5, 6],
+  [0, 6, 5, 5, 4],
+  [0, 5, 0, 4, 0, 4],
+  [0, 4, 0, 4, 0, 3, 0],
+  [0, 3, 0, 0, 4, 0],
+  [0, 0, 3, 0, 0, 3],
+  [0, 0, 0, 3, 0, 0, 2],
+  [0, 0, 3, 0, 0, 0, 2],
+  [0, 0, 0, 0, 2, 0, 0, 0]
+];
 export const CAMPAIGN_LENGTH = CAMPAIGN.length;
 const DIFFICULTY = ['Introduzione','Facile','Intermedio','Impegnativo','Difficile','Molto difficile','Esperto','Estremo','Brutale','Quasi impossibile'];
 
@@ -57,7 +70,9 @@ export function fixedCourse(id, version) {
     const last = i === track.rows.length - 1;
     const end = landing + (shelf ?? (last ? 22 : 19.5));
     const x = s => start + direction * s;
+    const runup = version >= 8 ? RECOVERY_RUNUP[id - 1][i] : 0;
     const points = [
+      ...(runup ? [[-runup, base]] : []),
       [0, base], [approach - 10, base], [approach - 5, base + profile.before[0]],
       [approach, base + profile.before[1]], [approach + 2.4, base + profile.before[1] - .65],
       [lip, lipY], [landing, landingY], ...(shelf ?
@@ -67,10 +82,11 @@ export function fixedCourse(id, version) {
     ].map(([s, y]) => ({x: x(s), y}));
     if (direction < 0) points.reverse();
     points.find(p => p.x === x(direction > 0 ? lip : landing)).gapAfter = true;
-    const tier = {start, end: x(end), direction, points, marker: x(i ? Math.max(3, overlap - 6) : 4),
+    const tier = {start: x(-runup), end: x(end), direction, points, marker: x(i ? Math.max(3, overlap - 6) : 4),
       top: Math.min(...points.map(p => p.y)), bottom: Math.max(...points.map(p => p.y)),
       jump: {approach: x(approach), lip: x(lip), landing: x(landing), launch: profile.launch, short: !!shelf},
       precisionDrop: !!drop && nextOverlap <= 24};
+    if (runup) tier.recovery = x(-runup / 2);
     if (!last) {
       start = tier.end + direction * nextOverlap;
       // Put the receiving ledge below the exit while keeping the overlapping courses separated.

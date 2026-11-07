@@ -1,8 +1,8 @@
-import {CAMPAIGN_LENGTH} from './courses.js?v=8';
+import {CAMPAIGN_LENGTH} from './courses.js?v=9';
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=8';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=9';
 import {TrialAudio} from './audio.js?v=7';
-import {drawTrial} from './render.js?v=8';
+import {drawTrial} from './render.js?v=9';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -186,7 +186,7 @@ function setMode(next) {
       ready: [course.id && (!multiplayer || race?.campaign) ? 'Livello ' + course.id + ' · Moto Trial' : 'Moto Trial', '', 'Parti'],
       paused: ['In pausa', multiplayer ? 'Gli altri piloti possono continuare a correre.' : 'Riprendi dal punto in cui ti sei fermato.', 'Riprendi'],
       crash: ['Caduta', course.version >= 6 ? 'Il casco ha toccato. Riparti dall’inizio dello stesso percorso.' : 'Ripartenza dall’inizio dello stesso percorso.', 'Riparti subito'],
-      offCourse: ['Fuori pista', bike.missedLanding ? 'Sei atterrato sul ripiano sbagliato. Riprova il salto.' : 'Hai mancato l’appoggio. Ritorno alla partenza.', 'Riparti subito'],
+      offCourse: ['Fuori pista', 'Sei oltre il bordo del circuito. Puoi tornare al via.', 'Torna al via'],
       finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), course.version < 6 ? 'Riprova il circuito' : course.id === CAMPAIGN_LENGTH ? 'Fine campagna' : 'Prossimo livello'],
       complete: ['Campagna completata!', 'Hai superato tutti e dieci i circuiti.', multiplayer ? 'Torna a Binottoland' : 'Ricomincia dal livello 1']
     }[next];
@@ -194,7 +194,7 @@ function setMode(next) {
     if (next === 'ready') describeCourse();
     else $('description').textContent = description;
     $('primary').textContent = button;
-    if (next === 'crash' || next === 'offCourse') retryTimer = setTimeout(() => { if (!document.hidden) retryAfterFall(); }, 1100);
+    if (next === 'crash') retryTimer = setTimeout(() => { if (!document.hidden) retryAfterFall(); }, 1100);
     if (next !== 'ready') $('primary').focus({preventScroll: true});
   }
   updateRaceStatus();

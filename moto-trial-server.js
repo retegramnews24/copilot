@@ -6,7 +6,7 @@ const boundsFor = course => {
   const xs = course.tiers.flatMap(tier => tier.points.map(p => p.x));
   return {min: Math.min(...xs), max: Math.max(...xs), bottom: course.bottom};
 };
-const campaigns = new Map([6, COURSE_VERSION].map(version => [version, Array.from({length: CAMPAIGN_LENGTH}, (_, i) => {
+const campaigns = new Map([6, 7, COURSE_VERSION].map(version => [version, Array.from({length: CAMPAIGN_LENGTH}, (_, i) => {
   const course = makeCourse(i + 1, version);
   return {course, bounds: boundsFor(course)};
 })]));
@@ -132,7 +132,8 @@ export class MotoTrialRoom {
         if (pose.mode === 'finish') {
           const pastGate = (pose.x - course.finish) * last.direction;
           const finishY = ground(last, pose.x) ?? ground(last, course.finish);
-          if (packet.tier !== course.tiers.length - 1 || pastGate < -.001 || pastGate > 6.4 ||
+          const nearGate = course.version >= 8 ? Math.abs(pastGate) < .5 : pastGate >= -.001 && pastGate <= 6.4;
+          if (packet.tier !== course.tiers.length - 1 || !nearGate ||
               Math.abs(pose.y - finishY) > 3.05) return;
           progress = {stage: Math.min(CAMPAIGN_LENGTH, stage + 1), complete: stage === CAMPAIGN_LENGTH};
           await this.ctx.storage.put('progress:' + member.id, progress);
