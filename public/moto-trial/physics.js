@@ -30,8 +30,8 @@ export function makeCourse(seed) {
       points.push({x: start + direction * (pad + j * ridge / bumps), y});
     }
     points.push({x: end, y: y + (i === 4 ? 0 : 1.15)});
-    const checkpoint = start + direction * (i ? overlap - 5 : 4);
-    tiers.push({start, end, direction, checkpoint, points: direction > 0 ? points : points.reverse()});
+    const marker = start + direction * (i ? overlap - 5 : 4);
+    tiers.push({start, end, direction, marker, points: direction > 0 ? points : points.reverse()});
     overlap = 23 + rng() * 5;
     start = end + direction * overlap;
     const deepest = Math.max(...points.map(p => p.y));
@@ -63,9 +63,10 @@ function contact(tier, x) {
   return {y: (left !== null && right !== null ? (left + right) / 2 : y) - WHEEL, angle};
 }
 
-export function resetBike(course, tier = 0) {
-  const {checkpoint: x, direction: facing} = course.tiers[tier];
-  return {x, y: contact(course.tiers[tier], x).y, vx: 0, vy: 0, angle: 0, spin: 0, lean: 0, roll: 0, facing, tier, checkpoint: tier, onGround: true, status: 'ride'};
+export function resetBike(course) {
+  const tier = course.tiers[0], x = tier.marker;
+  return {x, y: contact(tier, x).y, vx: 0, vy: 0, angle: 0, spin: 0, balance: 0,
+    lean: 0, roll: 0, facing: tier.direction, tier: 0, onGround: true, status: 'ride'};
 }
 
 export function turnBike(bike) {
@@ -97,11 +98,12 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
   const liftsAtCrest = next && bike.vy < -2.4 && Math.abs(bike.vx) > 6.5 &&
     previousY + (bike.vy + GRAVITY * dt) * dt < next.y - .018;
   if (next && !liftsAtCrest) {
-    const target = next.angle + lean * .22;
-    bike.y = next.y;
-    bike.vy = clamp((bike.y - previousY) / dt, -5.2, 7.8);
-    bike.angle += wrap(target - bike.angle) * Math.min(1, dt * 13);
-    bike.spin = 0;
+    bike.spin += (lean * 13.4 - bike.spin * 5.4 - bike.balance * 9.2) * dt;
+    bike.balance += bike.spin * dt;
+    bike.y = next.y - Math.abs(Math.sin(bike.balance)) * AXLE * .96;
+    bike.vy = clamp((next.y - surface.y) / dt, -5.2, 7.8);
+    bike.angle = next.angle + bike.balance;
+    if (Math.abs(bike.balance) > 1.17) bike.status = 'crash';
   } else {
     if (bike.onGround && !liftsAtCrest) {
       const edge = course.tiers[bike.tier];
@@ -112,7 +114,7 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
     bike.onGround = false;
     bike.vy = Math.min(22, bike.vy + GRAVITY * dt);
     bike.y += bike.vy * dt;
-    bike.spin = clamp((bike.spin + lean * 7.4 * dt) * Math.exp(-2.6 * dt), -2.5, 2.5);
+    bike.spin = clamp((bike.spin + lean * 12.4 * dt) * Math.exp(-1.7 * dt), -4.4, 4.4);
     bike.angle = wrap(bike.angle + bike.spin * dt);
     for (let i = 0; i < course.tiers.length; i++) {
       const tier = course.tiers[i], landing = contact(tier, bike.x);
@@ -125,15 +127,15 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
         bike.y = landing.y;
         bike.vy = 0;
         bike.angle = landing.angle;
-        bike.spin = 0;
+        bike.spin *= .35;
+        bike.balance = 0;
         bike.tier = i;
-        bike.checkpoint = Math.max(bike.checkpoint, i);
         bike.onGround = true;
       }
       break;
     }
   }
   if (bike.y > course.bottom) bike.status = 'crash';
-  if (bike.onGround && bike.tier === course.tiers.length - 1 &&
+  if (bike.status === 'ride' && bike.onGround && bike.tier === course.tiers.length - 1 &&
       (bike.x - course.finish) * course.tiers.at(-1).direction >= 0) bike.status = 'finish';
 }

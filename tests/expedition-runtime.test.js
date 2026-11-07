@@ -12,7 +12,7 @@ const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payl
 const options=convertV4MiniflareOptions({rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot}});let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
 function until(client,predicate){const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet'))},7000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
-async function connect(id,room,watch=false){const res=await mf.dispatchFetch('https://unit.test/api/labyrinth/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
+async function connect(id,room,watch=false,game='labyrinth'){const res=await mf.dispatchFetch('https://unit.test/api/'+game+'/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
 try{
  const unauth=await mf.dispatchFetch('https://unit.test/api/labyrinth/00000000-0000-4000-8000-000000000000/state',{headers:{'X-Checkmate-User':JSON.stringify({id:'1'})}});assert.equal(unauth.status,401);
  const telegramData=new URLSearchParams({
@@ -115,5 +115,32 @@ try{
  }
  await mf.dispose();mf=new Miniflare(options);const restoredSea=(await call(100,'/api/room/'+navalRoom+'/state')).data;assert.deepEqual(restoredSea.naval.fleet,ownFleet);assert.equal((await call(102,'/api/room/'+navalRoom+'/state')).data.naval.fleet,null);const restoredCall=(await call(140,'/api/room/'+calledRoom+'/state')).data;assert.equal(restoredCall.revision,calledState.revision);assert.equal((await call(150,'/api/room/'+calledRoom+'/state')).data.briscola.partner,null);assert.deepEqual((await call(150,'/api/room/'+calledRoom+'/state')).data.briscola.hand,[]);
  console.log('PASS naval/Briscola runtime: private out-of-turn fleet deployment, public shots, invalid/repeated-shot rejection, all player counts, private hands and called partner over HTTP/WebSocket, dealer/turn alignment and private SQLite restart.');
+ const madeRace=await call(201,'/api/create',{game:'moto-trial'});
+ assert.equal(madeRace.status,200);
+ const race=madeRace.data.state;
+ assert.equal((await mf.dispatchFetch('https://unit.test/api/moto-trial/'+race.room+'/state')).status,401);
+ const rider1=await connect(201,race.room,false,'moto-trial');
+ const rider2=await connect(202,race.room,false,'moto-trial');
+ const raceState=(await until(rider1,p=>p.type==='state'&&p.state.players.length===2)).state;
+ assert.equal(raceState.seed,race.seed);
+ assert.equal((await call(202,'/api/moto-trial/'+race.room+'/state')).data.state.seed,race.seed);
+ assert.equal(new Set(raceState.players.map(p=>p.color)).size,2);
+ assert.equal((await call(202,'/api/lobby')).data.games.find(g=>g.room===race.room).online,2);
+ const pose={type:'pose',seq:1,x:7,y:-.8,angle:1.05,vx:4,facing:1,lean:1,roll:2,mode:'ride'};
+ rider1.ws.send(JSON.stringify({...pose,x:9000}));
+ rider1.ws.send(JSON.stringify({...pose,id:'tg:202'}));
+ const motion=await until(rider2,p=>p.type==='pose');
+ assert.equal(motion.id,'tg:201');assert.equal(motion.pose.x,7);assert.equal(motion.pose.angle,1.05);
+ rider2.ws.send(JSON.stringify({...pose,x:8,facing:-1,angle:-.9}));
+ const opposite=await until(rider1,p=>p.type==='pose');
+ assert.equal(opposite.id,'tg:202');assert.equal(opposite.pose.facing,-1);
+ const rider2OtherWindow=await connect(202,race.room,false,'moto-trial');
+ const replacement=(await until(rider2OtherWindow,p=>p.type==='state')).state;
+ assert.equal(replacement.players.filter(p=>p.id==='tg:202').length,1);
+ assert.equal(replacement.players.find(p=>p.id==='tg:202').pose.x,8);
+ rider2OtherWindow.ws.close();
+ await until(rider1,p=>p.type==='state'&&p.state.players.length===1);
+ assert.equal((await call(201,'/api/lobby')).data.games.find(g=>g.room===race.room).online,1);
+ console.log('PASS Moto Trial runtime: shared route, authenticated live riders, poses in both directions, reconnect and Lobby presence.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and monotonic lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

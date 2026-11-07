@@ -16,8 +16,9 @@
     <span aria-hidden="true">·</span>
     <span id="time">0:00</span>
   </div>
-  <button id="pause" type="button" aria-label="Metti in pausa">Ⅱ</button>
+  <div class="hud-buttons"><button id="sound" type="button" aria-label="Audio del gioco" aria-pressed="true">♫</button><button id="pause" type="button" aria-label="Metti in pausa">Ⅱ</button></div>
 </header>
+<p id="race-status" hidden></p>
 <p id="cue" hidden></p>
 <div id="controls" aria-label="Comandi della moto" hidden>
   <div class="control-pair">
@@ -35,7 +36,7 @@
   <section class="panel" aria-labelledby="title">
     <p class="eyebrow">BINOTTOLAND <span>·</span> PLATFORM 2D</p>
     <h1 id="title">Moto Trial</h1>
-    <p id="description">Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Le bandierine segnano i checkpoint.</p>
+    <p id="description">Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Bilancia la moto sulle rampe per evitare di ribaltarti.</p>
     <p id="intro-controls"><span class="desktop-help">Frecce o WASD per guidare. <strong>Spazio</strong> gira la moto.</span><span class="touch-help">Tieni premuto <strong>Gas</strong> per partire. Tocca <strong>Gira</strong> per cambiare direzione.</span></p>
     <button id="primary" type="button">Parti</button>
     <button id="new-course" type="button" hidden>Nuovo percorso</button>

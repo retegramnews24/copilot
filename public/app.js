@@ -5,6 +5,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
+let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
@@ -29,16 +30,16 @@ async function request(path,data,keepalive=false){
  try{
   const response=await fetch(path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+sessionToken,'X-Player-Token':credentials.token||''},...(data?{body:JSON.stringify(data)}:{}),keepalive,signal:AbortSignal.timeout(15000)});
   const result=await response.json();trace(response.ok?'OK':'ERROR',response.status+' '+path+' · '+Math.round(performance.now()-started)+' ms');
-  if(!response.ok)throw Error(result.error||'Errore server');return result;
+  if(!response.ok)throw Object.assign(Error(result.error||'Errore server'),{status:response.status});return result;
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='moto-trial'?'Moto Trial':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
 const staged=g=>['uno','scarabeo','scopa','naval','briscola','briscola5'].includes(g?.game);
 const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:10}:{min:2,max:2});
 const ongoing=g=>!g.archived&&(g.phase!=='finished'||g.series&&!g.series.done);
-function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&g.game!=='moto-trial'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -55,6 +56,7 @@ function makeAvatar(user){
 }
 function renderLobby(){
  $('play-labyrinth').disabled=!identity;
+ $('create-moto-trial').disabled=!identity||motoOpening;
  const own=ownedGame();
  document.querySelectorAll('[data-create-game]').forEach(button=>{button.disabled=!identity;});
  $('owned-table').hidden=!own;
@@ -69,6 +71,17 @@ function renderLobby(){
  $('empty-games').hidden=active.length>0;
  $('empty-games').textContent='Nessun tavolo attivo.';
  for(const game of active){
+  if(game.game==='moto-trial'){
+   const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
+   card.className='table-card';info.className='turn-note';
+   title.textContent='Corsa '+game.number+' · Moto Trial';
+   info.textContent=(game.online||0)+' / '+(game.capacity||8)+' piloti'+(game.players.length?' · '+game.players.map(p=>p.name).join(' · '):'');
+   const mine=game.players.some(p=>p.id===identity?.player);
+   enter.disabled=!identity||!mine&&game.online>=game.capacity;
+   enter.textContent=enter.disabled&&identity?'Al completo':mine?'Riprendi':'Entra';
+   enter.onclick=()=>openMotoRace(game.room);card.append(title,info,enter);$('games').append(card);continue;
+  }
+
   if(game.game==='labyrinth'){
    const card=document.createElement('article');card.className='table-card';const title=document.createElement('strong');title.textContent='Spedizione '+game.number+' · Labyrinth';const info=document.createElement('p');info.className='turn-note';info.textContent=(game.online||0)+' collegati · '+(game.arrived||0)+' nell’arena · '+(game.entryLocked?'Ingressi chiusi':'Ingressi aperti');const players=document.createElement('p');players.className='turn-note';players.textContent=game.players.map(p=>p.name).join(' · ');card.append(title,info,players);
    const mine=game.players.some(p=>p.id===identity?.player);const enter=document.createElement('button');enter.textContent=mine?'Riprendi':game.entryLocked?'Assisti':'Entra';enter.onclick=()=>openLabyrinth(game.room,!mine&&game.entryLocked);card.append(enter);const watch=document.createElement('button');watch.className='alt';watch.textContent='Guarda';watch.onclick=()=>openLabyrinth(game.room,true);card.append(watch);
@@ -113,6 +126,7 @@ function leaveRoom(){
  showLobby();
 }
 async function openRoom(nextRoom,watchOnly=false){
+ if(games.find(g=>g.room===nextRoom)?.game==='moto-trial')return openMotoRace(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='labyrinth')return openLabyrinth(nextRoom,watchOnly);
  if(busy)return;
  if(nextRoom!==room)discardResult();
@@ -645,7 +659,7 @@ async function startSession(){
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:labyrinthRoom||room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:motoRace?.room||labyrinthRoom||room,away}));
 }
 
 function renderSpectators(){
@@ -751,27 +765,91 @@ function sendMotoInsets(insets=safeInsets(tg)){
  if(!$('moto-trial-overlay').hidden)$('moto-trial-frame').contentWindow?.postMessage({type:'moto-trial:insets',insets},location.origin);
 }
 const motoOverlay=$('moto-trial-overlay'),motoFrame=$('moto-trial-frame'),motoLaunch=$('play-moto-trial');
+function motoPost(type,payload={}){
+ if(!motoOverlay.hidden)motoFrame.contentWindow?.postMessage({type:'moto-trial:'+type,...payload},location.origin);
+}
+function sendMotoState(){
+ sendMotoInsets();
+ if(motoRace)motoPost('state',{state:motoRace,player:identity.player,connected:motoSocket?.readyState===1});
+}
 function closeMotoTrial(){
  if(motoOverlay.hidden)return;
- motoOverlay.hidden=true;
- motoFrame.src='about:blank';
+ clearTimeout(motoRetry);clearInterval(motoBeat);
+ if(motoSocket){motoSocket.onclose=null;motoSocket.close();motoSocket=null}
+ const wasRace=!!motoRace;motoRace=null;
+ motoOverlay.hidden=true;motoFrame.src='about:blank';
  tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}
- motoLaunch.focus();
+ if(wasRace){sendPresence();$('create-moto-trial').focus()}else motoLaunch.focus();
 }
-motoLaunch.onclick=()=>{
- if(!motoOverlay.hidden)return;
+function showMotoTrial(multiplayer=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  motoOverlay.hidden=false;
- motoFrame.src='/moto-trial/index.html';
+ motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1':'');
  tg?.BackButton?.show();
-};
-motoFrame.addEventListener('load',()=>sendMotoInsets());
+}
+function connectMotoRace(){
+ if(!motoRace||!sessionToken)return;
+ const selected=motoRace.room;
+ const socket=motoSocket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/moto-trial/'+selected+'/ws',['checkmate',sessionToken]);
+ socket.onopen=()=>{
+  if(socket!==motoSocket)return;
+  sendMotoState();
+  motoBeat=setInterval(()=>{if(socket.readyState===1)socket.send('{"type":"heartbeat"}')},15000);
+ };
+ socket.onmessage=event=>{
+  if(socket!==motoSocket)return;
+  try{
+   const packet=JSON.parse(event.data);
+   if(packet.type==='state'){motoRace=packet.state;sendMotoState()}
+   else if(packet.type==='pose'){
+    const member=motoRace.players.find(p=>p.id===packet.id);
+    if(member)member.pose=packet.pose;
+    motoPost('pose',{id:packet.id,pose:packet.pose});
+   }
+  }catch{}
+ };
+ socket.onclose=async event=>{
+  if(socket!==motoSocket)return;
+  clearInterval(motoBeat);motoPost('connection',{connected:false});
+  if(event.code===4000||event.code===4001){
+   closeMotoTrial();err(event.code===4000?'Corsa aperta in un’altra finestra.':'Riapri Binottoland da Telegram.');return;
+  }
+  try{
+   const {state}=await request('/api/moto-trial/'+selected+'/state');
+   if(socket!==motoSocket)return;
+   if(state.players.length>=8&&!state.players.some(p=>p.id===identity.player)){
+    closeMotoTrial();err('Corsa al completo.');return;
+   }
+  }catch(e){
+   if(socket!==motoSocket)return;
+   if(e.status===404){closeMotoTrial();err(e.message);return}
+  }
+  motoRetry=setTimeout(connectMotoRace,2400);
+ };
+}
+async function openMotoRace(selected){
+ if(!identity||motoOpening||!motoOverlay.hidden)return;
+ motoOpening=true;$('create-moto-trial').disabled=true;
+ try{
+  const {state}=selected?await request('/api/moto-trial/'+selected+'/state'):await request('/api/create',{game:'moto-trial'});
+  if(state.players.length>=8&&!state.players.some(p=>p.id===identity.player))throw Error('Corsa al completo.');
+  motoRace=state;showMotoTrial(true);connectMotoRace();sendPresence();
+ }catch(e){err(e.message)}finally{motoOpening=false;$('create-moto-trial').disabled=!identity}
+}
+motoLaunch.onclick=()=>{if(motoOverlay.hidden&&!motoOpening)showMotoTrial()};
+$('create-moto-trial').onclick=()=>openMotoRace();
+motoFrame.addEventListener('load',sendMotoState);
 window.addEventListener('message',event=>{
  if(motoOverlay.hidden||event.origin!==location.origin||event.source!==motoFrame.contentWindow)return;
- if(event.data?.type==='moto-trial:ready')sendMotoInsets();
- else if(event.data?.type==='moto-trial:exit')closeMotoTrial();
+ const data=event.data;
+ if(data?.type==='moto-trial:ready')sendMotoState();
+ else if(data?.type==='moto-trial:exit')closeMotoTrial();
+ else if(data?.type==='moto-trial:pose'&&motoSocket?.readyState===1&&motoSocket.bufferedAmount<16000){
+  const packet=JSON.stringify(data.packet);
+  if(packet?.length<=420)motoSocket.send(packet);
+ }
 });
 tg?.onEvent('backButtonClicked',()=>{if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
 

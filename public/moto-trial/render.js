@@ -94,7 +94,13 @@ function gate(c, x, y) {
   }
 }
 
-function motorcycle(c, bike, time) {
+const PAINT = [
+  ['#f4a644', '#70d5ce'], ['#e66a63', '#f1c482'], ['#72c5ef', '#c0daf8'], ['#a3cf67', '#efdb8c'],
+  ['#c899ed', '#f3b8d0'], ['#e4cf63', '#a8ded1'], ['#83a2ef', '#dcbbb3'], ['#ee92be', '#efd9a2']
+];
+
+function motorcycle(c, bike, time, color) {
+  const [paint, jersey] = PAINT[color] || PAINT[0];
   c.save();
   c.translate(bike.x, bike.y);
   c.rotate(bike.angle);
@@ -114,9 +120,9 @@ function motorcycle(c, bike, time) {
   line(c, [[-AXLE, 0], [-.21, -.19], [.38, -.51], [-.55, -.57], [-AXLE, 0]], '#1d242a', .17);
   line(c, [[-AXLE, 0], [-.18, -.18], [.42, -.52], [-.56, -.55], [-AXLE, 0]], '#efac57', .088);
   line(c, [[AXLE, 0], [.48, -.64], [.34, -.83], [.57, -.85]], '#e5cfb7', .081);
-  polygon(c, [[-.83, -.62], [-.31, -.63], [.30, -.56], [.12, -.34], [-.38, -.42]], '#f4a644');
+  polygon(c, [[-.83, -.62], [-.31, -.63], [.30, -.56], [.12, -.34], [-.38, -.42]], paint);
   polygon(c, [[-.88, -.67], [-.32, -.67], [-.23, -.60], [-.83, -.60]], '#31313a');
-  polygon(c, [[.57, -.29], [.95, -.41], [1.10, -.28], [.78, -.31]], '#ec8f47');
+  polygon(c, [[.57, -.29], [.95, -.41], [1.10, -.28], [.78, -.31]], paint);
   disc(c, -.12, -.31, .146, '#d6c2b4');
   disc(c, -.12, -.31, .084, '#746971');
   const rhythm = Math.sin(time * 13) * Math.min(.026, Math.abs(bike.vx) * .003);
@@ -124,7 +130,7 @@ function motorcycle(c, bike, time) {
   const hip = [-.42 + shift, -.72], shoulder = [-.15 + shift, -1.11 + rhythm];
   line(c, [[-.20, -.27], [-.04 + shift, -.51], hip], '#292b35', .18);
   line(c, [hip, shoulder], '#1c2630', .28);
-  line(c, [hip, shoulder], '#70d5ce', .195);
+  line(c, [hip, shoulder], jersey, .195);
   line(c, [shoulder, [.22 + shift * .5, -.90], [.49, -.84]], '#304551', .125);
   line(c, [shoulder, [.22 + shift * .5, -.90], [.49, -.84]], '#a8e6d4', .064);
   disc(c, shoulder[0] + .14, shoulder[1] - .20, .22, '#252834');
@@ -134,7 +140,7 @@ function motorcycle(c, bike, time) {
   c.restore();
 }
 
-export function drawTrial(c, width, height, course, bike, time, reduced) {
+export function drawTrial(c, width, height, course, bike, time, reduced, riders = [], selfColor = 0) {
   const theme = THEMES[course.seed % THEMES.length];
   sky(c, width, height, course, bike, theme);
   const scale = Math.max(19, Math.min(48, width / 30, height / 14.5));
@@ -147,7 +153,7 @@ export function drawTrial(c, width, height, course, bike, time, reduced) {
     if (tier.points[0].x > bike.x + reach || tier.points.at(-1).x < bike.x - reach ||
         !tier.points.some(p => Math.abs(p.y - bike.y) < below + 3)) continue;
     ledge(c, tier, theme);
-    sign(c, tier.checkpoint, ground(tier, tier.checkpoint), tier.direction, true);
+    sign(c, tier.marker, ground(tier, tier.marker), tier.direction, true);
     const x = i === 4 ? course.finish : tier.end - 4 * tier.direction;
     const y = ground(tier, x);
     if (i === 4) gate(c, x, y);
@@ -162,6 +168,29 @@ export function drawTrial(c, width, height, course, bike, time, reduced) {
     }
     c.globalAlpha = 1;
   }
-  motorcycle(c, bike, reduced ? 0 : time);
+  const visible = riders.filter(({bike: rider}) => Math.abs(rider.x - bike.x) < reach &&
+    Math.abs(rider.y - bike.y) < below);
+  for (const rider of visible) {
+    c.globalAlpha = rider.bike.mode === 'crash' ? .48 : .87;
+    motorcycle(c, rider.bike, reduced ? 0 : time, rider.color);
+  }
+  c.globalAlpha = 1;
+  motorcycle(c, bike, reduced ? 0 : time, selfColor);
   c.restore();
+  const names = [];
+  for (const rider of visible) {
+    const x = anchorX + (rider.bike.x - bike.x) * scale;
+    let y = anchorY + (rider.bike.y - bike.y - 2.05) * scale;
+    for (const label of names) if (Math.abs(x - label.x) < 82 && Math.abs(y - label.y) < 17) y = label.y - 18;
+    names.push({x, y});
+    c.save();
+    c.textAlign = 'center';
+    c.font = '600 12px system-ui';
+    c.lineWidth = 3;
+    c.strokeStyle = '#202630e8';
+    c.fillStyle = (PAINT[rider.color] || PAINT[0])[1];
+    c.strokeText(rider.name, x, y, 116);
+    c.fillText(rider.name, x, y, 116);
+    c.restore();
+  }
 }

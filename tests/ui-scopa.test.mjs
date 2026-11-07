@@ -46,6 +46,17 @@ w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:w,
 assert.equal(get('moto-trial-overlay').hidden,false);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,true);
+const raceFixture={room:'22222222-2222-4222-8222-222222222222',number:2,seed:67,players:[]};
+const beforeRaceFetch=w.fetch;
+w.fetch=async(path,opts)=>path==='/api/create'&&JSON.parse(opts.body).game==='moto-trial'?Response.json({state:raceFixture}):beforeRaceFetch(path,opts);
+get('create-moto-trial').click();
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.equal(get('moto-trial-overlay').hidden,false);
+assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?multiplayer=1');
+w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
+assert.equal(get('moto-trial-overlay').hidden,true);
+w.fetch=beforeRaceFetch;
+
 
 const wait=()=>new Promise(resolve=>setTimeout(resolve,100));
 const create=(game,kind)=>w.document.querySelector('[data-create-game="'+game+'"][data-creation-kind="'+kind+'"]');
@@ -244,11 +255,11 @@ const trialDom=new JSDOM(await fs.readFile('public/moto-trial/index.html','utf8'
  url:'https://unit.test/moto-trial/index.html',runScripts:'outside-only',pretendToBeVisual:true
 });
 const trial=trialDom.window, trialGet=id=>trial.document.getElementById(id);
-Object.assign(trial,trialPhysics,{drawTrial(){},applyInsets(){}});
+Object.assign(trial,trialPhysics,{TrialAudio:class{resume(){} update(){} surface(){} close(){}},drawTrial(){},applyInsets(){}});
 trial.matchMedia=()=>({matches:true});
 trialGet('trail').getContext=()=>({setTransform(){}});
 trial.eval((await fs.readFile('public/moto-trial/game.js','utf8')).replace(/^import .*;\n/gm,'')+
- '\nwindow.__trialTest={tick:()=>tick(lastFrame+32),bike:()=>bike,seed:()=>course.seed};');
+ '\nwindow.__trialTest={tick:()=>tick(lastFrame+32),bike:()=>bike,seed:()=>course.seed,mode:()=>mode};');
 trialGet('primary').click();
 assert.equal(trialGet('controls').hidden,false);
 const trialKey=(type,code,repeat=false)=>trial.dispatchEvent(new trial.KeyboardEvent(type,{code,repeat,cancelable:true}));
@@ -270,6 +281,15 @@ const oldSeed=trial.__trialTest.seed();
 trialGet('new-course').click();
 assert.notEqual(trial.__trialTest.seed(),oldSeed);
 assert.equal(trial.__trialTest.bike().x,4);
+const failedBike=trial.__trialTest.bike();
+failedBike.x=9;failedBike.status='crash';
+trial.__trialTest.tick();
+assert.equal(trial.__trialTest.mode(),'crash');
+const crashedSeed=trial.__trialTest.seed();
+await new Promise(resolve=>setTimeout(resolve,1180));
+assert.equal(trial.__trialTest.seed(),crashedSeed);
+assert.equal(trial.__trialTest.bike().x,4);
+assert.equal(trial.__trialTest.mode(),'ride');
 trialDom.window.close();
 console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and random restart.');
 

@@ -1,10 +1,14 @@
 import {applyInsets} from '../safe-area.js';
 import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js';
+import {TrialAudio} from './audio.js';
 import {drawTrial} from './render.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
 const keys = new Set(), pointers = new Map();
+const audio = new TrialAudio(), remote = new Map();
+const multiplayer = new URLSearchParams(location.search).get('multiplayer') === '1';
+let race = null, self = null, connected = false, lastPose = '', seq = 0, retryTimer = 0;
 const prefersReduced = matchMedia('(prefers-reduced-motion: reduce)');
 const throttleKeys = ['ArrowUp', 'KeyW'], brakeKeys = ['ArrowDown', 'KeyS'];
 const leftKeys = ['ArrowLeft', 'KeyA'], rightKeys = ['ArrowRight', 'KeyD'];
@@ -16,8 +20,74 @@ let course = makeCourse(freshSeed()), bike = resetBike(course), mode = 'ready';
 let elapsed = 0, falls = 0, accumulator = 0, lastFrame = 0, frame = 0;
 let width = 1, height = 1, pixelRatio = 1;
 
-function message(type) {
-  if (parent !== window) parent.postMessage({type: 'moto-trial:' + type}, location.origin);
+function message(type, payload = {}) {
+  if (parent !== window) parent.postMessage({type: 'moto-trial:' + type, ...payload}, location.origin);
+}
+
+function sendPose() {
+  if (!connected || !race) return;
+  const {x, y, angle, vx, facing, lean, roll} = bike;
+  const compact = value => Math.round(value * 1000) / 1000;
+  const pose = {x: compact(x), y: compact(y), angle: compact(angle), vx: compact(vx),
+    facing, lean: compact(lean), roll: compact(roll), mode};
+  const signature = JSON.stringify(pose);
+  if (lastPose === signature) return;
+  lastPose = signature;
+  message('pose', {packet: {type: 'pose', seq: ++seq, ...pose}});
+}
+
+function blendPose(member, now) {
+  const {from, pose, at} = member;
+  const t = Math.min(1, (now - at) / 102);
+  if (t >= 1 || !from) return pose;
+  const angle = (a, b) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
+  return {...pose, x: from.x + (pose.x - from.x) * t, y: from.y + (pose.y - from.y) * t,
+    angle: angle(from.angle, pose.angle), roll: angle(from.roll, pose.roll)};
+}
+
+function receivePose(id, pose) {
+  const member = remote.get(id);
+  if (!member || !pose) return;
+  const now = performance.now();
+  member.from = member.pose && Math.hypot(member.pose.x - pose.x, member.pose.y - pose.y) < 4
+    ? blendPose(member, now) : null;
+  member.pose = pose;
+  member.at = now;
+  if (mode !== 'ride') draw();
+}
+
+function updateRaceStatus() {
+  const status = $('race-status');
+  status.hidden = !multiplayer;
+  if (!multiplayer) return;
+  const text = connected && race ? 'Corsa ' + race.number + ' · ' + race.players.length + '/8 piloti'
+    : race ? 'Connessione alla corsa…' : 'Caricamento della corsa…';
+  if (status.textContent !== text) status.textContent = text;
+  $('primary').disabled = mode === 'ready' && !connected;
+}
+
+function receiveRace(data) {
+  const state = data.state;
+  if (!multiplayer || !state || !Array.isArray(state.players) || !Number.isInteger(state.seed)) return;
+  const newRace = race?.room !== state.room;
+  if (connected !== data.connected || newRace) lastPose = '';
+  connected = data.connected;
+  race = state;
+  self = state.players.find(p => p.id === data.player) || self;
+  if (newRace) {
+    remote.clear();
+    course = makeCourse(state.seed);
+    bike = resetBike(course);
+  }
+  const members = state.players.filter(p => p.id !== data.player);
+  for (const id of remote.keys()) if (!members.some(p => p.id === id)) remote.delete(id);
+  for (const member of members) {
+    if (!remote.has(member.id)) remote.set(member.id, {name: member.name, color: member.color});
+    if (member.pose) receivePose(member.id, member.pose);
+  }
+  updateRaceStatus();
+  updateHUD();
+  draw();
 }
 
 function clearInputs() {
@@ -44,7 +114,9 @@ function updateHUD() {
 function draw() {
   if (!ctx) return;
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
-  drawTrial(ctx, width, height, course, bike, elapsed, prefersReduced.matches);
+  const now = performance.now(), riders = [];
+  for (const member of remote.values()) if (member.pose) riders.push({...member, bike: blendPose(member, now)});
+  drawTrial(ctx, width, height, course, bike, elapsed, prefersReduced.matches, riders, self?.color);
 }
 
 function resize() {
@@ -62,11 +134,13 @@ function setMode(next) {
   clearInputs();
   accumulator = 0;
   cancelAnimationFrame(frame);
+  clearTimeout(retryTimer);
+  if (next !== 'ride') audio.update(false);
   $('menu').hidden = next === 'ride';
   $('controls').hidden = next !== 'ride';
   $('key-hints').hidden = next !== 'ride';
   $('pause').disabled = next !== 'ride';
-  $('new-course').hidden = next === 'ready';
+  $('new-course').hidden = next === 'ready' || multiplayer;
   $('intro-controls').hidden = next !== 'ready';
   if (next === 'ride') {
     canvas.focus({preventScroll: true});
@@ -74,22 +148,24 @@ function setMode(next) {
     frame = requestAnimationFrame(tick);
   } else {
     const [title, description, button] = {
-      ready: ['Moto Trial', 'Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Le bandierine segnano i checkpoint.', 'Parti'],
-      paused: ['In pausa', 'Riprendi dallo stesso punto o genera un altro percorso.', 'Riprendi'],
-      crash: ['Caduta', 'Riparti dalla bandierina dell’ultimo tratto raggiunto.', 'Riprova dal checkpoint'],
+      ready: ['Moto Trial', 'Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Bilancia la moto sulle rampe per evitare di ribaltarti.', 'Parti'],
+      paused: ['In pausa', multiplayer ? 'Gli altri piloti possono continuare a correre.' : 'Riprendi dallo stesso punto o genera un altro percorso.', 'Riprendi'],
+      crash: ['Caduta', 'Ripartenza dall’inizio dello stesso percorso.', 'Riparti subito'],
       finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), 'Riprova lo stesso percorso']
     }[next];
     $('title').textContent = title;
     $('description').textContent = description;
     $('primary').textContent = button;
+    if (next === 'crash') retryTimer = setTimeout(() => { if (!document.hidden) retryAfterFall(); }, 1100);
     if (next !== 'ready') $('primary').focus({preventScroll: true});
   }
+  updateRaceStatus();
   updateHUD();
   draw();
 }
 
 function restart(reseed = false) {
-  if (reseed) {
+  if (reseed && !multiplayer) {
     let seed = freshSeed();
     if (seed === course.seed) seed = (seed + 1) >>> 0;
     course = makeCourse(seed);
@@ -99,13 +175,18 @@ function restart(reseed = false) {
   setMode('ride');
 }
 
-function primary() {
-  if (mode === 'crash') bike = resetBike(course, bike.checkpoint);
-  else if (mode === 'finish') {
-    restart();
-    return;
-  }
+function retryAfterFall() {
+  bike = resetBike(course);
+  elapsed = 0;
   setMode('ride');
+}
+
+function primary() {
+  if (multiplayer && mode === 'ready' && !connected) return;
+  audio.resume();
+  if (mode === 'crash') retryAfterFall();
+  else if (mode === 'finish') restart();
+  else setMode('ride');
 }
 
 function tick(now) {
@@ -120,10 +201,14 @@ function tick(now) {
       Number(held.has('left') || leftKeys.some(key => keys.has(key)))
   };
   while (accumulator >= FIXED_STEP && bike.status === 'ride') {
+    const grounded = bike.onGround, fallSpeed = bike.vy;
     stepBike(course, bike, input);
+    if (bike.status === 'crash') audio.surface(true, Math.max(4, fallSpeed));
+    else if (grounded !== bike.onGround) audio.surface(bike.onGround, fallSpeed);
     elapsed += FIXED_STEP;
     accumulator -= FIXED_STEP;
   }
+  audio.update(bike.status === 'ride', bike.vx, input.throttle && !input.brake, !bike.onGround);
   if (bike.status === 'crash') {
     falls++;
     setMode('crash');
@@ -144,7 +229,12 @@ function turn() {
 }
 
 $('primary').onclick = primary;
-$('new-course').onclick = () => restart(true);
+$('new-course').onclick = () => { audio.resume(); restart(true); };
+$('sound').onclick = () => {
+  audio.setEnabled(!audio.enabled);
+  $('sound').setAttribute('aria-pressed', String(audio.enabled));
+  $('sound').textContent = audio.enabled ? '♫' : '♪̸';
+};
 $('pause').onclick = () => { if (mode === 'ride') setMode('paused'); };
 $('exit').onclick = () => {
   if (parent === window) location.href = '/';
@@ -209,13 +299,29 @@ window.addEventListener('blur', clearInputs);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && mode === 'ride') setMode('paused');
 });
-window.addEventListener('pagehide', () => cancelAnimationFrame(frame));
+window.addEventListener('pagehide', () => {
+  cancelAnimationFrame(frame);
+  clearTimeout(retryTimer);
+  audio.close();
+});
 window.addEventListener('resize', resize);
 window.addEventListener('message', event => {
-  if (parent !== window && event.source === parent && event.origin === location.origin &&
-      event.data?.type === 'moto-trial:insets') applyInsets(document.documentElement, event.data.insets);
+  if (parent === window || event.source !== parent || event.origin !== location.origin) return;
+  const data = event.data;
+  if (data?.type === 'moto-trial:insets') applyInsets(document.documentElement, data.insets);
+  else if (data?.type === 'moto-trial:state') receiveRace(data);
+  else if (data?.type === 'moto-trial:pose') receivePose(data.id, data.pose);
+  else if (data?.type === 'moto-trial:connection') {
+    connected = data.connected;
+    lastPose = '';
+    updateRaceStatus();
+  }
 });
 
+if (multiplayer) {
+  document.body.classList.add('moto-multi');
+  setInterval(sendPose, 100);
+}
 resize();
 setMode('ready');
 message('ready');

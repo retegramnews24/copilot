@@ -18,9 +18,8 @@ for (let seed = 0; seed < 320; seed++) {
   assert.equal(bike.status, 'finish', 'Seed ' + seed + ' must be possible to finish');
   assert.deepEqual(landings, [1, 2, 3, 4]);
   assert.ok(airSteps > 0);
-  assert.equal(bike.checkpoint, 4);
   for (const [index, tier] of course.tiers.entries()) {
-    assert.ok(ground(tier, tier.checkpoint) !== null);
+    assert.ok(ground(tier, tier.marker) !== null);
     if (index) {
       const above = course.tiers[index - 1];
       assert.equal(tier.direction, -above.direction);
@@ -44,7 +43,14 @@ const first = course.tiers[0];
 const airborne = {...resetBike(course), x: first.end + 1, y: ground(first, first.end), onGround: false, angle: Math.PI, vy: 3};
 for (let i = 0; i < 200 && airborne.status === 'ride'; i++) stepBike(course, airborne, {});
 assert.equal(airborne.status, 'crash', 'An upside-down landing is a crash');
-const respawn = resetBike(course, 2);
-assert.equal(respawn.x, course.tiers[2].checkpoint);
-assert.equal(respawn.status, 'ride');
-console.log('PASS Moto Trial: 320 full procedural descents, alternating turns, seeded courses, preserved momentum, brakes, crashes and checkpoints.');
+for (const lean of [-1, 1]) {
+  const tilted = resetBike(course);
+  for (let i = 0; i < 34; i++) stepBike(course, tilted, {lean});
+  assert.equal(tilted.onGround, true);
+  assert.ok(Math.sign(tilted.angle) === lean && Math.abs(tilted.angle) > .29);
+  assert.ok(tilted.y < resetBike(course).y, 'Tilting lifts one wheel while the other stays on the ground');
+  for (let i = 0; i < 200 && tilted.status === 'ride'; i++) stepBike(course, tilted, {lean});
+  assert.equal(tilted.status, 'crash', 'Holding either direction too far tips the bike over');
+  assert.equal(resetBike(course).x, course.tiers[0].marker);
+}
+console.log('PASS Moto Trial: 320 full procedural descents, turns, brakes, wheelies, crashes and restart at the beginning.');

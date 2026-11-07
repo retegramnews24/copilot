@@ -54,9 +54,9 @@ Il pulsante per creare tavoli è nella pagina Giochi. La Lobby conserva elenco, 
 
 ## Moto Trial · Platform 2D
 
-Dalla pagina Giochi si apre un percorso in singolo. La moto resta al centro della visuale mentre il canyon scorre. Ogni nuovo percorso genera cinque tratti collegati da discese e tornanti alternati. Le bandierine segnano i checkpoint. Dopo una caduta si può riprendere dall’ultimo tratto raggiunto. Il traguardo mostra il tempo e il numero di cadute.
+Dalla pagina Giochi si può partire in singolo o creare una corsa multiplayer. Le corse appaiono nella Lobby e ospitano fino a otto piloti sullo stesso percorso. Le moto degli altri giocatori si vedono in tempo reale, con nomi e colori distinti, e possono incrociarsi. La propria moto resta al centro della visuale mentre il canyon scorre. Ogni nuovo percorso genera cinque tratti collegati da discese e tornanti alternati. Dopo una caduta si riparte dall’inizio dello stesso percorso. Il traguardo mostra il tempo del giro riuscito e il numero di cadute.
 
-Frecce o WASD per accelerare, frenare e bilanciare la moto. Spazio inverte la direzione mantenendo lo slancio. Su telefono si può tenere premuto Gas e toccare Gira con un altro dito. Dal menu di pausa si può riprendere o generare un altro percorso. La grafica è vettoriale, disegnata su Canvas.
+Frecce o WASD per accelerare, frenare e inclinare la moto. Tenere premuta un’inclinazione può farla ribaltare. Il motore sale di giri con il gas, mentre salto e atterraggio hanno suoni distinti. Spazio inverte la direzione mantenendo lo slancio. Su telefono si può tenere premuto Gas e toccare Gira con un altro dito. Dal menu di pausa si può riprendere e, in singolo, generare un altro percorso. La grafica è vettoriale, disegnata su Canvas.
 
 ## Labyrinth · spedizioni multiplayer
 
