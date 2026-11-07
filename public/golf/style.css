@@ -22,3 +22,6 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 #watch-tools{display:flex;align-items:center;gap:8px;padding:0 4px;color:var(--muted);font-size:13px}
 #watch-player{min-width:0;max-width:60%;min-height:34px;padding:4px 7px;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px}
 #cancel-close{background:#253e50;color:var(--ink);border-color:var(--line)}
+
+.zoom-tools{position:absolute;top:8px;right:8px;display:flex;gap:5px}
+.zoom-tools button{min-width:38px;min-height:38px;padding:0;background:#192e3ce8;font-size:20px;line-height:1}

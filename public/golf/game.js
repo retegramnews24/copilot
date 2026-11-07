@@ -1,6 +1,6 @@
 import { COURSES, COURSE_VERSION, courseFor, RADIUS, BALL_KEY, ballColors, validBallColors } from './courses.js?v=3';
 import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=3';
-import { aimDirection, drawCourse } from './render.js?v=4';
+import { aimDirection, drawCourse } from './render.js?v=6';
 import { upright, rollBy } from './roll.js';
 import { applyInsets } from '../safe-area.js';
 
@@ -8,6 +8,8 @@ const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContex
 const online=new URLSearchParams(location.search).get('online')==='1';
 let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null, orbit=null, watching=null, watchOptions='';
 const ballRolls=new Map();
+const ZOOM_NEAR=.72,ZOOM_FAR=1.55;
+let zoomTarget=1;
 try{appearance=JSON.parse(localStorage.getItem(BALL_KEY));}catch{}
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
 const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},location.origin);
@@ -16,8 +18,12 @@ const value=id=>Number($(id).value);
 const player=()=>state?.players.find(p=>p.id===me);
 const canShoot=()=>!!($('close-confirm').hidden&&player()&&state.phase==='playing'&&!player().done&&!busy&&time()<state.deadline&&!(player().shot?.until>time()));
 const angle=()=>value('aim')*Math.PI/180;
+function setAim(yaw){
+  const wrapped=Math.atan2(Math.sin(yaw),Math.cos(yaw));
+  $('aim').value=String(Math.round(wrapped*180/Math.PI));
+}
 function resetAim(course){
-  $('aim').value=String(Math.round(Math.atan2(course.cup[1]-course.tee[1],course.cup[0]-course.tee[0])*180/Math.PI));
+  setAim(Math.atan2(course.cup[1]-course.tee[1],course.cup[0]-course.tee[0]));
   $('power').value='43';drag=null;orbit=null;ballRolls.clear();
 }
 
@@ -51,7 +57,7 @@ function sound(type){
 }
 function shoot(){
   if(!canShoot()||orbit)return;
-  if(!camera.free)camera.targetYaw=angle();
+  followAim();
   sound('shot');
   action('shot',{hole:state.hole,strokes:player().strokes,angle:angle(),power:value('power')/100});
 }
@@ -155,7 +161,7 @@ function draw(stamp=performance.now()){
   const course=courseFor(state?.hole??0,state ? state.courseVersion : COURSE_VERSION), now=time();
   if(hole!==(state?.hole??0)||camera?.course!==course){
     hole=state?.hole??0;resetAim(course);
-    camera={course,x:course.tee[0],z:course.tee[1],yaw:angle(),targetYaw:angle(),pitch:.18,free:false};
+    camera={course,x:course.tee[0],z:course.tee[1],yaw:angle(),targetYaw:angle(),pitch:.18,free:false,zoom:zoomTarget};
   }
   const dt=Math.max(.001,Math.min(.1,(stamp-lastFrame)/1000));
   lastFrame=stamp;
@@ -201,6 +207,7 @@ function draw(stamp=performance.now()){
     }
     camera.watched=watched?.id;
     const follow=1-Math.exp(-dt*17);
+    camera.zoom+=(zoomTarget-camera.zoom)*follow;
     camera.x+=(x-camera.x)*follow;
     camera.z+=(z-camera.z)*follow;
     if(!drag&&!orbit){
@@ -217,10 +224,24 @@ function aimDrag(e){
   const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
   const length=Math.hypot(dx,dy);
   if(length<6)return false;
-  $('aim').value=String(Math.round(aimDirection(drag.yaw,dx,dy)*180/Math.PI));
+  setAim(aimDirection(drag.yaw,dx,dy));
   $('power').value=String(Math.min(100,Math.max(1,Math.round(length/Math.min(150,canvas.clientWidth*.34)*100))));
   return true;
 }
+function zoomBy(factor){
+  if(!$('close-confirm').hidden)return;
+  zoomTarget=Math.max(ZOOM_NEAR,Math.min(ZOOM_FAR,zoomTarget*factor));
+  $('zoom-in').disabled=zoomTarget===ZOOM_NEAR;
+  $('zoom-out').disabled=zoomTarget===ZOOM_FAR;
+}
+$('zoom-in').onclick=()=>zoomBy(1/1.18);
+$('zoom-out').onclick=()=>zoomBy(1.18);
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const unit=e.deltaMode===1 ? 16 : e.deltaMode===2 ? 240 : 1;
+  const delta=Math.max(-180,Math.min(180,e.deltaY*unit));
+  zoomBy(Math.exp(delta*.0016));
+},{passive:false});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{
   if(drag||orbit||!$('close-confirm').hidden)return;
@@ -236,7 +257,10 @@ canvas.addEventListener('pointermove',e=>{
   if(orbit?.id===e.pointerId){
     if(!(e.buttons&2)){orbit=null;return;}
     camera.yaw+=(e.clientX-orbit.x)*.008;
-    camera.targetYaw=camera.yaw;camera.free=true;
+    camera.targetYaw=camera.yaw;
+    const p=player();
+    camera.free=!p||p.done;
+    if(!camera.free)setAim(camera.yaw);
     camera.pitch=Math.max(.07,Math.min(.64,camera.pitch-(e.clientY-orbit.y)*.006));
     orbit.x=e.clientX;orbit.y=e.clientY;
   }else if(drag?.id===e.pointerId)aimDrag(e);

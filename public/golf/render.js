@@ -18,10 +18,11 @@ export function aimDirection(yaw,dx,dy){
   return Math.atan2(Math.sin(yaw)*forward+Math.cos(yaw)*side,Math.cos(yaw)*forward-Math.sin(yaw)*side);
 }
 
-function viewFor(width,height,{x,z,yaw,pitch}){
+function viewFor(width,height,{x,z,yaw,pitch,zoom}){
   const fx=Math.cos(yaw),fz=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
   const tilt=pitch+ORBIT_OFFSET, along=Math.cos(tilt), above=Math.sin(tilt);
-  const eyeX=x-fx*ORBIT_DISTANCE*along,eyeZ=z-fz*ORBIT_DISTANCE*along,eyeY=ORBIT_DISTANCE*above;
+  const distance=ORBIT_DISTANCE*zoom;
+  const eyeX=x-fx*distance*along,eyeZ=z-fz*distance*along,eyeY=distance*above;
   const focal=Math.min(height*.96,width*1.3), centerY=height*.43;
   const transform=([x,z,y])=>{
     const dx=x-eyeX,dz=z-eyeZ,dy=y-eyeY,forward=dx*fx+dz*fz;

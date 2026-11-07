@@ -896,7 +896,7 @@ function publishGolf(ack=false){
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=5'+(online?'&online=1':'');
+ $('golf-frame').src='/golf/index.html?v=6'+(online?'&online=1':'');
  tg?.BackButton?.show();
 }
 async function syncGolf(){

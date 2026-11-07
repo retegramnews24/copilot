@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#172938"><title>Golf with your gay friends</title><link rel="stylesheet" href="style.css?v=2"></head>
+<meta name="theme-color" content="#172938"><title>Golf with your gay friends</title><link rel="stylesheet" href="style.css?v=3"></head>
 <body>
 <header>
   <button id="back" type="button" aria-label="Torna a Binottoland">← Giochi</button>
@@ -11,6 +11,10 @@
   <div class="course-info"><div><small id="counter"></small><h2 id="course"></h2></div><div class="course-actions"><span id="clock"></span><button type="button" id="close-game" hidden>Chiudi partita</button></div></div>
   <div class="course-view">
     <canvas id="green" aria-label="Percorso di minigolf. Trascina verso il bersaglio e rilascia per tirare."></canvas>
+    <div class="zoom-tools" role="group" aria-label="Zoom della visuale">
+      <button type="button" id="zoom-out" aria-label="Allontana visuale">−</button>
+      <button type="button" id="zoom-in" aria-label="Avvicina visuale">+</button>
+    </div>
     <section id="panel" class="glass" hidden>
       <h2 id="panel-title"></h2><p id="panel-text"></p><button type="button" id="start"></button>
     </section>
@@ -31,4 +35,4 @@
   <div id="watch-tools" hidden><label for="watch-player">Segui giocatore</label> <select id="watch-player"></select></div>
   <p id="tip" class="tip"></p>
 </main>
-<script type="module" src="game.js?v=5"></script></body></html>
+<script type="module" src="game.js?v=6"></script></body></html>
