@@ -131,7 +131,7 @@ try{
  const rider2=await connect(202,race.room,false,'moto-trial');
  const raceState=(await until(rider1,p=>p.type==='state'&&p.state.players.length===2)).state;
  assert.equal(raceState.seed,race.seed);
- assert.equal(raceState.courseVersion,6);
+ assert.equal(raceState.courseVersion,7);
  assert.equal(raceState.seed,1);
  assert.equal(raceState.campaign,true);
  assert.equal(raceState.courseName,'Campagna Moto Trial');

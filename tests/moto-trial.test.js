@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {makeCourse, ground, bikeSupport, helmetSupport, resetBike, turnBike, stepBike, FIXED_STEP} from '../public/moto-trial/physics.js';
+import {makeCourse, ground, bikeSupport, helmetSupport, COURSE_VERSION, resetBike, turnBike, stepBike, FIXED_STEP} from '../public/moto-trial/physics.js';
 
 import {helmetPosition,riderPose} from '../public/moto-trial/rider.js';
 import {FIXED_COURSES} from '../public/moto-trial/courses.js';
@@ -193,7 +193,7 @@ assert.ok(makeCourse(1).tiers.every(tier=>!tier.precisionDrop&&!tier.jump.short)
 assert.equal(makeCourse(10).tiers.filter(tier=>tier.jump.short).length,2);
 for (let id = 1; id <= FIXED_COURSES.length; id++) {
   const course = makeCourse(id);
-  assert.deepEqual(course, makeCourse(id, 6));
+  assert.deepEqual(course, makeCourse(id, COURSE_VERSION));
   assert.ok(FIXED_COURSES.some(track => track.name === course.name));
   const {bike, landings, jumps, duration} = drive(course);
   assert.equal(bike.status, 'finish', course.name);
@@ -225,3 +225,27 @@ for(let i=0;i<180;i++)stepBike(current,wheelsFirst,{});
 assert.equal(wheelsFirst.status,'ride');
 assert.equal(wheelsFirst.onGround,true);
 console.log('PASS articulated Moto Trial: fixed hand and foot anchors, wheel-first recovery, helmet contact and distinct out-of-course reset.');
+
+// Releasing the throttle at the start of the first ramp must still allow a tyre-first landing.
+const earlyCoast = resetBike(current);
+for(let i=0;i<900&&earlyCoast.status==='ride'&&!earlyCoast.clearedJump;i++){
+  stepBike(current,earlyCoast,{throttle:earlyCoast.x<19.5});
+}
+assert.equal(earlyCoast.status,'ride');
+assert.equal(earlyCoast.clearedJump,true);
+assert.ok(earlyCoast.x<current.tiers[0].jump.landing,'The front tyre lands before the chassis reaches the lip');
+
+const below = current.tiers[1];
+const missX = current.tiers[0].jump.lip + 1.2;
+const incoming = {...resetBike(current),x:missX,y:ground(below,missX)-3.5,vy:9,onGround:false};
+const missed = {...incoming}, headFirst = {...incoming,angle:Math.PI};
+for (const bike of [missed,headFirst]) {
+  for(let i=0;i<500&&bike.status==='ride';i++)stepBike(current,bike,{});
+}
+assert.equal(missed.status,'offCourse');
+assert.equal(missed.missedLanding,true);
+assert.equal(missed.tier,0,'The lower deck stops the bike without skipping a section');
+assert.equal(missed.y,bikeSupport(below,missed.x,missed.angle,missed.leftSpring,missed.rightSpring));
+assert.equal(headFirst.status,'crash','Helmet contact still counts when it occurs on the lower deck');
+assert.ok(Math.abs(headFirst.y-helmetSupport(below,headFirst.x,headFirst.angle,headFirst.facing,headFirst.lean,COURSE_VERSION))<.01);
+console.log('PASS Moto Trial first ramp: early coast, front tyre contact, solid lower deck and helmet-only crash.');

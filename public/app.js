@@ -789,7 +789,7 @@ function showMotoTrial(multiplayer=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  motoOverlay.hidden=false;
- motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1&v=7':'?v=7');
+ motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1&v=8':'?v=8');
  tg?.BackButton?.show();
 }
 function connectMotoRace(){

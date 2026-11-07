@@ -2,12 +2,14 @@ import {COURSE_VERSION, makeCourse, ground} from './public/moto-trial/physics.js
 
 import {CAMPAIGN_LENGTH} from './public/moto-trial/courses.js';
 
-const campaignCourses = Array.from({length: CAMPAIGN_LENGTH}, (_, i) => makeCourse(i + 1));
 const boundsFor = course => {
   const xs = course.tiers.flatMap(tier => tier.points.map(p => p.x));
   return {min: Math.min(...xs), max: Math.max(...xs), bottom: course.bottom};
 };
-const campaignBounds = campaignCourses.map(boundsFor);
+const campaigns = new Map([6, COURSE_VERSION].map(version => [version, Array.from({length: CAMPAIGN_LENGTH}, (_, i) => {
+  const course = makeCourse(i + 1, version);
+  return {course, bounds: boundsFor(course)};
+})]));
 const LIMIT = 8, EMPTY_GRACE = 60_000;
 const json = (data, status = 200) => Response.json(data, {status, headers: {'Cache-Control': 'no-store'}});
 const modes = new Set(['ready', 'ride', 'paused', 'crash', 'offCourse', 'finish']);
@@ -120,11 +122,12 @@ export class MotoTrialRoom {
       if (!this.room) return;
       const campaign = this.room.campaign, stage = member.stage;
       if (campaign && (packet.courseId !== stage || member.complete)) return;
-      const pose = readPose(packet, campaign ? campaignBounds[stage - 1] : this.room.bounds);
+      const circuit = campaign ? campaigns.get(this.room.courseVersion)[stage - 1] : null;
+      const pose = readPose(packet, circuit?.bounds ?? this.room.bounds);
       if (!pose) return;
       let progress;
       if (campaign) {
-        const course = campaignCourses[stage - 1], last = course.tiers.at(-1);
+        const {course} = circuit, last = course.tiers.at(-1);
         pose.courseId = stage;
         if (pose.mode === 'finish') {
           const pastGate = (pose.x - course.finish) * last.direction;

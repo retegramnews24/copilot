@@ -1,8 +1,8 @@
-import {CAMPAIGN_LENGTH} from './courses.js?v=6';
+import {CAMPAIGN_LENGTH} from './courses.js?v=8';
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=6';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=8';
 import {TrialAudio} from './audio.js?v=7';
-import {drawTrial} from './render.js?v=7';
+import {drawTrial} from './render.js?v=8';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -131,7 +131,7 @@ function updateHUD() {
     } else if (!bike.onGround && bike.tier < course.tiers.length - 1 && (bike.x - tier.end) * tier.direction >= 0) cue = 'Atterra sul sentiero sotto';
     else if (bike.facing !== tier.direction) cue = 'Frena e gira ' + (tier.direction > 0 ? 'verso destra →' : 'verso sinistra ←');
     else if (tier.jump && (tier.jump.lip - bike.x) * tier.direction >= 0 &&
-        Math.abs(tier.jump.lip - bike.x) < 17) cue = tier.jump.short ? 'Pianerottolo corto · dosa il gas' : 'Salto · prendi slancio';
+        Math.abs(tier.jump.lip - bike.x) < 17) cue = tier.jump.short ? 'Pianerottolo corto · dosa il gas' : course.id === 1 && bike.tier === 0 ? 'Primo salto · tieni il gas fino al bordo' : 'Salto · prendi slancio';
     else if (tier.precisionDrop && Math.abs(tier.end - bike.x) < 17) cue = 'Atterraggio stretto · frena prima del bordo';
     else if (bike.tier < course.tiers.length - 1 && Math.abs(tier.end - bike.x) < 15) cue = 'Discesa · rallenta dopo l’atterraggio';
   }
@@ -186,7 +186,7 @@ function setMode(next) {
       ready: [course.id && (!multiplayer || race?.campaign) ? 'Livello ' + course.id + ' · Moto Trial' : 'Moto Trial', '', 'Parti'],
       paused: ['In pausa', multiplayer ? 'Gli altri piloti possono continuare a correre.' : 'Riprendi dal punto in cui ti sei fermato.', 'Riprendi'],
       crash: ['Caduta', course.version >= 6 ? 'Il casco ha toccato. Riparti dall’inizio dello stesso percorso.' : 'Ripartenza dall’inizio dello stesso percorso.', 'Riparti subito'],
-      offCourse: ['Fuori pista', 'Hai mancato l’appoggio. Ritorno alla partenza.', 'Riparti subito'],
+      offCourse: ['Fuori pista', bike.missedLanding ? 'Sei atterrato sul ripiano sbagliato. Riprova il salto.' : 'Hai mancato l’appoggio. Ritorno alla partenza.', 'Riparti subito'],
       finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), course.version < 6 ? 'Riprova il circuito' : course.id === CAMPAIGN_LENGTH ? 'Fine campagna' : 'Prossimo livello'],
       complete: ['Campagna completata!', 'Hai superato tutti e dieci i circuiti.', multiplayer ? 'Torna a Binottoland' : 'Ricomincia dal livello 1']
     }[next];
@@ -203,7 +203,7 @@ function setMode(next) {
 }
 
 function openStage(id) {
-  course = makeCourse(id);
+  course = makeCourse(id, multiplayer ? race.courseVersion : undefined);
   bike = resetBike(course);
   falls = elapsed = 0;
   setMode('ready');

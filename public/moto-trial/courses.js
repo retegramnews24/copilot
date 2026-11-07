@@ -31,6 +31,9 @@ const CAMPAIGN_START = [
     ['step', 8.5, 1.3, 9, 25], ['tooth', 9.6, .8, 9.5, 25], ['wall', 10.2, .65, 10, 24], ['tooth', 10.7, .5, 10, 24], ['step', 11, .2]]}
 ];
 const CAMPAIGN = [...CAMPAIGN_START, FIXED_COURSES[3], FIXED_COURSES[5], FIXED_COURSES[4], ...FIXED_COURSES.slice(6)];
+const INTRO = {...CAMPAIGN[0], rows: [
+  ['roll', 3.9, 3.1, 8, 28], ...CAMPAIGN[0].rows.slice(1)
+]};
 export const CAMPAIGN_LENGTH = CAMPAIGN.length;
 const DIFFICULTY = ['Introduzione','Facile','Intermedio','Impegnativo','Difficile','Molto difficile','Esperto','Estremo','Brutale','Quasi impossibile'];
 
@@ -43,7 +46,7 @@ const PROFILES = {
 };
 
 export function fixedCourse(id, version) {
-  const track = (version >= 6 ? CAMPAIGN : FIXED_COURSES)[id - 1];
+  const track = version >= 7 && id === 1 ? INTRO : (version >= 6 ? CAMPAIGN : FIXED_COURSES)[id - 1];
   if (!track) throw RangeError('Circuito non valido.');
   let start = 0, base = 0, overlap = 0;
   const tiers = track.rows.map(([style, gap, landingDelta, drop, nextOverlap, shelf], i) => {

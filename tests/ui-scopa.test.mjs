@@ -49,12 +49,12 @@ assert.equal(get('moto-course'),null);
 get('play-moto-trial').click();
 const motoFrame=get('moto-trial-frame');
 assert.equal(get('moto-trial-overlay').hidden,false);
-assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?v=7');
+assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?v=8');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:w,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,false);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,true);
-const raceFixture={room:'22222222-2222-4222-8222-222222222222',number:2,seed:1,courseVersion:6,campaign:true,players:[]};
+const raceFixture={room:'22222222-2222-4222-8222-222222222222',number:2,seed:1,courseVersion:7,campaign:true,players:[]};
 const beforeRaceFetch=w.fetch;
 let requestedCourse;
 w.fetch=async(path,opts)=>{
@@ -65,7 +65,7 @@ w.fetch=async(path,opts)=>{
 get('create-moto-trial').click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.equal(get('moto-trial-overlay').hidden,false);
-assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?multiplayer=1&v=7');
+assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?multiplayer=1&v=8');
 assert.equal(requestedCourse,undefined);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,true);
