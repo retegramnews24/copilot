@@ -1,8 +1,22 @@
-import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWall } from './courses.js?v=3';
+import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWall } from './courses.js?v=7';
 
+import { estimateRoll } from './physics.js?v=7';
 import { rotateVector } from './roll.js';
 
 const NEAR=.35, ORBIT_DISTANCE=Math.hypot(7.3,2.95), ORBIT_OFFSET=Math.atan2(2.95,7.3)-.18;
+// Sky, horizon, terrain, fairway stripes and the signature scenery for each hole.
+const THEMES=[
+  ['#68b6db','#ffe2bd','#3d7754','#6db461','#7cc46c','park'],
+  ['#78b6d7','#ffd3bc','#866e71','#55a68e','#68baa0','coral'],
+  ['#4d9fd0','#c6e8f5','#356c7a','#4a9c89','#5caf9b','crystal'],
+  ['#372557','#d986ad','#332946','#65488c','#7756a4','lantern'],
+  ['#ad6176','#ffd796','#846b4e','#a89354','#bba664','autumn'],
+  ['#55b4d7','#fff0c9','#c7a778','#71a761','#83b96e','palm'],
+  ['#6693c1','#f6d8ec','#536886','#5c9c98','#70b0ae','crystal'],
+  ['#292650','#db72b1','#393359','#426f76','#50868b','lantern'],
+  ['#716dc4','#ffc8be','#5e657a','#688f72','#78a580','park']
+];
+const PARADE=['#ef6a91','#ffad66','#fce081','#70d2a7','#70b7f0','#bb96ed'];
 const DIMPLES=Array.from({length:56},(_,i)=>{
   const y=1-(2*i+1)/56, ring=Math.sqrt(1-y*y), a=i*Math.PI*(3-Math.sqrt(5));
   return [ring*Math.cos(a),y,ring*Math.sin(a)];
@@ -13,11 +27,6 @@ const circle=(x,z,r,y=0,segments=24)=>Array.from({length:segments},(_,i)=>{
   const a=i*Math.PI*2/segments;
   return [x+Math.cos(a)*r,z+Math.sin(a)*r,y];
 });
-export function aimDirection(yaw,dx,dy){
-  const forward=-dy*2, side=dx;
-  return Math.atan2(Math.sin(yaw)*forward+Math.cos(yaw)*side,Math.cos(yaw)*forward-Math.sin(yaw)*side);
-}
-
 function viewFor(width,height,{x,z,yaw,pitch,zoom}){
   const fx=Math.cos(yaw),fz=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
   const tilt=pitch+ORBIT_OFFSET, along=Math.cos(tilt), above=Math.sin(tilt);
@@ -54,12 +63,14 @@ function viewFor(width,height,{x,z,yaw,pitch,zoom}){
   return {point,polygon,ballVector,horizon:centerY-focal*sp/cp,depth:world=>transform(world)[2]};
 }
 
-function backdrop(ctx,w,h,horizon,yaw){
+function backdrop(ctx,w,h,horizon,yaw,skyTop,skyLight,accent){
   const sky=ctx.createLinearGradient(0,0,0,Math.max(1,horizon+26));
-  sky.addColorStop(0,'#6ca7cb');sky.addColorStop(1,'#f6daba');
+  sky.addColorStop(0,skyTop);sky.addColorStop(1,skyLight);
   ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  const sunX=w*(.5+.34*Math.sin(yaw-.9)),sunY=horizon-h*.13;
+  ctx.fillStyle=skyLight;ctx.beginPath();ctx.arc(sunX,sunY,Math.min(w,h)*.049,0,Math.PI*2);ctx.fill();
+  const colors=[accent+'4f',accent+'79',accent+'b0'];
   for(let layer=0;layer<3;layer++){
-    const colors=['#8caeb1','#699490','#547b72'];
     ctx.beginPath();ctx.moveTo(0,horizon+30);
     for(let x=0;x<w+19;x+=18){
       const angle=(x-w/2)/w*1.2+yaw;
@@ -116,12 +127,14 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
   };
   const queue=(x,z,draw)=>surfaces.push({d:view.depth([x,z,0]),draw});
   const area=(x,z,w,d,y,color)=>poly(quad(x,z,w,d,y),color);
-  backdrop(ctx,w,h,view.horizon,camera.yaw);
-  area(-90,-90,width+180,depth+180,-.34,'#527d5c');
-  area(-1.4,-1.4,width+2.8,depth+2.8,-.02,'#d9ba8b');
+  const [a,b,c]=course.colors;
+  const [skyTop,skyLight,land,darkTurf,lightTurf,prop]=THEMES[course.theme??0];
+  backdrop(ctx,w,h,view.horizon,camera.yaw,skyTop,skyLight,land);
+  area(-90,-90,width+180,depth+180,-.34,land);
+  area(-1.4,-1.4,width+2.8,depth+2.8,-.02,prop==='lantern'?c:'#d9ba8b');
   for(let x=0;x<width;x+=2*scale){
     const stripe=Math.round(x/(2*scale));
-    area(x,0,Math.min(2*scale,width-x)+.015,depth,0,stripe%2?'#66a455':'#73b35c');
+    area(x,0,Math.min(2*scale,width-x)+.015,depth,0,stripe%2?darkTurf:lightTurf);
   }
   for(const r of course.rough||[]){
     area(r.x,r.z,r.w,r.h,.012,'#c59965');
@@ -134,6 +147,18 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
       area(r.x+.36+ripple,r.z+i,r.w*.63,.06,.018,'#97e6e6');
     }
   }
+  for(const r of course.bridges||[]){
+    area(r.x,r.z,r.w,r.h,.021,'#b67f59');
+    for(let offset=.38;offset<r.w;offset+=.55){
+      area(r.x+offset,r.z,.044,r.h,.025,'#68493f');
+    }
+    area(r.x,r.z,r.w,.14,.027,'#e2bf8c');
+    area(r.x,r.z+r.h-.14,r.w,.14,.027,'#e2bf8c');
+  }
+  const [tx,tz]=course.tee;
+  poly(circle(tx,tz,.92*scale,.022),darkTurf);
+  poly(circle(tx,tz,.61*scale,.023),'#faf3c649');
+  for(const side of [-1,1])area(tx-.63*scale,tz+side*.72*scale,.34*scale,.082*scale,.025,'#fff5d1');
   const rail=(wall,half,height,top,side)=>{
     const {x,z,toX,toZ}=wall,length=Math.hypot(toX-x,toZ-z);
     if(!length)return;
@@ -156,32 +181,56 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
       });
     }
   };
-  const [a,,c]=course.colors;
   for(const [x,z,toX,toZ] of [[0,0,width,0],[width,0,width,depth],[width,depth,0,depth],[0,depth,0,0]]){
-    rail({x,z,toX,toZ},.09*scale,.26*scale,'#e7c69a','#99664b');
+    rail({x,z,toX,toZ},.09*scale,.26*scale,prop==='park'?'#e7c69a':a,prop==='park'?'#99664b':c);
   }
   for(const wall of course.walls)rail(wall,.12*scale,.68*scale,a,c);
   const rotor=rotorWall(course,seconds);
-  if(rotor)rail(rotor,.19*scale,.47*scale,'#f8c877','#ab5362');
+  if(rotor){
+    rail(rotor,.19*scale,.47*scale,'#f8c877','#ab5362');
+    const [x,z]=course.rotor;
+    queue(x,z,()=>poly(circle(x,z,.17*scale,.49*scale),'#fff3bf'));
+  }
   for(const [x,z,r] of course.bumpers||[])queue(x,z,()=>{
     const lower=circle(x,z,r),upper=circle(x,z,r,.35*scale);
     for(let i=0;i<lower.length;i++){
       const next=(i+1)%lower.length;
-      poly([lower[i],lower[next],upper[next],upper[i]],'#773b68');
+      poly([lower[i],lower[next],upper[next],upper[i]],c);
     }
-    poly(circle(x,z,r,.35*scale),'#ef7fa7');
-    poly(circle(x,z,r*.72,.355*scale),'#ac507d');
+    poly(circle(x,z,r,.35*scale),prop==='lantern'?'#ef7fa7':a);
+    poly(circle(x,z,r*.72,.355*scale),b);
     poly(circle(x,z,r*.35,.36*scale),'#ffd2ac');
   });
-  for(let i=0;i<9;i++){
-    const x=3+i*(width-6)/8, z=i%2?depth+3.8:-4.8;
+  for(let i=0;i<16;i++){
+    const x=(i%8+.25)*width/7.5,z=i<8?-2.4-(i%3)*1.35:depth+2.6+(i%4)*.9;
     queue(x,z,()=>{
       const p=view.point([x,z,-.29]);
       if(!p||p.x<-120||p.x>w+120||p.y<0||p.y>h+120)return;
-      const size=p.size*(1.6+i%3*.32);
-      ctx.fillStyle='#705a48';ctx.fillRect(p.x-size*.09,p.y-size*.52,size*.18,size*.52);
-      ctx.beginPath();ctx.moveTo(p.x,p.y-size*1.48);ctx.lineTo(p.x-size*.52,p.y-size*.39);ctx.lineTo(p.x+size*.52,p.y-size*.39);ctx.closePath();
-      ctx.fillStyle=i%2?'#39685b':'#467b65';ctx.fill();
+      const size=Math.min(96,p.size*(1.55+i%3*.36));
+      const pigment=PARADE[i%PARADE.length];
+      const shape=(points,color)=>{
+        ctx.beginPath();ctx.moveTo(p.x+points[0][0]*size,p.y+points[0][1]*size);
+        for(const [x,y] of points.slice(1))ctx.lineTo(p.x+x*size,p.y+y*size);
+        ctx.closePath();ctx.fillStyle=color;ctx.fill();
+      };
+      if(prop==='lantern'||prop==='park'&&i%3===0){
+        ctx.fillStyle=c;ctx.fillRect(p.x-size*.06,p.y-size*1.26,size*.12,size*1.26);
+        shape([[0,-1.43],[.6,-1.3],[0,-1.03]],pigment);
+      }else if(prop==='coral'||prop==='crystal'){
+        shape([[-.48,0],[-.38,-.71],[.08,-1.18],[.48,-.63],[.58,0]],prop==='coral'?pigment:a);
+        shape([[.08,-1.18],[.48,-.63],[.58,0],[.12,0]],b);
+      }else{
+        ctx.fillStyle='#705a48';ctx.fillRect(p.x-size*.07,p.y-size*.85,size*.14,size*.85);
+        if(prop==='palm'){
+          for(const direction of [-1,1]){
+            shape([[0,-.89],[direction*.31,-1.12],[direction*.74,-.98],[direction*.96,-.68],
+              [direction*.54,-.83],[direction*.28,-.77]],i%2?darkTurf:lightTurf);
+          }
+        }else{
+          ctx.fillStyle=prop==='autumn'?pigment:i%2?'#39685b':'#467b65';
+          ctx.beginPath();ctx.arc(p.x,p.y-size*.94,size*.42,0,Math.PI*2);ctx.fill();
+        }
+      }
     });
   }
   const [hx,hz]=course.cup;
@@ -192,21 +241,32 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
     const flagX=hx-Math.sin(camera.yaw)*flag,flagZ=hz+Math.cos(camera.yaw)*flag;
     poly([[hx-.022,hz,.02],[hx+.022,hz,.02],[hx+.022,hz,height],[hx-.022,hz,height]],'#fff3d1');
     poly([[hx,hz-.022,.02],[hx,hz+.022,.02],[hx,hz+.022,height],[hx,hz-.022,height]],'#fff3d1');
-    poly([[hx,hz,height],[flagX,flagZ,height-.19*scale],[hx,hz,height-.56*scale]],'#f86489');
+    poly([[hx,hz,height],[flagX,flagZ,height-.19*scale],[hx,hz,height-.56*scale]],PARADE[course.theme%PARADE.length]??'#f86489');
   });
   const own=balls.find(p=>p.id===self);
   if(available&&own){
-    for(let i=1;i<=5+Math.round(power*12);i++){
-      const step=(.42+i*.38)*scale;
-      const x=own.x+Math.cos(angle)*step,z=own.z+Math.sin(angle)*step;
-      if(x<=0||x>=width||z<=0||z>=depth)break;
-      poly(circle(x,z,.048*scale,.026,8),i%3?'#fff5cf':'#ffcd79');
+    const dx=Math.cos(angle),dz=Math.sin(angle);
+    const stop=estimateRoll(course,own.x,own.z,power);
+    const guide=Math.min(stop,7*scale);
+    const marker=distance=>{
+      const x=own.x+dx*distance,z=own.z+dz*distance;
+      return x>0&&x<width&&z>0&&z<depth ? [x,z] : null;
+    };
+    for(let distance=.36*scale;distance<7*scale;distance+=.36*scale){
+      const p=marker(distance);
+      if(!p)break;
+      const charged=distance<=guide;
+      poly(circle(...p,(charged ? .048 : .031)*scale,.029,8),charged?'#ffe199':'#f7f6e07a');
+    }
+    if(stop<=7*scale){
+      const p=marker(stop);
+      if(p)poly(circle(...p,.079*scale,.031,12),'#fff1b8');
     }
   }
   for(const ball of balls)queue(ball.x,ball.z,()=>{
     const p=view.point([ball.x,ball.z,radius*(1-2*ball.sink)]);
     if(!p||p.x<-48||p.x>w+48||p.y<0||p.y>h+48)return;
-    const r=clamp(radius*p.size,3,34)*(1-ball.sink*.88);
+    const r=clamp(radius*p.size,3,52)*(1-ball.sink*.88);
     const palette=ballColors(ball.appearance,ball.color);
     poly(circle(ball.x,ball.z,radius*1.25,.032,12),'#1c35296b');
     paintBall(ctx,p,r,palette,ball.id===self,ball.rotation,view);

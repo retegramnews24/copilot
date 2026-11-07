@@ -25,3 +25,11 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 
 .zoom-tools{position:absolute;top:8px;right:8px;display:flex;gap:5px}
 .zoom-tools button{min-width:38px;min-height:38px;padding:0;background:#192e3ce8;font-size:20px;line-height:1}
+
+.power-control>span{display:flex;justify-content:space-between;gap:4px}
+#power-value{color:#ffe4a5;font-weight:800;font-variant-numeric:tabular-nums}
+#power{--power-fill:43%;--power-track:linear-gradient(to right,#8fe7be,#ffdf83,#ff9a6d);appearance:none;margin:0;height:23px;background:transparent;cursor:pointer}
+#power::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),#172938b8 calc(25% - 1px) 25%),linear-gradient(90deg,transparent var(--power-fill),#324957 var(--power-fill)),var(--power-track)}
+#power::-moz-range-track{height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),#172938b8 calc(25% - 1px) 25%),linear-gradient(90deg,transparent var(--power-fill),#324957 var(--power-fill)),var(--power-track)}
+#power::-webkit-slider-thumb{appearance:none;width:15px;height:16px;margin-top:-3px;border-radius:5px;border:2px solid #172938;background:#fff3d1}
+#power::-moz-range-thumb{width:11px;height:12px;border-radius:5px;border:2px solid #172938;background:#fff3d1}

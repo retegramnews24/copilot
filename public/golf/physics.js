@@ -1,8 +1,16 @@
-import { WIDTH, DEPTH, RADIUS, CUP, rotorWall } from './courses.js?v=3';
+import { WIDTH, DEPTH, RADIUS, CUP, rotorWall } from './courses.js?v=7';
 
 const STEP = 1 / 100, MAX_STEP = 900;
 const clamp = (x,min,max) => Math.max(min,Math.min(max,x));
 const inside = (r,x,z) => x>r.x && x<r.x+r.w && z>r.z && z<r.z+r.h;
+const launchSpeed = power => power*18+1.7*Math.min(1,power/.15);
+const surfaceDrag = (course,x,z) => course.rough?.some(r=>inside(r,x,z)) ? 5.1 : 2.25;
+
+export function estimateRoll(course,x,z,power){
+  const speed=launchSpeed(power);
+  return speed*speed/(2*surfaceDrag(course,x,z))*(course.scale??1);
+}
+
 const courseBorders = (width,depth) => [
   {x:0,z:0,toX:width,toZ:0}, {x:width,z:0,toX:width,toZ:depth},
   {x:width,z:depth,toX:0,toZ:depth}, {x:0,z:depth,toX:0,toZ:0}
@@ -22,7 +30,7 @@ function rebound(ball, wall, radius, energy) {
 
 export function simulateShot(course, x, z, angle, power, startSeconds=0) {
   const scale=course.scale ?? 1, borders=courseBorders(course.width ?? WIDTH,course.depth ?? DEPTH);
-  const initialSpeed=(1.7+power*18)*scale, ball={x,z,vx:Math.cos(angle)*initialSpeed,vz:Math.sin(angle)*initialSpeed};
+  const initialSpeed=launchSpeed(power)*scale, ball={x,z,vx:Math.cos(angle)*initialSpeed,vz:Math.sin(angle)*initialSpeed};
   const samples=[[x,z]], walls=[...borders,...course.walls], from=[x,z];
   let sunk=false, penalty=false, step=0;
   for(;step<MAX_STEP;){
@@ -42,7 +50,7 @@ export function simulateShot(course, x, z, angle, power, startSeconds=0) {
     if(distance<=capture){[ball.x,ball.z]=course.cup;sunk=true;break}
     if(course.water?.some(r=>inside(r,ball.x,ball.z))){penalty=true;break}
     if(step%5===0)samples.push([ball.x,ball.z]);
-    const drag=course.rough?.some(r=>inside(r,ball.x,ball.z)) ? 5.1 : 2.25;
+    const drag=surfaceDrag(course,ball.x,ball.z);
     const factor=speed ? Math.max(0,1-drag*scale*STEP/speed) : 0;
     ball.vx*=factor;ball.vz*=factor;
     if(speed<.075*scale)break;

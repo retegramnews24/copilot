@@ -30,21 +30,46 @@ export function rotorWall(course, seconds) {
   return wall(x-dx,z-dz,x+dx,z+dz);
 }
 
-export const COURSE_VERSION = 2;
+export const COURSE_VERSION = 3;
 const scale = 1.55;
 const scalePoint = point => point.map(value => value * scale);
 const scaleAreas = areas => areas?.map(({x,z,w,h}) => water(x*scale,z*scale,w*scale,h*scale));
-const expandedCourses = COURSES.map(course => ({
+const expand = course => ({
   ...course, scale, width:WIDTH*scale, depth:DEPTH*scale,
   tee:scalePoint(course.tee), cup:scalePoint(course.cup),
   walls:course.walls.map(({x,z,toX,toZ}) => wall(x*scale,z*scale,toX*scale,toZ*scale)),
-  water:scaleAreas(course.water), rough:scaleAreas(course.rough),
+  water:scaleAreas(course.water), rough:scaleAreas(course.rough), bridges:scaleAreas(course.bridges),
   bumpers:course.bumpers?.map(scalePoint),
   rotor:course.rotor && [...scalePoint(course.rotor.slice(0,3)),course.rotor[3]]
-}));
+});
+const expandedCourses=COURSES.map(expand);
+
+const layouts=[
+  {walls:[wall(6,.8,9,2.2),wall(6,15.2,9,13.8)],tip:'Il centro è libero. Usa il primo green per provare la potenza.'},
+  {walls:[wall(3,14.8,6.5,14.8),wall(20,0,22,3),wall(18,12,21,14.5)]},
+  {walls:[wall(8.8,5.4,10,6.2),wall(8.8,10.6,10,9.8),wall(10,6.2,15,6.2),wall(10,9.8,15,9.8)],
+    bridges:[water(10,6.2,5,3.6)]},
+  {walls:[wall(8,2,12,3.6),wall(14.6,13.8,18,15.2)],extraBumpers:[[20.5,12.4,1.3]],
+    tip:'Passa nello slalom centrale oppure sfrutta le sponde oblique.'},
+  {walls:[wall(8,0,11,4.1),wall(8,16,11,12.9)],tip:'Le sponde portano al mulino. Aspetta il varco tra le pale.'},
+  {walls:[wall(18,13.7,21.5,15.2)],rough:[water(12,3,5,10),water(2.7,2.5,3.2,3.8),water(19,0,3.5,2.4)],
+    tip:'I bunker frenano il tiro. Puoi aggirarli passando lungo il bordo.'},
+  {walls:[wall(19.8,13.5,21.3,10.9)],water:[water(12,0,3.8,3),water(12,7,3.8,7.1)],
+    bridges:[water(12,3,3.8,4),water(12,14.1,3.8,1.9)],tip:'Il ponte largo è più sicuro. Il passaggio sul bordo richiede più precisione.'},
+  {walls:[wall(19.9,1.1,22.7,2.2),wall(19.9,14.9,22.7,13.8)],extraBumpers:[[21,11.7,1.1],[21,4.1,1.1]],
+    tip:'Passa il rotore e usa i respingenti per evitare di finire nelle corsie laterali.'},
+  {walls:[wall(3,15,6,15.5),wall(21,2,22.5,3.7)],rough:[water(20.8,9.7,1.4,4.2)],
+    bridges:[water(12,4,2.7,4.5)],tip:'Supera lo zigzag e il ponte, poi rallenta per l’ultimo putt.'}
+];
+const renovatedCourses=COURSES.map((course,index)=>{
+  const {walls,extraBumpers,...layout}=layouts[index];
+  return expand({...course,...layout,theme:index,walls:[...course.walls,...walls],
+    bumpers:[...(course.bumpers??[]),...(extraBumpers??[])]});
+});
 
 export function courseFor(index,version) {
-  return (version===COURSE_VERSION ? expandedCourses : COURSES)[index];
+  if(version===COURSE_VERSION)return renovatedCourses[index];
+  return (version===2 ? expandedCourses : COURSES)[index];
 }
 
 export const BALL_KEY = 'binotto-golf-ball';

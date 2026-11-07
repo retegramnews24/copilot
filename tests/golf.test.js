@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { COURSES, COURSE_VERSION, courseFor, ballColors } from '../public/golf/courses.js';
 import { upright, rollBy, rotateVector } from '../public/golf/roll.js';
-import { simulateShot } from '../public/golf/physics.js';
+import { simulateShot, estimateRoll } from '../public/golf/physics.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, HOLE_TIME, BREAK } from '../public/golf/match.js';
 
 const quarter=Math.PI*.24/2;
@@ -22,13 +22,19 @@ const routes=[
   [[8,4.6],[16,4.6],[16,8],[21,8]],
   [[8,12],[10.7,12],[11,6.7],[16,6.7],[20,5],[23,5]]
 ];
-for(const version of [undefined,COURSE_VERSION])for(const i of COURSES.keys()){
+for(const version of [undefined,2,COURSE_VERSION])for(const i of COURSES.keys()){
   const course=courseFor(i,version),scale=course.scale??1;
   let position=course.tee;
   const goals=[...routes[i].map(point=>point.map(value=>value*scale)),course.cup];
   for(const target of goals){
     const dx=target[0]-position[0],dz=target[1]-position[1];
-    const power=Math.max(0,(Math.sqrt(4.5*Math.hypot(dx,dz)/scale)+.07-1.7)/18);
+    const distance=Math.hypot(dx,dz)/scale+.06;
+    let low=0,high=1;
+    for(let step=0;step<20;step++){
+      const power=(low+high)/2;
+      if(estimateRoll(COURSES[0],0,0,power)<distance)low=power;else high=power;
+    }
+    const power=high;
     const choices=Array.from({length:24},(_,phase)=>simulateShot(course,...position,Math.atan2(dz,dx),power,phase*.18));
     const error=shot=>shot.penalty?Infinity:Math.hypot(shot.end[0]-target[0],shot.end[1]-target[1]);
     const best=choices.sort((a,b)=>error(a)-error(b))[0];
@@ -40,6 +46,9 @@ for(const version of [undefined,COURSE_VERSION])for(const i of COURSES.keys()){
 for(const power of [.43,.65,1])assert.equal(simulateShot(COURSES[0],3,8,0,power).sunk,true);
 assert.equal(simulateShot(COURSES[0],22.6,8.53,0,.04).sunk,true,'A slow putt catches the lip');
 assert.equal(simulateShot(COURSES[0],22.3,8.55,0,1).sunk,false,'A hard glancing shot can pass the lip');
+const tap=simulateShot(COURSES[0],22.37,8,0,.015);
+assert.equal(tap.sunk,true,'A 1.5% tap can reach the lip from just outside the cup');
+assert.ok(simulateShot(COURSES[0],3,8,0,.01).end[0]-3<.04,'A 1% tap travels only a few centimetres');
 const water=simulateShot(COURSES[2],3,2,0,.6);
 assert.equal(water.penalty,true);assert.deepEqual(water.end,[3,2]);
 const wall=simulateShot(COURSES[0],3,8,Math.PI,.45);

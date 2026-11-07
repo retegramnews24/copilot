@@ -1,5 +1,5 @@
-import { COURSES, COURSE_VERSION, courseFor, validBallColors } from './courses.js?v=3';
-import { simulateShot } from './physics.js?v=3';
+import { COURSES, COURSE_VERSION, courseFor, validBallColors } from './courses.js?v=7';
+import { simulateShot } from './physics.js?v=7';
 
 export const CAPACITY=8, LIMIT=10, HOLE_TIME=105000, BREAK=3500;
 const fail=message=>{throw Error(message)};
@@ -71,7 +71,7 @@ export function takeShot(match,id,input,now){
   if(!player || match.phase!=='playing' || input.hole!==match.hole || player.done || input.strokes!==player.strokes ||
      now>=match.deadline || player.shot?.until>now)fail('Attendi che la palla sia ferma o che inizi la prossima buca.');
   if(!Number.isFinite(input.angle)||Math.abs(input.angle)>Math.PI*2||
-     !Number.isFinite(input.power)||input.power<0||input.power>1)fail('Colpo non valido.');
+     !Number.isFinite(input.power)||input.power<=0||input.power>1)fail('Colpo non valido.');
   const shot=simulateShot(courseFor(match.hole,match.courseVersion),...player.position,input.angle,input.power,(now-match.started)/1000);
   player.position=shot.end;player.strokes++;
   player.shot={...shot,at:now,until:now+shot.duration+(shot.penalty?480:shot.sunk?210:0)};

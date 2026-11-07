@@ -83,7 +83,7 @@ w.fetch=beforeRaceFetch;
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=6');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=7');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -102,7 +102,7 @@ w.fetch=async(path,opts)=>{
 golfLobbyButton.click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=6&online=1');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=7&online=1');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 w.fetch=previousFetch;
 
@@ -460,7 +460,7 @@ pointer('pointerup',2,0,440,190);
 paintGolf();
 assert.ok(golf.win.__golf.camera().yaw>yaw+.5);
 assert.ok(golf.win.__golf.camera().pitch>pitch+.1);
-assert.equal(Number(golf.find('aim').value),Math.round(golf.win.__golf.camera().yaw*180/Math.PI));
+assert.equal(Number(golf.find('aim').value),Math.round(golf.win.__golf.camera().yaw*1800/Math.PI)/10);
 assert.equal(golf.win.__golf.state().players[0].strokes,0);
 pointer('pointerdown',2,2,440,190);
 pointer('pointermove',-1,2,340,220);
@@ -475,9 +475,15 @@ golf.green.dispatchEvent(wheel);
 paintGolf();
 assert.ok(wheel.defaultPrevented&&golf.win.__golf.camera().zoom>1);
 assert.equal(Number(golf.find('aim').value),0,'Zoom keeps the shot direction');
-for(const [event,x,y] of [['pointerdown',340,220],['pointerup',340,155]]){
- golf.green.dispatchEvent(Object.assign(new golf.win.MouseEvent(event,{clientX:x,clientY:y,button:0}),{pointerId:1}));
-}
+pointer('pointerdown',0,1,340,220);
+pointer('pointermove',-1,1,470,219);
+assert.equal(golf.find('power-value').textContent,'0,5%');
+assert.equal(Number(golf.find('aim').value),0);
+pointer('pointermove',-1,1,480,155);
+paintGolf();
+assert.equal(golf.find('power-value').textContent,'43,5%');
+assert.equal(golf.win.__golf.camera().yaw,0);
+pointer('pointerup',0,0,480,155);
 const putt=golf.win.__golf.state().players[0].shot;
 assert.equal(putt.sunk,true,'Drag forward to reach the cup');
 const teeX=golf.win.__golf.camera().x;
@@ -485,6 +491,12 @@ golf.win.Date.now=()=>putt.at+1000;
 paintGolf();
 assert.ok(golf.win.__golf.camera().x>teeX+3,'The camera follows the rolling ball');
 assert.notEqual(golf.rotations.at(-1),initialRotation,'The color seam follows the ball rotation');
+for(let i=0;i<14;i++)golf.find('zoom-in').click();
+paintGolf();paintGolf();
+assert.ok(golf.win.__golf.camera().zoom<.5&&golf.find('zoom-in').disabled);
+for(let i=0;i<14;i++)golf.find('zoom-out').click();
+paintGolf();paintGolf();
+assert.ok(golf.win.__golf.camera().zoom>2.35&&golf.find('zoom-out').disabled);
 golf.find('scores').click();assert.equal(golf.find('card').hidden,false);
 golf.find('scores').click();assert.equal(golf.find('card').hidden,true);
 golf.instance.window.close();
@@ -515,7 +527,7 @@ golfOnline.find('watch-player').dispatchEvent(new golfOnline.win.Event('change')
 golfOnline.win.__golf.draw();
 assert.match(golfOnline.find('status').textContent,/Segui Amico/);
 golfOnline.instance.window.close();
-console.log('PASS Golf UI: hub launch, right-button aiming, wheel and button zoom, rolling ball, spectators, close confirmation and cup capture.');
+console.log('PASS Golf UI: hub launch, locked left-button aim, granular charge, expanded zoom, rolling ball, spectators and room controls.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){

@@ -170,7 +170,7 @@ try{
  const appearance=['#a11293','#197b61'];
  const golf=await call(301,'/api/create',{game:'golf',appearance});
  assert.equal(golf.status,200);
- assert.equal(golf.data.state.courseVersion,2);
+ assert.equal(golf.data.state.courseVersion,3);
  assert.deepEqual(golf.data.state.players[0].appearance,appearance);
  const golfPath='/api/golf/'+golf.data.state.room;
  assert.equal((await mf.dispatchFetch('https://unit.test'+golfPath+'/state')).status,401);

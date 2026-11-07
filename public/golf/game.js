@@ -1,6 +1,6 @@
-import { COURSES, COURSE_VERSION, courseFor, RADIUS, BALL_KEY, ballColors, validBallColors } from './courses.js?v=3';
-import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=3';
-import { aimDirection, drawCourse } from './render.js?v=6';
+import { COURSES, COURSE_VERSION, courseFor, RADIUS, BALL_KEY, ballColors, validBallColors } from './courses.js?v=7';
+import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=7';
+import { drawCourse } from './render.js?v=7';
 import { upright, rollBy } from './roll.js';
 import { applyInsets } from '../safe-area.js';
 
@@ -8,7 +8,7 @@ const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContex
 const online=new URLSearchParams(location.search).get('online')==='1';
 let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null, orbit=null, watching=null, watchOptions='';
 const ballRolls=new Map();
-const ZOOM_NEAR=.72,ZOOM_FAR=1.55;
+const ZOOM_NEAR=.43,ZOOM_FAR=2.5;
 let zoomTarget=1;
 try{appearance=JSON.parse(localStorage.getItem(BALL_KEY));}catch{}
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
@@ -18,13 +18,14 @@ const value=id=>Number($(id).value);
 const player=()=>state?.players.find(p=>p.id===me);
 const canShoot=()=>!!($('close-confirm').hidden&&player()&&state.phase==='playing'&&!player().done&&!busy&&time()<state.deadline&&!(player().shot?.until>time()));
 const angle=()=>value('aim')*Math.PI/180;
+const MIN_POWER=.5;
 function setAim(yaw){
   const wrapped=Math.atan2(Math.sin(yaw),Math.cos(yaw));
-  $('aim').value=String(Math.round(wrapped*180/Math.PI));
+  $('aim').value=String(Math.round(wrapped*1800/Math.PI)/10);
 }
 function resetAim(course){
   setAim(Math.atan2(course.cup[1]-course.tee[1],course.cup[0]-course.tee[0]));
-  $('power').value='43';drag=null;orbit=null;ballRolls.clear();
+  setPower(43);drag=null;orbit=null;ballRolls.clear();
 }
 
 function solo(){
@@ -55,11 +56,12 @@ function sound(type){
     tone.connect(gain);gain.connect(audio.destination);tone.start(now);tone.stop(now+length);
   }catch{}
 }
-function shoot(){
-  if(!canShoot()||orbit)return;
-  followAim();
+function shoot(heading=camera.yaw){
+  if(!canShoot()||orbit||drag)return;
+  camera.targetYaw=heading;
+  setAim(heading);
   sound('shot');
-  action('shot',{hole:state.hole,strokes:player().strokes,angle:angle(),power:value('power')/100});
+  action('shot',{hole:state.hole,strokes:player().strokes,angle:heading,power:value('power')/100});
 }
 function say(message){note=message;noteUntil=performance.now()+3500;}
 function updatePanel(){
@@ -177,12 +179,14 @@ function draw(stamp=performance.now()){
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');
   putText('tip',watched?'Su PC, tieni premuto il destro per ruotare la visuale.':
-    course.tip+'  ·  Trascina verso il bersaglio per tirare. Su PC, tieni premuto il destro per ruotare la visuale.');
+    course.tip+'  ·  Trascina in verticale per dosare la forza e rilascia per tirare. Su PC, tieni premuto il destro per mirare.');
   const progress=p?'Colpi '+p.strokes+'/'+LIMIT:'';
   const notice=watched?'Segui '+watched.name+' · Colpi '+watched.strokes+'/'+LIMIT:p?.shot?.penalty&&p.shot.until>now&&now>=p.shot.at+p.shot.duration?'Acqua · ritorno all’ultimo punto':
     p?.shot?.sunk&&now>=p.shot.at+p.shot.duration?'In buca! · '+progress:p?.done?'Buca chiusa · '+progress:progress;
   putText('status',performance.now()<noteUntil?note:notice);
-  $('shoot').disabled=!available;
+  $('shoot').disabled=!available||!!drag;
+  $('aim').disabled=!!drag||!!orbit;
+  $('power').disabled=!!drag;
   updatePanel();
   if(!$('card').hidden)table();
   const width=canvas.clientWidth,height=canvas.clientHeight;
@@ -207,29 +211,43 @@ function draw(stamp=performance.now()){
     }
     camera.watched=watched?.id;
     const follow=1-Math.exp(-dt*17);
-    camera.zoom+=(zoomTarget-camera.zoom)*follow;
-    camera.x+=(x-camera.x)*follow;
-    camera.z+=(z-camera.z)*follow;
+    if(!drag){
+      camera.zoom+=(zoomTarget-camera.zoom)*follow;
+      camera.x+=(x-camera.x)*follow;
+      camera.z+=(z-camera.z)*follow;
+    }
     if(!drag&&!orbit){
       const delta=camera.targetYaw-camera.yaw;
       camera.yaw+=Math.atan2(Math.sin(delta),Math.cos(delta))*(1-Math.exp(-dt*11));
     }
-    drawCourse(ctx,width,height,course,balls,me,available,angle(),value('power')/100,
+    drawCourse(ctx,width,height,course,balls,me,available,drag?.yaw??camera.yaw,value('power')/100,
       state?.started!=null?Math.max(0,now-state.started)/1000:0,camera);
   }
   frame=requestAnimationFrame(draw);
 }
 
-function aimDrag(e){
-  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-  const length=Math.hypot(dx,dy);
-  if(length<6)return false;
-  setAim(aimDirection(drag.yaw,dx,dy));
-  $('power').value=String(Math.min(100,Math.max(1,Math.round(length/Math.min(150,canvas.clientWidth*.34)*100))));
-  return true;
+function setPower(value){
+  const power=Math.min(100,Math.max(MIN_POWER,Math.round(value*2)/2));
+  const bar=$('power');
+  bar.value=String(power);
+  bar.style.setProperty('--power-fill',power+'%');
+  $('power-value').textContent=String(power).replace('.',',')+'%';
+}
+$('power').addEventListener('input',()=>setPower(value('power')));
+
+function chargeShot(e){
+  const travel=Math.abs(e.clientY-drag.y);
+  const range=Math.min(150,Math.max(104,canvas.clientWidth*.34));
+  setPower(travel/range*100);
+  return travel>=1;
+}
+function releaseCharge(){
+  if(!drag)return;
+  setPower(drag.previousPower);
+  drag=null;
 }
 function zoomBy(factor){
-  if(!$('close-confirm').hidden)return;
+  if(drag||!$('close-confirm').hidden)return;
   zoomTarget=Math.max(ZOOM_NEAR,Math.min(ZOOM_FAR,zoomTarget*factor));
   $('zoom-in').disabled=zoomTarget===ZOOM_NEAR;
   $('zoom-out').disabled=zoomTarget===ZOOM_FAR;
@@ -249,7 +267,10 @@ canvas.addEventListener('pointerdown',e=>{
     e.preventDefault();
     orbit={id:e.pointerId,x:e.clientX,y:e.clientY};
   }else if(e.button===0&&canShoot()){
-    drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:camera.yaw};
+    drag={id:e.pointerId,y:e.clientY,yaw:camera.yaw,previousPower:value('power')};
+    camera.targetYaw=drag.yaw;
+    setAim(drag.yaw);
+    setPower(MIN_POWER);
   }else return;
   canvas.setPointerCapture?.(e.pointerId);
 });
@@ -263,33 +284,36 @@ canvas.addEventListener('pointermove',e=>{
     if(!camera.free)setAim(camera.yaw);
     camera.pitch=Math.max(.07,Math.min(.64,camera.pitch-(e.clientY-orbit.y)*.006));
     orbit.x=e.clientX;orbit.y=e.clientY;
-  }else if(drag?.id===e.pointerId)aimDrag(e);
+  }else if(drag?.id===e.pointerId)chargeShot(e);
 });
 canvas.addEventListener('pointerup',e=>{
   if(orbit?.id===e.pointerId)orbit=null;
   if(drag?.id!==e.pointerId)return;
-  const moved=e.button===0&&aimDrag(e);drag=null;if(moved)shoot();
+  if(e.button!==0||!chargeShot(e)){releaseCharge();return;}
+  const heading=drag.yaw;
+  drag=null;
+  shoot(heading);
 });
 for(const event of ['pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{
   if(orbit?.id===e.pointerId)orbit=null;
-  if(drag?.id===e.pointerId)drag=null;
+  if(drag?.id===e.pointerId)releaseCharge();
 });
-window.addEventListener('blur',()=>{drag=null;orbit=null;});
-function followAim(){camera.targetYaw=angle();camera.free=false;}
+window.addEventListener('blur',()=>{releaseCharge();orbit=null;});
+function followAim(){if(!drag&&!orbit){camera.targetYaw=angle();camera.free=false;}}
 $('aim').addEventListener('input',followAim);
 window.addEventListener('keydown',e=>{
   if(e.code==='Escape'&&!$('close-confirm').hidden){
     dismissClose();e.preventDefault();return;
   }
-  if(e.target.matches?.('input,button,select')||!canShoot()||orbit)return;
+  if(e.target.matches?.('input,button,select')||!canShoot()||orbit||drag)return;
   const {code}=e;
   if(!['ArrowLeft','ArrowRight','KeyA','KeyD','ArrowUp','ArrowDown','KeyW','KeyS','Space'].includes(code))return;
   e.preventDefault();
   if(code==='Space'){if(!e.repeat)shoot();return;}
   if(['ArrowLeft','ArrowRight','KeyA','KeyD'].includes(code)){
-    $('aim').value=String((value('aim')+180+360+(['ArrowRight','KeyD'].includes(code)?3:-3))%360-180);
+    setAim(angle()+(['ArrowRight','KeyD'].includes(code)?1:-1)*Math.PI/180);
     followAim();
-  }else $('power').value=String(value('power')+(['ArrowUp','KeyW'].includes(code)?3:-3));
+  }else setPower(value('power')+(['ArrowUp','KeyW'].includes(code) ? .5 : -.5));
 });
 function leave(){if(parent!==window)post('exit');else location.href='/';}
 $('watch-player').onchange=event=>{watching=event.target.value;};
@@ -309,7 +333,7 @@ $('confirm-close').onclick=()=>{
   if(online)action('close');else leave();
 };
 $('back').onclick=leave;
-$('shoot').onclick=shoot;
+$('shoot').onclick=()=>shoot();
 $('scores').onclick=()=>{
   const card=$('card');card.hidden=!card.hidden;
   $('scores').setAttribute('aria-expanded',String(!card.hidden));if(!card.hidden)table();

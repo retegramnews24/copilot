@@ -2,7 +2,7 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {BALL_KEY,ballColors} from './golf/courses.js?v=3';
+import {BALL_KEY,ballColors} from './golf/courses.js?v=7';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
@@ -896,7 +896,7 @@ function publishGolf(ack=false){
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=6'+(online?'&online=1':'');
+ $('golf-frame').src='/golf/index.html?v=7'+(online?'&online=1':'');
  tg?.BackButton?.show();
 }
 async function syncGolf(){
