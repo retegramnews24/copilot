@@ -31,5 +31,15 @@ try{
  spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.viewingRoom===null));
  spectator.ws.send(JSON.stringify({type:'presence',room:dama.data.state.room,away:true}));await until(spectator,p=>p.users&&!p.users.some(u=>u.id==='21'));
  console.log('PASS spectator presence: live chess/checkers table changes, unique identity, Lobby return and away removal.');
+ const four=await call(30,'/api/create',{game:'connect4'});assert.equal(four.status,200);const fourRoom=four.data.state.room;
+ assert.equal((await call(31,'/api/room/'+fourRoom+'/claim',{})).status,200);assert.equal((await call(32,'/api/room/'+fourRoom+'/claim',{})).status,409);
+ const fourRes=await mf.dispatchFetch('https://unit.test/api/room/'+fourRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(32)}});assert.equal(fourRes.status,101);const fourWatch={ws:fourRes.webSocket,packets:[],waiters:[]};fourWatch.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);fourWatch.packets.push(p);for(const fn of [...fourWatch.waiters])fn(p)});fourWatch.ws.accept();sockets.push(fourWatch.ws);await until(fourWatch,p=>p.game==='connect4');
+ let fourState=(await call(30,'/api/room/'+fourRoom+'/state')).data;
+ assert.equal((await call(32,'/api/room/'+fourRoom+'/move',{column:0,revision:fourState.revision})).status,403);assert.equal((await call(31,'/api/room/'+fourRoom+'/move',{column:0,revision:fourState.revision})).status,403);
+ assert.equal((await call(30,'/api/room/'+fourRoom+'/move',{column:7,revision:fourState.revision})).status,400);
+ for(const column of [0,0,1,1,2,2,3]){const id=fourState.turn===0?30:31,res=await call(id,'/api/room/'+fourRoom+'/move',{column,revision:fourState.revision});assert.equal(res.status,200);fourState=res.data;await until(fourWatch,p=>p.revision===fourState.revision)}
+ assert.equal(fourState.connect4.result,'1-0');assert.equal(fourState.phase,'finished');assert.equal((await call(30,'/api/room/'+fourRoom+'/replay')).data.frames.length,8);
+ assert.equal((await call(32,'/api/room/'+fourRoom+'/archive',{revision:fourState.revision})).status,403);assert.equal((await call(30,'/api/room/'+fourRoom+'/archive',{revision:fourState.revision})).status,200);
+ console.log('PASS Forza 4 runtime: create, two seats, spectator live updates/read-only permissions, turn/column validation, win, replay and archive.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and monotonic lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

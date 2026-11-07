@@ -104,3 +104,9 @@ In WebGL i materiali passano alla GPU e gli otto punti luce più vicini vengono 
 `npm test`: motori esistenti, labirinti, rendering, quattro partecipanti simulati, carte/porte, timer, arrivi e vetrine, persistenza del modello e safe area. `npm run test:multiplayer-runtime`: build di prova Wrangler e test workerd con quattro veri WebSocket più uno spettatore, autenticazione, correzioni del movimento, autorizzazioni, archiviazione/eliminazione e riavvio con stato SQLite conservato. La build di questo test resta in `.test-bundle/` e non va pubblicata come asset.
 
 Controllati inoltre cinque DOM client e il bridge della Lobby, e verificato nel browser il layout con barre simulate e renderer Canvas. WebGL hardware e l’uso simultaneo su veri telefoni Telegram Android richiedono ancora il collaudo sui dispositivi.
+
+## Forza 4
+
+Tavolo condiviso per due account Telegram con spettatori nella stessa Lobby. Griglia 7 × 6, Rosso per primo e Giallo per secondo; scegliendo una colonna la pedina scende nell’ultimo posto libero. Il server valida identità, turno, revisione e colonne, riconosce quattro in fila orizzontali, verticali o diagonali e la patta a griglia piena. Nomi degli spettatori in diretta, proposta di patta, chiusura, archiviazione/eliminazione dei partecipanti e player di revisione nell’archivio. Layout limitato sia dalla larghezza sia dall’altezza disponibile.
+
+Verifiche: 600 partite complete con controllo indipendente delle linee e della gravità; test workerd con creazione, occupazione dei due posti, spettatore in sola lettura, mosse fuori turno/colonne non valide, vittoria, replay e archivio. Collaudo visivo a 390 e 760 pixel CSS di larghezza.

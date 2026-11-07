@@ -29,8 +29,8 @@ async function request(path,data){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='checkers'?'Dama italiana':'Checkmate!';
-const boardState=()=>state?.checkers||state?.chess;
+const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const boardState=()=>state?.connect4||state?.checkers||state?.chess;
 function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&g.phase!=='finished'&&g.players.some(p=>p.id===seat(g.room).player))}
 
 function renderProfile(){
@@ -50,6 +50,7 @@ function renderLobby(){
  $('play-labyrinth').disabled=!identity;
  const own=ownedGame();$('create-chess').disabled=!identity||!!own;$('create-chess').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  $('create-checkers').disabled=!identity||!!own;$('create-checkers').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
+ $('create-connect4').disabled=!identity||!!own;$('create-connect4').textContent=own?'Hai già un tavolo aperto':'Crea tavolo';
  const active=games.filter(g=>!g.archived);
  const waiting=active.filter(g=>g.phase==='waiting').length,playing=active.filter(g=>g.phase==='playing').length;
  $('lobby-summary').textContent=active.length?waiting+' da giocare · '+playing+' in corso':'';
@@ -70,7 +71,7 @@ function renderLobby(){
   const badge=document.createElement('span');badge.className='game-badge '+game.phase;
   badge.textContent=game.phase==='waiting'?'Posto libero':game.phase==='playing'?'In corso':'Conclusa';title.append(heading,badge);
   const names=document.createElement('div');names.className='table-players';
-  for(let i=0;i<2;i++){const person=document.createElement('span');person.className='table-player'+(!game.players[i]?' vacant':'');const dot=document.createElement('i');dot.className='side-dot '+(i?'black':'white');const label=document.createElement('span');label.textContent=game.players[i]?.name||'In attesa';person.append(dot,label);names.append(person)}
+  for(let i=0;i<2;i++){const person=document.createElement('span');person.className='table-player'+(!game.players[i]?' vacant':'');const dot=document.createElement('i');dot.className='side-dot '+(game.game==='connect4'?(i?'yellow':'red'):(i?'black':'white'));const label=document.createElement('span');label.textContent=game.players[i]?.name||'In attesa';person.append(dot,label);names.append(person)}
   const note=document.createElement('p');note.className='turn-note';
   const mine=game.players.some(p=>p.id===seat(game.room).player);
   note.textContent=game.phase==='playing'?(game.players[game.turn]?.id===seat(game.room).player?'Tocca a te':'Tocca a '+game.players[game.turn].name):game.phase==='waiting'?'':'Disponibile per la revisione.';
@@ -119,7 +120,7 @@ function render(s){
  $('room-number').textContent=s.number?'Tavolo '+s.number+' · '+gameTitle(s):gameTitle(s);
  $('status').textContent=s.phase==='waiting'?'In attesa di un avversario':s.phase==='finished'?(s.archived?'Archiviata':boardState()?.reason||'Partita conclusa')+(boardState()?.result?' · '+boardState().result:''):(mine===s.turn?'Tocca a te':'Tocca a '+s.players[s.turn].name)+(s.chess?.check?' · Scacco':'');
  $('players').replaceChildren();
- for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(boardState()?(i===0?'Bianco · ':'Nero · '):'')+(s.players[i]?.name||'Posto libero');$('players').append(el)}
+ for(let i=0;i<2;i++){const el=document.createElement('div');el.className='person'+(s.phase==='playing'&&s.turn===i?' active':'');el.textContent=(boardState()?(s.connect4?(i===0?'Rosso · ':'Giallo · '):(i===0?'Bianco · ':'Nero · ')):'')+(s.players[i]?.name||'Posto libero');$('players').append(el)}
  $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
 
  $('pass').hidden=!!boardState()||s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
@@ -142,7 +143,7 @@ function render(s){
  $('manage-game').hidden=mine<0;$('archive-game').hidden=!!s.archived;
  $('replay-player').hidden=!boardState()||s.phase!=='finished';
  if(boardState()&&s.phase==='finished'&&replayRevision!==s.revision&&!replayLoading)loadReplay();
- $('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent=m.san?Math.ceil(m.number/2)+(m.number%2?'. ':'… ')+m.san+' · '+m.by:'#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}
+ $('log').replaceChildren();for(const m of s.moves.slice(-30).reverse()){const p=document.createElement('p');p.textContent=Number.isInteger(m.column)?'#'+m.number+' · '+m.by+' · colonna '+(m.column+1):m.san?Math.ceil(m.number/2)+(m.number%2?'. ':'… ')+m.san+' · '+m.by:'#'+m.number+' · '+m.by+' ha passato il turno';$('log').append(p)}
  renderSpectators();renderBoard();refreshDebug();sendPresence();
 }
 function connect(){
@@ -175,6 +176,7 @@ async function createGame(game){
 }
 action('create-chess',()=>createGame('chess'));
 action('create-checkers',()=>createGame('checkers'));
+action('create-connect4',()=>createGame('connect4'));
 
 action('pass',async()=>render(await api('pass',{revision:state.revision})));
 action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(await api('finish',{revision:state.revision}))});
@@ -182,7 +184,7 @@ $('back-lobby').onclick=showLobby;
 $('newtable').onclick=()=>{showLobby();$('name').focus()};
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true)}if(!document.hidden){connectLobby();if(room)connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Binottoland 1.1'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia','Binottoland 1.1'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
@@ -237,8 +239,10 @@ function position(fen){
 }
 function canMove(){return replayPly===null&&!state?.archived&&state?.phase==='playing'&&state.players[state.turn]?.id===credentials.player&&!busy}
 function renderBoard(){
- $('move-strip').hidden=!!state?.checkers;
+ $('move-strip').hidden=!!state?.checkers||!!state?.connect4;
+ $('board').classList.toggle('connect4-board',!!state?.connect4);$('flip-board').hidden=!!state?.connect4;
  $('chess-area').hidden=!boardState();if(!boardState())return;
+ if(state.connect4){renderConnect4();return;}
  $('board').setAttribute('aria-label',state.checkers?'Damiera italiana':'Scacchiera');
  if(state.checkers){renderCheckersBoard();return;}
  $('cancel-capture').hidden=true;
@@ -272,6 +276,15 @@ function renderMoveStrip(){
 function checkerSvg(piece){
  const side=piece===piece.toUpperCase()?'white':'black',crown=piece.toLowerCase()==='k';
  return '<svg viewBox="0 0 45 45" aria-hidden="true"><g fill="var(--'+side+'-piece)" stroke="var(--'+side+'-outline)" stroke-width="1.7"><ellipse cx="22.5" cy="25" rx="16" ry="15"/><circle cx="22.5" cy="21" r="16"/><circle cx="22.5" cy="21" r="11.8" fill="none" opacity=".65"/>'+(crown?'<path d="m14 18 3 8h11l3-8-6 4-2.5-7-2.5 7z"/><path d="M17 29h11" fill="none"/>':'<circle cx="22.5" cy="21" r="7" fill="none" opacity=".4"/>')+'</g></svg>';
+}
+function renderConnect4(){
+ const view=replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:state.connect4,board=$('board');
+ board.setAttribute('aria-label','Forza 4 · sette colonne, sei righe');board.replaceChildren();$('cancel-capture').hidden=true;
+ $('board-hint').textContent=state.phase==='waiting'?'In attesa del secondo giocatore':replayPly!==null?'Rivedi la partita':canMove()?'Scegli una colonna':state.phase==='finished'?view.reason||'Partita conclusa':'Quattro pedine in fila per vincere';
+ for(let col=0;col<7;col++){const button=document.createElement('button');button.className='connect4-column';button.disabled=!canMove()||!view.legalMoves.includes(col);button.setAttribute('aria-label','Colonna '+(col+1)+(view.board[col]!==null?' · piena':''));
+ for(let row=0;row<6;row++){const i=row*7+col,disc=document.createElement('span');disc.className='connect4-disc'+(view.board[i]===0?' red':view.board[i]===1?' yellow':'')+(view.winning?.includes(i)?' winning':'')+(view.lastMove?.row===row&&view.lastMove.column===col?' latest':'');disc.setAttribute('aria-hidden','true');button.append(disc)}
+ button.onclick=()=>sendMove({column:col,revision:state.revision});board.append(button)}
+ updateReplayControls();requestAnimationFrame(fitBoard);
 }
 function matchingCaptures(){return (state.checkers.legalMoves||[]).filter(m=>capturePath.every((s,i)=>m.path[i]===s))}
 function renderCheckersBoard(){
@@ -471,7 +484,7 @@ function sendPresence(away=document.hidden){
 
 function renderSpectators(){
  const output=$('spectators');if(!output)return;
- if(!state||!room||(!state.chess&&!state.checkers)){output.hidden=true;return}
+ if(!state||!room||(!state.chess&&!state.checkers&&!state.connect4)){output.hidden=true;return}
  output.hidden=false;
  if(lobbyWS?.readyState!==1){output.textContent='Spettatori · collegamento…';return}
  const seated=new Set(state.players.map(p=>p.id)),seen=new Set(),watchers=onlineUsers.filter(u=>u.viewingRoom===room&&!seated.has(u.player)&&!seen.has(u.id)&&seen.add(u.id));

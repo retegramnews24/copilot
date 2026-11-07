@@ -1,3 +1,4 @@
+import {initialConnect4,playConnect4} from './connect4.js';
 import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
@@ -152,7 +153,7 @@ export default {
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,async()=>hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));}
- public(s){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,created:s.created,expires:s.expires}}
+ public(s){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,created:s.created,expires:s.expires}}
  async broadcast(s){const msg=JSON.stringify(this.public(s)),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(msg)}catch{}}}
  async fetch(req){
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
@@ -165,7 +166,7 @@ export class Room extends DurableObject {
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],game:b.game==='checkers'?'checkers':'chess',chess:b.game==='checkers'?null:chessSnapshot(new Chess()),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
+     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],game:['checkers','connect4'].includes(b.game)?b.game:'chess',chess:['checkers','connect4'].includes(b.game)?null:chessSnapshot(new Chess()),...(b.game==='connect4'?{connect4:initialConnect4()}:{}),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
      await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
      return json({token,player:s.players[0].id,state:this.public(s)});
     }
@@ -177,6 +178,7 @@ export class Room extends DurableObject {
      return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     }
     if(path.endsWith('/replay')&&req.method==='GET'){
+     if(s.connect4){let game=initialConnect4();const frames=[game];for(const entry of s.moves){game=playConnect4(game,entry.column);frames.push(game)}return json({room:s.room,revision:s.revision,frames})}
      if(s.checkers){
       let game=initialCheckers();const frames=[{board:game.board,lastMove:null}];
       for(const entry of s.moves){const played=playCheckers(game,entry.path);game=played.game;frames.push({board:game.board,lastMove:played.move})}
@@ -218,20 +220,25 @@ export class Room extends DurableObject {
      s.archived=true;s.phase='finished';s.expires=null;s.revision++;
      if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
      if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:s.checkers.reason||'Archiviata'};
+     if(s.connect4)s.connect4={...s.connect4,legalMoves:[],reason:s.connect4.reason||'Archiviata'};
      await this.ctx.storage.deleteAlarm();await this.ctx.storage.put('state',s);await this.broadcast(s);
      return json(this.public(s));
     }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
     if(path.endsWith('/offer-draw')){
-     if((!s.chess&&!s.checkers)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
+     if((!s.chess&&!s.checkers&&!s.connect4)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
      if(s.drawOffer)return json({error:'C’è già una proposta in attesa.'},409);
      if(s.lastDrawOffer?.by===who&&s.lastDrawOffer?.ply===s.moves.length)return json({error:'Attendi una nuova mossa prima di proporre ancora la patta.'},409);
      s.drawOffer={by:s.players[who].id,name:s.players[who].name};s.lastDrawOffer={by:who,ply:s.moves.length};
     }else if(path.endsWith('/accept-draw')||path.endsWith('/reject-draw')){
      if(!s.drawOffer||s.drawOffer.by===s.players[who].id)return json({error:'Non puoi rispondere a questa proposta.'},403);
-     if(path.endsWith('/accept-draw')){s.phase='finished';const key=s.checkers?'checkers':'chess';s[key]={...s[key],legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
+     if(path.endsWith('/accept-draw')){s.phase='finished';const key=s.connect4?'connect4':s.checkers?'checkers':'chess';s[key]={...s[key],legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
      s.drawOffer=null;
+    }else if(path.endsWith('/move')&&s.connect4){
+     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
+     const next=playConnect4(s.connect4,b.column);s.connect4=next;s.turn=next.turn;s.drawOffer=null;
+     s.moves.push({column:b.column,row:next.lastMove.row,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
     }else if(path.endsWith('/move')&&s.checkers){
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      const played=playCheckers(s.checkers,b.path),key=checkersKey(played.game);
@@ -252,11 +259,11 @@ export class Room extends DurableObject {
      s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
      if(game.isGameOver())s.phase='finished';
     }else if(path.endsWith('/pass')){
-     if(s.chess||s.checkers)return json({error:'Devi effettuare una mossa.'},409);
+     if(s.chess||s.checkers||s.connect4)return json({error:'Devi effettuare una mossa.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
      if(s.moves.length>=500)s.phase='finished';
-    }else if(path.endsWith('/finish')){s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:'Partita chiusa',result:null};}else bad('Azione non valida.');
+    }else if(path.endsWith('/finish')){s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:'Partita chiusa',result:null};if(s.connect4)s.connect4={...s.connect4,legalMoves:[],reason:'Partita chiusa',result:null};}else bad('Azione non valida.');
     s.revision++;await this.ctx.storage.put('state',s);await this.broadcast(s);return json(this.public(s));
    }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
   });
@@ -330,7 +337,7 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
+   if(body.game!==undefined&&!['chess','checkers','connect4','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
    if((await this.lobbyList()).some(g=>g.game!=='labyrinth'&&!g.archived&&g.phase!=='finished'&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    const number=(await this.ctx.storage.get('lobbyCounter')||0)+1;
    await this.ctx.storage.put('lobbyCounter',number);
