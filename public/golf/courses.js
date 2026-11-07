@@ -29,3 +29,29 @@ export function rotorWall(course, seconds) {
   const [x,z,length,rate] = course.rotor, dx = Math.cos(seconds*rate)*length, dz = Math.sin(seconds*rate)*length;
   return wall(x-dx,z-dz,x+dx,z+dz);
 }
+
+export const COURSE_VERSION = 2;
+const scale = 1.55;
+const scalePoint = point => point.map(value => value * scale);
+const scaleAreas = areas => areas?.map(({x,z,w,h}) => water(x*scale,z*scale,w*scale,h*scale));
+const expandedCourses = COURSES.map(course => ({
+  ...course, scale, width:WIDTH*scale, depth:DEPTH*scale,
+  tee:scalePoint(course.tee), cup:scalePoint(course.cup),
+  walls:course.walls.map(({x,z,toX,toZ}) => wall(x*scale,z*scale,toX*scale,toZ*scale)),
+  water:scaleAreas(course.water), rough:scaleAreas(course.rough),
+  bumpers:course.bumpers?.map(scalePoint),
+  rotor:course.rotor && [...scalePoint(course.rotor.slice(0,3)),course.rotor[3]]
+}));
+
+export function courseFor(index,version) {
+  return (version===COURSE_VERSION ? expandedCourses : COURSES)[index];
+}
+
+export const BALL_KEY = 'binotto-golf-ball';
+export function validBallColors(colors) {
+  return Array.isArray(colors) && colors.length===2 &&
+    colors.every(color => typeof color==='string' && /^#[0-9a-f]{6}$/i.test(color));
+}
+export function ballColors(colors,index=0) {
+  return validBallColors(colors) ? colors : [COLORS[index] || COLORS[0], '#455aa7'];
+}

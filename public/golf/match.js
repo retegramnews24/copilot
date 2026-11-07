@@ -1,26 +1,33 @@
-import { COURSES } from './courses.js';
-import { simulateShot } from './physics.js?v=2';
+import { COURSES, COURSE_VERSION, courseFor, validBallColors } from './courses.js?v=3';
+import { simulateShot } from './physics.js?v=3';
 
 export const CAPACITY=8, LIMIT=10, HOLE_TIME=105000, BREAK=3500;
 const fail=message=>{throw Error(message)};
 const resetBall=(player,course)=>Object.assign(player,{position:[...course.tee],strokes:0,done:false,shot:null});
-export function makeMatch(room,number,user,now=Date.now()){
-  const match={room,number,game:'golf',host:user.player,phase:'waiting',created:now,revision:1,hole:0,players:[]};
-  joinMatch(match,user);
+export function makeMatch(room,number,user,now=Date.now(),appearance){
+  const match={room,number,game:'golf',host:user.player,phase:'waiting',courseVersion:COURSE_VERSION,created:now,revision:1,hole:0,players:[]};
+  joinMatch(match,user,appearance);
   return match;
 }
 
-export function joinMatch(match,user){
-  if(match.players.some(p=>p.id===user.player))return;
+export function joinMatch(match,user,appearance){
+  const existing=match.players.find(p=>p.id===user.player);
+  const palette=validBallColors(appearance) ? [...appearance] : null;
+  if(existing){
+    if(palette && palette.some((color,index)=>color!==existing.appearance?.[index])){
+      existing.appearance=palette;match.revision++;
+    }
+    return;
+  }
   if(match.phase!=='waiting')fail('La gara è già iniziata.');
   if(match.players.length>=CAPACITY)fail('Stanza al completo.');
-  match.players.push(resetBall({id:user.player,name:user.name.slice(0,48),color:match.players.length,total:0,scores:[]},COURSES[0]));
+  match.players.push(resetBall({id:user.player,name:user.name.slice(0,48),color:match.players.length,total:0,scores:[],appearance:palette},courseFor(0,match.courseVersion)));
   match.revision++;
 }
 
 function openHole(match,now){
   match.phase='playing';match.started=now;match.deadline=now+HOLE_TIME;match.nextAt=null;
-  for(const player of match.players)resetBall(player,COURSES[match.hole]);
+  for(const player of match.players)resetBall(player,courseFor(match.hole,match.courseVersion));
   match.revision++;
 }
 
@@ -65,7 +72,7 @@ export function takeShot(match,id,input,now){
      now>=match.deadline || player.shot?.until>now)fail('Attendi che la palla sia ferma o che inizi la prossima buca.');
   if(!Number.isFinite(input.angle)||Math.abs(input.angle)>Math.PI*2||
      !Number.isFinite(input.power)||input.power<0||input.power>1)fail('Colpo non valido.');
-  const shot=simulateShot(COURSES[match.hole],...player.position,input.angle,input.power,(now-match.started)/1000);
+  const shot=simulateShot(courseFor(match.hole,match.courseVersion),...player.position,input.angle,input.power,(now-match.started)/1000);
   player.position=shot.end;player.strokes++;
   player.shot={...shot,at:now,until:now+shot.duration+(shot.penalty?480:shot.sunk?210:0)};
   match.revision++;

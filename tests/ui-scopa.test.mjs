@@ -40,9 +40,17 @@ assert.ok(w.document.querySelector('.word-cell.proposed .word-tile-value'));
 assert.equal(w.document.documentElement.dataset.telegramPlatform,'android');
 
 const get=id=>w.document.getElementById(id);
+assert.equal(get('tutorial-labyrinth'),null);
 assert.equal(get('solo-labyrinth').textContent,'Dev Mode');
+assert.match(get('leaderboard-multi').querySelector('details summary').textContent,/Anna/);
+assert.equal(get('leaderboard-multi').querySelector('details').open,false);
+for(const [id,color] of [['golf-ball-top','#a11293'],['golf-ball-bottom','#197b61']]){
+ const input=get(id);input.value=color;input.dispatchEvent(new w.Event('input',{bubbles:true}));
+}
+assert.deepEqual(JSON.parse(w.localStorage.getItem('binotto-golf-ball')),['#a11293','#197b61']);
+assert.equal(get('golf-ball-preview').style.getPropertyValue('--golf-ball-top'),'#a11293');
 get('solo-labyrinth').click();
-assert.equal(get('labyrinth-frame').getAttribute('src'),'/labyrinth/index.html?dev=1&v=dev1');
+assert.equal(get('labyrinth-frame').getAttribute('src'),'/labyrinth/index.html?dev=1&v=dev2');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:get('labyrinth-frame').contentWindow,data:{type:'labyrinth:exit'}}));
 assert.equal(get('catalog-platform-title').textContent,'Platform 2D');
 assert.equal(get('moto-course'),null);
@@ -75,7 +83,7 @@ w.fetch=beforeRaceFetch;
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=2');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=3');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -290,13 +298,14 @@ assert.deepEqual(JSON.parse(lab.localStorage.getItem(storageKey)).inventory,['sw
 assert.equal(labGet('inventory').querySelectorAll('.inventory-slot').length>=8,true);
 labDom.window.close();
 
-for(const mode of ['multiplayer','tutorial']){
+{
+ const mode='multiplayer';
  const instance=new JSDOM(labHtml,{url:'https://unit.test/labyrinth/index.html?'+mode+'=1&dev=1',runScripts:'outside-only',pretendToBeVisual:true});
  const child=instance.window,find=id=>child.document.getElementById(id);
  Object.assign(child,labCore,labAdventure,labTraps,labSpring,{FrameBudget,matchMedia:()=>({matches:false}),
    readAppearance:lab.readAppearance,Renderer:lab.Renderer,Atmosphere:lab.Atmosphere});
  child.eval(labScript+'\nwindow.__labMode={level:()=>level,receive:receiveState,assign:value=>{multiplayer=value}};');
- if(mode==='multiplayer'){
+ {
   const state={room:'qa',seed:41,revision:0,players:[],floors:{},cases:[]};
   child.__labMode.assign({room:'qa',state,watch:true});
   child.__labMode.receive(state);
@@ -403,25 +412,32 @@ raceDom.window.close();
 console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and sequential campaign progression, startup with unavailable audio and legacy Canvas, and multiplayer readiness.');
 
 const golfHtml=await fs.readFile('public/golf/index.html','utf8');
-const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state,draw};',
+const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state,camera:()=>camera,draw};',
  resolveDir:process.cwd()+'/public/golf'},bundle:true,write:false,format:'iife',platform:'browser'});
-function golfFixture(search=''){
+function golfFixture(search='',appearance=null){
  const instance=new JSDOM(golfHtml,{url:'https://unit.test/golf/'+search,runScripts:'outside-only',pretendToBeVisual:true});
  const win=instance.window,find=id=>win.document.getElementById(id),green=find('green');
  Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
  const labels=[],arcs=[];
- green.getContext=()=>new Proxy({arc(){arcs.push(this.fillStyle);},createLinearGradient:()=>({addColorStop(){}}),
+ const gradient=()=>({addColorStop(){}});
+ green.getContext=()=>new Proxy({arc(){arcs.push(this.fillStyle);},createLinearGradient:gradient,createRadialGradient:gradient,
    measureText:name=>({width:name.length*6}),fillText:name=>labels.push(name)},{get:(target,key)=>target[key]??(()=>{})});
+ if(appearance)win.localStorage.setItem('binotto-golf-ball',JSON.stringify(appearance));
  win.eval(golfBundle.outputFiles[0].text);
  return {instance,win,find,green,labels,arcs};
 }
-const golf=golfFixture();
+const golf=golfFixture('',['#a11293','#197b61']);
 assert.equal(golf.find('course').textContent,'Pride Park');
-assert.ok(golf.arcs.length>0);
-for(const [event,x,y] of [['pointerdown',100,100],['pointerup',163,114]]){
+assert.ok(golf.arcs.includes('#a11293'));
+for(const [event,x,y] of [['pointerdown',340,220],['pointerup',340,155]]){
  golf.green.dispatchEvent(Object.assign(new golf.win.MouseEvent(event,{clientX:x,clientY:y,button:0}),{pointerId:1}));
 }
-assert.equal(golf.win.__golf.state().players[0].shot.sunk,true,'Drag forward to reach the cup');
+const putt=golf.win.__golf.state().players[0].shot;
+assert.equal(putt.sunk,true,'Drag forward to reach the cup');
+const teeX=golf.win.__golf.camera().x;
+golf.win.Date.now=()=>putt.at+1000;
+golf.win.__golf.draw(golf.win.performance.now()+100);
+assert.ok(golf.win.__golf.camera().x>teeX+3,'The camera follows the rolling ball');
 golf.find('scores').click();assert.equal(golf.find('card').hidden,false);
 golf.find('scores').click();assert.equal(golf.find('card').hidden,true);
 golf.instance.window.close();
@@ -429,13 +445,13 @@ golf.instance.window.close();
 const golfOnline=golfFixture('?online=1'),now=Date.now();
 const golfState={revision:1,phase:'playing',hole:0,deadline:now+60000,started:now,players:[
  {id:'me',name:'Io',color:0,position:[3,8],strokes:0},
- {id:'friend',name:'Amico',color:1,position:[3,8],strokes:0}
+ {id:'friend',name:'Amico',color:1,appearance:['#a11293','#197b61'],position:[3,8],strokes:0}
 ]};
 golfOnline.win.dispatchEvent(new golfOnline.win.MessageEvent('message',{origin:'https://unit.test',source:golfOnline.win,
  data:{type:'golf:state',state:golfState,player:'me',now}}));
 golfOnline.win.__golf.draw();
 assert.ok(golfOnline.labels.includes('Amico'));
-assert.ok(golfOnline.arcs.includes('#ff82b6'),'Opponents are drawn before their first putt');
+assert.ok(golfOnline.arcs.includes('#a11293'),'Opponents are drawn before their first putt');
 golfOnline.instance.window.close();
 console.log('PASS Golf UI: hub launch, forward drag, cup capture and opponents visible at the tee.');
 

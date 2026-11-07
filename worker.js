@@ -527,7 +527,7 @@ export class Room extends DurableObject {
    if(isArcade(body.game)){
     const room=id(),prefix=body.game==='labyrinth'?'lab:':body.game==='golf'?'golf:':'moto:';
     const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix+room));
-    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
+    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,appearance:body.game==='golf'?body.appearance:undefined,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
     if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
    }
    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));

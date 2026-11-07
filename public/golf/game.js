@@ -1,11 +1,12 @@
-import { COURSES, COLORS } from './courses.js';
-import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=2';
-import { viewFor, drawCourse } from './render.js?v=2';
+import { COURSES, COURSE_VERSION, courseFor, BALL_KEY, ballColors, validBallColors } from './courses.js?v=3';
+import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=3';
+import { aimDirection, drawCourse } from './render.js?v=3';
 import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});
 const online=new URLSearchParams(location.search).get('online')==='1';
-let audio=null, lastSound=null;
+let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null;
+try{appearance=JSON.parse(localStorage.getItem(BALL_KEY));}catch{}
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
 const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},location.origin);
 const time=()=>Date.now()+offset;
@@ -20,7 +21,7 @@ function resetAim(course){
 
 function solo(){
   offset=0;me='solo';
-  state=makeMatch('solo',0,{player:me,name:'Tu'});
+  state=makeMatch('solo',0,{player:me,name:'Tu'},Date.now(),appearance);
   startMatch(state,me,Date.now(),1);
   hole=-1;
   $('card').hidden=true;$('scores').setAttribute('aria-expanded','false');
@@ -72,7 +73,7 @@ function updatePanel(){
   }
 }
 function table(){
-  const signature=JSON.stringify(state?.players.map(p=>[p.id,p.scores,p.total,p.strokes,p.done]));
+  const signature=JSON.stringify(state?.players.map(p=>[p.id,p.scores,p.total,p.strokes,p.done,p.appearance]));
   if(signature===revision)return;
   revision=signature;
   const row=(values,tag)=>{
@@ -84,7 +85,9 @@ function table(){
   const rows=(state?.players||[]).slice().sort((a,b)=>b.scores.length-a.scores.length||a.total-b.total);
   $('score-body').replaceChildren(...rows.map(p=>{
     const tr=row([p.name,...COURSES.map((_,i)=>p.scores[i]??(i===state?.hole&&state?.phase==='playing'?p.strokes:'–')),p.total],'td');
-    const marker=document.createElement('span');marker.className='ball-color';marker.style.background=COLORS[p.color];
+    const marker=document.createElement('span');marker.className='ball-color';
+    const [top,bottom]=ballColors(p.appearance,p.color);
+    marker.style.background='linear-gradient('+top+' 50%, '+bottom+' 50%)';
     tr.firstChild.prepend(marker);return tr;
   }));
 }
@@ -103,10 +106,15 @@ function positionAt(p,now){
   return a.map((x,i)=>x+(next[i]-x)*fraction);
 }
 const putText=(id,text)=>{const node=$(id);if(node.textContent!==text)node.textContent=text;};
-function draw(){
+function draw(stamp=performance.now()){
   if(state&&!online)advanceMatch(state,time());
-  const course=COURSES[state?.hole||0], now=time();
-  if(hole!==(state?.hole??0)){hole=state?.hole??0;resetAim(course);}
+  const course=courseFor(state?.hole??0,state ? state.courseVersion : COURSE_VERSION), now=time();
+  if(hole!==(state?.hole??0)||camera?.course!==course){
+    hole=state?.hole??0;resetAim(course);
+    camera={course,x:course.tee[0],z:course.tee[1],yaw:angle()};
+  }
+  const dt=Math.max(.001,Math.min(.1,(stamp-lastFrame)/1000));
+  lastFrame=stamp;
   const p=player(), available=canShoot();
   if(p?.shot&&now>=p.shot.at+p.shot.duration&&lastSound!==p.shot.at){
     lastSound=p.shot.at;
@@ -126,32 +134,39 @@ function draw(){
   if(!$('card').hidden)table();
   const width=canvas.clientWidth,height=canvas.clientHeight;
   if(width>1&&height>1&&ctx){
-    const scale=Math.min(devicePixelRatio||1,1.6);
+    const scale=Math.min(devicePixelRatio||1,1.6,Math.sqrt(2400000/(width*height)));
     const w=Math.round(width*scale),h=Math.round(height*scale);
     if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
     ctx.setTransform(scale,0,0,scale,0,0);
     const balls=(state?.players||[]).flatMap(p=>{
       const pos=positionAt(p,now);
-      return pos?[{id:p.id,name:p.name,color:p.color,x:pos[0],z:pos[1],sink:pos[2]||0}]:[];
+      return pos?[{id:p.id,name:p.name,color:p.color,appearance:p.appearance,x:pos[0],z:pos[1],sink:pos[2]||0}]:[];
     });
+    const [x,z]=p ? positionAt(p,now)??p.position : course.tee;
+    const follow=1-Math.exp(-dt*17);
+    camera.x+=(x-camera.x)*follow;
+    camera.z+=(z-camera.z)*follow;
+    if(!drag){
+      const delta=angle()-camera.yaw;
+      camera.yaw+=Math.atan2(Math.sin(delta),Math.cos(delta))*(1-Math.exp(-dt*11));
+    }
     drawCourse(ctx,width,height,course,balls,me,available,angle(),value('power')/100,
-      state?.started?Math.max(0,now-state.started)/1000:0);
+      state?.started!=null?Math.max(0,now-state.started)/1000:0,camera);
   }
   frame=requestAnimationFrame(draw);
 }
 
 function aimDrag(e){
   const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-  const [x,z]=viewFor(canvas.clientWidth,canvas.clientHeight).direction(dx,dy);
   const length=Math.hypot(dx,dy);
   if(length<6)return false;
-  $('aim').value=String(Math.round(Math.atan2(z,x)*180/Math.PI));
+  $('aim').value=String(Math.round(aimDirection(drag.yaw,dx,dy)*180/Math.PI));
   $('power').value=String(Math.min(100,Math.max(1,Math.round(length/Math.min(150,canvas.clientWidth*.34)*100))));
   return true;
 }
 canvas.addEventListener('pointerdown',e=>{
   if(!canShoot()||e.button!==0||drag)return;
-  drag={id:e.pointerId,x:e.clientX,y:e.clientY};
+  drag={id:e.pointerId,x:e.clientX,y:e.clientY,yaw:camera.yaw};
   canvas.setPointerCapture?.(e.pointerId);
 });
 canvas.addEventListener('pointermove',e=>{if(drag?.id===e.pointerId)aimDrag(e);});
@@ -186,6 +201,9 @@ window.addEventListener('message',e=>{
   if(e.origin!==location.origin||e.source!==parent)return;
   const data=e.data;
   if(data?.type==='golf:insets')applyInsets(document.documentElement,data.insets);
+  if(data?.type==='golf:appearance'&&!online&&validBallColors(data.colors)){
+    appearance=data.colors;player().appearance=appearance;
+  }
   if(data?.type==='golf:state'&&online){
     if(data.state.revision>=(state?.revision??0)){state=data.state;offset=data.now-Date.now();me=data.player;}
     if(data.ack)busy=false;

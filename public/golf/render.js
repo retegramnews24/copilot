@@ -1,122 +1,204 @@
-import { WIDTH, DEPTH, CUP, COLORS, rotorWall } from './courses.js';
+import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWall } from './courses.js?v=3';
 
-const RAINBOW=['#ff8ba9','#ffbd78','#ffe27a','#79efbf','#72d4ff','#b69aff'];
-export function viewFor(width,height){
-  const s=Math.min((width-28)/(WIDTH+.67*DEPTH),(height-26)/(.23*WIDTH+.66*DEPTH));
-  const scale=Math.max(1,s);
-  const cx=width/2, cy=height/2;
-  const point=(x,z,y=0)=>[cx+(x-WIDTH/2-.67*(z-DEPTH/2))*scale,
-    cy+(.23*(x-WIDTH/2)+.66*(z-DEPTH/2)-y)*scale];
-  const direction=(dx,dy)=>[(.66*dx+.67*dy)/.8141,(-.23*dx+dy)/.8141];
-  return {point,direction,scale};
+const NEAR=.35, pitch=.18, cp=Math.cos(pitch), sp=Math.sin(pitch);
+const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+const quad=(x,z,w,d,y=0)=>[[x,z,y],[x+w,z,y],[x+w,z+d,y],[x,z+d,y]];
+const circle=(x,z,r,y=0,segments=24)=>Array.from({length:segments},(_,i)=>{
+  const a=i*Math.PI*2/segments;
+  return [x+Math.cos(a)*r,z+Math.sin(a)*r,y];
+});
+export function aimDirection(yaw,dx,dy){
+  const forward=-dy*2, side=dx;
+  return Math.atan2(Math.sin(yaw)*forward+Math.cos(yaw)*side,Math.cos(yaw)*forward-Math.sin(yaw)*side);
 }
 
-function polygon(c,points,color){
-  c.beginPath();points.forEach(([x,y],i)=>i?c.lineTo(x,y):c.moveTo(x,y));
-  c.closePath();c.fillStyle=color;c.fill();
-}
-
-function line(c,a,b,color,width){
-  c.strokeStyle=color;c.lineWidth=width;c.beginPath();c.moveTo(...a);c.lineTo(...b);c.stroke();
-}
-
-function circle(c,x,y,r,color){
-  c.fillStyle=color;c.beginPath();c.arc(x,y,r,0,Math.PI*2);c.fill();
-}
-
-export function drawCourse(c,width,height,course,players,self,canAim,aim,power,clock){
-  const {point:p,scale:s}=viewFor(width,height);
-  const sky=c.createLinearGradient(0,0,0,height);
-  sky.addColorStop(0,course.colors[2]);sky.addColorStop(1,'#1d3446');
-  c.fillStyle=sky;c.fillRect(0,0,width,height);
-  for(let i=0;i<42;i++){
-    const x=(i*157+39)%width,y=(i*83+11)%height;
-    circle(c,x,y,i%7===0?1.7:.8,'#e9fbff45');
-  }
-  const rect=(x,z,w,h,color)=>polygon(c,[p(x,z),p(x+w,z),p(x+w,z+h),p(x,z+h)],color);
-  const corner=[p(0,0),p(WIDTH,0),p(WIDTH,DEPTH),p(0,DEPTH)];
-  polygon(c,[corner[1],corner[2],p(WIDTH,DEPTH,-.8),p(WIDTH,0,-.8)],'#103a49');
-  polygon(c,[corner[2],corner[3],p(0,DEPTH,-.8),p(WIDTH,DEPTH,-.8)],'#245366');
-  rect(0,0,WIDTH,DEPTH,course.colors[0]);
-  for(let x=0;x<WIDTH;x+=2)rect(x,0,1,DEPTH,'#ffffff11');
-  for(const r of course.rough||[])rect(r.x,r.z,r.w,r.h,'#f6cf80');
-  for(const r of course.water||[]){
-    rect(r.x,r.z,r.w,r.h,'#236a9e');
-    for(let z=r.z+.38;z<r.z+r.h;z+=.64){
-      const shift=(Math.sin(z*3+clock*2)+1)*.21;
-      line(c,p(r.x+.22+shift,z),p(r.x+r.w-.25,z),'#84e8ff7a',Math.max(1,s*.03));
-    }
-  }
-  const rail=(a,b,height,color)=>{
-    polygon(c,[p(...a),p(...b),p(...b,height),p(...a,height)],color);
-    line(c,p(...a,height),p(...b,height),'#f9fff5a0',Math.max(1,s*.08));
+function viewFor(width,height,{x,z,yaw}){
+  const fx=Math.cos(yaw),fz=Math.sin(yaw);
+  const eyeX=x-fx*7.3,eyeZ=z-fz*7.3,eyeY=2.95;
+  const focal=Math.min(height*.96,width*1.3), centerY=height*.43;
+  const transform=([x,z,y])=>{
+    const dx=x-eyeX,dz=z-eyeZ,dy=y-eyeY,forward=dx*fx+dz*fz;
+    return [dz*fx-dx*fz,dy*cp+forward*sp,forward*cp-dy*sp];
   };
-  rail([0,0],[WIDTH,0],.26,course.colors[1]);
-  rail([0,0],[0,DEPTH],.26,course.colors[1]);
-  for(const wall of course.walls)rail([wall.x,wall.z],[wall.toX,wall.toZ],.53,course.colors[1]);
-  for(const [x,z,r] of course.bumpers||[]){
-    const a=p(x,z,.31),b=p(x,z);
-    circle(c,b[0],b[1],s*r*.75,'#ac457e');circle(c,a[0],a[1],s*r*.68,'#ff92c5');
-    circle(c,a[0],a[1],s*r*.28,'#ffeed5');
-  }
-  const rotor=rotorWall(course,clock);
-  if(rotor){
-    rail([rotor.x,rotor.z],[rotor.toX,rotor.toZ],.35,'#d770ab');
-    const [x,z]=course.rotor, a=p(x,z,.45);
-    circle(c,a[0],a[1],s*.27,'#ffedc7');
-  }
-  rail([0,DEPTH],[WIDTH,DEPTH],.26,course.colors[1]);
-  rail([WIDTH,0],[WIDTH,DEPTH],.26,course.colors[1]);
-  for(let i=0;i<6;i++){
-    const x=i*WIDTH/6;
-    line(c,p(x,DEPTH+.02,-.18),p(x+WIDTH/6,DEPTH+.02,-.18),RAINBOW[i],Math.max(2,s*.14));
-  }
-  const tee=p(...course.tee),cup=p(...course.cup);
-  c.beginPath();c.ellipse(...tee,s*.82,s*.44,.23,0,Math.PI*2);c.strokeStyle='#f4fff399';c.lineWidth=1.4;c.stroke();
-  const rim=Array.from({length:24},(_,i)=>{
-    const theta=i*Math.PI/12;
-    return p(course.cup[0]+CUP*Math.cos(theta),course.cup[1]+CUP*Math.sin(theta));
-  });
-  polygon(c,rim,'#19323b');
-  const pole=p(...course.cup,2.65);
-  line(c,cup,pole,'#fff0df',Math.max(1,s*.08));
-  for(let i=0;i<6;i++)polygon(c,[[pole[0],pole[1]+s*i*.14],[pole[0]+s*1.36,pole[1]+s*i*.1+.08*s],
-    [pole[0]+s*1.36,pole[1]+s*(i+1)*.1+.08*s],[pole[0],pole[1]+s*(i+1)*.14]],RAINBOW[i]);
-
-  const me=canAim&&players.find(ball=>ball.id===self);
-  if(me){
-    const {x,z}=me, len=1.25+power*4.7, a=p(x,z,.3), b=p(x+Math.cos(aim)*len,z+Math.sin(aim)*len,.3);
-    c.setLineDash([s*.19,s*.2]);line(c,a,b,'#fffbed',Math.max(2,s*.12));c.setLineDash([]);
-    circle(c,...b,s*.14,'#fff5bf');
-  }
-  const labels=[];
-  const ordered=[...players.filter(ball=>ball.id!==self),...players.filter(ball=>ball.id===self)];
-  for(const ball of ordered){
-    const foot=p(ball.x,ball.z),pos=p(ball.x,ball.z,.28-ball.sink*.25);
-    const r=Math.max(3.4,s*.28)*(1-ball.sink);
-    circle(c,foot[0]+r*.32,foot[1]+r*.2,r*.95,'#172c3860');
-    circle(c,...pos,r,COLORS[ball.color]);circle(c,pos[0]-r*.28,pos[1]-r*.32,r*.34,'#fff9ea');
-    if(ball.id===self&&!ball.sink){
-      c.strokeStyle='#fff5ca';c.lineWidth=1.3;c.beginPath();c.arc(...pos,r+2.5,0,Math.PI*2);c.stroke();
-    }else if(!ball.sink)labels.push({pos,ball,r});
-  }
-  c.font='600 11px system-ui';c.textBaseline='middle';
-  const placed=[];
-  for(const {pos,ball,r} of labels){
-    const name=[...ball.name].slice(0,15).join('');
-    const w=c.measureText(name).width+17;
-    let x,y;
-    placement: for(const row of [0,-1,1,-2,2,-3,3]){
-      for(const col of [0,-1,1,-2,2]){
-        x=Math.max(3,Math.min(width-w-3,pos[0]-w/2+col*(w+5)));
-        y=Math.max(3,Math.min(height-17,pos[1]-r-21+row*17));
-        if(!placed.some(label=>x+w>label.x&&x<label.x+label.w&&y+16>label.y&&y<label.y+16))break placement;
-      }
+  const project=([x,y,d])=>{
+    const size=focal/d;
+    return {x:width/2+x*size,y:centerY-y*size,size,d};
+  };
+  const point=world=>{
+    const camera=transform(world);
+    return camera[2]>=NEAR ? project(camera) : null;
+  };
+  const polygon=world=>{
+    const vertices=world.map(transform), clipped=[];
+    for(let i=0;i<vertices.length;i++){
+      const a=vertices[i],b=vertices[(i+1)%vertices.length];
+      if(a[2]>=NEAR)clipped.push(a);
+      if((a[2]>=NEAR)===(b[2]>=NEAR))continue;
+      const t=(NEAR-a[2])/(b[2]-a[2]);
+      clipped.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,NEAR]);
     }
-    placed.push({x,y,w});
-    line(c,pos,[x+w/2,y+8],COLORS[ball.color],1);
-    c.fillStyle='#152838ed';c.fillRect(x,y,w,16);
-    circle(c,x+6,y+8,2.5,COLORS[ball.color]);
-    c.fillStyle='#fff7e7';c.fillText(name,x+12,y+8);
+    return clipped.map(project);
+  };
+  return {point,polygon,horizon:centerY-focal*sp/cp,depth:world=>transform(world)[2]};
+}
+
+function backdrop(ctx,w,h,horizon,yaw){
+  const sky=ctx.createLinearGradient(0,0,0,Math.max(1,horizon+26));
+  sky.addColorStop(0,'#6ca7cb');sky.addColorStop(1,'#f6daba');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
+  for(let layer=0;layer<3;layer++){
+    const colors=['#8caeb1','#699490','#547b72'];
+    ctx.beginPath();ctx.moveTo(0,horizon+30);
+    for(let x=0;x<w+19;x+=18){
+      const angle=(x-w/2)/w*1.2+yaw;
+      const hill=Math.sin(angle*(5+layer*2)+layer)*.55+Math.cos(angle*13-layer)*.23;
+      ctx.lineTo(x,horizon+layer*4-16*hill-7);
+    }
+    ctx.lineTo(w,horizon+45);ctx.lineTo(0,horizon+45);ctx.closePath();
+    ctx.fillStyle=colors[layer];ctx.fill();
+  }
+}
+
+function paintBall(ctx,p,r,palette,own){
+  const {x,y}=p;
+  ctx.save();
+  ctx.fillStyle=palette[0];ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.clip();
+  ctx.fillRect(x-r,y-r,2*r,r);
+  ctx.fillStyle=palette[1];ctx.fillRect(x-r,y,2*r,r);
+  const lighting=ctx.createRadialGradient(x-r*.35,y-r*.42,0,x-r*.12,y-r*.16,r*1.25);
+  lighting.addColorStop(0,'#ffffffdf');lighting.addColorStop(.36,'#ffffff24');lighting.addColorStop(.67,'#080f1b00');lighting.addColorStop(1,'#080f1bcc');
+  ctx.fillStyle=lighting;ctx.fillRect(x-r,y-r,2*r,2*r);
+  if(r>6){
+    ctx.fillStyle='#101a302c';
+    for(let row=-2;row<=2;row++)for(let col=-2;col<=2;col++){
+      ctx.beginPath();ctx.arc(x+(col+(row%2)*.5)*r*.36,y+row*r*.34,r*.075,0,Math.PI*2);ctx.fill();
+    }
+  }
+  ctx.restore();
+  ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.strokeStyle=own?'#fff8de':'#ffffffa8';ctx.lineWidth=own?1.5:1;ctx.stroke();
+}
+
+export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,seconds,camera){
+  const view=viewFor(w,h,camera), scale=course.scale??1, width=course.width??WIDTH, depth=course.depth??DEPTH;
+  const radius=RADIUS*scale, cup=CUP*scale, surfaces=[], labels=[];
+  const poly=(world,color)=>{
+    const points=view.polygon(world);
+    if(points.length<3||points.every(p=>p.x<0)||points.every(p=>p.x>w)||points.every(p=>p.y<0)||points.every(p=>p.y>h))return;
+    ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);
+    for(const p of points.slice(1))ctx.lineTo(p.x,p.y);
+    ctx.closePath();ctx.fillStyle=color;ctx.fill();
+  };
+  const queue=(x,z,draw)=>surfaces.push({d:view.depth([x,z,0]),draw});
+  const area=(x,z,w,d,y,color)=>poly(quad(x,z,w,d,y),color);
+  backdrop(ctx,w,h,view.horizon,camera.yaw);
+  area(-90,-90,width+180,depth+180,-.34,'#527d5c');
+  area(-1.4,-1.4,width+2.8,depth+2.8,-.02,'#d9ba8b');
+  for(let x=0;x<width;x+=2*scale){
+    const stripe=Math.round(x/(2*scale));
+    area(x,0,Math.min(2*scale,width-x)+.015,depth,0,stripe%2?'#66a455':'#73b35c');
+  }
+  for(const r of course.rough||[]){
+    area(r.x,r.z,r.w,r.h,.012,'#c59965');
+    for(let i=.45;i<r.h-.3;i+=.64)area(r.x+.15,r.z+i,r.w-.3,.075,.017,'#e1b484');
+  }
+  for(const r of course.water||[]){
+    area(r.x,r.z,r.w,r.h,.012,'#3796ad');
+    for(let i=.28;i<r.h-.28;i+=.52){
+      const ripple=.23*Math.sin(i*3+seconds*2);
+      area(r.x+.36+ripple,r.z+i,r.w*.63,.06,.018,'#97e6e6');
+    }
+  }
+  const rail=(wall,half,height,top,side)=>{
+    const {x,z,toX,toZ}=wall,length=Math.hypot(toX-x,toZ-z);
+    if(!length)return;
+    const dx=(toX-x)/length,dz=(toZ-z)/length;
+    const corners=[[x-dz*half,z+dx*half],[toX-dz*half,toZ+dx*half],[toX+dz*half,toZ-dx*half],[x+dz*half,z-dx*half]];
+    // Draw long rails in sections so nearby balls can pass in front of the far end.
+    const sections=Math.ceil(length/2.5);
+    for(let i=0;i<sections;i++){
+      const along=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t];
+      const ring=[along(corners[0],corners[1],i/sections),along(corners[0],corners[1],(i+1)/sections),
+        along(corners[3],corners[2],(i+1)/sections),along(corners[3],corners[2],i/sections)];
+      const upper=ring.map(([x,z])=>[x,z,height]);
+      queue((ring[0][0]+ring[2][0])/2,(ring[0][1]+ring[2][1])/2,()=>{
+        for(let n=0;n<4;n++){
+          if(n===1&&i!==sections-1||n===3&&i!==0)continue;
+          const next=(n+1)%4;
+          poly([[...ring[n],0],[...ring[next],0],upper[next],upper[n]],side);
+        }
+        poly(upper,top);
+      });
+    }
+  };
+  const [a,,c]=course.colors;
+  for(const [x,z,toX,toZ] of [[0,0,width,0],[width,0,width,depth],[width,depth,0,depth],[0,depth,0,0]]){
+    rail({x,z,toX,toZ},.09*scale,.26*scale,'#e7c69a','#99664b');
+  }
+  for(const wall of course.walls)rail(wall,.12*scale,.68*scale,a,c);
+  const rotor=rotorWall(course,seconds);
+  if(rotor)rail(rotor,.19*scale,.47*scale,'#f8c877','#ab5362');
+  for(const [x,z,r] of course.bumpers||[])queue(x,z,()=>{
+    const lower=circle(x,z,r),upper=circle(x,z,r,.35*scale);
+    for(let i=0;i<lower.length;i++){
+      const next=(i+1)%lower.length;
+      poly([lower[i],lower[next],upper[next],upper[i]],'#773b68');
+    }
+    poly(circle(x,z,r,.35*scale),'#ef7fa7');
+    poly(circle(x,z,r*.72,.355*scale),'#ac507d');
+    poly(circle(x,z,r*.35,.36*scale),'#ffd2ac');
+  });
+  for(let i=0;i<9;i++){
+    const x=3+i*(width-6)/8, z=i%2?depth+3.8:-4.8;
+    queue(x,z,()=>{
+      const p=view.point([x,z,-.29]);
+      if(!p||p.x<-120||p.x>w+120||p.y<0||p.y>h+120)return;
+      const size=p.size*(1.6+i%3*.32);
+      ctx.fillStyle='#705a48';ctx.fillRect(p.x-size*.09,p.y-size*.52,size*.18,size*.52);
+      ctx.beginPath();ctx.moveTo(p.x,p.y-size*1.48);ctx.lineTo(p.x-size*.52,p.y-size*.39);ctx.lineTo(p.x+size*.52,p.y-size*.39);ctx.closePath();
+      ctx.fillStyle=i%2?'#39685b':'#467b65';ctx.fill();
+    });
+  }
+  const [hx,hz]=course.cup;
+  poly(circle(hx,hz,cup*1.17,.02),'#b7d29a');
+  poly(circle(hx,hz,cup,.027),'#203332');
+  queue(hx,hz,()=>{
+    const height=2.25*scale, flag=(.83+Math.sin(seconds*3)*.11)*scale;
+    const flagX=hx-Math.sin(camera.yaw)*flag,flagZ=hz+Math.cos(camera.yaw)*flag;
+    poly([[hx-.022,hz,.02],[hx+.022,hz,.02],[hx+.022,hz,height],[hx-.022,hz,height]],'#fff3d1');
+    poly([[hx,hz-.022,.02],[hx,hz+.022,.02],[hx,hz+.022,height],[hx,hz-.022,height]],'#fff3d1');
+    poly([[hx,hz,height],[flagX,flagZ,height-.19*scale],[hx,hz,height-.56*scale]],'#f86489');
+  });
+  const own=balls.find(p=>p.id===self);
+  if(available&&own){
+    for(let i=1;i<=5+Math.round(power*12);i++){
+      const step=(.42+i*.38)*scale;
+      const x=own.x+Math.cos(angle)*step,z=own.z+Math.sin(angle)*step;
+      if(x<=0||x>=width||z<=0||z>=depth)break;
+      poly(circle(x,z,.048*scale,.026,8),i%3?'#fff5cf':'#ffcd79');
+    }
+  }
+  for(const ball of balls)queue(ball.x,ball.z,()=>{
+    const p=view.point([ball.x,ball.z,radius*(1-2*ball.sink)]);
+    if(!p||p.x<-48||p.x>w+48||p.y<0||p.y>h+48)return;
+    const r=clamp(radius*p.size,3,34)*(1-ball.sink*.88);
+    const palette=ballColors(ball.appearance,ball.color);
+    poly(circle(ball.x,ball.z,radius*1.25,.032,12),'#1c35296b');
+    paintBall(ctx,p,r,palette,ball.id===self);
+    if(ball.id!==self&&!ball.sink)labels.push({p,r,name:ball.name,color:palette[0]});
+  });
+  surfaces.sort((a,b)=>b.d-a.d).forEach(({draw})=>draw());
+  ctx.font='600 11px system-ui';ctx.textAlign='left';ctx.textBaseline='middle';
+  const occupied=[];
+  for(const {p,r,name,color} of labels){
+    const label=name.length>16?name.slice(0,15)+'…':name;
+    const width=ctx.measureText(label).width+22;
+    const x=clamp(p.x-width/2,3,w-width-3);
+    let y=clamp(p.y-r-21,3,h-21);
+    while(y>3&&occupied.some(other=>Math.abs(y-other.y)<19&&x<other.x+other.width&&x+width>other.x))y-=19;
+    y=Math.max(3,y);occupied.push({x,y,width});
+    ctx.fillStyle='#142630e8';ctx.fillRect(x,y,width,17);
+    ctx.fillStyle=color;ctx.fillRect(x+5,y+6,5,5);
+    ctx.fillStyle='#fff7ed';ctx.fillText(label,x+15,y+8.5);
   }
 }

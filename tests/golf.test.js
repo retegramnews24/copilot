@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { COURSES } from '../public/golf/courses.js';
+import { COURSES, COURSE_VERSION, courseFor, ballColors } from '../public/golf/courses.js';
 import { simulateShot } from '../public/golf/physics.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, HOLE_TIME, BREAK } from '../public/golf/match.js';
 
@@ -14,16 +14,17 @@ const routes=[
   [[8,4.6],[16,4.6],[16,8],[21,8]],
   [[8,12],[10.7,12],[11,6.7],[16,6.7],[20,5],[23,5]]
 ];
-for(const [i,course] of COURSES.entries()){
+for(const version of [undefined,COURSE_VERSION])for(const i of COURSES.keys()){
+  const course=courseFor(i,version),scale=course.scale??1;
   let position=course.tee;
-  const goals=[...routes[i],course.cup];
+  const goals=[...routes[i].map(point=>point.map(value=>value*scale)),course.cup];
   for(const target of goals){
     const dx=target[0]-position[0],dz=target[1]-position[1];
-    const power=Math.max(0,(Math.sqrt(4.5*Math.hypot(dx,dz))+.07-1.7)/18);
+    const power=Math.max(0,(Math.sqrt(4.5*Math.hypot(dx,dz)/scale)+.07-1.7)/18);
     const choices=Array.from({length:24},(_,phase)=>simulateShot(course,...position,Math.atan2(dz,dx),power,phase*.18));
     const error=shot=>shot.penalty?Infinity:Math.hypot(shot.end[0]-target[0],shot.end[1]-target[1]);
     const best=choices.sort((a,b)=>error(a)-error(b))[0];
-    assert.ok(error(best)<.68,course.name+' has a playable route toward '+target);
+    assert.ok(error(best)<.68*scale,course.name+' has a playable route toward '+target);
     position=best.end;
     if(target===course.cup)assert.equal(best.sunk,true,course.name);
   }
@@ -37,6 +38,12 @@ const wall=simulateShot(COURSES[0],3,8,Math.PI,.45);
 assert.ok(wall.end[0]>3,'A shot rebounds from the perimeter');
 
 const a={player:'tg:1',name:'Uno'},b={player:'tg:2',name:'Due'},match=makeMatch('golf',1,a,0);
+assert.deepEqual(match.players[0].position,courseFor(0,COURSE_VERSION).tee);
+assert.ok(courseFor(0,COURSE_VERSION).width>35);
+assert.deepEqual(ballColors(['red','#123456'],1),['#ff82b6','#455aa7']);
+const skin=['#abcdef','#012345'];
+joinMatch(match,a,skin);
+assert.deepEqual(match.players[0].appearance,skin);
 assert.throws(()=>startMatch(match,a.player,0),/Aspetta/);
 joinMatch(match,b);assert.throws(()=>startMatch(match,b.player,0),/Solo/);
 startMatch(match,a.player,0);assert.throws(()=>joinMatch(match,{player:'tg:3',name:'Tre'}),/iniziata/);

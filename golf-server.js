@@ -35,8 +35,8 @@ export class GolfRoom {
       let match=await this.ctx.storage.get('golf');
       try {
         if(action==='init' && !match && req.method==='POST'){
-          const {room,number}=await req.json();
-          match=makeMatch(room,number,user,now);
+          const {room,number,appearance}=await req.json();
+          match=makeMatch(room,number,user,now,appearance);
           await this.save(match);
           return json({state:match,summary:this.summary(match),now});
         }
@@ -46,7 +46,7 @@ export class GolfRoom {
         if(req.method!=='POST')return json({error:'Operazione non disponibile.'},405);
         const raw=await req.text();
         if(raw.length>512)return json({error:'Richiesta troppo grande.'},413);
-        if(action==='join')joinMatch(match,user);
+        if(action==='join')joinMatch(match,user,raw ? JSON.parse(raw)?.appearance : null);
         else if(action==='start')startMatch(match,user.player,now);
         else if(action==='shot')takeShot(match,user.player,JSON.parse(raw),now);
         else return json({error:'Operazione non disponibile.'},404);
