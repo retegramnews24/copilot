@@ -31,13 +31,13 @@ export class MotoTrialRoom {
   }
 
   state(room) {
-    return {room: room.room, number: room.number, seed: room.seed, courseVersion: room.courseVersion ?? 1, players: this.players()};
+    return {room: room.room, number: room.number, seed: room.seed, courseVersion: room.courseVersion ?? 1, courseName: room.courseName, players: this.players()};
   }
 
   summary(room) {
     const players = this.players().map(({id, name}) => ({id, name}));
     return {room: room.room, number: room.number, game: 'moto-trial', phase: 'playing',
-      players, online: players.length, capacity: LIMIT, expires: null, created: room.created, revision: room.revision};
+      players, online: players.length, courseName: room.courseName, capacity: LIMIT, expires: null, created: room.created, revision: room.revision};
   }
 
   broadcast(packet, except) {
@@ -63,7 +63,7 @@ export class MotoTrialRoom {
       if (path === '/moto-trial/init' && req.method === 'POST' && !room) {
         const {room: id, number, seed} = await req.json(), course = makeCourse(seed);
         const points = course.tiers.flatMap(tier => tier.points.map(p => p.x));
-        room = {room: id, number, seed, courseVersion: COURSE_VERSION, created: Date.now(), revision: 0,
+        room = {room: id, number, seed, courseName: course.name, courseVersion: COURSE_VERSION, created: Date.now(), revision: 0,
           bounds: {min: Math.min(...points), max: Math.max(...points), bottom: course.bottom}};
         await this.ctx.storage.put('moto-trial', room);
         await this.ctx.storage.setAlarm(Date.now() + EMPTY_GRACE);

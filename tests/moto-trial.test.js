@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import {makeCourse, ground, bikeSupport, helmetSupport, resetBike, turnBike, stepBike, FIXED_STEP} from '../public/moto-trial/physics.js';
 
-assert.deepEqual(makeCourse(71), makeCourse(71));
-assert.notDeepEqual(makeCourse(71).tiers, makeCourse(72).tiers);
-const durations = [];
-for (let seed = 0; seed < 320; seed++) {
-  const course = makeCourse(seed);
+import {FIXED_COURSES} from '../public/moto-trial/courses.js';
+
+function drive(course) {
   const bike = resetBike(course);
   const landings = [];
   let airSteps = 0, lean = 0, jumps = 0;
@@ -24,6 +22,15 @@ for (let seed = 0; seed < 320; seed++) {
       if (speed > 8.15) brake = true;
       if (speed > 7.6) throttle = false;
     }
+    if (bike.onGround && tier.jump?.short && bike.facing === tier.direction) {
+      const approach = (tier.jump.lip - bike.x) * tier.direction;
+      if (approach > 0 && approach < 7) {
+        const target = Math.sqrt((Math.abs(tier.jump.landing - tier.jump.lip) + 2.8) * 13.6 / (2 * tier.jump.launch));
+        const speed = bike.vx * tier.direction;
+        if (speed > target + .18) brake = true;
+        if (speed > target - .25) throttle = false;
+      }
+    }
     if (steps % 4 === 0) {
       const preview = bike.x + bike.vx * .15;
       const front = ground(tier, preview + .7), back = ground(tier, preview - .7);
@@ -41,12 +48,20 @@ for (let seed = 0; seed < 320; seed++) {
     }
     if (bike.tier !== previousTier) landings.push(bike.tier);
   }
+  return {bike, landings, jumps, airSteps, duration: steps * FIXED_STEP};
+}
+
+assert.deepEqual(makeCourse(71, 4), makeCourse(71, 4));
+assert.notDeepEqual(makeCourse(71, 4).tiers, makeCourse(72, 4).tiers);
+const durations = [];
+for (let seed = 0; seed < 320; seed++) {
+  const course = makeCourse(seed, 4);
+  const {bike, landings, jumps, airSteps, duration} = drive(course);
   assert.equal(bike.status, 'finish', 'Seed ' + seed + ' must be possible to finish');
   assert.equal(course.tiers.length, 16);
   assert.equal(jumps, 12);
   assert.equal(course.tiers.filter(tier => tier.precisionDrop).length, 4);
   assert.deepEqual(landings, course.tiers.slice(1).map((_, i) => i + 1));
-  const duration = steps * FIXED_STEP;
   assert.ok(duration >= 165 && duration <= 200, 'Completion should be around three minutes: ' + duration);
   durations.push(duration);
   assert.ok(ground(course.tiers.at(-1), course.finish) !== null);
@@ -62,7 +77,7 @@ for (let seed = 0; seed < 320; seed++) {
   }
 }
 
-const course = makeCourse(72), bike = resetBike(course);
+const course = makeCourse(72, 4), bike = resetBike(course);
 for (let i = 0; i < 100; i++) stepBike(course, bike, {throttle: true});
 assert.ok(bike.vx > 0);
 const {x, vx} = bike;
@@ -156,7 +171,7 @@ const inertialSpin = freeFlight.spin;
 stepBike(cliff, freeFlight, {}, .01);
 assert.equal(freeFlight.spin, inertialSpin, 'Free flight has no artificial self-leveling or angular drag');
 assert.equal(makeCourse(71, 3).tiers.filter(tier => tier.jump).length, 9);
-const flatOut = makeCourse(4), unbraked = resetBike(flatOut);
+const flatOut = makeCourse(4, 4), unbraked = resetBike(flatOut);
 for (let i = 0; i < 24000 && unbraked.status === 'ride'; i++) {
   if (unbraked.onGround && unbraked.facing !== flatOut.tiers[unbraked.tier].direction) turnBike(unbraked);
   stepBike(flatOut, unbraked, {throttle: true});
@@ -165,6 +180,25 @@ for (let i = 0; i < 24000 && unbraked.status === 'ride'; i++) {
 assert.equal(unbraked.status, 'crash');
 const legacy = makeCourse(71, 1);
 assert.equal(legacy.tiers.length, 5);
-assert.notEqual(legacy.finish, makeCourse(71).finish);
+assert.notEqual(legacy.finish, makeCourse(71, 4).finish);
 console.log('PASS Moto Trial: 320 descents (' + Math.round(Math.min(...durations)) + '–' +
   Math.round(Math.max(...durations)) + ' s), twelve gaps, precision drops, edge pivots and Classic air impulses.');
+
+assert.equal(FIXED_COURSES.length, 10);
+assert.equal(new Set(FIXED_COURSES.map(track => track.name)).size, 10);
+assert.throws(() => makeCourse(11), RangeError);
+for (let id = 1; id <= FIXED_COURSES.length; id++) {
+  const course = makeCourse(id);
+  assert.deepEqual(course, makeCourse(id, 5));
+  assert.equal(course.name, FIXED_COURSES[id - 1].name);
+  const {bike, landings, jumps, duration} = drive(course);
+  assert.equal(bike.status, 'finish', course.name);
+  assert.deepEqual(landings, course.tiers.slice(1).map((_, i) => i + 1));
+  assert.equal(jumps, course.tiers.length);
+  assert.ok(duration >= 25 && duration <= 65, course.name + ': ' + duration + ' s');
+  for (const {jump} of course.tiers) {
+    assert.ok(jump.launch > 0);
+  }
+  assert.ok(course.tiers.every(tier => ground(tier, (tier.jump.lip + tier.jump.landing) / 2) === null));
+}
+console.log('PASS Moto Trial fixed circuits: ten distinct courses, all jumps and finishes verified.');

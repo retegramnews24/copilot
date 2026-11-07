@@ -1,3 +1,4 @@
+import {FIXED_COURSES} from './moto-trial/courses.js?v=5';
 import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
@@ -74,7 +75,7 @@ function renderLobby(){
   if(game.game==='moto-trial'){
    const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
    card.className='table-card';info.className='turn-note';
-   title.textContent='Corsa '+game.number+' · Moto Trial';
+   title.textContent='Corsa '+game.number+' · '+(game.courseName||'Moto Trial');
    info.textContent=(game.online||0)+' / '+(game.capacity||8)+' piloti'+(game.players.length?' · '+game.players.map(p=>p.name).join(' · '):'');
    const mine=game.players.some(p=>p.id===identity?.player);
    enter.disabled=!identity||!mine&&game.online>=game.capacity;
@@ -782,11 +783,13 @@ function closeMotoTrial(){
  try{tg?.enableVerticalSwipes?.()}catch{}
  if(wasRace){sendPresence();$('create-moto-trial').focus()}else motoLaunch.focus();
 }
+const motoCourse=$('moto-course');
+for(const [i,track] of FIXED_COURSES.entries())motoCourse.add(new Option((i+1)+'. '+track.name,i+1));
 function showMotoTrial(multiplayer=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  motoOverlay.hidden=false;
- motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1':'');
+ motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1':'?course='+motoCourse.value);
  tg?.BackButton?.show();
 }
 function connectMotoRace(){
@@ -833,7 +836,7 @@ async function openMotoRace(selected){
  if(!identity||motoOpening||!motoOverlay.hidden)return;
  motoOpening=true;$('create-moto-trial').disabled=true;
  try{
-  const {state}=selected?await request('/api/moto-trial/'+selected+'/state'):await request('/api/create',{game:'moto-trial'});
+  const {state}=selected?await request('/api/moto-trial/'+selected+'/state'):await request('/api/create',{game:'moto-trial',courseId:Number(motoCourse.value)});
   if(state.players.length>=8&&!state.players.some(p=>p.id===identity.player))throw Error('Corsa al completo.');
   motoRace=state;showMotoTrial(true);connectMotoRace();sendPresence();
  }catch(e){err(e.message)}finally{motoOpening=false;$('create-moto-trial').disabled=!identity}

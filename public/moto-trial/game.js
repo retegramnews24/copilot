@@ -1,7 +1,8 @@
+import {FIXED_COURSES} from './courses.js?v=5';
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=4';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=5';
 import {TrialAudio} from './audio.js';
-import {drawTrial} from './render.js?v=4';
+import {drawTrial} from './render.js?v=5';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -14,9 +15,13 @@ const throttleKeys = ['ArrowUp', 'KeyW'], brakeKeys = ['ArrowDown', 'KeyS'];
 const leftKeys = ['ArrowLeft', 'KeyA'], rightKeys = ['ArrowRight', 'KeyD'];
 const driving = [...throttleKeys, ...brakeKeys, ...leftKeys, ...rightKeys];
 const formatTime = seconds => Math.floor(seconds / 60) + ':' + String(Math.floor(seconds % 60)).padStart(2, '0');
-const freshSeed = () => crypto.getRandomValues(new Uint32Array(1))[0];
+const picker = $('course-picker');
+for (const [i, track] of FIXED_COURSES.entries()) picker.add(new Option((i + 1) + '. ' + track.name, i + 1));
+const requested = Number(new URLSearchParams(location.search).get('course'));
+const initialCourse = Number.isInteger(requested) && requested >= 1 && requested <= FIXED_COURSES.length ? requested : 1;
+picker.value = String(initialCourse);
 
-let course = makeCourse(freshSeed()), bike = resetBike(course), mode = 'ready';
+let course = makeCourse(initialCourse), bike = resetBike(course), mode = 'ready';
 let elapsed = 0, falls = 0, accumulator = 0, lastFrame = 0, frame = 0;
 let width = 1, height = 1, pixelRatio = 1;
 
@@ -80,6 +85,7 @@ function receiveRace(data) {
     remote.clear();
     course = makeCourse(state.seed, state.courseVersion ?? 1);
     bike = resetBike(course);
+    if (mode === 'ready') describeCourse();
   }
   const members = state.players.filter(p => p.id !== data.player);
   for (const id of remote.keys()) if (!members.some(p => p.id === id)) remote.delete(id);
@@ -107,7 +113,7 @@ function updateHUD() {
     if (!bike.onGround && bike.tier < course.tiers.length - 1 && (bike.x - tier.end) * tier.direction >= 0) cue = 'Atterra sul sentiero sotto';
     else if (bike.facing !== tier.direction) cue = 'Frena e gira ' + (tier.direction > 0 ? 'verso destra →' : 'verso sinistra ←');
     else if (tier.jump && (tier.jump.lip - bike.x) * tier.direction >= 0 &&
-        Math.abs(tier.jump.lip - bike.x) < 17) cue = 'Salto · prendi slancio';
+        Math.abs(tier.jump.lip - bike.x) < 17) cue = tier.jump.short ? 'Pianerottolo corto · dosa il gas' : 'Salto · prendi slancio';
     else if (tier.precisionDrop && Math.abs(tier.end - bike.x) < 17) cue = 'Atterraggio stretto · frena prima del bordo';
     else if (bike.tier < course.tiers.length - 1 && Math.abs(tier.end - bike.x) < 15) cue = 'Discesa · rallenta dopo l’atterraggio';
   }
@@ -134,6 +140,13 @@ function resize() {
   draw();
 }
 
+function describeCourse() {
+  $('description').textContent = course.name ? course.name + ' · ' + course.detail
+    : 'Supera le rampe e trova il traguardo.';
+  $('course-summary').textContent = course.name ? course.tiers.length + ' salti · ' +
+    course.tiers.filter(tier => tier.jump.short).length + ' pianerottoli corti' : '';
+}
+
 function setMode(next) {
   mode = next;
   clearInputs();
@@ -147,19 +160,21 @@ function setMode(next) {
   $('pause').disabled = next !== 'ride';
   $('new-course').hidden = next === 'ready' || next === 'finish' || multiplayer;
   $('intro-controls').hidden = next !== 'ready';
+  $('course-selection').hidden = next !== 'ready' || multiplayer;
   if (next === 'ride') {
     canvas.focus({preventScroll: true});
     lastFrame = performance.now();
     frame = requestAnimationFrame(tick);
   } else {
     const [title, description, button] = {
-      ready: ['Moto Trial', 'Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Bilancia la moto sulle rampe per evitare di ribaltarti.', 'Parti'],
-      paused: ['In pausa', multiplayer ? 'Gli altri piloti possono continuare a correre.' : 'Riprendi dallo stesso punto o genera un altro percorso.', 'Riprendi'],
+      ready: ['Moto Trial', '', 'Parti'],
+      paused: ['In pausa', multiplayer ? 'Gli altri piloti possono continuare a correre.' : 'Riprendi o torna alla selezione dei circuiti.', 'Riprendi'],
       crash: ['Caduta', 'Ripartenza dall’inizio dello stesso percorso.', 'Riparti subito'],
-      finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), multiplayer ? 'Riprova lo stesso percorso' : 'Nuovo percorso']
+      finish: ['Traguardo!', 'Tempo ' + formatTime(elapsed) + ' · ' + falls + (falls === 1 ? ' caduta' : ' cadute'), multiplayer ? 'Riprova il circuito' : 'Scegli circuito']
     }[next];
     $('title').textContent = title;
-    $('description').textContent = description;
+    if (next === 'ready') describeCourse();
+    else $('description').textContent = description;
     $('primary').textContent = button;
     if (next === 'crash') retryTimer = setTimeout(() => { if (!document.hidden) retryAfterFall(); }, 1100);
     if (next !== 'ready') $('primary').focus({preventScroll: true});
@@ -169,15 +184,11 @@ function setMode(next) {
   draw();
 }
 
-function restart(reseed = false) {
-  if (reseed && !multiplayer) {
-    let seed = freshSeed();
-    if (seed === course.seed) seed = (seed + 1) >>> 0;
-    course = makeCourse(seed);
-  }
+function selectCourse() {
+  course = makeCourse(Number(picker.value));
   bike = resetBike(course);
   falls = elapsed = 0;
-  setMode('ride');
+  setMode('ready');
 }
 
 function retryAfterFall() {
@@ -190,7 +201,13 @@ function primary() {
   if (multiplayer && mode === 'ready' && !connected) return;
   audio.resume();
   if (mode === 'crash') retryAfterFall();
-  else if (mode === 'finish') restart(true);
+  else if (mode === 'finish') {
+    if (!multiplayer) selectCourse();
+    else {
+      falls = 0;
+      retryAfterFall();
+    }
+  }
   else setMode('ride');
 }
 
@@ -234,7 +251,8 @@ function turn() {
 }
 
 $('primary').onclick = primary;
-$('new-course').onclick = () => { audio.resume(); restart(true); };
+$('new-course').onclick = selectCourse;
+picker.onchange = selectCourse;
 $('sound').onclick = () => {
   audio.setEnabled(!audio.enabled);
   $('sound').setAttribute('aria-pressed', String(audio.enabled));

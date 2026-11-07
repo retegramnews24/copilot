@@ -10,6 +10,7 @@ import * as labAdventure from '../public/labyrinth/adventure.js';
 import * as labTraps from '../public/labyrinth/traps.js';
 import {renderBriscola} from '../public/sea-cards-ui.js';
 import {sicilianSVG} from '../public/sicilian-cards.js';
+import {FIXED_COURSES} from '../public/moto-trial/courses.js';
 import * as trialPhysics from '../public/moto-trial/physics.js';
 import {FrameBudget} from '../public/labyrinth/performance.js';
 const source=await fs.readFile('public/app.js','utf8'),bundle=await build({stdin:{contents:source+'\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};',resolveDir:process.cwd()+'/public'},bundle:true,write:false,format:'iife',platform:'browser'});
@@ -38,21 +39,29 @@ assert.equal(w.document.documentElement.dataset.telegramPlatform,'android');
 
 const get=id=>w.document.getElementById(id);
 assert.equal(get('catalog-platform-title').textContent,'Platform 2D');
+assert.equal(get('moto-course').options.length,10);
+get('moto-course').value='7';
 get('play-moto-trial').click();
 const motoFrame=get('moto-trial-frame');
 assert.equal(get('moto-trial-overlay').hidden,false);
-assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html');
+assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?course=7');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:w,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,false);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,true);
-const raceFixture={room:'22222222-2222-4222-8222-222222222222',number:2,seed:67,players:[]};
+const raceFixture={room:'22222222-2222-4222-8222-222222222222',number:2,seed:7,courseVersion:5,players:[]};
 const beforeRaceFetch=w.fetch;
-w.fetch=async(path,opts)=>path==='/api/create'&&JSON.parse(opts.body).game==='moto-trial'?Response.json({state:raceFixture}):beforeRaceFetch(path,opts);
+let requestedCourse;
+w.fetch=async(path,opts)=>{
+ if(path!=='/api/create'||JSON.parse(opts.body).game!=='moto-trial')return beforeRaceFetch(path,opts);
+ requestedCourse=JSON.parse(opts.body).courseId;
+ return Response.json({state:raceFixture});
+};
 get('create-moto-trial').click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.equal(get('moto-trial-overlay').hidden,false);
 assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?multiplayer=1');
+assert.equal(requestedCourse,7);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,true);
 w.fetch=beforeRaceFetch;
@@ -252,14 +261,16 @@ labDom.window.close();
 console.log('PASS Labyrinth menu: reset uses an in-app confirmation, cancel preserves progress, restart saves floor one and there is no fullscreen button.');
 
 const trialDom=new JSDOM(await fs.readFile('public/moto-trial/index.html','utf8'),{
- url:'https://unit.test/moto-trial/index.html',runScripts:'outside-only',pretendToBeVisual:true
+ url:'https://unit.test/moto-trial/index.html?course=4',runScripts:'outside-only',pretendToBeVisual:true
 });
 const trial=trialDom.window, trialGet=id=>trial.document.getElementById(id);
-Object.assign(trial,trialPhysics,{TrialAudio:class{resume(){} update(){} surface(){} close(){}},drawTrial(){},applyInsets(){}});
+Object.assign(trial,trialPhysics,{FIXED_COURSES,TrialAudio:class{resume(){} update(){} surface(){} close(){}},drawTrial(){},applyInsets(){}});
 trial.matchMedia=()=>({matches:true});
 trialGet('trail').getContext=()=>({setTransform(){}});
 trial.eval((await fs.readFile('public/moto-trial/game.js','utf8')).replace(/^import .*;\n/gm,'')+
  '\nwindow.__trialTest={tick:()=>tick(lastFrame+32),bike:()=>bike,seed:()=>course.seed,mode:()=>mode};');
+assert.equal(trial.__trialTest.seed(),4);
+assert.equal(trialGet('course-picker').options.length,10);
 trialGet('primary').click();
 assert.equal(trialGet('controls').hidden,false);
 const trialKey=(type,code,repeat=false)=>trial.dispatchEvent(new trial.KeyboardEvent(type,{code,repeat,cancelable:true}));
@@ -279,7 +290,12 @@ trialKey('keydown','Escape');
 assert.equal(trialGet('title').textContent,'In pausa');
 const oldSeed=trial.__trialTest.seed();
 trialGet('new-course').click();
-assert.notEqual(trial.__trialTest.seed(),oldSeed);
+assert.equal(trial.__trialTest.seed(),oldSeed);
+assert.equal(trial.__trialTest.mode(),'ready');
+trialGet('course-picker').value='8';
+trialGet('course-picker').dispatchEvent(new trial.Event('change'));
+assert.equal(trial.__trialTest.seed(),8);
+trialGet('primary').click();
 assert.equal(trial.__trialTest.bike().x,4);
 const failedBike=trial.__trialTest.bike();
 failedBike.x=9;failedBike.status='crash';
@@ -292,11 +308,12 @@ assert.equal(trial.__trialTest.bike().x,4);
 assert.equal(trial.__trialTest.mode(),'ride');
 trial.__trialTest.bike().status='finish';
 trial.__trialTest.tick();
-assert.equal(trialGet('primary').textContent,'Nuovo percorso');
+assert.equal(trialGet('primary').textContent,'Scegli circuito');
 trialGet('primary').click();
-assert.notEqual(trial.__trialTest.seed(),crashedSeed);
+assert.equal(trial.__trialTest.seed(),crashedSeed);
+assert.equal(trial.__trialTest.mode(),'ready');
 trialDom.window.close();
-console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and random restart.');
+console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and fixed course selection.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){

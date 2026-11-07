@@ -1,3 +1,5 @@
+import {fixedCourse} from './courses.js';
+
 export const WHEEL = .38;
 export const AXLE = .86;
 export const HELMET = {x: -.01, y: -1.31, radius: .22};
@@ -14,7 +16,7 @@ function random(seed) {
   };
 }
 
-export const COURSE_VERSION = 4;
+export const COURSE_VERSION = 5;
 
 // X-Moto Classic: original.xml, Scene.h and BikePlayer.cpp.
 const CLASSIC_STEP = .01, CLASSIC_SPEED = .6;
@@ -28,6 +30,7 @@ const CLASSIC_RIDER_INERTIA = 2 * 5 * [
 const CLASSIC_INERTIA = CLASSIC_FRAME_INERTIA + CLASSIC_WHEEL_INERTIA + CLASSIC_RIDER_INERTIA;
 
 function classicTurn(bike, lean, dt, airborne) {
+  let slice = CLASSIC_STEP - bike.turnClock, rotation = 0;
   bike.turnClock += dt;
   while (bike.turnClock + 1e-10 >= CLASSIC_STEP) {
     bike.turnClock -= CLASSIC_STEP;
@@ -37,10 +40,13 @@ function classicTurn(bike, lean, dt, airborne) {
       bike.nextTurn = bike.turnTick + CLASSIC_REPEAT_STEPS;
       bike.turnDirection = lean;
     }
+    if (airborne) rotation += bike.spin * slice;
+    slice = CLASSIC_STEP;
     if (airborne) bike.spin += bike.turnTorque / CLASSIC_INERTIA * CLASSIC_STEP * CLASSIC_SPEED ** 2;
     bike.turnTorque *= CLASSIC_DECAY;
     if (Math.abs(bike.turnTorque) < 100) bike.turnTorque = 0;
   }
+  return rotation + bike.spin * Math.min(dt, Math.max(0, bike.turnClock));
 }
 
 function addJump(tier, ridgeStart, ridge, rng, index, expert) {
@@ -64,6 +70,7 @@ function addJump(tier, ridgeStart, ridge, rng, index, expert) {
 }
 
 export function makeCourse(seed, version = COURSE_VERSION) {
+  if (version === 5) return fixedCourse(seed);
   const rng = random(seed), tiers = [], count = version === 1 ? 5 : version === 2 ? 17 : 16;
   let start = 0, base = 0, overlap = 0;
   for (let i = 0; i < count; i++) {
@@ -322,7 +329,7 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
     const leaving = bike.onGround;
     if (overLip) {
       bike.jumping = true;
-      bike.vy = -Math.abs(bike.vx) * .67;
+      bike.vy = -Math.abs(bike.vx) * (jump.launch ?? .67);
     } else if (leaving && !liftsAtCrest && !rebound && !(expert && bike.edgePivot)) {
       const lip = (bike.x - tier.end) * tier.direction >= 0 ? tier.end : tier.start;
       const at = lip + Math.sign((tier.start + tier.end) / 2 - lip) * AXLE;
@@ -338,9 +345,9 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
     bike.vy = Math.min(22, bike.vy + GRAVITY * dt);
     bike.y += bike.vy * dt;
     const wheelTorque = technical ? (input.brake ? .85 : input.throttle ? -.18 : 0) * bike.facing : 0;
-    if (expert) classicTurn(bike, lean, dt, true);
-    else bike.spin = clamp((bike.spin + (lean * (technical ? 15.8 : 12.4) + wheelTorque) * dt) * Math.exp(-(technical ? .8 : 1.7) * dt), -4.4, 4.4);
-    bike.angle = wrap(bike.angle + bike.spin * dt);
+    const classicRotation = expert ? classicTurn(bike, lean, dt, true) : 0;
+    if (!expert) bike.spin = clamp((bike.spin + (lean * (technical ? 15.8 : 12.4) + wheelTorque) * dt) * Math.exp(-(technical ? .8 : 1.7) * dt), -4.4, 4.4);
+    bike.angle = wrap(bike.angle + (course.version >= 5 ? classicRotation : bike.spin * dt));
     const hit = findLanding(course, bike, from, leaving);
     if (hit) {
       if (hit.helmet <= hit.wheels) {
