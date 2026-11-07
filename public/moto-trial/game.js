@@ -1,8 +1,8 @@
 import {CAMPAIGN_LENGTH} from './courses.js?v=6';
 import {applyInsets} from '../safe-area.js';
 import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=6';
-import {TrialAudio} from './audio.js';
-import {drawTrial} from './render.js?v=6';
+import {TrialAudio} from './audio.js?v=7';
+import {drawTrial} from './render.js?v=7';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -74,10 +74,11 @@ function updateRaceStatus() {
   const status = $('race-status');
   status.hidden = !multiplayer;
   if (!multiplayer) return;
-  const text = connected && race ? 'Corsa ' + race.number + ' · ' + race.players.length + '/8 piloti'
+  const ready = connected && race && self;
+  const text = ready ? 'Corsa ' + race.number + ' · ' + race.players.length + '/8 piloti'
     : race ? 'Connessione alla corsa…' : 'Caricamento della corsa…';
   if (status.textContent !== text) status.textContent = text;
-  $('primary').disabled = !connected && (mode === 'ready' || mode === 'finish') ||
+  $('primary').disabled = !ready && (mode === 'ready' || mode === 'finish') ||
     mode === 'finish' && race?.campaign && !(self?.stage > course.id || self?.complete);
 }
 
@@ -90,7 +91,7 @@ function receiveRace(data) {
   race = state;
   const own = state.players.find(p => p.id === data.player);
   const initialSelf = own && (!self || newRace);
-  self = own || self;
+  self = own || (newRace ? null : self);
   if (newRace) remote.clear();
   if (newRace || initialSelf && state.campaign) {
     course = makeCourse(own?.stage ?? state.seed, state.courseVersion ?? 1);
@@ -116,13 +117,18 @@ function clearInputs() {
 }
 
 function updateHUD() {
-  $('section').textContent = course.version >= 6 ? 'Liv. ' + course.id + '/' + CAMPAIGN_LENGTH +
-    ' · ' + (bike.tier + 1) + '/' + course.tiers.length : (bike.tier + 1) + ' / ' + course.tiers.length;
-  $('time').textContent = formatTime(elapsed);
+  const section = $('section'), timer = $('time');
+  const progress = (bike.tier + 1) + '/' + course.tiers.length;
+  const label = course.version >= 6 ? 'Liv. ' + course.id + '/' + CAMPAIGN_LENGTH + ' · ' + progress : progress;
+  const time = formatTime(elapsed);
+  if (section.textContent !== label) section.textContent = label;
+  if (timer.textContent !== time) timer.textContent = time;
   const tier = course.tiers[bike.tier];
   let cue = '';
   if (mode === 'ride') {
-    if (!bike.onGround && bike.tier < course.tiers.length - 1 && (bike.x - tier.end) * tier.direction >= 0) cue = 'Atterra sul sentiero sotto';
+    if (bike.tier === 0 && Math.abs(bike.x - tier.marker) < .1 && Math.abs(bike.vx) < .1) {
+      cue = document.body.classList.contains('touch') ? 'Tieni premuto Gas per partire' : 'Tieni premuto ↑ o W per accelerare';
+    } else if (!bike.onGround && bike.tier < course.tiers.length - 1 && (bike.x - tier.end) * tier.direction >= 0) cue = 'Atterra sul sentiero sotto';
     else if (bike.facing !== tier.direction) cue = 'Frena e gira ' + (tier.direction > 0 ? 'verso destra →' : 'verso sinistra ←');
     else if (tier.jump && (tier.jump.lip - bike.x) * tier.direction >= 0 &&
         Math.abs(tier.jump.lip - bike.x) < 17) cue = tier.jump.short ? 'Pianerottolo corto · dosa il gas' : 'Salto · prendi slancio';
@@ -209,9 +215,15 @@ function retryAfterFall() {
   setMode('ride');
 }
 
+function updateSoundButton() {
+  $('sound').setAttribute('aria-pressed', String(audio.enabled));
+  $('sound').textContent = audio.enabled ? '♫' : '♪̸';
+}
+
 function primary() {
   if ($('primary').disabled) return;
   audio.resume();
+  updateSoundButton();
   if (mode === 'crash' || mode === 'offCourse') retryAfterFall();
   else if (mode === 'finish') {
     if (course.version < 6) {
@@ -273,8 +285,7 @@ function turn() {
 $('primary').onclick = primary;
 $('sound').onclick = () => {
   audio.setEnabled(!audio.enabled);
-  $('sound').setAttribute('aria-pressed', String(audio.enabled));
-  $('sound').textContent = audio.enabled ? '♫' : '♪̸';
+  updateSoundButton();
 };
 $('pause').onclick = () => { if (mode === 'ride') setMode('paused'); };
 $('exit').onclick = () => {
@@ -289,6 +300,7 @@ window.addEventListener('keydown', event => {
     if (!event.repeat) setMode(mode === 'ride' ? 'paused' : 'ride');
     return;
   }
+  if (mode === 'ready' && !event.repeat && throttleKeys.includes(code)) primary();
   if (mode !== 'ride') return;
   if (code === 'Space') {
     event.preventDefault();
@@ -302,7 +314,7 @@ window.addEventListener('keyup', event => keys.delete(event.code));
 
 const touchMedia = matchMedia('(pointer: coarse)');
 function enableTouch() { document.body.classList.add('touch'); }
-if (touchMedia.matches) enableTouch();
+if (touchMedia.matches || navigator.maxTouchPoints > 0) enableTouch();
 window.addEventListener('pointerdown', event => {
   if (event.pointerType === 'touch') enableTouch();
 }, {capture: true});

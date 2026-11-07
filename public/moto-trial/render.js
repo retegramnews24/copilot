@@ -123,7 +123,8 @@ function sign(c, x, y, direction, flag = false, brake = false) {
     c.scale(direction, 1);
     c.fillStyle = brake ? '#913f24' : '#332a2b';
     c.beginPath();
-    c.roundRect(-.67, -.42, 1.34, .84, .14);
+    if (c.roundRect) c.roundRect(-.67, -.42, 1.34, .84, .14);
+    else c.rect(-.67, -.42, 1.34, .84);
     c.fill();
     if (brake) {
       line(c, [[0, -.24], [0, .05]], '#fff1ce', .11);

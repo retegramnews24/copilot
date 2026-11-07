@@ -11,7 +11,9 @@ import {SPRING_HEIGHT, springAt, resetJump, jumpFromSpring, advanceSpring} from 
 const $=id=>document.getElementById(id),canvas=$('scene'),keys=new Set(),coarse=matchMedia('(pointer: coarse)').matches,debug=new URLSearchParams(location.search).get('debug')==='1';
 let playerId='guest',seed=crypto.getRandomValues(new Uint32Array(1))[0],level=1,world,player,hasKey=false,seconds=0,started=false,playing=false,transitioning=false,renderer,raf=0,lastTime=0,saveClock=0,stepDistance=0,bob=0,walk=0,quality='auto',sensitivity=1,joystick={x:0,y:0,id:null},lookId=null,lastLook=null,lookVector={x:0,y:0},dragging=false,cursorFree=false,releasingCursor=false,toastTimer=0,frameBudget=new FrameBudget();
 let tutorialBox=null,trapNotice=null,guarding=false,guardPointer=null,touchCrouch=false,lastTouchAction=-Infinity,healthFlash=0;
-const tutorialMode=new URLSearchParams(location.search).get('tutorial')==='1';
+const options=new URLSearchParams(location.search);
+const tutorialMode=options.get('tutorial')==='1',networkMode=options.get('multiplayer')==='1';
+const devMode=()=>!networkMode&&!tutorialMode&&!multiplayer;
 let run=newRun(seed,true),guideEnabled=true,guideClock=0;
 let multiplayer=null,networkConnected=false,networkBusy=false,requestId=0,poseSeq=0,netClock=0,remoteClock=0,caseSignature='',remoteViews=new Map(),followId='';
 let localAppearance=readAppearance(),inventorySignature='';const nameNodes=new Map(),sentPoses=new Map();
@@ -104,12 +106,12 @@ function loadWorld(saved=null,back=false){
  trapNotice=null;resetJump(jumpState,saved?.player?.height||0);world=worldFor(seed,level);sound.setArena?.(!!world.arena);configureNetworkWorld();const floor=floorState(run,world);player=saved?.player?{...saved.player}:{...world.spawn,pitch:0};
  if(!multiplayer)jumpState.height=frameSupport(settledFrames(world,floor,sceneTime()),player.x,player.z,RADIUS);
  if(back){player.x=world.door.x-world.door.dx*1.25;player.z=world.door.z-world.door.dz*1.25;player.yaw=Math.atan2(-world.door.dx,world.door.dz)}
- renderer.load(world);syncScene();$('floor').textContent=world.arena?'COLOSSEO':'PIANO '+String(level).padStart(2,'0')+' · '+world.palette.name.toUpperCase();textIfChanged('objective',world.arena?(run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):'Trova la keycard · raggiungi l’uscita');renderer.draw(player,hasKey,0,cameraHeight());saveClock=0;bob=0;stepDistance=0;guideClock=1;updateInventory();updateHealth();updateActions();$('test-travel').hidden=multiplayer?!multiplayer.watch:!run.test;
+ renderer.load(world);syncScene();$('floor').textContent=world.arena?'COLOSSEO':'PIANO '+String(level).padStart(2,'0')+' · '+world.palette.name.toUpperCase();textIfChanged('objective',world.arena?(run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):'Trova la keycard · raggiungi l’uscita');renderer.draw(player,hasKey,0,cameraHeight());saveClock=0;bob=0;stepDistance=0;guideClock=1;updateInventory();updateHealth();updateActions();$('test-travel').hidden=!devMode();$('guide-option').hidden=!devMode();
 }
 function loadSaved(){
- let saved=readRun(read('binottoland-labyrinth-v2-'+playerId+(tutorialMode?'-tutorial':''),null));
- if(!saved&&!tutorialMode){const old=restoreProgress(read('binottoland-labyrinth-'+playerId,null));if(old){saved=newRun(old.seed,true);saved.level=Math.min(5,old.level);saved.seconds=old.seconds;if(saved.level===old.level)saved.player=old.player}}
- run=saved||newRun(seed,true);run.test=true;seed=run.seed;level=run.level;seconds=run.seconds;loadWorld(saved);$('start').textContent=saved?'Continua · '+(level===6?'Arena':'Piano '+level):'Entra nel labirinto';$('new-run').hidden=!saved;$('saved-info').textContent=run.test?'Prova · selezione dei livelli disponibile':'';return !!saved;
+ let saved=networkMode?null:readRun(read('binottoland-labyrinth-v2-'+playerId+(tutorialMode?'-tutorial':''),null));
+ if(!saved&&devMode()){const old=restoreProgress(read('binottoland-labyrinth-'+playerId,null));if(old){saved=newRun(old.seed,true);saved.level=Math.min(5,old.level);saved.seconds=old.seconds;if(saved.level===old.level)saved.player=old.player}}
+ run=saved||newRun(seed,devMode());run.test=devMode();seed=run.seed;level=run.level;seconds=run.seconds;loadWorld(saved);$('start').textContent=saved?'Continua · '+(level===6?'Arena':'Piano '+level):devMode()?'Entra in Dev Mode':'Entra nel labirinto';$('new-run').hidden=!saved;$('saved-info').textContent=devMode()?'Dev Mode · tutti i piani e l’equipaggiamento':'';return !!saved;
 }
 function portrait(){return document.body.classList.contains('touch')&&innerHeight>innerWidth}
 function updateOrientation(){const blocked=playing&&portrait();if(blocked)setGuard(false);$('portrait').hidden=!blocked;sound.active(playing&&!blocked);if(!playing)renderer?.draw(player,hasKey,performance.now()/1000,cameraHeight())}
@@ -126,7 +128,7 @@ function toggleCursor(){
   pointerLock();
  }
 }
-function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if(multiplayer&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();updateInventory();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent='Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
+function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if((networkMode||multiplayer)&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();updateInventory();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent=devMode()?'Labyrinth · Dev Mode':'Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
 function pause(){if(!started||transitioning)return;playing=false;if(tutorialBox)tutorialBox.hidden=true;cancelAnimationFrame(raf);raf=0;resetInput();sound.active(false);if(document.pointerLockElement)document.exitPointerLock?.();document.body.classList.remove('playing');$('portrait').hidden=true;$('menu').hidden=false;$('menu-title').textContent='Una pausa.';$('start').textContent='Riprendi l’esplorazione';$('new-run').hidden=!!multiplayer;$('saved-info').textContent=(world.arena?'Arena':'Piano '+level)+(hasPass(run)?' · passe-partout':'');store()}
 function leave(){setGuard(false);store();sound.active(false);if(parent!==window)parent.postMessage({type:'labyrinth:exit'},location.origin);else location.href='/'}
 function tryJump(){
@@ -174,7 +176,7 @@ function target(){
 }
 function textIfChanged(id,value){const node=$(id);if(node.textContent!==value)node.textContent=value}
 function updateActions(){if(!world||!player)return;const open=!world.arena&&floorState(run,world).open;updateTutorial();textIfChanged('objective',world.arena?(SHOWCASE_GEAR.every(([id])=>hasGear(run,id))?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):open?'Uscita aperta · attraversa la porta':hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita');const holder=multiplayer?.state.players.find(p=>p.id!==playerId&&p.inventory.includes('key:'+level));if(!world.arena&&!hasKey&&!hasPass(run)&&!open&&holder)textIfChanged('objective','Keycard raccolta da '+holder.name);const t=guarding?null:target(),touch=document.body.classList.contains('touch');$('action').disabled=!!multiplayer&&(multiplayer.watch||!networkConnected||multiplayer.state.archived||!t&&multiplayer.state.arenaResult);$('action').textContent=t?(t.kind==='waiting'?'Attendi':'Usa'):'Colpisci';$('action').setAttribute('aria-label',t?t.label:'Colpisci');textIfChanged('hint',t?(touch?'Usa · ':'E · ')+t.label:open&&nearby(world.door,2.2)?'Attraversa la porta':'');
- if(!world.arena&&guideEnabled){$('guide').hidden=false;guideClock++;if(guideClock>8){guideClock=0;const destination=tutorialMode&&!hasKey&&!hasPass(run)&&!open?itemsAt(run,world).find(i=>i.type==='key')||world.door:world.door;const q=nextWaypoint(world,player,destination);if(q){const angle=Math.atan2(q.x-player.x,-(q.z-player.z))-player.yaw;$('guide-arrow').style.transform='rotate('+angle+'rad)';$('guide-text').textContent=(tutorialMode&&!hasKey&&!hasPass(run)&&!open?'Keycard':'Uscita')+' · percorso '+Math.max(1,Math.round(q.steps*CELL))+' m'}}}else $('guide').hidden=true;
+ if(devMode()&&!world.arena&&guideEnabled){$('guide').hidden=false;guideClock++;if(guideClock>8){guideClock=0;const q=nextWaypoint(world,player,world.door);if(q){const angle=Math.atan2(q.x-player.x,-(q.z-player.z))-player.yaw;$('guide-arrow').style.transform='rotate('+angle+'rad)';$('guide-text').textContent='Uscita · percorso '+Math.max(1,Math.round(q.steps*CELL))+' m'}}}else $('guide').hidden=true;
 }
 function crossLevel(){
  setGuard(false);level++;run.level=level;run.player=null;
@@ -264,7 +266,25 @@ function tick(now){
  raf=requestAnimationFrame(tick);
 }
 $('follow-player').onchange=e=>{followId=e.target.value;if(multiplayer)receiveState(multiplayer.state,true)};
-$('test-travel-go').onclick=()=>{if(multiplayer?.watch)followId='';if(multiplayer&&!multiplayer.watch)return;if(!run.test&&!multiplayer?.watch)return;const next=Number($('test-floor').value);if(!Number.isInteger(next)||next<1||next>6)return;const slot=run.inventory.indexOf('key:'+level);if(slot>=0)drop(run,world,slot,player);level=next;run.level=next;loadWorld();if(world.arena){player.x=world.showcase.x;player.z=world.showcase.z+2.2;player.yaw=0;player.pitch=0}resume();toast('Viaggio rapido · prova')};
+$('test-travel-go').onclick=()=>{
+ if(!devMode()||!renderer||transitioning)return;
+ const next=Number($('test-floor').value);
+ if(!Number.isInteger(next)||next<1||next>6)return;
+ const slot=run.inventory.indexOf('key:'+level);
+ if(slot>=0)drop(run,world,slot,player);
+ level=next;run.level=next;
+ const arena=level===6?worldFor(seed,level):null;
+ loadWorld(arena?{player:{x:arena.showcase.x,z:arena.showcase.z+2.2,yaw:0,pitch:0}}:null);
+ resume();toast('Dev Mode · '+(arena?'Arena':'Piano '+level));
+};
+$('dev-kit').onclick=()=>{
+ if(!devMode()||!renderer||transitioning)return;
+ const cards=run.inventory.filter(id=>id?.startsWith('key:'));
+ Object.assign(run,{backpack:true,swordTaken:true,shieldTaken:true,helmet:true,armor:true,showcaseOpen:true,
+  inventory:['sword','shield','pass',...cards]});
+ for(const floor of Object.values(run.floors))floor.pass=null;
+ syncScene();updateInventory();updateActions();resume();toast('Equipaggiamento completo e passe-partout');
+};
 $('start').onclick=resume;
 $('new-run').onclick=()=>{
  if(multiplayer||!renderer||transitioning)return;
@@ -273,7 +293,7 @@ $('new-run').onclick=()=>{
 $('new-run-cancel').onclick=()=>{$('new-run-confirm').hidden=true;$('new-run').focus({preventScroll:true})};
 $('new-run-start').onclick=()=>{
  if(multiplayer||!renderer||transitioning)return;
- seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;healthFlash=0;run=newRun(seed,true);
+ seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;healthFlash=0;run=newRun(seed,devMode());
  loadWorld();resume();
 };
 const actionButton=$('action');
@@ -289,7 +309,7 @@ actionButton.onclick=e=>{
 $('menu-leave').onclick=leave;
 $('archive-arena').onclick=()=>parent.postMessage({type:'labyrinth:archive'},location.origin);$('drop-item').onclick=dropHeld;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=tryJump;
 $('sound').onclick=()=>{sound.toggle();sound.active(playing&&!portrait());write('labyrinth-sound',sound.enabled);updateSound()};
-$('guide-toggle').checked=guideEnabled=read('labyrinth-guide',true);$('guide-toggle').onchange=e=>{guideEnabled=e.target.checked;write('labyrinth-guide',guideEnabled);updateActions()};
+$('guide-toggle').checked=guideEnabled=read('labyrinth-dev-guide',true);$('guide-toggle').onchange=e=>{guideEnabled=e.target.checked;write('labyrinth-dev-guide',guideEnabled);updateActions()};
 $('sensitivity').value=String(sensitivity=Math.max(.4,Math.min(2.2,Number(read('labyrinth-sensitivity',1))||1)));
 $('sensitivity').oninput=e=>{sensitivity=Number(e.target.value);write('labyrinth-sensitivity',sensitivity)};
 $('quality').value=quality=['auto','low','high'].includes(read('labyrinth-quality','auto'))?read('labyrinth-quality','auto'):'auto';
@@ -386,7 +406,7 @@ function receiveState(s,correct=false){
   if(!p.impact||p.impact.number===previous.players.find(before=>before.id===p.id)?.impact?.number)continue;
   if(p.id===playerId||p.impact.attacker===playerId)showImpact(p.impact,p.id===playerId);
  }
- $('test-travel').hidden=!multiplayer.watch;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent=s.arenaResult?(s.archived?'Risultato archiviato.':'Puoi archiviare il risultato prima di uscire.'):'La spedizione rimane nella Lobby anche quando è vuota.';
+ $('test-travel').hidden=true;$('guide-option').hidden=true;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent=s.arenaResult?(s.archived?'Risultato archiviato.':'Puoi archiviare il risultato prima di uscire.'):'La spedizione rimane nella Lobby anche quando è vuota.';
  const active=s.players.filter(p=>p.counted),arrived=active.filter(p=>p.level===6);$('expedition-status').textContent=(multiplayer.watch?'Spettatore · ':'')+active.filter(p=>p.online).length+' online · arena '+arrived.length+'/'+active.length+(s.entryLocked?' · ingressi chiusi':' · ingressi aperti');
  if(previous&&!previous.showcaseOpen&&s.showcaseOpen){sound.chime();toast(s.arenaLive?'Tutti arrivati. Vince l’ultimo superstite.':'Le vetrine sono aperte.')}
  if(!playing)renderer.draw(player,hasKey,performance.now()/1000,cameraHeight());
@@ -403,4 +423,4 @@ window.addEventListener('message',event=>{
  else if(data?.type==='labyrinth:packet'&&multiplayer){const p=data.packet;if(p.type==='state'){if(Number.isFinite(p.serverTime))multiplayer.clockOffset=p.serverTime-Date.now();receiveState(p.state,p.correct&&(p.correctSeq??true));}else if(p.type==='ack'){if(networkBusy===p.request)networkBusy=false;if(!p.ok)toast(p.error||'Azione non riuscita.')}}
 });
 
-function updateTutorial(){if(!tutorialMode)return;if(!tutorialBox){tutorialBox=document.createElement('aside');tutorialBox.id='lab-tutorial';tutorialBox.style.cssText='position:fixed;top:calc(var(--system-safe-top,0px) + var(--content-safe-top,0px) + 64px);left:50%;transform:translateX(-50%);width:min(70vw,470px);padding:9px 12px;border:1px solid #a6cba870;border-radius:10px;background:#14201ee8;color:#f3f0d9;font:12px/1.4 system-ui;z-index:15;pointer-events:none';document.body.append(tutorialBox)}const step=!world.arena?floorState(run,world).open?['2 · Attraversa l’uscita','La porta resta aperta. Cammina oltre la soglia per proseguire.']:!hasKey&&!hasPass(run)?['1 · Esplora e raccogli','Muoviti con WASD o joystick sinistro; guarda col mouse o joystick destro. Cerca la keycard colorata: avvicinati e premi E / Usa.']:['2 · Apri l’uscita','Hai una carta adatta. Segui la freccia, avvicinati alla porta e premi E / Usa. La keycard si consuma. Il passe-partout si può riusare. Attraversa l’uscita.']:!run.showcaseOpen?['3 · La vetrina','Avvicinati alla vetrina e guardala: E / Usa la apre. In multiplayer occorre aspettare gli altri.']:!run.backpack?['4 · Lo zaino','Raccogli prima lo zaino: aggiunge quattro posti alle due mani e alle due tasche. Puoi lasciare le keycard con Q / Lascia.']:!run.swordTaken?['5 · La spada','Raccogli la spada dalla vetrina. F o clic sinistro / Colpisci attacca. Tieni premuto il destro o Para per difenderti.']:['6 · Pronto a esplorare','Prova la rete elastica e Salta. Pausa ti permette di cambiare piano nella modalità di prova o tornare alla Lobby.'];textIfChanged('lab-tutorial',step[0]+' — '+step[1]);tutorialBox.hidden=!playing;}
+function updateTutorial(){if(!tutorialMode)return;if(!tutorialBox){tutorialBox=document.createElement('aside');tutorialBox.id='lab-tutorial';tutorialBox.style.cssText='position:fixed;top:calc(var(--system-safe-top,0px) + var(--content-safe-top,0px) + 64px);left:50%;transform:translateX(-50%);width:min(70vw,470px);padding:9px 12px;border:1px solid #a6cba870;border-radius:10px;background:#14201ee8;color:#f3f0d9;font:12px/1.4 system-ui;z-index:15;pointer-events:none';document.body.append(tutorialBox)}const step=!world.arena?floorState(run,world).open?['2 · Attraversa l’uscita','La porta resta aperta. Cammina oltre la soglia per proseguire.']:!hasKey&&!hasPass(run)?['1 · Esplora e raccogli','Muoviti con WASD o joystick sinistro; guarda col mouse o joystick destro. Cerca la keycard colorata: avvicinati e premi E / Usa.']:['2 · Apri l’uscita','Hai una carta adatta. Cerca la porta e avvicinati e premi E / Usa. La keycard si consuma. Il passe-partout si può riusare. Attraversa l’uscita.']:!run.showcaseOpen?['3 · La vetrina','Avvicinati alla vetrina e guardala: E / Usa la apre. In multiplayer occorre aspettare gli altri.']:!run.backpack?['4 · Lo zaino','Raccogli prima lo zaino: aggiunge quattro posti alle due mani e alle due tasche. Puoi lasciare le keycard con Q / Lascia.']:!run.swordTaken?['5 · La spada','Raccogli la spada dalla vetrina. F o clic sinistro / Colpisci attacca. Tieni premuto il destro o Para per difenderti.']:['6 · Pronto a esplorare','Prova la rete elastica e Salta. Da Pausa puoi tornare alla Lobby.'];textIfChanged('lab-tutorial',step[0]+' — '+step[1]);tutorialBox.hidden=!playing;}

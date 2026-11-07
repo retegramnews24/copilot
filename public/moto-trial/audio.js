@@ -7,6 +7,15 @@ export class TrialAudio {
     if (!this.enabled) return;
     const Audio = window.AudioContext || window.webkitAudioContext;
     if (!Audio) return;
+    try {
+      this.start(Audio);
+    } catch {
+      this.close();
+      this.enabled = false;
+    }
+  }
+
+  start(Audio) {
     if (!this.ctx) {
       const ctx = this.ctx = new Audio();
       this.master = ctx.createGain();
@@ -18,13 +27,15 @@ export class TrialAudio {
       this.filter.type = 'lowpass';
       this.filter.frequency.value = 140;
       this.filter.Q.value = .7;
-      this.filter.connect(this.engine).connect(this.master);
+      this.filter.connect(this.engine);
+      this.engine.connect(this.master);
       this.oscillators = ['sawtooth', 'triangle'].map((type, i) => {
         const oscillator = ctx.createOscillator(), mix = ctx.createGain();
         oscillator.type = type;
         oscillator.frequency.value = i ? 49 : 24;
         mix.gain.value = i ? .25 : .7;
-        oscillator.connect(mix).connect(this.filter);
+        oscillator.connect(mix);
+        mix.connect(this.filter);
         oscillator.start();
         return oscillator;
       });
@@ -32,7 +43,7 @@ export class TrialAudio {
       const noise = buffer.getChannelData(0);
       for (let i = 0; i < noise.length; i++) noise[i] = Math.random() * 2 - 1;
     }
-    this.ctx.resume().catch(() => {});
+    this.ctx.resume()?.catch(() => {});
     this.master.gain.setTargetAtTime(.65, this.ctx.currentTime, .035);
   }
 
@@ -60,9 +71,11 @@ export class TrialAudio {
     filter.frequency.setValueAtTime(landing ? 670 : 210, now);
     filter.frequency.exponentialRampToValueAtTime(landing ? 110 : 810, now + duration);
     envelope.gain.setValueAtTime(.001, now);
-    envelope.gain.exponentialRampToValueAtTime(landing ? .10 + Math.min(14, impact) * .012 : .092, now + .014);
+    envelope.gain.exponentialRampToValueAtTime(landing ? .10 + Math.max(0, Math.min(14, impact)) * .012 : .092, now + .014);
     envelope.gain.exponentialRampToValueAtTime(.001, now + duration);
-    noise.connect(filter).connect(envelope).connect(this.master);
+    noise.connect(filter);
+    filter.connect(envelope);
+    envelope.connect(this.master);
     noise.start(now);
     noise.stop(now + duration);
     if (landing) {
@@ -71,13 +84,16 @@ export class TrialAudio {
       bass.frequency.exponentialRampToValueAtTime(39, now + .13);
       bounce.gain.setValueAtTime(.095, now);
       bounce.gain.exponentialRampToValueAtTime(.001, now + .14);
-      bass.connect(bounce).connect(this.master);
+      bass.connect(bounce);
+      bounce.connect(this.master);
       bass.start(now);
       bass.stop(now + .15);
     }
   }
 
   close() {
-    this.ctx?.close().catch(() => {});
+    const ctx = this.ctx;
+    this.ctx = null;
+    try { ctx?.close()?.catch(() => {}); } catch {}
   }
 }

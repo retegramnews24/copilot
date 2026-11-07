@@ -741,7 +741,7 @@ function connectExpedition(){
 }
 async function openLabyrinth(selected,watch=false){
  if(!identity||labyrinthOpening)return;labyrinthOpening=true;
- try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1&v=arena2';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
+ try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1&v=dev1';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
  catch(e){err(e.message)}finally{labyrinthOpening=false}
 }
 $('play-labyrinth').onclick=async()=>{if(!identity||labyrinthOpening)return;$('play-labyrinth').disabled=true;try{const result=await request('/api/create',{game:'labyrinth'});await openLabyrinth(result.state.room,false)}catch(e){err(e.message)}finally{$('play-labyrinth').disabled=false}};
@@ -789,7 +789,7 @@ function showMotoTrial(multiplayer=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  motoOverlay.hidden=false;
- motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1&v=6':'?v=6');
+ motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1&v=7':'?v=7');
  tg?.BackButton?.show();
 }
 function connectMotoRace(){
@@ -843,7 +843,7 @@ async function openMotoRace(selected){
 }
 motoLaunch.onclick=()=>{if(motoOverlay.hidden&&!motoOpening)showMotoTrial()};
 $('create-moto-trial').onclick=()=>openMotoRace();
-motoFrame.addEventListener('load',sendMotoState);
+motoFrame.addEventListener('load',()=>{if(!motoOverlay.hidden){motoFrame.focus();sendMotoState()}});
 window.addEventListener('message',event=>{
  if(motoOverlay.hidden||event.origin!==location.origin||event.source!==motoFrame.contentWindow)return;
  const data=event.data;
@@ -887,8 +887,8 @@ async function loadLeaders(){
   }while(data.pending);
  }catch(e){err(e.message)}finally{leaderBusy=false}
 }
-$('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?v=arena2';tg?.BackButton?.show()};
-$('tutorial-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?tutorial=1&v=arena2';tg?.BackButton?.show()};
+$('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?dev=1&v=dev1';tg?.BackButton?.show()};
+$('tutorial-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?tutorial=1&v=dev1';tg?.BackButton?.show()};
 
 $('access-retry').onclick=startSession;
 startSession();
