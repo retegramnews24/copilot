@@ -181,6 +181,8 @@ try{
  assert.equal((await call(302,golfPath+'/start',{})).status,409);
  assert.equal((await call(301,golfPath+'/start',{})).data.state.phase,'playing');
  assert.equal((await call(303,golfPath+'/join',{})).status,409);
+ assert.equal((await call(303,golfPath+'/state')).data.state.players.length,2);
+ assert.equal((await call(303,golfPath+'/close',{})).status,403);
  const putt={hole:0,strokes:0,angle:0,power:.43};
  assert.equal((await call(303,golfPath+'/shot',putt)).status,409);
  const scores=await Promise.all([301,302].map(player=>call(player,golfPath+'/shot',putt)));
@@ -192,6 +194,10 @@ try{
  const golfListing=(await call(302,'/api/lobby')).data.games.find(entry=>entry.room===golfState.room);
  assert.equal(golfListing.capacity,8);
  assert.equal(golfListing.players.length,2);
- console.log('PASS Golf runtime: authenticated lobby, host start, concurrent authoritative shots and compact polling.');
+ assert.equal((await call(302,golfPath+'/close',{})).status,200);
+ assert.equal((await call(303,golfPath+'/state')).status,404);
+ assert.ok(!(await call(301,'/api/lobby')).data.games.some(entry=>entry.room===golfState.room));
+ assert.deepEqual((await call(301,'/api/leaderboard?game=golf')).data.leaders,[]);
+ console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

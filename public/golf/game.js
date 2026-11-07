@@ -6,7 +6,7 @@ import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});
 const online=new URLSearchParams(location.search).get('online')==='1';
-let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null, orbit=null;
+let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null, orbit=null, watching=null, watchOptions='';
 const ballRolls=new Map();
 try{appearance=JSON.parse(localStorage.getItem(BALL_KEY));}catch{}
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
@@ -14,7 +14,7 @@ const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},locati
 const time=()=>Date.now()+offset;
 const value=id=>Number($(id).value);
 const player=()=>state?.players.find(p=>p.id===me);
-const canShoot=()=>!!(player()&&state.phase==='playing'&&!player().done&&!busy&&time()<state.deadline&&!(player().shot?.until>time()));
+const canShoot=()=>!!($('close-confirm').hidden&&player()&&state.phase==='playing'&&!player().done&&!busy&&time()<state.deadline&&!(player().shot?.until>time()));
 const angle=()=>value('aim')*Math.PI/180;
 function resetAim(course){
   $('aim').value=String(Math.round(Math.atan2(course.cup[1]-course.tee[1],course.cup[0]-course.tee[0])*180/Math.PI));
@@ -64,7 +64,8 @@ function updatePanel(){
   if(!state){title.textContent='Collegamento…';text.textContent='Apertura della stanza.';return;}
   if(state.phase==='waiting'){
     title.textContent='Stanza '+state.number;
-    text.textContent=state.players.map(p=>p.name).join(' · ')+' — '+state.players.length+'/8 giocatori. Gli amici possono entrare dalla lobby.';
+    text.textContent=state.players.map(p=>p.name).join(' · ')+' — '+state.players.length+'/8 giocatori. '+
+      (player()?'Gli amici possono entrare dalla lobby.':'Stai assistendo. La gara deve ancora iniziare.');
     btn.hidden=state.host!==me;btn.disabled=state.players.length<2||busy;btn.textContent='Inizia la gara';
   }else if(state.phase==='finished'){
     title.textContent=online?'Risultato finale':'Giro completato';
@@ -127,6 +128,27 @@ function rotationAt(p,now,[x,z],radius){
   const index=Math.min(samples.length-2,Math.floor(Math.max(0,now-at)/50));
   return rollBy(roll.rotations[index],x-samples[index][0],z-samples[index][1],radius);
 }
+function watchPlayer(p){
+  const watchingRound=online&&state?.phase==='playing'&&(!p||p.done&&!state.nextAt);
+  $('controls').hidden=online&&!!state&&(!p||watchingRound);
+  $('watch-tools').hidden=!watchingRound;
+  if(!watchingRound)return null;
+  const active=state.players.filter(p=>!p.done), players=active.length?active:state.players;
+  const select=$('watch-player'), signature=JSON.stringify(players.map(p=>[p.id,p.name]));
+  if(signature!==watchOptions){
+    watchOptions=signature;
+    select.replaceChildren(...players.map(p=>{
+      const option=document.createElement('option');option.value=p.id;option.textContent=p.name;
+      return option;
+    }));
+  }
+  const target=players.find(p=>p.id===watching)??players[0];
+  if(target){
+    watching=target.id;
+    if(select.value!==watching)select.value=watching;
+  }
+  return target;
+}
 const putText=(id,text)=>{const node=$(id);if(node.textContent!==text)node.textContent=text;};
 function draw(stamp=performance.now()){
   if(state&&!online)advanceMatch(state,time());
@@ -137,7 +159,9 @@ function draw(stamp=performance.now()){
   }
   const dt=Math.max(.001,Math.min(.1,(stamp-lastFrame)/1000));
   lastFrame=stamp;
-  const p=player(), available=canShoot();
+  const p=player(), available=canShoot(), watched=watchPlayer(p);
+  $('close-game').hidden=online&&!p;
+  $('close-game').disabled=busy;
   if(p?.shot&&now>=p.shot.at+p.shot.duration&&lastSound!==p.shot.at){
     lastSound=p.shot.at;
     if(p.shot.sunk||p.shot.penalty)sound(p.shot.sunk?'sunk':'water');
@@ -146,9 +170,10 @@ function draw(stamp=performance.now()){
   putText('course',course.name);
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');
-  putText('tip',course.tip+'  ·  Trascina verso il bersaglio per tirare. Su PC, tieni premuto il destro per ruotare la visuale.');
+  putText('tip',watched?'Su PC, tieni premuto il destro per ruotare la visuale.':
+    course.tip+'  ·  Trascina verso il bersaglio per tirare. Su PC, tieni premuto il destro per ruotare la visuale.');
   const progress=p?'Colpi '+p.strokes+'/'+LIMIT:'';
-  const notice=p?.shot?.penalty&&p.shot.until>now&&now>=p.shot.at+p.shot.duration?'Acqua · ritorno all’ultimo punto':
+  const notice=watched?'Segui '+watched.name+' · Colpi '+watched.strokes+'/'+LIMIT:p?.shot?.penalty&&p.shot.until>now&&now>=p.shot.at+p.shot.duration?'Acqua · ritorno all’ultimo punto':
     p?.shot?.sunk&&now>=p.shot.at+p.shot.duration?'In buca! · '+progress:p?.done?'Buca chiusa · '+progress:progress;
   putText('status',performance.now()<noteUntil?note:notice);
   $('shoot').disabled=!available;
@@ -165,7 +190,16 @@ function draw(stamp=performance.now()){
       const pos=positionAt(p,now);
       return pos?[{id:p.id,name:p.name,color:p.color,appearance:p.appearance,x:pos[0],z:pos[1],sink:pos[2]||0,rotation:rotationAt(p,now,pos,radius)}]:[];
     });
-    const [x,z]=p ? positionAt(p,now)??p.position : course.tee;
+    const target=watched??p;
+    const [x,z]=target ? positionAt(target,now)??target.position : course.tee;
+    if(watched&&camera.watched!==watched.id){
+      camera.x=x;camera.z=z;
+      if(!camera.free){
+        camera.yaw=Math.atan2(course.cup[1]-z,course.cup[0]-x);
+        camera.targetYaw=camera.yaw;
+      }
+    }
+    camera.watched=watched?.id;
     const follow=1-Math.exp(-dt*17);
     camera.x+=(x-camera.x)*follow;
     camera.z+=(z-camera.z)*follow;
@@ -189,7 +223,7 @@ function aimDrag(e){
 }
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 canvas.addEventListener('pointerdown',e=>{
-  if(drag||orbit)return;
+  if(drag||orbit||!$('close-confirm').hidden)return;
   if(e.button===2){
     e.preventDefault();
     orbit={id:e.pointerId,x:e.clientX,y:e.clientY};
@@ -220,7 +254,10 @@ window.addEventListener('blur',()=>{drag=null;orbit=null;});
 function followAim(){camera.targetYaw=angle();camera.free=false;}
 $('aim').addEventListener('input',followAim);
 window.addEventListener('keydown',e=>{
-  if(e.target.matches?.('input,button')||!canShoot()||orbit)return;
+  if(e.code==='Escape'&&!$('close-confirm').hidden){
+    dismissClose();e.preventDefault();return;
+  }
+  if(e.target.matches?.('input,button,select')||!canShoot()||orbit)return;
   const {code}=e;
   if(!['ArrowLeft','ArrowRight','KeyA','KeyD','ArrowUp','ArrowDown','KeyW','KeyS','Space'].includes(code))return;
   e.preventDefault();
@@ -231,6 +268,22 @@ window.addEventListener('keydown',e=>{
   }else $('power').value=String(value('power')+(['ArrowUp','KeyW'].includes(code)?3:-3));
 });
 function leave(){if(parent!==window)post('exit');else location.href='/';}
+$('watch-player').onchange=event=>{watching=event.target.value;};
+function dismissClose(){
+  $('close-confirm').hidden=true;
+  $('close-game').focus();
+}
+$('close-game').onclick=()=>{
+  if(busy||online&&!player())return;
+  $('close-message').textContent=online?'La stanza verrà chiusa per tutti.':'Il giro in corso verrà chiuso.';
+  $('close-confirm').hidden=false;
+  $('cancel-close').focus();
+};
+$('cancel-close').onclick=dismissClose;
+$('confirm-close').onclick=()=>{
+  dismissClose();
+  if(online)action('close');else leave();
+};
 $('back').onclick=leave;
 $('shoot').onclick=shoot;
 $('scores').onclick=()=>{
@@ -238,6 +291,7 @@ $('scores').onclick=()=>{
   $('scores').setAttribute('aria-expanded',String(!card.hidden));if(!card.hidden)table();
 };
 $('start').onclick=()=>{
+  if(!$('close-confirm').hidden)return;
   if(state?.phase==='finished'){if(online)leave();else solo();}
   else if(online)action('start');
 };

@@ -80,8 +80,8 @@ function renderLobby(){
    title.textContent='Golf '+game.number+' · '+gameTitle(game);
    info.textContent=game.players.length+'/'+game.capacity+' giocatori'+(game.phase==='playing'?' · Buca '+(game.hole+1):' · In attesa');
    const mine=game.players.some(p=>p.id===identity?.player);
-   enter.disabled=!identity||!mine&&(game.phase!=='waiting'||game.players.length>=game.capacity);
-   enter.textContent=mine?'Riprendi':enter.disabled?'Ingresso chiuso':'Entra';
+   enter.disabled=!identity;
+   enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';
    enter.onclick=()=>openGolf(game.room);card.append(title,info,enter);$('games').append(card);continue;
   }
   if(game.game==='moto-trial'){
@@ -896,7 +896,7 @@ function publishGolf(ack=false){
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=4'+(online?'&online=1':'');
+ $('golf-frame').src='/golf/index.html?v=5'+(online?'&online=1':'');
  tg?.BackButton?.show();
 }
 async function syncGolf(){
@@ -907,9 +907,8 @@ async function syncGolf(){
   const result=await request('/api/golf/'+selected+'/state?after='+golfSnapshot.state.revision);
   if(golfRoom===selected&&result.state&&result.state.revision>=golfSnapshot.state.revision){
    golfSnapshot=result;publishGolf();
-   if(result.state.phase==='finished')clearInterval(golfSync);
   }
- }catch(error){if(golfRoom===selected&&error.status===404){closeGolf();err(error.message)}}
+ }catch(error){if(golfRoom===selected&&error.status===404)returnFromClosedGolf(selected)}
  finally{golfPolling=false}
 }
 async function openGolf(selected){
@@ -917,7 +916,19 @@ async function openGolf(selected){
  golfPending=true;$('create-golf').disabled=true;
  try{
   const appearance=read(BALL_KEY,null);
-  golfSnapshot=await request(selected?'/api/golf/'+selected+'/join':'/api/create',selected?{appearance}:{game:'golf',appearance});
+  if(!selected){
+   golfSnapshot=await request('/api/create',{game:'golf',appearance});
+  }else{
+   const path='/api/golf/'+selected, game=games.find(g=>g.room===selected);
+   const watching=game&&!game.players.some(p=>p.id===identity.player)&&(game.phase!=='waiting'||game.players.length>=game.capacity);
+   try{golfSnapshot=watching ? await request(path+'/state') : await request(path+'/join',{appearance});}
+   catch(error){
+    if(error.status!==409||watching)throw error;
+    const result=await request(path+'/state'), match=result.state;
+    if(match.phase==='waiting'&&match.players.length<8)throw error;
+    golfSnapshot=result;
+   }
+  }
   golfRoom=golfSnapshot.state.room;showGolf(true);sendPresence();
   golfSync=setInterval(syncGolf,850);
  }catch(error){err(error.message)}finally{golfPending=false;$('create-golf').disabled=!identity}
@@ -928,6 +939,11 @@ function closeGolf(){
  $('golf-overlay').hidden=true;$('golf-frame').src='about:blank';tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}sendPresence();$(online?'create-golf':'play-golf').focus();
 }
+function returnFromClosedGolf(selected){
+ closeGolf();
+ games=games.filter(game=>game.room!==selected);
+ renderLobby();selectPage('lobby');
+}
 $('play-golf').onclick=()=>{if(!golfPending)showGolf(false)};
 $('create-golf').onclick=()=>openGolf();
 window.addEventListener('message',async event=>{
@@ -936,15 +952,16 @@ window.addEventListener('message',async event=>{
  if(data?.type==='golf:ready'){golfPost('insets',{insets:safeInsets(tg)});golfPost('appearance',{colors:read(BALL_KEY,null)});publishGolf();return;}
  if(data?.type==='golf:exit'){closeGolf();return;}
  const selected=golfRoom;
- if(!selected||data?.type!=='golf:action'||!['start','shot'].includes(data.kind))return;
- const payload=data.kind==='start'?{}:data.payload;
+ if(!selected||data?.type!=='golf:action'||!['start','shot','close'].includes(data.kind))return;
+ const payload=data.kind==='shot'?data.payload:{};
  try{
   const result=await request('/api/golf/'+selected+'/'+data.kind,payload);
   if(golfRoom===selected){
+   if(data.kind==='close'){returnFromClosedGolf(selected);return;}
    if(result.state.revision>=golfSnapshot.state.revision)golfSnapshot=result;
    publishGolf(true);
   }
- }catch(error){if(golfRoom===selected)golfPost('error',{message:error.message})}
+ }catch(error){if(golfRoom===selected){if(error.status===404)returnFromClosedGolf(selected);else golfPost('error',{message:error.message})}}
 });
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify({type:'heartbeat'}))});
 

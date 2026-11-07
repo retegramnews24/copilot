@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#172938"><title>Golf with your gay friends</title><link rel="stylesheet" href="style.css?v=1"></head>
+<meta name="theme-color" content="#172938"><title>Golf with your gay friends</title><link rel="stylesheet" href="style.css?v=2"></head>
 <body>
 <header>
   <button id="back" type="button" aria-label="Torna a Binottoland">← Giochi</button>
@@ -8,7 +8,7 @@
   <button id="scores" type="button" aria-expanded="false" aria-controls="card">Punteggi</button>
 </header>
 <main>
-  <div class="course-info"><div><small id="counter"></small><h2 id="course"></h2></div><span id="clock"></span></div>
+  <div class="course-info"><div><small id="counter"></small><h2 id="course"></h2></div><div class="course-actions"><span id="clock"></span><button type="button" id="close-game" hidden>Chiudi partita</button></div></div>
   <div class="course-view">
     <canvas id="green" aria-label="Percorso di minigolf. Trascina verso il bersaglio e rilascia per tirare."></canvas>
     <section id="panel" class="glass" hidden>
@@ -17,13 +17,18 @@
     <section id="card" class="glass" hidden>
       <h2>Cartellino</h2><div class="scroll"><table><caption>Colpi per buca</caption><thead id="score-head"></thead><tbody id="score-body"></tbody></table></div>
     </section>
+    <section id="close-confirm" class="glass" role="dialog" aria-modal="true" aria-labelledby="close-title" hidden>
+      <h2 id="close-title">Chiudere la partita?</h2><p id="close-message"></p>
+      <button type="button" id="cancel-close">Annulla</button> <button type="button" id="confirm-close">Chiudi partita</button>
+    </section>
   </div>
   <p id="status" role="status"></p>
-  <div class="controls">
+  <div class="controls" id="controls">
     <label>Mira <input id="aim" type="range" min="-180" max="180" value="0" aria-label="Direzione del tiro"></label>
     <label>Forza <input id="power" type="range" min="1" max="100" value="43" aria-label="Forza del tiro"></label>
     <button id="shoot" type="button">Tira</button>
   </div>
+  <div id="watch-tools" hidden><label for="watch-player">Segui giocatore</label> <select id="watch-player"></select></div>
   <p id="tip" class="tip"></p>
 </main>
-<script type="module" src="game.js?v=4"></script></body></html>
+<script type="module" src="game.js?v=5"></script></body></html>

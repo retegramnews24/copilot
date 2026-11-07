@@ -16,3 +16,9 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 .controls{display:grid;grid-template-columns:1fr 1fr auto;gap:9px;align-items:center}.controls label{min-width:0;display:grid;gap:2px;color:var(--muted);font-size:12px}.controls input{width:100%;min-width:0;accent-color:#89e1cd}.tip{font-size:12px;color:var(--muted)}
 .scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}caption{text-align:left;color:var(--muted);padding:5px 0}td,th{padding:5px 4px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}.ball-color{display:inline-block;width:.65em;height:.65em;margin-right:5px;border-radius:50%}
 @media(max-height:440px){header{padding-bottom:2px}.brand{display:none}main{gap:2px}.tip{display:none}.course-info h2{font-size:16px}.controls input{margin:0}}
+
+.course-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+#close-game{font-size:12px;min-height:32px;padding:4px 8px}
+#watch-tools{display:flex;align-items:center;gap:8px;padding:0 4px;color:var(--muted);font-size:13px}
+#watch-player{min-width:0;max-width:60%;min-height:34px;padding:4px 7px;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px}
+#cancel-close{background:#253e50;color:var(--ink);border-color:var(--line)}

@@ -83,9 +83,28 @@ w.fetch=beforeRaceFetch;
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=4');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=5');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
+
+const lobbyGolf={room:'33333333-3333-4333-8333-333333333333',number:3,game:'golf',phase:'playing',capacity:8,hole:0,
+ players:[{id:'tg:8',name:'Ospite'}],revision:2};
+lobbySocket.onmessage({data:JSON.stringify({...payload(),games:[lobbyGolf]})});
+const golfLobbyButton=get('games').querySelector('button');
+assert.equal(golfLobbyButton.textContent,'Guarda');
+assert.equal(golfLobbyButton.disabled,false);
+const previousFetch=w.fetch,golfCalls=[];
+w.fetch=async(path,opts)=>{
+ if(!path.startsWith('/api/golf/'))return previousFetch(path,opts);
+ golfCalls.push([path,opts.method]);
+ return Response.json({state:lobbyGolf,now:Date.now()});
+};
+golfLobbyButton.click();
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=5&online=1');
+w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
+w.fetch=previousFetch;
 
 const wait=()=>new Promise(resolve=>setTimeout(resolve,100));
 const create=(game,kind)=>w.document.querySelector('[data-create-game="'+game+'"][data-creation-kind="'+kind+'"]');
@@ -470,6 +489,21 @@ golfOnline.win.dispatchEvent(new golfOnline.win.MessageEvent('message',{origin:'
 golfOnline.win.__golf.draw();
 assert.ok(golfOnline.labels.includes('Amico'));
 assert.ok(golfOnline.arcs.includes('#a11293'),'Opponents are drawn before their first putt');
+assert.equal(golfOnline.find('close-game').hidden,false);
+golfOnline.find('close-game').click();
+assert.equal(golfOnline.find('close-confirm').hidden,false);
+golfOnline.find('cancel-close').click();
+assert.equal(golfOnline.find('close-confirm').hidden,true);
+golfOnline.win.dispatchEvent(new golfOnline.win.MessageEvent('message',{origin:'https://unit.test',source:golfOnline.win,
+ data:{type:'golf:state',state:{...golfState,revision:2},player:'spectator',now}}));
+golfOnline.win.__golf.draw();
+assert.equal(golfOnline.find('close-game').hidden,true);
+assert.equal(golfOnline.find('controls').hidden,true);
+assert.equal(golfOnline.find('watch-tools').hidden,false);
+golfOnline.find('watch-player').value='friend';
+golfOnline.find('watch-player').dispatchEvent(new golfOnline.win.Event('change'));
+golfOnline.win.__golf.draw();
+assert.match(golfOnline.find('status').textContent,/Segui Amico/);
 golfOnline.instance.window.close();
 console.log('PASS Golf UI: hub launch, right-button orbit, rolling ball, forward drag, cup capture and visible opponents.');
 

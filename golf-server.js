@@ -27,6 +27,12 @@ export class GolfRoom {
     }
     await this.lobby('update',this.summary(match));
   }
+  async remove(match){
+    const removed=await this.lobby('remove',{room:match.room});
+    if(!removed.ok)throw Error('Impossibile chiudere la stanza. Riprova.');
+    await this.ctx.storage.delete('golf');
+    await this.ctx.storage.deleteAlarm();
+  }
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
@@ -46,6 +52,11 @@ export class GolfRoom {
         if(req.method!=='POST')return json({error:'Operazione non disponibile.'},405);
         const raw=await req.text();
         if(raw.length>512)return json({error:'Richiesta troppo grande.'},413);
+        if(action==='close'){
+          if(!match.players.some(p=>p.id===user.player))return json({error:'Solo i partecipanti possono chiudere la partita.'},403);
+          await this.remove(match);
+          return json({ok:true});
+        }
         if(action==='join')joinMatch(match,user,raw ? JSON.parse(raw)?.appearance : null);
         else if(action==='start')startMatch(match,user.player,now);
         else if(action==='shot')takeShot(match,user.player,JSON.parse(raw),now);
@@ -62,7 +73,7 @@ export class GolfRoom {
       if(!match)return;
       const now=Date.now();
       if(match.phase==='waiting'&&now>=match.created+WAIT || match.phase==='finished'&&now>=match.finished+KEEP){
-        await this.lobby('remove',{room:match.room});await this.ctx.storage.delete('golf');return;
+        await this.remove(match);return;
       }
       if(advanceMatch(match,now)){await this.save(match);await this.update(match);}
       else await this.save(match);
