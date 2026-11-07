@@ -192,6 +192,28 @@ export class Renderer{
   this.sleeve=this.mesh(sleeve);this.hand=this.mesh(hand,null,[.93,.69,.60]);
   this.swordBlade=this.mesh(blade,null,[.76,.81,.81],.36);this.swordHilt=this.mesh(hilt,null,[.52,.37,.19]);
   this.props.push(this.remoteHead,this.remoteHair,this.remoteEyes,this.bodyAccent,this.bodyShoes,this.shoeSoles,this.hips,this.thigh,this.shin,this.upperArm,this.lowerArm,this.sleeve,this.hand,this.swordBlade,this.swordHilt);
+  const helmet=new Geometry(),armor=new Geometry(),plateTrim=new Geometry(),shield=new Geometry(),boss=new Geometry(),straps=new Geometry();
+  helmet.ellipsoid(0,1.28,.003,.196,.284,.18,7,14,b=>1.64+.31*Math.sin(b));
+  helmet.sphere(0,1.625,-.09,.185,.027,.105,5,12);
+  armor.sphere(0,.81,-.077,.237,.279,.114,8,14);
+  armor.sphere(0,.84,.077,.229,.255,.103,7,12);
+  for(const side of [-1,1]){
+   armor.sphere(side*.209,1.21,-.002,.093,.064,.134,6,10);
+   plateTrim.sphere(side*.13,1.23,-.136,.021,.065,.035,5,8);
+   plateTrim.sphere(side*.15,.94,-.149,.074,.015,.041,5,10);
+  }
+  plateTrim.sphere(0,.96,-.173,.039,.079,.031,6,10);
+  shield.sphere(0,-.32,-.045,.233,.32,.068,9,16);
+  boss.sphere(0,-.086,-.105,.089,.086,.039,6,12);
+  boss.sphere(0,-.285,-.054,.205,.285,.045,7,14);
+  for(const x of [-.082,.071])straps.sphere(x,-.153,.025,.023,.15,.031,6,9);
+  this.helmet=this.mesh(helmet,null,[.40,.52,.56],.2);
+  this.armor=this.mesh(armor,null,[.40,.52,.56],.18);
+  this.armorTrim=this.mesh(plateTrim,null,[.67,.54,.30],.25);
+  this.shieldRim=this.mesh(shield,null,[.68,.55,.32],.24);
+  this.shieldFace=this.mesh(boss,null,[.32,.43,.44],.27);
+  this.shieldStraps=this.mesh(straps,null,[.30,.23,.16],.13);
+  this.props.push(this.helmet,this.armor,this.armorTrim,this.shieldRim,this.shieldFace,this.shieldStraps);
   const mirrorRims=new Geometry();
   this.mirrorPanels=(world.mirrors||[]).map(mirror=>{
    const panel=new Geometry(),rim=mirrorCorners(mirror,.055),vertices=mirrorCorners(mirror).map(p=>[p.x,p.y,p.z]),normal=[mirror.nx,0,mirror.nz];
@@ -311,8 +333,8 @@ export class Renderer{
     }else this.drawMesh(mesh,identity());
    }
   }
-  if(scene.appearance&&(reflected||player.pitch<-.45||scene.weapon||scene.swing)){
-   const me={appearance:scene.appearance,backpack:scene.backpack,weapon:scene.weapon,player:{...player,height:Math.max(0,bob)}};
+  if(scene.appearance&&(reflected||player.pitch<-.45||scene.weapon||scene.shield||scene.guard||scene.swing)){
+   const me={...scene,player:{...player,height:Math.max(0,bob)}};
    if(reflected){
     g.uniform3fv(u.uAmbient,pal.ambient.map(value=>Math.max(value,.24)));
     this.drawAvatar(me,scene.swing||0,scene.walk||0,false);
@@ -336,8 +358,16 @@ export class Renderer{
     g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND);
    }
   }
-  if(this.world.arena){for(const mesh of [this.net,this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());const boxes=scene.cases||[{...this.world.showcase,backpack:scene.backpack,swordTaken:scene.swordTaken,open:scene.showcaseOpen}];
+  if(this.world.arena){for(const mesh of [this.net,this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());const boxes=scene.cases||[{...this.world.showcase,...scene,open:scene.showcaseOpen}];
    for(const box of boxes){const model=identity();model[12]=box.x-this.world.showcase.x;model[14]=box.z-this.world.showcase.z;for(const mesh of [this.caseFrame,this.caseShelf])this.drawMesh(mesh,model);if(!box.backpack)this.drawMesh(this.pack,model);if(!box.swordTaken){this.drawMesh(this.blade,model);this.drawMesh(this.guard,model)}
+    const show=(meshes,x,y,scale)=>{
+     const item=identity();item[0]=item[10]=-scale;item[5]=scale;
+     item[12]=box.x+x;item[13]=y;item[14]=box.z+.04;
+     for(const mesh of meshes)this.drawMesh(mesh,item);
+    };
+    if(!box.helmet)show([this.helmet],-.68,-.48,.57);
+    if(!box.armor)show([this.armor,this.armorTrim],0,-.21,.55);
+    if(!box.shieldTaken)show([this.shieldRim,this.shieldFace],.69,.54,.74);
     if(!box.open){g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE_MINUS_SRC_ALPHA);g.depthMask(false);g.uniform1f(u.uAlpha,.24);this.drawMesh(this.caseGlass,model);g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND)}
    }
   }
@@ -364,20 +394,26 @@ export class Renderer{
   }
   if(!firstPerson){
    this.drawMesh(this.bodyShirt,model);
+   if(avatar.armor){this.drawMesh(this.armor,model);this.drawMesh(this.armorTrim,model)}
    if(avatar.backpack)this.drawMesh(this.wornPack,model);
    const head=headTransform(model,p.pitch||0);
    for(const mesh of [this.remoteHead,this.remoteHair,...(details?[this.remoteEyes]:[])])this.drawMesh(mesh,head);
+   if(avatar.helmet)this.drawMesh(this.helmet,head);
   }
-  if(firstPerson&&!drawBody&&avatar.weapon!=='sword'&&!swing)return;
+  if(firstPerson&&!drawBody&&!avatar.weapon&&!avatar.shield&&!avatar.guard&&!swing)return;
   for(const side of [-1,1]){
-   if(firstPerson&&!drawBody&&side===-1)continue;
-   const {shoulder,elbow,wrist}=armPose(side,avatar.weapon==='sword',swing/.42,walk,firstPerson);
+   if(firstPerson&&!drawBody&&(side===-1?!avatar.guard&&!avatar.shield:!avatar.guard&&!avatar.weapon&&!swing))continue;
+   const {shoulder,elbow,wrist}=armPose(side,avatar.weapon==='sword',swing/.42,walk,firstPerson,avatar.guard,avatar.shield);
    this.drawMesh(this.sleeve,multiply(model,limbModel(shoulder,between(shoulder,elbow,.67))));
    this.drawMesh(this.upperArm,multiply(model,limbModel(between(shoulder,elbow,.42),elbow)));
    this.drawMesh(this.lowerArm,multiply(model,limbModel(elbow,wrist)));
    this.drawMesh(this.hand,multiply(model,limbModel(wrist,between(wrist,elbow,-.30))));
+   if(side===-1&&avatar.shield){
+    const shield=identity();shield[12]=wrist[0];shield[13]=wrist[1]-.04;shield[14]=wrist[2]-.063;
+    const held=multiply(model,shield);this.drawMesh(this.shieldRim,held);this.drawMesh(this.shieldFace,held);this.drawMesh(this.shieldStraps,held);
+   }
    if(side===1&&avatar.weapon==='sword'){
-    const weapon=identity(),tilt=-.42-Math.sin(Math.PI*swing/.42)*.86;
+    const weapon=identity(),tilt=avatar.guard?-.93:-.42-Math.sin(Math.PI*swing/.42)*.86;
     weapon[5]=weapon[10]=Math.cos(tilt);weapon[6]=Math.sin(tilt);weapon[9]=-weapon[6];
     weapon[12]=wrist[0];weapon[13]=wrist[1];weapon[14]=wrist[2]-.045;
     const held=multiply(model,weapon);this.drawMesh(this.swordBlade,held);this.drawMesh(this.swordHilt,held);
@@ -448,9 +484,9 @@ class SoftwareRenderer{
    }
    function netLine(ax,az,bx,bz){let a=project(ax,.38,az),b=project(bx,.38,bz);if(a.depth<.08&&b.depth<.08)return;if(a.depth<.08){const t=(.08-a.depth)/(b.depth-a.depth);ax+=(bx-ax)*t;az+=(bz-az)*t;a=project(ax,.38,az)}else if(b.depth<.08){const t=(.08-b.depth)/(a.depth-b.depth);bx+=(ax-bx)*t;bz+=(az-bz)*t;b=project(bx,.38,bz)}c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke()}
    for(const d of [...world.decor].sort((a,b)=>Math.hypot(b.x-p.x,b.z-p.z)-Math.hypot(a.x-p.x,a.z-p.z))){const q=project(d.x,0,d.z);if(q.depth<.2||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const sprite=decorSprite(d.type,pal);c.drawImage(sprite.canvas,q.x-sprite.width*q.scale/2,q.y-sprite.height*q.scale,sprite.width*q.scale,sprite.height*q.scale)}
-   for(const box of scene.cases||[{...world.showcase,backpack:scene.backpack,swordTaken:scene.swordTaken,open:scene.showcaseOpen}]){const q=project(box.x,0,box.z);if(q.depth>.2&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const sprite=showcaseSprite(box,pal);c.drawImage(sprite,q.x-1.21*q.scale,q.y-2.32*q.scale,2.42*q.scale,2.36*q.scale)}}
+   for(const box of scene.cases||[{...world.showcase,...scene,open:scene.showcaseOpen}]){const q=project(box.x,0,box.z);if(q.depth>.2&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const sprite=showcaseSprite(box,pal);c.drawImage(sprite,q.x-1.21*q.scale,q.y-2.32*q.scale,2.42*q.scale,2.36*q.scale)}}
   }
-  for(const remote of [...(scene.players||[])].sort((a,b)=>Math.hypot(b.player.x-p.x,b.player.z-p.z)-Math.hypot(a.player.x-p.x,a.player.z-p.z))){const r=remote.player,q=project(r.x,r.height||0,r.z);if(q.depth<.25||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const angle=Math.atan2(p.x-r.x,-(p.z-r.z))-r.yaw,view=Math.round(angle/(Math.PI/4)),sprite=avatarSprite(remote.appearance,remote.backpack,view,pal);c.save();c.translate(q.x,q.y);c.scale(q.scale,q.scale);c.fillStyle='#0003';c.beginPath();c.ellipse(0,.005,.28,.065,0,0,Math.PI*2);c.fill();c.imageSmoothingEnabled=true;c.drawImage(sprite,-.58,-1.92,1.16,1.92);if(remote.weapon==='sword'){const age=((scene.serverNow||Date.now())-(remote.actionAt||0))/1000;c.strokeStyle=litColor('#b8c4c8',pal);c.lineWidth=.035;c.beginPath();c.moveTo(.28,-.79);c.lineTo(age>=0&&age<.42?-.28:.32,age>=0&&age<.42?-1.18:-1.6);c.stroke();c.strokeStyle=litColor('#8b713e',pal);c.lineWidth=.06;c.beginPath();c.moveTo(.19,-.94);c.lineTo(.39,-.94);c.stroke()}c.restore()}
+  for(const remote of [...(scene.players||[])].sort((a,b)=>Math.hypot(b.player.x-p.x,b.player.z-p.z)-Math.hypot(a.player.x-p.x,a.player.z-p.z))){const r=remote.player,q=project(r.x,r.height||0,r.z);if(q.depth<.25||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const angle=Math.atan2(p.x-r.x,-(p.z-r.z))-r.yaw,view=Math.round(angle/(Math.PI/4)),sprite=avatarSprite(remote.appearance,remote.backpack,view,pal,{...remote,weapon:null});c.save();c.translate(q.x,q.y);c.scale(q.scale,q.scale);c.fillStyle='#0003';c.beginPath();c.ellipse(0,.005,.28,.065,0,0,Math.PI*2);c.fill();c.imageSmoothingEnabled=true;c.drawImage(sprite,-.58,-1.92,1.16,1.92);if(remote.weapon==='sword'&&!remote.guard){const age=((scene.serverNow||Date.now())-(remote.actionAt||0))/1000;c.strokeStyle=litColor('#b8c4c8',pal);c.lineWidth=.035;c.beginPath();c.moveTo(.28,-.79);c.lineTo(age>=0&&age<.42?-.28:.32,age>=0&&age<.42?-1.18:-1.6);c.stroke();c.strokeStyle=litColor('#8b713e',pal);c.lineWidth=.06;c.beginPath();c.moveTo(.19,-.94);c.lineTo(.39,-.94);c.stroke()}c.restore()}
 
 
   if(scene.appearance)this.drawLocalArm(p,bob,scene,pal,project);
@@ -471,7 +507,7 @@ class SoftwareRenderer{
    const glass=c.createLinearGradient(0,top,0,bottom);glass.addColorStop(0,'#5d706f');glass.addColorStop(.57,'#384a4c');glass.addColorStop(1,'#45524e');
    c.fillStyle=glass;c.fillRect(0,top,w,bottom-top);
    const observer=reflectPoint(mirror,p),players=[...(scene.players||[])];
-   if(scene.appearance)players.push({player:{...p,height:Math.max(0,bob)},appearance:scene.appearance,backpack:scene.backpack,weapon:scene.weapon});
+   if(scene.appearance)players.push({...scene,player:{...p,height:Math.max(0,bob)}});
    players.sort((a,b)=>mirrorSide(mirror,b.player)-mirrorSide(mirror,a.player));
    for(const avatar of players){
     const pose=avatar.player,distance=mirrorSide(mirror,pose);
@@ -482,7 +518,7 @@ class SoftwareRenderer{
     const r=reflectPoint(mirror,pose),q=project(r.x,pose.height||0,r.z);
     if(q.depth<.15||(r.x-p.x)*dirX+(r.z-p.z)*dirZ<=0)continue;
     const view=(Math.atan2(observer.x-pose.x,-(observer.z-pose.z))-pose.yaw)/(Math.PI/4);
-    const sprite=avatarSprite(avatar.appearance,avatar.backpack,view,pal);
+    const sprite=avatarSprite(avatar.appearance,avatar.backpack,view,pal,avatar);
     c.save();c.translate(q.x,q.y);c.scale(-q.scale,q.scale);
     c.drawImage(sprite,-.58,-1.92,1.16,1.92);c.restore();
    }
@@ -490,11 +526,9 @@ class SoftwareRenderer{
   }
  }
  drawLocalArm(p,bob,scene,pal,project){
-  if(!scene.weapon&&!scene.swing&&p.pitch>-.45)return;
+  if(!scene.weapon&&!scene.shield&&!scene.guard&&!scene.swing&&p.pitch>-.45)return;
   const c=this.ctx,sy=Math.sin(p.yaw),cy=Math.cos(p.yaw),height=Math.max(0,bob);
   const toScreen=([x,y,z])=>project(p.x+cy*x-sy*z,y+height,p.z+sy*x+cy*z);
-  const {shoulder,elbow,wrist}=armPose(1,scene.weapon==='sword',(scene.swing||0)/.42,scene.walk||0,true);
-  const sleeveEnd=between(shoulder,elbow,.58),fingers=between(wrist,elbow,-.25);
   const segment=(from,to,width,color)=>{
    let a=toScreen(from),b=toScreen(to);
    if(a.depth<=.09&&b.depth<=.09)return;
@@ -504,9 +538,23 @@ class SoftwareRenderer{
    c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke();
   };
   c.save();
-  segment(shoulder,sleeveEnd,.17,scene.appearance.shirt);
-  segment(sleeveEnd,elbow,.125,'#d29c88');segment(elbow,wrist,.108,'#d29c88');segment(wrist,fingers,.10,'#e0ab97');
-  if(scene.weapon==='sword')segment(wrist,[wrist[0],wrist[1]+.69,wrist[2]-.16],.044,'#c1ccce');
+  for(const side of [-1,1]){
+   if(side===-1&&!scene.shield&&!scene.guard)continue;
+   if(side===1&&scene.shield&&!scene.weapon&&!scene.swing&&!scene.guard&&p.pitch>-.45)continue;
+   const {shoulder,elbow,wrist}=armPose(side,scene.weapon==='sword',(scene.swing||0)/.42,scene.walk||0,true,scene.guard,scene.shield);
+   const sleeveEnd=between(shoulder,elbow,.58),fingers=between(wrist,elbow,-.25);
+   segment(shoulder,sleeveEnd,.17,scene.appearance.shirt);
+   segment(sleeveEnd,elbow,.125,'#d29c88');segment(elbow,wrist,.108,'#d29c88');segment(wrist,fingers,.10,'#e0ab97');
+   if(side===1&&scene.weapon==='sword')segment(wrist,[wrist[0],wrist[1]+.69,wrist[2]-.16],.044,'#c1ccce');
+   if(side===-1&&scene.shield){
+    const q=toScreen([wrist[0],wrist[1]-.04,wrist[2]-.11]);
+    if(q.depth>.1){
+     c.beginPath();c.ellipse(q.x,q.y,q.scale*.19,q.scale*.25,0,0,Math.PI*2);
+     c.fillStyle=litColor('#506b71',pal,1.25);c.fill();c.strokeStyle=litColor('#b3a16d',pal,1.2);
+     c.lineWidth=q.scale*.024;c.stroke();
+    }
+   }
+  }
   c.restore();
  }
  destroy(){this.closed=true;this.generation++;this.surfaces.destroy()}

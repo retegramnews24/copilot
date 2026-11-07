@@ -1,14 +1,15 @@
 import {FrameBudget} from './performance.js';
 import {applyInsets} from '../safe-area.js';
 import {move,free,restoreProgress,beginJump,crossedDoor,forwardVector,CELL,RADIUS} from './core.js';
-import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeBackpack,takeSword,nextWaypoint,advanceBounce,onSpring,beginAction,advanceAction} from './adventure.js';
-import {framePose,frameStrike,frameSupport,settledFrames,triggerFrames} from './traps.js';
+import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,nextWaypoint,advanceBounce,onSpring,beginAction,advanceAction} from './adventure.js';
+import {framePose,struckFrame,frameSupport,settledFrames,triggerFrames} from './traps.js';
 import {projectPoint,Renderer} from './render.js';
 import {readAppearance} from './avatar.js';
+import {avatarSprite} from './visuals.js';
 import {Atmosphere} from './audio.js';
 const $=id=>document.getElementById(id),canvas=$('scene'),keys=new Set(),coarse=matchMedia('(pointer: coarse)').matches,debug=new URLSearchParams(location.search).get('debug')==='1';
 let playerId='guest',seed=crypto.getRandomValues(new Uint32Array(1))[0],level=1,world,player,hasKey=false,seconds=0,started=false,playing=false,transitioning=false,renderer,raf=0,lastTime=0,saveClock=0,stepDistance=0,bob=0,walk=0,quality='auto',sensitivity=1,joystick={x:0,y:0,id:null},lookId=null,lastLook=null,lookVector={x:0,y:0},dragging=false,cursorFree=false,releasingCursor=false,toastTimer=0,frameBudget=new FrameBudget();
-let tutorialBox=null,trapNotice=null;
+let tutorialBox=null,trapNotice=null,guarding=false,healthFlash=0;
 const tutorialMode=new URLSearchParams(location.search).get('tutorial')==='1';
 let run=newRun(seed,true),guideEnabled=true,guideClock=0;
 let multiplayer=null,networkConnected=false,networkBusy=false,requestId=0,poseSeq=0,netClock=0,remoteClock=0,caseSignature='',remoteViews=new Map(),followId='';
@@ -21,26 +22,78 @@ const sound=new Atmosphere(read('labyrinth-sound',true));
 function tell(message){try{if(parent!==window)parent.postMessage({type:'labyrinth:trace',message},location.origin)}catch{}}
 function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;toastTimer=setTimeout(()=>$('toast').textContent='',3000)}
 function updateSound(){$('sound').setAttribute('aria-pressed',String(sound.enabled));$('sound').setAttribute('aria-label',sound.enabled?'Disattiva audio':'Attiva audio');$('sound').textContent=sound.enabled?'♫':'♪̸'}
-function resetInput(){keys.clear();walk=0;joystick={x:0,y:0,id:null};lookId=null;lastLook=null;lookVector={x:0,y:0};$('look-stick').style.transform='';dragging=false;$('stick').style.transform='';actionState.remaining=0;actionState.cooldown=0;}
+function resetInput(){setGuard(false);keys.clear();walk=0;joystick={x:0,y:0,id:null};lookId=null;lastLook=null;lookVector={x:0,y:0};$('look-stick').style.transform='';dragging=false;$('stick').style.transform='';actionState.remaining=0;actionState.cooldown=0;}
 function store(){if(multiplayer)return;if(!started||!player)return;run.player={x:player.x,z:player.z,yaw:player.yaw,pitch:player.pitch};run.seconds=seconds;run.level=level;write('binottoland-labyrinth-v2-'+playerId+(tutorialMode?'-tutorial':''),run)}
+const gearIcons={sword:'⚔',shield:'⛨',helmet:'◕',armor:'✦',backpack:'▣'};
+function cardInHand(){return [0,1].find(i=>run.inventory[i]==='pass'||run.inventory[i]?.startsWith('key:'))}
 function updateInventory(){
- const signature=JSON.stringify([run.inventory,capacity(run),!!multiplayer?.watch,localAppearance.shirt]);if(signature===inventorySignature)return;inventorySignature=signature;
+ const gear=equipment(run),watch=!!multiplayer?.watch;
+ const signature=JSON.stringify([run.inventory,gear,watch,localAppearance]);if(signature===inventorySignature)return;inventorySignature=signature;
  const root=$('inventory');root.replaceChildren();
- for(let i=0;i<capacity(run);i++){const id=run.inventory[i],b=document.createElement('button');const label=i===0?'Mano':i===1?'Tasca':'Zaino '+(i-1);b.setAttribute('aria-label',label+' · '+(id==='pass'?'Passe-partout':id==='sword'?'Spada':id?'Keycard':'Vuoto'));b.setAttribute('aria-pressed',String(i===0));b.disabled=!!multiplayer?.watch;const number=document.createElement('small');number.textContent=i<2?label:String(i-1);b.append(number);if(id==='pass'||id?.startsWith('key:')){const icon=document.createElement('span');icon.className='card-icon';icon.style.setProperty('--stripe',id==='pass'?'#16181b':worldFor(seed,Number(id.split(':')[1])).palette.stripe);b.append(icon)}else if(id==='sword'){const icon=document.createElement('span');icon.textContent='⚔';b.append(icon)}b.onclick=()=>{
-  if(!i||!id||!playing||transitioning)return;
-  if(multiplayer)sendAction('equip',{slot:i,item:id});
-  else if(putInHand(run,i)){syncScene();updateInventory();updateActions();store()}
- };root.append(b)}
- window.dispatchEvent(new CustomEvent('labyrinth:equipment',{detail:{backpack:run.backpack}}));
- $('action').textContent=run.inventory[0]==='sword'?'Colpisci':'Azione';
- $('drop-item').hidden=!!multiplayer?.watch||!run.inventory[0]||run.inventory[0]==='sword';
+ const slots=document.createElement('div');slots.className='inventory-slots';
+ const bag=document.createElement('div');bag.className='inventory-slots bag-slots';
+ const makeSlot=(label,id,slot)=>{
+  const node=document.createElement(slot===undefined?'div':'button');node.className='inventory-slot';
+  const name=id==='pass'?'Passe-partout':id?.startsWith('key:')?'Keycard':SHOWCASE_GEAR.find(([kind])=>id===kind)?.[1]||'Vuoto';
+  node.setAttribute('aria-label',label+' · '+name);node.title=label+' · '+name;
+  const caption=document.createElement('small');caption.textContent=label;node.append(caption);
+  if(id){
+   const icon=document.createElement('span');icon.setAttribute('aria-hidden','true');node.append(icon);
+   if(id==='pass'||id.startsWith('key:')){
+    icon.className='card-icon';icon.style.setProperty('--stripe',id==='pass'?'#16181b':worldFor(seed,Number(id.split(':')[1])).palette.stripe);
+   }else icon.textContent=gearIcons[id];
+  }
+  if(slot!==undefined){
+   node.dataset.hand=String(slot<2);node.disabled=watch||!id;
+   node.onclick=()=>{
+    if(!playing||transitioning)return;
+    if(multiplayer)sendAction('equip',{slot,item:id});
+    else if(putInHand(run,slot)){syncScene();updateInventory();updateActions();store()}
+    else toast('Serve uno spazio libero nelle tasche o nello zaino.');
+   };
+  }
+  return node;
+ };
+ const labels=['Mano D','Mano S','Tasca 1','Tasca 2'];
+ for(let i=0;i<capacity(run);i++){
+  const target=i<4?slots:bag;target.append(makeSlot(labels[i]||'Zaino '+(i-3),run.inventory[i],i));
+ }
+ root.append(slots);if(gear.backpack)root.append(bag);
+ const worn=document.createElement('div');worn.className='worn-gear';
+ for(const [id,label] of [['helmet','Testa'],['armor','Corazza'],['backpack','Zaino']])if(gear[id])worn.append(makeSlot(label,id));
+ if(gear.armor){
+  const portrait=avatarSprite(localAppearance,gear.backpack,0,null,gear);
+  portrait.className='mini-avatar';portrait.setAttribute('role','img');portrait.setAttribute('aria-label','Il tuo personaggio con l’equipaggiamento indossato');
+  worn.prepend(portrait);
+ }
+ if(worn.childElementCount)root.append(worn);
+ window.dispatchEvent(new CustomEvent('labyrinth:equipment',{detail:{backpack:gear.backpack}}));
+ $('drop-item').hidden=watch||cardInHand()===undefined;
 }
-function syncScene(){hasKey=run.inventory.includes('key:'+level);renderer.scene={appearance:localAppearance,items:itemsAt(run,world),showcaseOpen:run.showcaseOpen,backpack:run.backpack,weapon:run.inventory[0]==='sword'?'sword':null,swing:actionState.remaining,swordTaken:run.swordTaken,doorOpen:floorState(run,world).open,traps:floorState(run,world).traps};if(multiplayer){if(multiplayer.watch)renderer.scene.appearance=null;renderer.scene.serverNow=Date.now()+(multiplayer.clockOffset||0);renderer.scene.cases=multiplayer.state.cases;renderer.scene.players=[...remoteViews.values()].filter(p=>p.level===level&&(!multiplayer.watch||p.id!==followId));}}
+function updateHealth(value=run.health){
+ const health=healthValue(value),display=performance.now()<healthFlash?0:health;
+ $('health').hidden=!!multiplayer?.watch;
+ const meter=$('health-meter');meter.value=display;meter.style.setProperty('--life-hue',String(Math.round(display*1.2)));
+ textIfChanged('health-value',display+'%');
+}
+function showImpact(impact,received){
+ const {kind,damage,fatal,guarded}=impact;
+ sound.impact?.(kind,impact.shielded,received?1:.7);
+ if(!received)return;
+ if(fatal)healthFlash=performance.now()+480;
+ if(damage||fatal){
+  const flash=$('damage-flash');flash.classList.remove('hit');
+  if(!reduced){void flash.offsetWidth;flash.classList.add('hit')}
+ }
+ toast(fatal?'Sei caduto. Riparti dall’inizio del piano.':damage===0?'Pugno parato':(kind==='frame'?'Quadro caduto':guarded?'Colpo parato':'Colpo subito')+' · −'+damage+'% vita');
+ updateHealth();
+}
+function syncScene(){hasKey=run.inventory.includes('key:'+level);renderer.scene={appearance:localAppearance,items:itemsAt(run,world),showcaseOpen:run.showcaseOpen,...equipment(run),guard:guarding,swing:actionState.remaining,doorOpen:floorState(run,world).open,traps:floorState(run,world).traps};if(multiplayer){if(multiplayer.watch)renderer.scene.appearance=null;renderer.scene.serverNow=Date.now()+(multiplayer.clockOffset||0);renderer.scene.cases=multiplayer.state.cases;renderer.scene.players=[...remoteViews.values()].filter(p=>p.level===level&&(!multiplayer.watch||p.id!==followId));}}
 function loadWorld(saved=null,back=false){
  trapNotice=null;jumpState.height=saved?.player?.height||0;jumpState.velocity=0;world=worldFor(seed,level);configureNetworkWorld();const floor=floorState(run,world);player=saved?.player?{...saved.player}:{...world.spawn,pitch:0};
  if(!multiplayer)jumpState.height=frameSupport(settledFrames(world,floor,sceneTime()),player.x,player.z,RADIUS);
  if(back){player.x=world.door.x-world.door.dx*1.25;player.z=world.door.z-world.door.dz*1.25;player.yaw=Math.atan2(-world.door.dx,world.door.dz)}
- renderer.load(world);syncScene();$('floor').textContent=world.arena?'ARENA':'PIANO '+String(level).padStart(2,'0')+' · '+world.palette.name.toUpperCase();textIfChanged('objective',world.arena?(run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):'Trova la keycard · raggiungi l’uscita');renderer.draw(player,hasKey,0);saveClock=0;bob=0;stepDistance=0;guideClock=1;updateInventory();updateActions();$('test-travel').hidden=multiplayer?!multiplayer.watch:!run.test;
+ renderer.load(world);syncScene();$('floor').textContent=world.arena?'ARENA':'PIANO '+String(level).padStart(2,'0')+' · '+world.palette.name.toUpperCase();textIfChanged('objective',world.arena?(run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):'Trova la keycard · raggiungi l’uscita');renderer.draw(player,hasKey,0);saveClock=0;bob=0;stepDistance=0;guideClock=1;updateInventory();updateHealth();updateActions();$('test-travel').hidden=multiplayer?!multiplayer.watch:!run.test;
 }
 function loadSaved(){
  let saved=readRun(read('binottoland-labyrinth-v2-'+playerId+(tutorialMode?'-tutorial':''),null));
@@ -48,12 +101,12 @@ function loadSaved(){
  run=saved||newRun(seed,true);run.test=true;seed=run.seed;level=run.level;seconds=run.seconds;loadWorld(saved);$('start').textContent=saved?'Continua · '+(level===6?'Arena':'Piano '+level):'Entra nel labirinto';$('new-run').hidden=!saved;$('saved-info').textContent=run.test?'Prova · selezione dei livelli disponibile':'';return !!saved;
 }
 function portrait(){return document.body.classList.contains('touch')&&innerHeight>innerWidth}
-function updateOrientation(){const blocked=playing&&portrait();$('portrait').hidden=!blocked;sound.active(playing&&!blocked);if(!playing)renderer?.draw(player,hasKey,performance.now()/1000)}
+function updateOrientation(){const blocked=playing&&portrait();if(blocked)setGuard(false);$('portrait').hidden=!blocked;sound.active(playing&&!blocked);if(!playing)renderer?.draw(player,hasKey,performance.now()/1000)}
 function look(dx,dy,touch=false){if(!playing||transitioning||portrait())return;const scale=(touch ? .0045 : .0021)*sensitivity;player.yaw+=dx*scale;player.yaw=((player.yaw+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;player.pitch=Math.max(-1.15,Math.min(1.15,player.pitch-dy*scale))}
 function pointerLock(){if(cursorFree||coarse||document.body.classList.contains('touch'))return;try{const result=canvas.requestPointerLock?.();result?.catch(()=>toast('Trascina sullo schermo per guardarti intorno.'))}catch{toast('Trascina sullo schermo per guardarti intorno.')}}
 function toggleCursor(){
  if(releasingCursor||coarse||document.body.classList.contains('touch'))return;
- cursorFree=!cursorFree;dragging=false;
+ cursorFree=!cursorFree;dragging=false;setGuard(false);
  if(cursorFree){
   if(document.pointerLockElement===canvas){releasingCursor=true;document.exitPointerLock?.()}
   toast('Cursore libero · premi M per riprendere la visuale');
@@ -62,14 +115,14 @@ function toggleCursor(){
   pointerLock();
  }
 }
-function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if(multiplayer&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent='Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
+function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if(multiplayer&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();updateInventory();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent='Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
 function pause(){if(!started||transitioning)return;playing=false;if(tutorialBox)tutorialBox.hidden=true;cancelAnimationFrame(raf);raf=0;resetInput();sound.active(false);if(document.pointerLockElement)document.exitPointerLock?.();document.body.classList.remove('playing');$('portrait').hidden=true;$('menu').hidden=false;$('menu-title').textContent='Una pausa.';$('start').textContent='Riprendi l’esplorazione';$('new-run').hidden=!!multiplayer;$('saved-info').textContent=(world.arena?'Arena':'Piano '+level)+(hasPass(run)?' · passe-partout':'');store()}
-function leave(){store();sound.active(false);if(parent!==window)parent.postMessage({type:'labyrinth:exit'},location.origin);else location.href='/'}
+function leave(){setGuard(false);store();sound.active(false);if(parent!==window)parent.postMessage({type:'labyrinth:exit'},location.origin);else location.href='/'}
 function tryJump(){
  if(!playing||transitioning||portrait()||(multiplayer&&!networkConnected))return;
  const floor=frameSupport(settledFrames(world,floorState(run,world),sceneTime()),player.x,player.z,RADIUS);
- if(floor>0&&Math.abs(jumpState.height-floor)<.002&&jumpState.velocity<=0)jumpState.velocity=4.1;
- else beginJump(jumpState);
+ if(floor>0&&Math.abs(jumpState.height-floor)<.002&&jumpState.velocity<=0){jumpState.velocity=4.1;sound.jump?.();}
+ else if(beginJump(jumpState))sound.jump?.();
 }
 function sceneTime(){return Date.now()+(multiplayer?.clockOffset||0)}
 function updateTraps(floor,now){
@@ -82,21 +135,36 @@ function updateTraps(floor,now){
 function nearby(a,d=1.8){return Math.hypot(player.x-a.x,player.z-a.z)<d}
 function aimedAt(item){const dx=item.x-player.x,dz=item.z-player.z,d=Math.hypot(dx,dz);return d<.38||(player.pitch<-.35&&(dx*Math.sin(player.yaw)-dz*Math.cos(player.yaw))/Math.max(.001,d)>.72)}
 function facing(item){const dx=item.x-player.x,dz=item.z-player.z;return (dx*Math.sin(player.yaw)-dz*Math.cos(player.yaw))/Math.max(.001,Math.hypot(dx,dz))>.65}
-function strike(){if(multiplayer&&!networkConnected)return;if(!playing||transitioning||portrait())return;if(beginAction(actionState)){sound.swish?.();if(multiplayer&&!multiplayer.watch)sendAction('strike',{weapon:run.inventory[0]==='sword'?'sword':null},true)}}
+function setGuard(active){
+ if(active&&(!playing||transitioning||portrait()||multiplayer&&(!networkConnected||multiplayer.watch||multiplayer.state.archived)))return;
+ if(guarding===active)return;
+ guarding=active;
+ $('guard').setAttribute('aria-pressed',String(active));
+ document.body.classList.toggle('guarding',active);
+ if(active){actionState.remaining=0;sound.guard?.(equipment(run).shield)}
+ sendPose();
+}
+function strike(){
+ if(!playing||transitioning||portrait()||guarding||multiplayer&&(!networkConnected||multiplayer.watch||multiplayer.state.archived))return;
+ if(beginAction(actionState)){
+  sound.swish?.(equipment(run).weapon||'fist');
+  if(multiplayer)sendAction('strike',{},true);
+ }
+}
 function target(){
  if(multiplayer&&(multiplayer.watch||!networkConnected||multiplayer.state.archived))return null;
  for(const item of itemsAt(run,world))if(nearby(item,item.type==='pass'?.95:1.25)&&aimedAt(item))return {kind:'card',item,label:item.type==='pass'?'Prendi passe-partout':'Prendi keycard'};
- if(world.arena){if(nearby(world.showcase,2.5)&&facing(world.showcase)){if(!run.showcaseOpen)return multiplayer&&multiplayer.state.players.filter(p=>p.counted).length>1?{kind:'waiting',label:'In attesa degli altri'}:{kind:'showcase',label:'Apri vetrina'};if(!run.backpack)return {kind:'backpack',label:'Prendi zaino'};if(!run.swordTaken)return {kind:'sword',label:'Prendi spada'}}if(nearby(world.door))return {kind:hasPass(run)?'back':'no-back',label:hasPass(run)?'Torna al piano nero':'Per tornare serve il passe-partout'};return null}
+ if(world.arena){if(nearby(world.showcase,2.5)&&facing(world.showcase)){if(!run.showcaseOpen)return multiplayer&&multiplayer.state.players.filter(p=>p.counted).length>1?{kind:'waiting',label:'In attesa degli altri'}:{kind:'showcase',label:'Apri vetrina'};const gear=SHOWCASE_GEAR.find(([id])=>!hasGear(run,id));if(gear)return {kind:gear[0],label:'Prendi '+gear[1].toLowerCase()}}if(nearby(world.door))return {kind:hasPass(run)?'back':'no-back',label:hasPass(run)?'Torna al piano nero':'Per tornare serve il passe-partout'};return null}
  if(nearby(world.door)&&!floorState(run,world).open)return {kind:'door',label:hasPass(run)?'Apri col passe-partout':'Apri porta'};
  if(level>1&&nearby(world.spawn,1))return {kind:hasPass(run)?'back':'no-back',label:hasPass(run)?'Torna al piano precedente':'Per tornare serve il passe-partout'};
  return null;
 }
 function textIfChanged(id,value){const node=$(id);if(node.textContent!==value)node.textContent=value}
-function updateActions(){if(!world||!player)return;const open=!world.arena&&floorState(run,world).open;updateTutorial();textIfChanged('objective',world.arena?(run.swordTaken?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):open?'Uscita aperta · attraversa la porta':hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita');const holder=multiplayer?.state.players.find(p=>p.id!==playerId&&p.inventory.includes('key:'+level));if(!world.arena&&!hasKey&&!hasPass(run)&&!open&&holder)textIfChanged('objective','Keycard raccolta da '+holder.name);const t=target(),touch=document.body.classList.contains('touch');$('action').disabled=!!multiplayer&&(multiplayer.watch||!networkConnected||multiplayer.state.archived);$('action').textContent=t?(t.kind==='waiting'?'Attendi':'Usa'):run.inventory[0]==='sword'?'Colpisci':'Azione';$('action').setAttribute('aria-label',t?t.label:'Azione o colpo di spada');textIfChanged('hint',t?(touch?'Usa · ':'E · ')+t.label:open&&nearby(world.door,2.2)?'Attraversa la porta':'');
+function updateActions(){if(!world||!player)return;const open=!world.arena&&floorState(run,world).open;updateTutorial();textIfChanged('objective',world.arena?(SHOWCASE_GEAR.every(([id])=>hasGear(run,id))?'Equipaggiamento pronto':run.showcaseOpen?'Raccogli il tuo equipaggiamento':'Esplora oppure apri la vetrina'):open?'Uscita aperta · attraversa la porta':hasPass(run)?'Passe-partout · segui l’uscita':hasKey?'Keycard raccolta · cerca l’uscita':'Trova la keycard · raggiungi l’uscita');const holder=multiplayer?.state.players.find(p=>p.id!==playerId&&p.inventory.includes('key:'+level));if(!world.arena&&!hasKey&&!hasPass(run)&&!open&&holder)textIfChanged('objective','Keycard raccolta da '+holder.name);const t=target(),touch=document.body.classList.contains('touch');$('action').disabled=!!multiplayer&&(multiplayer.watch||!networkConnected||multiplayer.state.archived);$('action').textContent=t?(t.kind==='waiting'?'Attendi':'Usa'):'Colpisci';$('action').setAttribute('aria-label',t?t.label:'Colpisci');textIfChanged('hint',t?(touch?'Usa · ':'E · ')+t.label:open&&nearby(world.door,2.2)?'Attraversa la porta':'');
  if(!world.arena&&guideEnabled){$('guide').hidden=false;guideClock++;if(guideClock>8){guideClock=0;const destination=tutorialMode&&!hasKey&&!hasPass(run)&&!open?itemsAt(run,world).find(i=>i.type==='key')||world.door:world.door;const q=nextWaypoint(world,player,destination);if(q){const angle=Math.atan2(q.x-player.x,-(q.z-player.z))-player.yaw;$('guide-arrow').style.transform='rotate('+angle+'rad)';$('guide-text').textContent=(tutorialMode&&!hasKey&&!hasPass(run)&&!open?'Keycard':'Uscita')+' · percorso '+Math.max(1,Math.round(q.steps*CELL))+' m'}}}else $('guide').hidden=true;
 }
 function crossLevel(){
- level++;run.level=level;run.player=null;
+ setGuard(false);level++;run.level=level;run.player=null;
  sound.chime();loadWorld();store();
  toast(level===6?'Sei fuori. La vetrina ti aspetta.':'Piano '+level+' · '+world.palette.name);
  tell('Passaggio a '+(level===6?'Arena':'piano '+level));
@@ -104,8 +172,7 @@ function crossLevel(){
 function resetAtEntrance(){
  Object.assign(player,world.spawn,{pitch:0,height:0});
  jumpState.height=0;jumpState.velocity=0;bob=0;stepDistance=0;
- sound.swish?.();toast('Il quadro ti ha colpito. Sei tornato all’ingresso del piano.');
- store();
+ setGuard(false);
 }
 function changeLevel(next,back=false){
  const cardSlot=run.inventory.indexOf('key:'+level);if(cardSlot>=0)drop(run,world,cardSlot,player);
@@ -120,12 +187,17 @@ function use(){
  else if(t.kind==='back'){changeLevel(level-1,true);return}
  else if(t.kind==='no-back')toast('Puoi tornare indietro solo con il passe-partout.');
  else if(t.kind==='showcase')openCase();
- else if(t.kind==='backpack'){if(takeBackpack(run)){sound.chime();toast('Zaino raccolto · sei posti totali.')}}
- else if(t.kind==='sword'){if(takeSword(run)){sound.chime();toast('Spada raccolta · F, clic o Colpisci.')}else toast('Non c’è spazio nello zaino.')}
+ else if(takeGear(run,t.kind)){sound.chime();toast(t.kind==='backpack'?'Zaino raccolto · quattro spazi aggiunti.':t.label.replace('Prendi ','')+' · equipaggiamento aggiornato.')}
+ else toast('Inventario pieno. Libera uno spazio per raccogliere l’oggetto.');
  syncScene();updateInventory();updateActions();store();
 }
-function openCase(){if(!playing||transitioning||!world.arena||!nearby(world.showcase,2.5)||!facing(world.showcase))return;if(openShowcase(run)){sound.chime();toast('Vetrina aperta. Raccogli lo zaino, poi la spada.');$('objective').textContent='Raccogli il tuo equipaggiamento';tell('Arena · vetrina aperta');syncScene();updateActions();store()}}
-function dropHeld(){if(multiplayer){if(playing&&!transitioning)sendAction('drop',{slot:0});return}if(!playing||transitioning)return;if(drop(run,world,0,player)){toast('Carta lasciata a terra. Guarda ai tuoi piedi per riprenderla.');syncScene();updateInventory();updateActions();store()}}
+function openCase(){if(!playing||transitioning||!world.arena||!nearby(world.showcase,2.5)||!facing(world.showcase))return;if(openShowcase(run)){sound.chime();toast('Vetrina aperta. Raccogli il tuo equipaggiamento.');$('objective').textContent='Raccogli il tuo equipaggiamento';tell('Arena · vetrina aperta');syncScene();updateActions();store()}}
+function dropHeld(){
+ if(!playing||transitioning)return;
+ const slot=cardInHand();if(slot===undefined)return;
+ if(multiplayer){sendAction('drop',{slot});return}
+ if(drop(run,world,slot,player)){toast('Carta lasciata a terra. Guarda ai tuoi piedi per riprenderla.');syncScene();updateInventory();updateActions();store()}
+}
 function tick(now){
  if(!playing)return;const raw=(now-lastTime)/1000,dt=Math.min(.1,Math.max(0,raw));lastTime=now;
  if(!transitioning&&!portrait()){
@@ -148,16 +220,25 @@ function tick(now){
    const facing=forwardVector(player.yaw);
    move(world,player,(facing.x*forward-facing.z*strafe)*speed,(facing.z*forward+facing.x*strafe)*speed,{doorOpen:floor.open,people,frames,height:jumpState.height});
    const walked=Math.hypot(player.x-previous.x,player.z-previous.z);stepDistance+=walked;walk+=(walked&&!reduced?Math.sin(seconds*(fast?14:10))*.085-walk:-walk)*Math.min(1,dt*14);bob=walked&&!reduced?Math.sin(seconds*(fast?15:10))*.018:0;
-   if(!multiplayer&&frameStrike(world,floor,previous,{...player,height:jumpState.height},nowMs-dt*1000,nowMs,RADIUS))resetAtEntrance();
-   else if(floor.open&&crossedDoor(world,previous,player)){
+   const frame=!multiplayer&&struckFrame(world,floor,previous,{...player,height:jumpState.height},nowMs-dt*1000,nowMs,RADIUS,run.frameHits);
+   let impact;
+   if(frame){
+    (run.frameHits??=[]).push(frame);
+    impact=takeDamage(run,'frame',FRAME_DAMAGE,nowMs);
+    if(impact?.fatal)resetAtEntrance();
+    if(impact)showImpact(impact,true);
+    store();
+   }
+   if(!impact?.fatal&&floor.open&&crossedDoor(world,previous,player)){
     if(multiplayer){netClock=0;sendPose()}else crossLevel();
    }
-   if(jumpState.height<.05&&jumpState.velocity<=0&&onSpring(world,player)){jumpState.velocity=9.3;sound.step(true)}
-   if(stepDistance>.82&&jumpState.height<.02){sound.step(fast);stepDistance=0}
+   if(previous.height>jumpState.height+.015&&jumpState.velocity===0&&!impact?.fatal){sound.land?.();stepDistance=0}
+   if(jumpState.height<.05&&jumpState.velocity<=0&&onSpring(world,player)){jumpState.velocity=9.3;sound.jump?.(true)}
+   if(stepDistance>(fast?.94:.72)&&jumpState.velocity===0){sound.step(fast);stepDistance=0}
   }
   seconds+=dt;saveClock+=dt;if(saveClock>5){store();saveClock=0}
   advanceAction(actionState,dt);updateActions();
-  networkTick(dt);renderer.scene.weapon=run.inventory[0]==='sword'?'sword':null;renderer.scene.swing=actionState.remaining;renderer.scene.walk=walk;renderer.draw(player,hasKey,now/1000,bob+jumpState.height);renderRemoteNames();
+  networkTick(dt);renderer.scene.guard=guarding;if(healthFlash&&now>=healthFlash){healthFlash=0;updateHealth()}renderer.scene.swing=actionState.remaining;renderer.scene.walk=walk;renderer.draw(player,hasKey,now/1000,bob+jumpState.height);renderRemoteNames();
   if(quality==='auto'&&seconds>5)renderer.resolutionScale=frameBudget.sample(raw);
   if(debug){$('debug').hidden=false;$('debug').textContent='Piano '+level+' · '+Math.round(1/Math.max(raw,.001))+' fps\nx '+player.x.toFixed(2)+' z '+player.z.toFixed(2)+' · chiave '+hasKey+'\n'+canvas.width+' × '+canvas.height}
  }
@@ -173,7 +254,7 @@ $('new-run').onclick=()=>{
 $('new-run-cancel').onclick=()=>{$('new-run-confirm').hidden=true;$('new-run').focus({preventScroll:true})};
 $('new-run-start').onclick=()=>{
  if(multiplayer||!renderer||transitioning)return;
- seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;run=newRun(seed,true);
+ seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;healthFlash=0;run=newRun(seed,true);
  loadWorld();resume();
 };
 $('menu-leave').onclick=leave;$('action').onclick=()=>target()?use():strike();$('drop-item').onclick=dropHeld;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=tryJump;
@@ -185,7 +266,15 @@ $('quality').value=quality=['auto','low','high'].includes(read('labyrinth-qualit
 $('quality').onchange=e=>{quality=e.target.value;renderer.quality=quality;frameBudget.reset();renderer.resolutionScale=1;write('labyrinth-quality',quality);renderer.draw(player,hasKey,performance.now()/1000)};
 window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(playing)pause();return}if(!playing||transitioning)return;if(e.code==='KeyM'&&!coarse&&!document.body.classList.contains('touch')){e.preventDefault();if(!e.repeat)toggleCursor();return}if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyE','KeyQ','KeyF','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='KeyF'&&!e.repeat)strike();if(e.code==='KeyE'&&!e.repeat)use();if(e.code==='KeyQ'&&!e.repeat)dropHeld();if(e.code==='Space'&&!e.repeat)tryJump()}});
 window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{resetInput();if(playing&&!transitioning)pause()});
-canvas.addEventListener('mousedown',e=>{if(!playing||cursorFree)return;if(e.button===0){dragging=true;strike();pointerLock()}});window.addEventListener('mouseup',()=>dragging=false);
+canvas.addEventListener('mousedown',e=>{
+ if(!playing||cursorFree)return;
+ if(e.button===2){e.preventDefault();setGuard(true);return}
+ if(e.button===0){dragging=true;strike();pointerLock()}
+});
+window.addEventListener('mouseup',e=>{if(e.button===0)dragging=false;if(e.button===2)setGuard(false)});
+const guardButton=$('guard');
+guardButton.addEventListener('pointerdown',e=>{e.preventDefault();guardButton.setPointerCapture?.(e.pointerId);setGuard(true)});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])guardButton.addEventListener(event,()=>setGuard(false));
 window.addEventListener('mousemove',e=>{if(!cursorFree&&(document.pointerLockElement===canvas||dragging))look(e.movementX,e.movementY)});
 document.addEventListener('pointerlockchange',()=>{
  if(cursorFree){
@@ -213,7 +302,7 @@ if(coarse)document.body.classList.add('touch');
 window.addEventListener('resize',updateOrientation);
 document.addEventListener('visibilitychange',()=>{if(document.hidden){resetInput();store();sound.active(false);if(playing&&!transitioning)pause()}});
 window.addEventListener('message',event=>{if(event.source!==parent||event.origin!==location.origin||event.data?.type!=='labyrinth:identity'||started)return;const id=String(event.data.player||'');if(!/^\d{1,20}$/.test(id)||id===playerId)return;playerId=id;if(renderer)loadSaved()});
-window.addEventListener('pagehide',()=>{store();playing=false;cancelAnimationFrame(raf);clearTimeout(toastTimer);sound.destroy();renderer?.destroy()});
+window.addEventListener('pagehide',()=>{setGuard(false);store();playing=false;cancelAnimationFrame(raf);clearTimeout(toastTimer);sound.destroy();renderer?.destroy()});
 canvas.addEventListener('webglcontextlost',event=>{event.preventDefault();if(playing)pause();renderer?.destroy();renderer=null;$('start').disabled=true;$('fatal').textContent='La grafica è stata sospesa dal dispositivo. Attendi il ripristino oppure riapri Labyrinth.';tell('Contesto WebGL sospeso')});
 canvas.addEventListener('webglcontextrestored',()=>{try{renderer=new Renderer(canvas);renderer.quality=quality;renderer.load(world);syncScene();renderer.draw(player,hasKey,0);$('fatal').textContent='';$('start').disabled=false;tell('Contesto WebGL ripristinato')}catch(e){$('fatal').textContent=e.message}});
 try{renderer=new Renderer(canvas);renderer.quality=quality;loadSaved();updateSound();tell('Motore 3D pronto')}catch(error){$('fatal').textContent=error.message;$('start').disabled=true;$('new-run').hidden=true;$('menu-note').textContent='La grafica 3D richiede WebGL. Puoi tornare a Binottoland e provare da un altro dispositivo.';tell('Avvio non riuscito: '+error.message)}
@@ -223,20 +312,21 @@ function netSend(packet){if(parent!==window)parent.postMessage({type:'labyrinth:
 function sendPose(){if(!multiplayer||multiplayer.watch||!networkConnected||!player||multiplayer.state.archived)return;const warp=multiplayer.state.players.find(p=>p.id===playerId)?.warp||0;
  sentPoses.set(++poseSeq,{x:player.x,z:player.z,level,warp});
  if(sentPoses.size>32)sentPoses.delete(sentPoses.keys().next().value);
- netSend({type:'pose',seq:poseSeq,level,warp,x:player.x,z:player.z,yaw:player.yaw,pitch:player.pitch,height:jumpState.height,weapon:run.inventory[0]==='sword'?'sword':null})}
+ netSend({type:'pose',seq:poseSeq,level,warp,x:player.x,z:player.z,yaw:player.yaw,pitch:player.pitch,height:jumpState.height,guard:guarding})}
 function sendAction(kind,extra={},quiet=false){if(!networkConnected||multiplayer?.watch||multiplayer?.state.archived){if(!quiet)toast('Attendi il collegamento o accedi come giocatore.');return}if(networkBusy&&!quiet)return;sendPose();const id=++requestId;netSend({type:'action',kind,request:id,...extra});if(!quiet){networkBusy=id;setTimeout(()=>{if(networkBusy===id){networkBusy=false;toast('Conferma non ricevuta. Attendi la riconnessione.')}},8000)}}
-function networkUse(){if(!playing||transitioning||portrait()||networkBusy)return;const t=target();if(!t)return;const map={door:'open',back:'back',showcase:'showcase',backpack:'backpack',sword:'sword'};if(t.kind==='card')sendAction('pickup',{item:t.item.id});else if(map[t.kind])sendAction(map[t.kind]);else toast(t.kind==='waiting'?'Le vetrine si apriranno quando saranno arrivati tutti.':'Serve il passe-partout per tornare indietro.')}
+function networkUse(){if(!playing||transitioning||portrait()||networkBusy)return;const t=target();if(!t)return;if(t.kind==='card')sendAction('pickup',{item:t.item.id});else if(['door','back','showcase',...SHOWCASE_GEAR.map(([id])=>id)].includes(t.kind))sendAction(t.kind==='door'?'open':t.kind);else toast(t.kind==='waiting'?'Le vetrine si apriranno quando saranno arrivati tutti.':'Serve il passe-partout per tornare indietro.')}
 function configureNetworkWorld(){if(!multiplayer||!world.arena)return;const cases=multiplayer.state.cases||[],own=cases.find(c=>c.id===playerId);world.cases=cases;world.obstacles=world.obstacles.filter(b=>b.type);world.obstacles.push(...cases.map(c=>({...c,halfWidth:1.08,halfDepth:.5})));if(own)world.showcase={x:own.x,z:own.z};}
 function receiveState(s,correct=false){
  if(!multiplayer||!s||s.room!==multiplayer.room)return;if(s.deleted){leave();return}const previous=multiplayer.state;if(s.revision<previous.revision)return;multiplayer.state=s;const me=s.players.find(p=>p.id===playerId),oldLevel=level;
  seed=s.seed;if(multiplayer.watch&&followId&&!s.players.some(p=>p.id===followId&&p.online))followId=s.players.find(p=>p.online)?.id||'';const followed=multiplayer.watch?s.players.find(p=>p.id===followId):null;if(!multiplayer.watch&&me)level=me.level;else if(followed)level=followed.level;
  const own=multiplayer.watch?null:me,priorOwn=previous.players.find(p=>p.id===playerId);const warped=own&&(own.warp||0)!==(priorOwn?.warp||0);
- run={version:2,seed,level,seconds,inventory:own?[...own.inventory]:[],backpack:own?.backpack||false,floors:s.floors,showcaseOpen:s.showcaseOpen,swordTaken:own?.swordTaken||false,test:false};
+ run={...own,version:2,seed,level,seconds,inventory:own?[...own.inventory]:[],floors:s.floors,showcaseOpen:s.showcaseOpen,test:false};
+ if(s.archived)setGuard(false);
  const signature=JSON.stringify((s.cases||[]).map(c=>[c.id,c.x,c.z]));const changedWorld=!world||world.seed!==seed||world.level!==level||oldLevel!==level;
  if(changedWorld){sentPoses.clear();loadWorld(own?{player:{...own.player}}:followed?{player:{...followed.player}}:null);transitioning=false;toast(level===6?'Arena · '+s.players.filter(p=>p.counted&&p.level===6).length+' arrivati':'Piano '+level)}
  else if(warped){
   sentPoses.clear();Object.assign(player,own.player);jumpState.height=own.player.height||0;jumpState.velocity=0;bob=0;stepDistance=0;
-  if(own.hitAt!==priorOwn?.hitAt){sound.swish?.();toast('Il quadro ti ha colpito. Sei tornato all’ingresso del piano.')}
+  setGuard(false);
  }
  else if(own&&(correct===true||sentPoses.has(correct)||Math.hypot(player.x-own.player.x,player.z-own.player.z)>1.8)){
   const sample=sentPoses.get(correct),dx=player.x-(sample?.x??player.x),dz=player.z-(sample?.z??player.z);
@@ -248,9 +338,14 @@ function receiveState(s,correct=false){
  }
  for(const seq of sentPoses.keys())if(seq<=(me?.seq||0))sentPoses.delete(seq);
  if(world.arena){configureNetworkWorld();if(own&&!free(world,player.x,player.z)){player.x=own.player.x;player.z=own.player.z}if(signature!==caseSignature){renderer.load(world);caseSignature=signature}}
- for(const p of s.players){if(p.id===playerId&&!multiplayer.watch)continue;if(!p.online){remoteViews.delete(p.id);continue}const prior=remoteViews.get(p.id);if(!prior||prior.level!==p.level||prior.warp!==p.warp)remoteViews.set(p.id,{...p,player:{...p.player},target:{...p.player}});else{prior.target={...p.player};prior.appearance=p.appearance;prior.backpack=p.backpack;prior.weapon=p.weapon;prior.actionAt=p.actionAt}}
+ for(const p of s.players){if(p.id===playerId&&!multiplayer.watch)continue;if(!p.online){remoteViews.delete(p.id);continue}const prior=remoteViews.get(p.id);if(!prior||prior.level!==p.level||prior.warp!==p.warp)remoteViews.set(p.id,{...p,player:{...p.player},target:{...p.player}});else{prior.target={...p.player};prior.appearance=p.appearance;Object.assign(prior,equipment(p),{guard:p.guard,actionAt:p.actionAt})}}
  for(const id of remoteViews.keys())if(!s.players.some(p=>p.id===id&&p.online))remoteViews.delete(id);
- poseSeq=Math.max(poseSeq,me?.seq||0);syncScene();updateInventory();updateActions();$('new-run').hidden=true;$('test-travel').hidden=!multiplayer.watch;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent='La spedizione rimane nella Lobby anche quando è vuota.';
+ poseSeq=Math.max(poseSeq,me?.seq||0);syncScene();updateInventory();updateHealth();updateActions();$('new-run').hidden=true;
+ if(playing&&own)for(const p of s.players){
+  if(!p.impact||p.impact.number===previous.players.find(before=>before.id===p.id)?.impact?.number)continue;
+  if(p.id===playerId||p.impact.attacker===playerId)showImpact(p.impact,p.id===playerId);
+ }
+ $('test-travel').hidden=!multiplayer.watch;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent='La spedizione rimane nella Lobby anche quando è vuota.';
  const active=s.players.filter(p=>p.counted),arrived=active.filter(p=>p.level===6);$('expedition-status').textContent=(multiplayer.watch?'Spettatore · ':'')+active.filter(p=>p.online).length+' online · arena '+arrived.length+'/'+active.length+(s.entryLocked?' · ingressi chiusi':' · ingressi aperti');
  if(previous&&!previous.showcaseOpen&&s.showcaseOpen){sound.chime();toast('Tutti arrivati. Le vetrine sono aperte.')}
  if(!playing)renderer.draw(player,hasKey,performance.now()/1000);
@@ -267,4 +362,4 @@ window.addEventListener('message',event=>{
  else if(data?.type==='labyrinth:packet'&&multiplayer){const p=data.packet;if(p.type==='state'){if(Number.isFinite(p.serverTime))multiplayer.clockOffset=p.serverTime-Date.now();receiveState(p.state,p.correct&&(p.correctSeq??true));}else if(p.type==='ack'){if(networkBusy===p.request)networkBusy=false;if(!p.ok)toast(p.error||'Azione non riuscita.')}}
 });
 
-function updateTutorial(){if(!tutorialMode)return;if(!tutorialBox){tutorialBox=document.createElement('aside');tutorialBox.id='lab-tutorial';tutorialBox.style.cssText='position:fixed;top:calc(var(--system-safe-top,0px) + var(--content-safe-top,0px) + 64px);left:50%;transform:translateX(-50%);width:min(70vw,470px);padding:9px 12px;border:1px solid #a6cba870;border-radius:10px;background:#14201ee8;color:#f3f0d9;font:12px/1.4 system-ui;z-index:15;pointer-events:none';document.body.append(tutorialBox)}const step=!world.arena?floorState(run,world).open?['2 · Attraversa l’uscita','La porta resta aperta. Cammina oltre la soglia per proseguire.']:!hasKey&&!hasPass(run)?['1 · Esplora e raccogli','Muoviti con WASD o joystick sinistro; guarda col mouse o joystick destro. Cerca la keycard colorata: avvicinati e premi E / Usa.']:['2 · Apri l’uscita','Hai una carta adatta. Segui la freccia, avvicinati alla porta e premi E / Usa. La keycard si consuma. Il passe-partout si può riusare. Attraversa l’uscita.']:!run.showcaseOpen?['3 · La vetrina','Avvicinati alla vetrina e guardala: E / Usa la apre. In multiplayer occorre aspettare gli altri.']:!run.backpack?['4 · Lo zaino','Raccogli prima lo zaino: aggiunge quattro posti a mano e tasca. Puoi lasciare le keycard con Q / Lascia.']:!run.swordTaken?['5 · La spada','Raccogli la spada e selezionala nell’inventario. F o clic sinistro / Colpisci muove il braccio.']:['6 · Pronto a esplorare','Prova la rete elastica e Salta. Pausa ti permette di cambiare piano nella modalità di prova o tornare alla Lobby.'];textIfChanged('lab-tutorial',step[0]+' — '+step[1]);tutorialBox.hidden=!playing;}
+function updateTutorial(){if(!tutorialMode)return;if(!tutorialBox){tutorialBox=document.createElement('aside');tutorialBox.id='lab-tutorial';tutorialBox.style.cssText='position:fixed;top:calc(var(--system-safe-top,0px) + var(--content-safe-top,0px) + 64px);left:50%;transform:translateX(-50%);width:min(70vw,470px);padding:9px 12px;border:1px solid #a6cba870;border-radius:10px;background:#14201ee8;color:#f3f0d9;font:12px/1.4 system-ui;z-index:15;pointer-events:none';document.body.append(tutorialBox)}const step=!world.arena?floorState(run,world).open?['2 · Attraversa l’uscita','La porta resta aperta. Cammina oltre la soglia per proseguire.']:!hasKey&&!hasPass(run)?['1 · Esplora e raccogli','Muoviti con WASD o joystick sinistro; guarda col mouse o joystick destro. Cerca la keycard colorata: avvicinati e premi E / Usa.']:['2 · Apri l’uscita','Hai una carta adatta. Segui la freccia, avvicinati alla porta e premi E / Usa. La keycard si consuma. Il passe-partout si può riusare. Attraversa l’uscita.']:!run.showcaseOpen?['3 · La vetrina','Avvicinati alla vetrina e guardala: E / Usa la apre. In multiplayer occorre aspettare gli altri.']:!run.backpack?['4 · Lo zaino','Raccogli prima lo zaino: aggiunge quattro posti alle due mani e alle due tasche. Puoi lasciare le keycard con Q / Lascia.']:!run.swordTaken?['5 · La spada','Raccogli la spada dalla vetrina. F o clic sinistro / Colpisci attacca. Tieni premuto il destro o Para per difenderti.']:['6 · Pronto a esplorare','Prova la rete elastica e Salta. Pausa ti permette di cambiare piano nella modalità di prova o tornare alla Lobby.'];textIfChanged('lab-tutorial',step[0]+' — '+step[1]);tutorialBox.hidden=!playing;}

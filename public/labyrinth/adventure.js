@@ -21,28 +21,56 @@ export function makeArena(seed){
 
 }
 export function worldFor(seed,level){const w=level===6?makeArena(seed):makeLevel(seed,level);if(level>1&&level<6)w.lamps=w.lamps.filter((p,i)=>{const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL),cell=index(x,z,w.n);return cell===w.exit||((x+z)%4===2&&(level<4||i%(level===5?4:2)===0))});w.palette=level===6?ARENA_LIGHT:FLOORS[level-1];w.frames=placeFrames(w,CELL,distances,random);w.mirrors=placeMirrors(w);return w}
-export function newRun(seed,test=true){return {version:2,seed:seed>>>0,level:1,seconds:0,player:null,inventory:[],kitRemoved:true,backpack:false,floors:{},showcaseOpen:false,swordTaken:false,test};}
+export function newRun(seed,test=true){return {version:2,seed:seed>>>0,level:1,seconds:0,player:null,inventory:[],inventoryLayout:2,health:100,kitRemoved:true,backpack:false,floors:{},showcaseOpen:false,swordTaken:false,test};}
 function randomSpot(world,salt){const rng=random(world.seed^Math.imul(world.level,7717)^salt),choices=[];for(let i=0;i<world.grid.length;i++)if(!world.grid[i]&&i!==world.start&&i!==world.exit&&i!==world.key&&!world.frames.some(f=>f.id===i))choices.push(i);return centre(choices[Math.floor(rng()*choices.length)],world.n)}
 export function floorState(run,world){
  if(!run.floors[world.level])run.floors[world.level]={open:false,cycle:0,key:{...world.keyPosition},pass:world.level===5&&!hasPass(run)&&!Object.values(run.floors).some(f=>f.pass)?randomSpot(world,823):null};
  return run.floors[world.level];
 }
-export const capacity=run=>run.backpack?6:2;
+export const capacity=run=>run.backpack?8:4;
 export const hasPass=run=>run.inventory.includes('pass');
 export function itemsAt(run,world){const f=floorState(run,world),items=[];if(!world.arena&&!f.open&&f.key)items.push({id:'key:'+world.level,type:'key',...f.key,color:world.palette.stripe});if(f.pass)items.push({id:'pass',type:'pass',...f.pass,color:'#16181b'});return items}
+const freeSlot=(run,from=0)=>Array.from({length:capacity(run)},(_,i)=>i).find(i=>i>=from&&!run.inventory[i]);
+function setSlot(inventory,slot,item){
+ while(inventory.length<slot)inventory.push(null);
+ inventory[slot]=item;
+}
+export function clearSlot(inventory,slot){
+ inventory[slot]=null;
+ while(inventory.length&&!inventory.at(-1))inventory.pop();
+}
+export function migrateInventory(run){
+ if(run.inventoryLayout===2)return false;
+ run.inventory.splice(1,0,null);
+ if(run.inventory.length>3)run.inventory.splice(3,0,null);
+ while(run.inventory.length&&!run.inventory.at(-1))run.inventory.pop();
+ run.inventoryLayout=2;
+ return true;
+}
 export function pickup(run,world,itemId){
- if(run.inventory.length>=capacity(run))return 'full';const f=floorState(run,world);
- if(itemId==='pass'&&f.pass&&!hasPass(run)){f.pass=null;run.inventory.push('pass');return 'ok'}
- if(itemId==='key:'+world.level&&f.key&&!f.open){f.key=null;run.inventory.push(itemId);return 'ok'}return 'missing';
+ const slot=freeSlot(run);if(slot===undefined)return 'full';const f=floorState(run,world);
+ if(itemId==='pass'&&f.pass&&!hasPass(run)){f.pass=null;setSlot(run.inventory,slot,'pass');return 'ok'}
+ if(itemId==='key:'+world.level&&f.key&&!f.open){f.key=null;setSlot(run.inventory,slot,itemId);return 'ok'}return 'missing';
 }
 export function drop(run,world,slot,player){
- const id=run.inventory[slot];if(!id||id==='sword')return false;const f=floorState(run,world),p={x:player.x,z:player.z};
+ const id=run.inventory[slot];if(!id)return false;const f=floorState(run,world),p={x:player.x,z:player.z};
  if(id==='pass')f.pass=p;else if(id==='key:'+world.level&&!f.open)f.key=p;else return false;
- run.inventory.splice(slot,1);return true;
+ clearSlot(run.inventory,slot);return true;
 }
 export function putInHand(run,slot){
- if(!Number.isInteger(slot)||slot<1||!run.inventory[slot])return false;
- [run.inventory[0],run.inventory[slot]]=[run.inventory[slot],run.inventory[0]];
+ if(!Number.isInteger(slot)||slot<0||slot>=capacity(run)||!run.inventory[slot])return false;
+ const id=run.inventory[slot],hand=id==='shield'?1:0;
+ if(slot===hand){
+  const pocket=freeSlot(run,2);if(pocket===undefined)return false;
+  setSlot(run.inventory,pocket,id);clearSlot(run.inventory,slot);return true;
+ }
+ const previous=run.inventory[hand];
+ if(slot===1&&previous==='sword'){
+  const pocket=freeSlot(run,2);if(pocket===undefined)return false;
+  setSlot(run.inventory,pocket,previous);run.inventory[hand]=id;clearSlot(run.inventory,slot);return true;
+ }
+ setSlot(run.inventory,hand,id);
+ if(previous)setSlot(run.inventory,slot,previous);else clearSlot(run.inventory,slot);
  return true;
 }
 export function openDoor(run,world){
@@ -50,13 +78,51 @@ export function openDoor(run,world){
  const f=floorState(run,world);if(f.open)return true;
  const i=run.inventory.indexOf('key:'+world.level);
  if(i<0&&!hasPass(run))return false;
- if(i>=0)run.inventory.splice(i,1);
+ if(i>=0)clearSlot(run.inventory,i);
  f.key=null;
  f.open=true;return true;
 }
 export function openShowcase(run){if(run.level!==6||run.showcaseOpen)return false;run.showcaseOpen=true;return true}
-export function takeBackpack(run){if(!run.showcaseOpen||run.backpack)return false;run.backpack=true;return true}
-export function takeSword(run){if(!run.showcaseOpen||!run.backpack||run.swordTaken||run.inventory.length>=capacity(run))return false;run.inventory.unshift('sword');run.swordTaken=true;return true}
+export const SHOWCASE_GEAR=[['backpack','Zaino'],['sword','Spada'],['shield','Scudo'],['helmet','Elmetto'],['armor','Corazza']];
+const gearFlag=kind=>kind==='sword'||kind==='shield'?kind+'Taken':kind;
+export const hasGear=(run,kind)=>!!run[gearFlag(kind)];
+export function takeGear(run,kind){
+ if(run.level!==6||!run.showcaseOpen||!SHOWCASE_GEAR.some(([id])=>id===kind)||hasGear(run,kind)||kind==='sword'&&!run.backpack)return false;
+ if(kind==='sword'||kind==='shield'){
+  const hand=kind==='sword'?0:1,previous=run.inventory[hand];
+  if(previous){
+   const slot=freeSlot(run,2)??freeSlot(run);
+   if(slot===undefined)return false;
+   setSlot(run.inventory,slot,previous);
+  }
+  setSlot(run.inventory,hand,kind);
+ }
+ run[gearFlag(kind)]=true;
+ return true;
+}
+export const takeBackpack=run=>takeGear(run,'backpack');
+export const takeSword=run=>takeGear(run,'sword');
+export const equipment=run=>({
+ backpack:!!run.backpack,helmet:!!run.helmet,armor:!!run.armor,
+ swordTaken:!!run.swordTaken,shieldTaken:!!run.shieldTaken,
+ weapon:run.inventory[0]==='sword'?'sword':null,
+ shield:run.inventory[1]==='shield'
+});
+export const healthValue=value=>Number.isFinite(value)?Math.max(1,Math.min(100,Math.round(value))):100;
+export const FRAME_DAMAGE=25;
+export function takeDamage(target,kind,damage,now,attacker=null){
+ if(now<(target.protectedUntil||0))return null;
+ const remaining=Math.max(0,healthValue(target.health)-damage);
+ const fatal=remaining===0;
+ target.health=fatal?100:remaining;
+ if(fatal)target.protectedUntil=now+1250;
+ return target.impact={kind,damage,fatal,attacker,number:(target.impact?.number||0)+1};
+}
+export function strikeDamage(kind,guarded,gear){
+ if(kind==='fist')return guarded?0:2;
+ if(gear.helmet&&gear.armor&&gear.shield)return 2;
+ return guarded?7:10;
+}
 export function nextWaypoint(world,player,target){
  const start=index(Math.floor(player.x/CELL),Math.floor(player.z/CELL),world.n),end=index(Math.floor(target.x/CELL),Math.floor(target.z/CELL),world.n),ds=distances(world.grid,world.n,end);
  if(ds[start]<0)return null;if(start===end)return {...target,steps:0};const x=start%world.n,z=Math.floor(start/world.n),next=[[1,0],[-1,0],[0,1],[0,-1]].map(([a,b])=>index(x+a,z+b,world.n)).find(i=>ds[i]>=0&&ds[i]===ds[start]-1);return next===undefined?null:{...centre(next,world.n),steps:ds[start]};
@@ -65,10 +131,16 @@ export function readRun(raw){
  if(!raw||raw.version!==2||!Number.isInteger(raw.seed)||raw.seed<0||raw.seed>4294967295||!Number.isInteger(raw.level)||raw.level<1||raw.level>6)return null;
  const r=newRun(raw.seed,raw.test===true);r.level=raw.level;r.seconds=Number.isFinite(raw.seconds)?Math.max(0,Math.min(1e8,raw.seconds)):0;r.backpack=raw.backpack===true;r.showcaseOpen=raw.showcaseOpen===true;r.swordTaken=r.showcaseOpen&&raw.swordTaken===true;
  if(!r.showcaseOpen)r.backpack=false;
- const allowed=new Set(['pass',...(raw.floors?.[r.level]?.open?[]:['key:'+r.level]),...(r.swordTaken?['sword']:[])]);r.inventory=[...new Set(Array.isArray(raw.inventory)?raw.inventory:[])].filter(i=>allowed.has(i)).slice(0,capacity(r));
+  for(const gear of ['armor','helmet','shieldTaken'])r[gear]=r.showcaseOpen&&raw[gear]===true;
+ r.health=healthValue(raw.health);r.frameHits=(Array.isArray(raw.frameHits)?raw.frameHits:[]).filter(v=>typeof v==='string').slice(-12);
+ const allowed=new Set(['pass',...(raw.floors?.[r.level]?.open?[]:['key:'+r.level]),...(r.swordTaken?['sword']:[]),...(r.shieldTaken?['shield']:[])]);
+ const inventory={inventory:Array.isArray(raw.inventory)?raw.inventory.slice(0,8):[],inventoryLayout:raw.inventoryLayout};
+ migrateInventory(inventory);
+ r.inventory=inventory.inventory.slice(0,capacity(r)).map(id=>allowed.delete(id)?id:null);
+ while(r.inventory.length&&!r.inventory.at(-1))r.inventory.pop();
  r.floors={};for(let level=1;level<=6;level++){const w=worldFor(r.seed,level),s=raw.floors?.[level];if(!s)continue;const valid=p=>p&&free(w,p.x,p.z)?{x:p.x,z:p.z}:null;const cycle=Number.isInteger(s.cycle)?Math.max(0,Math.min(1e6,s.cycle)):0;r.floors[level]={open:s.open===true,cycle,key:s.open?null:valid(s.key),pass:valid(s.pass),traps:Object.fromEntries(w.frames.filter(f=>Number.isFinite(s.traps?.[f.id])).map(f=>[f.id,s.traps[f.id]]))};if(!w.arena&&!s.open&&!r.floors[level].key&&!r.inventory.includes('key:'+level))r.floors[level].key=randomSpot(w,cycle*104729);}
  for(const [level,f] of Object.entries(r.floors))if(r.inventory.includes('key:'+level))f.key=null;
- if(r.test&&raw.kitRemoved!==true){r.inventory=r.inventory.filter(i=>i==='sword');r.floors={}}
+ if(r.test&&raw.kitRemoved!==true){r.inventory=r.inventory.includes('sword')?['sword']:[];r.floors={};r.frameHits=[]}
  // One master card throughout the expedition, including carried/dropped state.
  let found=hasPass(r);for(let level=1;level<=6;level++){const f=r.floors[level];if(!f?.pass)continue;if(found)f.pass=null;else found=true}
  if(found&&!r.floors[5]){const w=worldFor(r.seed,5);floorState(r,w).pass=null}

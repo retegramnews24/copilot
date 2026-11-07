@@ -35,8 +35,18 @@ try{
  watcher.ws.send(JSON.stringify({type:'action',request:1,kind:'pickup',item:'key:1'}));const denied=await until(watcher,p=>p.type==='ack'&&p.request===1);assert.equal(denied.ok,false);
  const origin=latest.players.find(p=>p.id==='1').player;clients[0].ws.send(JSON.stringify({type:'pose',seq:1,x:origin.x+.08,z:origin.z,yaw:0,pitch:0,height:0}));clients[0].ws.send(JSON.stringify({type:'action',request:3,kind:'appearance',appearance:{shirt:'#cf514d',shorts:'#529766'}}));await until(clients[0],p=>p.type==='ack'&&p.request===3&&p.ok);assert.equal((await call(1,'/api/labyrinth/'+room+'/state')).data.state.players[0].appearance.shirt,'#cf514d');
  clients[0].ws.send(JSON.stringify({type:'pose',seq:2,x:999,z:999,yaw:0,pitch:0}));await until(clients[0],p=>p.correct===true);clients[0].ws.send(JSON.stringify({type:'action',request:4,kind:'pickup',item:'key:1'}));assert.equal((await until(clients[0],p=>p.type==='ack'&&p.request===4)).ok,false);
+ const defender=latest.players.find(p=>p.id==='2').player;
+ clients[0].ws.send(JSON.stringify({type:'pose',seq:3,x:origin.x+.08,z:origin.z,yaw:-Math.PI/2,pitch:0,height:0}));
+ clients[0].ws.send(JSON.stringify({type:'action',request:5,kind:'strike',weapon:'sword'}));
+ await until(watcher,p=>p.type==='state'&&p.state.players.find(p=>p.id==='2').health===98);
+ await new Promise(resolve=>setTimeout(resolve,580));
+ clients[1].ws.send(JSON.stringify({type:'pose',seq:1,x:defender.x,z:defender.z,yaw:Math.PI/2,pitch:0,height:0,guard:true}));
+ await until(clients[1],p=>p.type==='state'&&p.state.players.find(p=>p.id==='2').guard);
+ clients[0].ws.send(JSON.stringify({type:'action',request:6,kind:'strike'}));
+ const blocked=await until(clients[1],p=>p.type==='state'&&p.state.players.find(p=>p.id==='2').impact?.damage===0);
+ assert.equal(blocked.state.players.find(p=>p.id==='2').health,98);
  assert.equal((await call(5,'/api/labyrinth/'+room+'/archive',{})).status,403);assert.equal((await call(1,'/api/labyrinth/'+room+'/archive',{})).status,200);await until(watcher,p=>p.type==='state'&&p.state.archived);assert.equal((await call(2,'/api/lobby')).data.games.find(g=>g.room===room).archived,true);
- for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();mf=new Miniflare(options);const restored=await call(1,'/api/labyrinth/'+room+'/state');assert.equal(restored.status,200);assert.equal(restored.data.state.archived,true);assert.equal(restored.data.state.players[0].appearance.shirt,'#cf514d');
+ for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();mf=new Miniflare(options);const restored=await call(1,'/api/labyrinth/'+room+'/state');assert.equal(restored.status,200);assert.equal(restored.data.state.archived,true);assert.equal(restored.data.state.players[0].appearance.shirt,'#cf514d');assert.equal(restored.data.state.players.find(p=>p.id==='2').health,98);
  assert.equal((await call(2,'/api/labyrinth/'+room+'/delete',{})).status,200);assert.equal((await call(1,'/api/lobby')).data.games.length,0);const next=await call(1,'/api/create',{game:'labyrinth'});assert.equal(next.data.state.number,2,'Numbers do not restart after deleting the last table');
  // Spectator presence identifies the viewed table independently from an owned game.
  const chess=await call(20,'/api/create',{game:'chess'}),dama=await call(22,'/api/create',{game:'checkers'});

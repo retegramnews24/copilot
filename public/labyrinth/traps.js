@@ -58,10 +58,11 @@ export function frameSupport(frames,x,z,r){
  for(const f of frames||[])height=Math.max(height,frameHeight(f,x,z,r,REST_ANGLE));
  return height;
 }
-export function frameStrike(world,floor,from,to,since,now,r){
+export function struckFrame(world,floor,from,to,since,now,r,hit=[]){
  for(const f of world.frames||[]){
   const start=floor.traps?.[f.id];
   if(start===undefined)continue;
+  const token=world.level+':'+f.id+':'+start;if(hit.includes(token))continue;
   const first=Math.max(since,start+WARNING_MS),last=Math.min(now,start+WARNING_MS+FALL_MS-1);
   if(first>last)continue;
   const steps=Math.max(1,Math.ceil((last-first)/20));
@@ -70,8 +71,10 @@ export function frameStrike(world,floor,from,to,since,now,r){
    const x=from.x+(to.x-from.x)*t,z=from.z+(to.z-from.z)*t;
    const feet=(from.height||0)+((to.height||0)-(from.height||0))*t;
    const y=frameHeight(f,x,z,r,framePose(start,time).angle);
-   if(y>feet-.02&&y>0&&y<feet+1.78)return true;
+   if(y>feet-.02&&y>0&&y<feet+1.78)return token;
   }
  }
- return false;
+ return null;
 }
+
+export const frameStrike=(...args)=>struckFrame(...args)!==null;

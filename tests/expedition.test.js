@@ -47,8 +47,9 @@ at(a,{x:frame.x+frame.dx*.5,z:frame.z+frame.dz*.5});
 const step=(time)=>pose(s,a,{seq:a.seq+1,level:a.level,warp:a.warp||0,x:a.player.x,z:a.player.z,yaw:0,pitch:0,height:0},time);
 const warp=a.warp||0;assert.equal(step(now),'trap');
 assert.equal(framePose(s.floors[3].traps[frame.id],now+400).phase,'warning');
-assert.equal(step(now+1000),true);assert.equal(step(now+1500),'warp');
-assert.equal(a.warp,warp+1);assert.equal(a.level,3);assert.equal(a.player.x,trapWorld.spawn.x);assert.equal(a.player.z,trapWorld.spawn.z);
+assert.equal(step(now+1000),true);assert.equal(step(now+1500),'trap');
+assert.equal(a.warp||0,warp);assert.equal(a.level,3);assert.equal(a.health,75);assert.equal(a.impact.kind,'frame');
+step(now+1510);assert.equal(a.health,75,'A falling frame can only hit once per player');
 console.log('PASS multiplayer: four players, atomic card/door actions, independent floors, creator disconnect, grace/drop/reconnect, solo and grouped arena barriers, personal cases/equipment, bounded poses and persistent empty expeditions.');
 
 // Cards must be authoritative before any pickup, even with two clients and after restore.
@@ -80,5 +81,36 @@ assert.deepEqual(holder.inventory,['pass','key:2']);
 act(masterRoom,holder,{kind:'equip',slot:1},now);
 assert.deepEqual(holder.inventory,['key:2','pass']);assert.throws(()=>act(masterRoom,holder,{kind:'equip',slot:2},now));
 at(holder,{x:green.door.x-green.door.dx*.8,z:green.door.z-green.door.dz*.8});
-act(masterRoom,holder,{kind:'open'},now);assert.deepEqual(holder.inventory,['pass']);assert.ok(masterRoom.floors[2].open);
+act(masterRoom,holder,{kind:'open'},now);assert.deepEqual(holder.inventory,[null,'pass']);assert.ok(masterRoom.floors[2].open);
 console.log('PASS master key and hand slot: reusable black door access, obsolete shared key removal and authoritative equip.');
+
+const duel=createExpedition('duel',1,172,user(1),now);
+const attacker=duel.players['1'],defender=joinExpedition(duel,user(2),now);
+for(const p of [attacker,defender]){connectPlayer(duel,p.id,'duel-'+p.id,now);p.level=6;}
+const arena=expeditionWorld(duel,6),origin={x:arena.spawn.x,z:arena.spawn.z-3};
+at(attacker,origin);at(defender,{x:origin.x,z:origin.z-1});
+function guard(active,faces=true){
+ const {x,z,height}=defender.player;
+ return pose(duel,defender,{seq:defender.seq+1,x,z,yaw:faces?Math.PI:0,pitch:0,height,guard:active},now);
+}
+function hit(){
+ now+=600;
+ return act(duel,attacker,{kind:'strike',weapon:'forged-sword'},now);
+}
+hit();assert.equal(defender.health,98);assert.equal(defender.impact.kind,'fist');
+guard(true);hit();assert.equal(defender.health,98);assert.equal(defender.impact.damage,0);
+guard(true,false);hit();assert.equal(defender.health,96);
+attacker.inventory=['sword'];guard(false);hit();assert.equal(defender.health,86);
+guard(true);hit();assert.equal(defender.health,79);
+Object.assign(defender,{inventory:[null,'shield'],helmet:true,armor:true});
+guard(true);hit();assert.equal(defender.health,77);
+guard(false);hit();assert.equal(defender.health,75);
+defender.health=2;const beforeWarp=defender.warp||0;
+hit();assert.equal(defender.health,100);assert.equal(defender.impact.fatal,true);
+assert.equal(defender.warp,beforeWarp+1);assert.equal(defender.level,6);
+assert.equal(defender.player.x,arena.spawn.x);assert.equal(defender.player.z,arena.spawn.z);
+assert.deepEqual(defender.inventory,[null,'shield']);assert.equal(defender.helmet,true);assert.equal(defender.armor,true);
+at(defender,{x:origin.x,z:origin.z-1});hit();assert.equal(defender.health,100,'Brief spawn protection applies');
+at(defender,{x:origin.x,z:origin.z-1});defender.player.height=2;hit();hit();assert.equal(defender.health,100,'A jumping player beyond the reach is missed');
+assert.equal(act(duel,attacker,{kind:'strike'},now+5),false);
+console.log('PASS Labyrinth combat: authoritative weapon, frontal blocks, exact damage, protected same-floor respawn, intact gear and cooldown.');

@@ -1,6 +1,11 @@
 // Model coordinates face -Z. Both cameras use these shoulder, elbow and wrist positions.
-export function armPose(side,holding,swing,walk,firstPerson=false){
+export function armPose(side,holding,swing,walk,firstPerson=false,guard=false,shield=false){
  const shoulder=[side*.235,1.27,firstPerson?.15:0];
+ if(guard){
+  const shieldArm=shield&&side===-1;
+  return {shoulder,elbow:[side*.31,1.13,-.19],wrist:[side*(shieldArm?.19:.13),shieldArm?1.25:1.44,shieldArm?-.55:-.43]};
+ }
+ if(shield&&side===-1)return {shoulder,elbow:[-.31,1.0,-.085],wrist:[-.32,1.01,-.38]};
  const raised=holding&&side===1;
  const thrust=swing&&side===1?Math.sin(Math.PI*swing):0;
  const elbow=[side*(.29+.045*thrust),1.025+.11*thrust,raised?-.19-.19*thrust:-.04+walk*side];
