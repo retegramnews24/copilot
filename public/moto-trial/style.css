@@ -50,11 +50,7 @@ h1 { margin: 4px 0 7px; font-size: clamp(26px,7vmin,47px); line-height: 1; lette
 .touch .touch-help { display: inline; }
 .panel button { min-height: 42px; border: 1px solid var(--line); border-radius: 10px; padding: 7px 12px; font-weight: 740; }
 #primary { color: #34291e; background: #ffcd85; }
-#new-course { margin-left: 4px; background: #293846; }
 @media (max-width:340px) { .hud #exit span { display: none; } #controls { left: calc(var(--left) + 5px); right: calc(var(--right) + 5px); } }
 @media (max-height:370px) { .panel { padding: 13px 16px; } #description { margin-bottom: 6px; } #intro-controls { margin-bottom: 8px; } .panel button { min-height: 36px; } }
 
-#course-selection { display:grid; gap:4px; margin:12px 0 10px; }
-#course-selection label { color:#f4bc7e; font-size:10px; font-weight:800; letter-spacing:.14em; }
-#course-picker { width:100%; min-height:42px; padding:7px 10px; border:1px solid var(--line); border-radius:9px; background:#1c2833; color:var(--paper); font:inherit; }
-#course-summary { color:#d8d6c5; }
+#course-summary { display:block; color:#d8d6c5; margin:.55rem 0; }

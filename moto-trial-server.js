@@ -1,8 +1,16 @@
-import {COURSE_VERSION, makeCourse} from './public/moto-trial/physics.js';
+import {COURSE_VERSION, makeCourse, ground} from './public/moto-trial/physics.js';
 
+import {CAMPAIGN_LENGTH} from './public/moto-trial/courses.js';
+
+const campaignCourses = Array.from({length: CAMPAIGN_LENGTH}, (_, i) => makeCourse(i + 1));
+const boundsFor = course => {
+  const xs = course.tiers.flatMap(tier => tier.points.map(p => p.x));
+  return {min: Math.min(...xs), max: Math.max(...xs), bottom: course.bottom};
+};
+const campaignBounds = campaignCourses.map(boundsFor);
 const LIMIT = 8, EMPTY_GRACE = 60_000;
 const json = (data, status = 200) => Response.json(data, {status, headers: {'Cache-Control': 'no-store'}});
-const modes = new Set(['ready', 'ride', 'paused', 'crash', 'finish']);
+const modes = new Set(['ready', 'ride', 'paused', 'crash', 'offCourse', 'finish']);
 
 function readPose(packet, bounds) {
   const {x, y, angle, vx, facing, lean, roll, leftSpring = 0, rightSpring = 0, mode} = packet;
@@ -27,11 +35,11 @@ export class MotoTrialRoom {
   }
 
   players() {
-    return this.sockets().map(({member: {id, name, color, pose}}) => ({id, name, color, pose}));
+    return this.sockets().map(({member: {id, name, color, pose, stage, complete}}) => ({id, name, color, pose, stage, complete}));
   }
 
   state(room) {
-    return {room: room.room, number: room.number, seed: room.seed, courseVersion: room.courseVersion ?? 1, courseName: room.courseName, players: this.players()};
+    return {room: room.room, number: room.number, seed: room.seed, courseVersion: room.courseVersion ?? 1, courseName: room.courseName, campaign: !!room.campaign, players: this.players()};
   }
 
   summary(room) {
@@ -62,9 +70,8 @@ export class MotoTrialRoom {
       let room = await this.ctx.storage.get('moto-trial');
       if (path === '/moto-trial/init' && req.method === 'POST' && !room) {
         const {room: id, number, seed} = await req.json(), course = makeCourse(seed);
-        const points = course.tiers.flatMap(tier => tier.points.map(p => p.x));
-        room = {room: id, number, seed, courseName: course.name, courseVersion: COURSE_VERSION, created: Date.now(), revision: 0,
-          bounds: {min: Math.min(...points), max: Math.max(...points), bottom: course.bottom}};
+        room = {room: id, number, seed, courseName: 'Campagna Moto Trial', courseVersion: COURSE_VERSION, campaign: true,
+          created: Date.now(), revision: 0, bounds: boundsFor(course)};
         await this.ctx.storage.put('moto-trial', room);
         await this.ctx.storage.setAlarm(Date.now() + EMPTY_GRACE);
         return json({state: this.state(room), summary: this.summary(room)});
@@ -84,8 +91,10 @@ export class MotoTrialRoom {
       }
       const pair = new WebSocketPair(), socket = pair[1];
       this.ctx.acceptWebSocket(socket, ['moto-trial']);
+      const progress = room.campaign && await this.ctx.storage.get('progress:' + user.player);
       socket.serializeAttachment({kind: 'moto-trial', accessTag: req.headers.get('X-Access-Tag'),
-        id: user.player, name: user.name.slice(0, 45), color, pose: previous?.member.pose ?? null, seq: 0, sentAt: 0});
+        id: user.player, name: user.name.slice(0, 45), color, pose: previous?.member.pose ?? null,
+        stage: room.campaign ? progress?.stage ?? 1 : undefined, complete: !!progress?.complete, seq: 0, sentAt: 0});
       this.broadcast({type: 'state', state: this.state(room)});
       await this.ctx.storage.deleteAlarm();
       await this.updateLobby(room);
@@ -99,20 +108,37 @@ export class MotoTrialRoom {
     await this.lobby(room, 'update');
   }
 
-  async message(socket, message) {
-    if (typeof message !== 'string' || message.length > 420) return;
-    const member = socket.deserializeAttachment(), now = Date.now();
-    if (!member || member.closed || now - member.sentAt < 60) return;
-    let packet;
-    try { packet = JSON.parse(message); } catch { return; }
-    if (packet?.type !== 'pose' || !Number.isSafeInteger(packet.seq) || packet.seq <= member.seq) return;
-    this.room ??= await this.ctx.storage.get('moto-trial');
-    const pose = this.room && readPose(packet, this.room.bounds);
-    if (!pose) return;
-    const current = socket.deserializeAttachment();
-    if (!current || current.closed || packet.seq <= current.seq || now - current.sentAt < 60) return;
-    socket.serializeAttachment({...current, pose, seq: packet.seq, sentAt: now});
-    this.broadcast({type: 'pose', id: member.id, pose}, socket);
+  message(socket, message) {
+    return this.ctx.blockConcurrencyWhile(async () => {
+      if (typeof message !== 'string' || message.length > 420) return;
+      const member = socket.deserializeAttachment(), now = Date.now();
+      if (!member || member.closed || now - member.sentAt < 60) return;
+      let packet;
+      try { packet = JSON.parse(message); } catch { return; }
+      if (packet?.type !== 'pose' || !Number.isSafeInteger(packet.seq) || packet.seq <= member.seq) return;
+      this.room ??= await this.ctx.storage.get('moto-trial');
+      if (!this.room) return;
+      const campaign = this.room.campaign, stage = member.stage;
+      if (campaign && (packet.courseId !== stage || member.complete)) return;
+      const pose = readPose(packet, campaign ? campaignBounds[stage - 1] : this.room.bounds);
+      if (!pose) return;
+      let progress;
+      if (campaign) {
+        const course = campaignCourses[stage - 1], last = course.tiers.at(-1);
+        pose.courseId = stage;
+        if (pose.mode === 'finish') {
+          const pastGate = (pose.x - course.finish) * last.direction;
+          const finishY = ground(last, pose.x) ?? ground(last, course.finish);
+          if (packet.tier !== course.tiers.length - 1 || pastGate < -.001 || pastGate > 6.4 ||
+              Math.abs(pose.y - finishY) > 3.05) return;
+          progress = {stage: Math.min(CAMPAIGN_LENGTH, stage + 1), complete: stage === CAMPAIGN_LENGTH};
+          await this.ctx.storage.put('progress:' + member.id, progress);
+        }
+      }
+      socket.serializeAttachment({...member, ...progress, pose, seq: packet.seq, sentAt: now});
+      this.broadcast({type: 'pose', id: member.id, pose}, socket);
+      if (progress) this.broadcast({type: 'state', state: this.state(this.room)});
+    });
   }
 
   close(socket) {
@@ -134,7 +160,7 @@ export class MotoTrialRoom {
       const room = await this.ctx.storage.get('moto-trial');
       if (!room || this.sockets().length) return;
       await this.lobby(room, 'remove');
-      await this.ctx.storage.delete('moto-trial');
+      await this.ctx.storage.deleteAll();
     });
   }
 }

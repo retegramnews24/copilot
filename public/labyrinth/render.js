@@ -6,7 +6,8 @@ import {framePose,FRAME_WIDTH,FRAME_LENGTH} from './traps.js';
 import {mirrorCorners,mirrorSide,reflectPoint} from './mirrors.js';
 import {colosseumMeshes,crowdSeats,arcadeTile,ARCADE_TOP,ARCH_BAYS,CROWD_COLORS,STONE_HEIGHT} from './colosseum.js';
 import {armPose,between,limbModel} from './character.js';
-const VS=`attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aUV;uniform mat4 uViewProjection;uniform mat4 uModel;uniform float uCrowd;uniform mediump float uTime;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;void main(){vec4 p=uModel*vec4(aPosition,1.);float sway=uCrowd*sin(uTime*1.8+aPosition.x*1.38+aPosition.z*1.78);p.x+=sway*.035;p.y+=sway*.024;vPosition=p.xyz;vec3 x=uModel[0].xyz,y=uModel[1].xyz,z=uModel[2].xyz;vNormal=x*aNormal.x/dot(x,x)+y*aNormal.y/dot(y,y)+z*aNormal.z/dot(z,z);vUV=aUV;gl_Position=uViewProjection*p;}`;
+import {SPRING_HEIGHT,netDeflection} from './spring.js?v=arena2';
+const VS=`attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aUV;uniform mat4 uViewProjection;uniform mat4 uModel;uniform float uCrowd;uniform vec3 uNetDip;uniform mediump float uTime;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;void main(){vec4 p=uModel*vec4(aPosition,1.);float sway=uCrowd*sin(uTime*1.8+aPosition.x*1.38+aPosition.z*1.78);p.x+=sway*.035;p.y+=sway*.024;if(uNetDip.z>0.){vec2 d=p.xz-uNetDip.xy;p.y-=uNetDip.z*max(0.,1.-dot(d,d)*.25);}vPosition=p.xyz;vec3 x=uModel[0].xyz,y=uModel[1].xyz,z=uModel[2].xyz;vNormal=x*aNormal.x/dot(x,x)+y*aNormal.y/dot(y,y)+z*aNormal.z/dot(z,z);vUV=aUV;gl_Position=uViewProjection*p;}`;
 const FS=`precision mediump float;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;uniform sampler2D uTexture;uniform vec3 uColor;uniform vec3 uCamera;uniform vec3 uLights[8];uniform float uEmission;uniform float uTime;uniform vec3 uAmbient;uniform vec3 uTint;uniform vec3 uFog;uniform float uPower;uniform float uVisibility;uniform float uAlpha;uniform float uSky;uniform vec4 uClip;uniform vec2 uMirrorScale;void main(){if(dot(vec4(vPosition,1.),uClip)<0.)discard;if(uMirrorScale.x>0.){vec3 reflected=texture2D(uTexture,gl_FragCoord.xy*uMirrorScale).rgb;gl_FragColor=vec4(reflected*.93+vec3(.035,.048,.055),1.);return;}if(uSky>.5){gl_FragColor=texture2D(uTexture,vUV);return;}vec3 n=normalize(vNormal);vec3 light=uAmbient;for(int i=0;i<8;i++){vec3 d=uLights[i]-vPosition;float r=dot(d,d);float diffuse=max(dot(n,normalize(d)),.025);light+=uTint*diffuse*uPower/(1.+r*.22);}vec4 tex=texture2D(uTexture,vUV);vec3 c=tex.rgb*uColor; c*=mix(light,vec3(1.1),uEmission);float fog=1.-exp(-pow(length(vPosition-uCamera)/uVisibility,1.55));c=mix(c,uFog,clamp(fog,0.,.92));gl_FragColor=vec4(pow(max(c,vec3(0.)),vec3(.94)),uAlpha*tex.a);}`;
 const identity=()=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
 function multiply(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)o[c*4+r]+=a[k*4+r]*b[c*4+k];return o}
@@ -111,7 +112,7 @@ export class Renderer{
   this.anisotropy=this.anisotropic?Math.min(4,gl.getParameter(this.anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT)):1;
   const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error('Shader non disponibile: '+gl.getShaderInfoLog(s));return s};
   const program=gl.createProgram();gl.attachShader(program,compile(gl.VERTEX_SHADER,VS));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,FS));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Renderer non disponibile.');this.program=program;gl.useProgram(program);
-  this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky','uCrowd','uClip','uMirrorScale'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
+  this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky','uCrowd','uNetDip','uClip','uMirrorScale'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
   gl.uniform1f(this.uniforms.uAlpha,1);const white=document.createElement('canvas');white.width=white.height=1;white.getContext('2d').fillRect(0,0,1,1);const ctx=white.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1,1);this.white=this.texture(white);this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.meshes=[];this.textures=[];this.quality='auto';this.resize();
  }
  texture(canvas){const g=this.gl,t=g.createTexture();g.bindTexture(g.TEXTURE_2D,t);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,canvas);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR_MIPMAP_LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.REPEAT);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.REPEAT);if(this.anisotropy>1)g.texParameterf(g.TEXTURE_2D,this.anisotropic.TEXTURE_MAX_ANISOTROPY_EXT,this.anisotropy);g.generateMipmap(g.TEXTURE_2D);return t}
@@ -280,8 +281,15 @@ export class Renderer{
    frame.box(c.x,2.1,c.z,2.18,.08,1.05);frame.box(c.x,.1,c.z,2.18,.12,1.05);shelf.box(c.x,.85,c.z,2.04,.07,.94);shelf.box(c.x,.2,c.z-.47,2.02,1.87,.025);
    glass.quad([c.x-1.02,.23,c.z+.48],[c.x+1.02,.23,c.z+.48],[c.x+1.02,2.1,c.z+.48],[c.x-1.02,2.1,c.z+.48],[0,0,1]);
    for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth;for(const dx of [-hx,hx])springs.box(net.x+dx,0,net.z,.1,.48,hz*2+.1);for(const dz of [-hz,hz])springs.box(net.x,0,net.z+dz,hx*2+.1,.48,.1);
-    for(let v=-hx+.15;v<hx;v+=.24)nets.box(net.x+v,.36,net.z,.025,.018,hz*2-.25);
-    for(let v=-hz+.15;v<hz;v+=.24)nets.box(net.x,.36,net.z+v,hx*2-.25,.018,.025);
+    const y=SPRING_HEIGHT,r=.016;
+    for(let x=-hx+.15;x<hx;x+=.26)for(let z=-hz;z<hz;z+=.8){
+     const a=net.x+x,b=net.z+z,c=net.z+Math.min(hz,z+.8);
+     nets.quad([a-r,y,b],[a-r,y,c],[a+r,y,c],[a+r,y,b],[0,1,0]);
+    }
+    for(let z=-hz+.15;z<hz;z+=.26)for(let x=-hx;x<hx;x+=.8){
+     const a=net.z+z,b=net.x+x,c=net.x+Math.min(hx,x+.8);
+     nets.quad([b,y+.002,a-r],[b,y+.002,a+r],[c,y+.002,a+r],[c,y+.002,a-r],[0,1,0]);
+    }
     for(let v=-hx+.15;v<hx;v+=.35)for(const side of [-1,1])springs.box(net.x+v,.32,net.z+side*(hz-.09),.045,.035,.19);
     for(let v=-hz+.15;v<hz;v+=.35)for(const side of [-1,1])springs.box(net.x+side*(hx-.09),.32,net.z+v,.19,.035,.045);
    }
@@ -410,7 +418,10 @@ export class Renderer{
    g.uniform1f(u.uCrowd,scene.stillCrowd?0:1);
    for(const mesh of this.crowd)this.drawMesh(mesh,identity());
    g.uniform1f(u.uCrowd,0);
-   for(const mesh of [this.net,this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());const boxes=scene.cases||[{...this.world.showcase,...scene,open:scene.showcaseOpen}];
+   g.uniform3fv(u.uNetDip,netDeflection(this.world.nets[0],player,scene));
+   this.drawMesh(this.net,identity());
+   g.uniform3fv(u.uNetDip,[0,0,0]);
+   for(const mesh of [this.springs,...this.decorMeshes])this.drawMesh(mesh,identity());const boxes=scene.cases||[{...this.world.showcase,...scene,open:scene.showcaseOpen}];
    for(const box of boxes){const model=identity();model[12]=box.x-this.world.showcase.x;model[14]=box.z-this.world.showcase.z;for(const mesh of [this.caseFrame,this.caseShelf])this.drawMesh(mesh,model);
     const show=(meshes,x,y,scale)=>{
      const item=identity();item[0]=item[10]=-scale;item[5]=scale;
@@ -557,14 +568,23 @@ class SoftwareRenderer{
     c.fillStyle=CROWD_COLORS[person.color];c.fillRect(q.x-width*.5,q.y-height,width,height);
     c.fillStyle='#b99068';c.fillRect(q.x-q.scale*.09,q.y-height-q.scale*.18,q.scale*.18,q.scale*.18);
    }
-   for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth,pts=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>project(net.x+x,.36,net.z+z));
+   for(const net of world.nets){const hx=net.halfWidth,hz=net.halfDepth,dip=netDeflection(net,p,scene);
     // Clip the net polygon at the near plane so the surface remains visible while standing on it.
     let poly=[[-hx,-hz],[hx,-hz],[hx,hz],[-hx,hz]].map(([x,z])=>({x:net.x+x,z:net.z+z})),out=[];for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length],da=(a.x-p.x)*dirX+(a.z-p.z)*dirZ,db=(b.x-p.x)*dirX+(b.z-p.z)*dirZ;if(da>=.08)out.push(a);if((da>=.08)!==(db>=.08)){const t=(.08-da)/(db-da);out.push({x:a.x+(b.x-a.x)*t,z:a.z+(b.z-a.z)*t})}}poly=out;
-    if(poly.length>2){const points=poly.map(q=>project(q.x,.36,q.z));c.fillStyle='#775234';c.strokeStyle='#b39265';c.lineWidth=2;c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();c.save();c.clip();c.strokeStyle='#dcbb7d77';c.lineWidth=.6;
-     for(let v=-hx;v<=hx;v+=.32)netLine(net.x+v,net.z-hz,net.x+v,net.z+hz);for(let v=-hz;v<=hz;v+=.32)netLine(net.x-hx,net.z+v,net.x+hx,net.z+v);c.restore();
+    if(poly.length>2){const points=poly.map(q=>project(q.x,SPRING_HEIGHT,q.z));c.fillStyle='#775234';c.strokeStyle='#b39265';c.lineWidth=2;c.beginPath();points.forEach((q,i)=>i?c.lineTo(q.x,q.y):c.moveTo(q.x,q.y));c.closePath();c.fill();c.stroke();c.save();c.clip();c.strokeStyle='#dcbb7d77';c.lineWidth=.6;
+     for(let v=-hx;v<=hx;v+=.32)netLine(net.x+v,net.z-hz,net.x+v,net.z+hz,dip);for(let v=-hz;v<=hz;v+=.32)netLine(net.x-hx,net.z+v,net.x+hx,net.z+v,dip);c.restore();
     }
    }
-   function netLine(ax,az,bx,bz){let a=project(ax,.38,az),b=project(bx,.38,bz);if(a.depth<.08&&b.depth<.08)return;if(a.depth<.08){const t=(.08-a.depth)/(b.depth-a.depth);ax+=(bx-ax)*t;az+=(bz-az)*t;a=project(ax,.38,az)}else if(b.depth<.08){const t=(.08-b.depth)/(a.depth-b.depth);bx+=(ax-bx)*t;bz+=(az-bz)*t;b=project(bx,.38,bz)}c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke()}
+   function netLine(ax,az,bx,bz,dip){
+    const draw=(x,z)=>project(x,SPRING_HEIGHT-dip[2]*Math.max(0,1-((x-dip[0])**2+(z-dip[1])**2)*.25),z);
+    let a=draw(ax,az),b=draw(bx,bz);
+    if(a.depth<.08&&b.depth<.08)return;
+    if(a.depth<.08){const t=(.08-a.depth)/(b.depth-a.depth);ax+=(bx-ax)*t;az+=(bz-az)*t;a=draw(ax,az)}
+    else if(b.depth<.08){const t=(.08-b.depth)/(a.depth-b.depth);bx+=(ax-bx)*t;bz+=(az-bz)*t;b=draw(bx,bz)}
+    c.beginPath();c.moveTo(a.x,a.y);
+    if(dip[2]>0)for(let t=.05;t<1;t+=.05){const q=draw(ax+(bx-ax)*t,az+(bz-az)*t);c.lineTo(q.x,q.y)}
+    c.lineTo(b.x,b.y);c.stroke();
+   }
    for(const d of [...world.decor].sort((a,b)=>Math.hypot(b.x-p.x,b.z-p.z)-Math.hypot(a.x-p.x,a.z-p.z))){const q=project(d.x,0,d.z);if(q.depth<.2||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const sprite=decorSprite(d.type,pal);c.drawImage(sprite.canvas,q.x-sprite.width*q.scale/2,q.y-sprite.height*q.scale,sprite.width*q.scale,sprite.height*q.scale)}
    for(const box of scene.cases||[{...world.showcase,...scene,open:scene.showcaseOpen}]){const q=project(box.x,0,box.z);if(q.depth>.2&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const sprite=showcaseSprite(box,pal);c.drawImage(sprite,q.x-1.21*q.scale,q.y-2.32*q.scale,2.42*q.scale,2.36*q.scale)}}
   }

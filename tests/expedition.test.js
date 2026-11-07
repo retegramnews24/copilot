@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,GRACE,STALE} from '../expedition-model.js';
+import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,barrier,expeditionSummary,GRACE,STALE} from '../expedition-model.js';
 import {itemsAt,floorState,STANDS_WAIT,standsView} from '../public/labyrinth/adventure.js';
 import {free,distances,index,CELL,PLAYER_CLEARANCE} from '../public/labyrinth/core.js';
 import {ExpeditionRoom} from '../labyrinth-server.js';
@@ -8,9 +8,9 @@ const user=i=>({id:String(i),name:'Pilota '+i});let now=1000000;
 const s=createExpedition('room',1,71,user(1),now);for(let i=2;i<=4;i++)joinExpedition(s,user(i),now);for(let i=1;i<=4;i++)connectPlayer(s,String(i),'conn'+i,now);
 const [a,b,c,d]=Object.values(s.players),w=expeditionWorld(s,1),r=runFor(s,a);floorState(r,w);assert.equal(cases(s).length,4);assert.equal(new Set(cases(s).map(c=>c.x+','+c.z)).size,4);
 function at(p,pos,pitch=0){p.player={x:pos.x,z:pos.z,yaw:0,pitch,height:0};p.lastMove=now}
-function walkThrough(p,w){
+function walkThrough(p,w,room=s){
  at(p,{x:w.door.x-w.door.dx*.7,z:w.door.z-w.door.dz*.7});
- const out=pose(s,p,{seq:p.seq+1,level:p.level,warp:p.warp||0,x:w.door.x+w.door.dx*.025,z:w.door.z+w.door.dz*.025,yaw:0,pitch:0},now+220);
+ const out=pose(room,p,{seq:p.seq+1,level:p.level,warp:p.warp||0,x:w.door.x+w.door.dx*.025,z:w.door.z+w.door.dz*.025,yaw:0,pitch:0},now+220);
  assert.equal(out,'level');
 }
 // Concurrent contenders are serialized: the second pickup cannot duplicate the card.
@@ -23,19 +23,28 @@ assert.throws(()=>act(s,a,{kind:'close'},now));assert.equal(itemsAt(runFor(s,a),
 disconnectPlayer(s,'1','conn1',now);for(const p of [b,c,d])p.lastSeen=now+GRACE;sweep(s,now+GRACE-1);assert.equal(a.counted,true);assert.equal(sweep(s,now+GRACE),true);assert.equal(a.counted,false);assert.equal(s.floors[1].open,true);assert.equal(s.players['2'].online,true);
 connectPlayer(s,'1','new-conn',now+GRACE+1);assert.equal(a.counted,true);assert.equal(a.inventory.length,0);disconnectPlayer(s,'1','conn1',now+GRACE+2);assert.equal(a.online,true,'Old socket close cannot disconnect a newer session');
 // Four-player barrier: first arrival closes entry, no premature opening, last opens all.
-for(const p of [a,b,c,d]){p.level=5;const ww=expeditionWorld(s,5);at(p,{x:ww.door.x-ww.door.dx*.7,z:ww.door.z-ww.door.dz*.7});floorState(runFor(s,p),ww).open=true}
-walkThrough(a,expeditionWorld(s,5));assert.equal(s.entryLocked,true);assert.equal(s.showcaseOpen,false);assert.throws(()=>joinExpedition(s,user(5),now));for(const p of [b,c,d])walkThrough(p,expeditionWorld(s,5));assert.equal(s.showcaseOpen,true);
-for(const p of [a,b,c,d]){const box=casePosition(s,p);at(p,{x:box.x,z:box.z+2});act(s,p,{kind:'backpack'},now);act(s,p,{kind:'sword'},now);assert.deepEqual(p.inventory,['sword']);assert.throws(()=>act(s,p,{kind:'sword'},now));}
-assert.equal(cases(s).every(c=>c.backpack&&c.swordTaken&&c.open),true);assert.equal(snapshot(s).players.some(p=>'connection' in p),false);
+const group=structuredClone(s),groupMembers=participants(group);
+for(const p of groupMembers){p.level=5;const ww=expeditionWorld(group,5);floorState(runFor(group,p),ww).open=true}
+walkThrough(groupMembers[0],expeditionWorld(group,5),group);
+assert.equal(group.entryLocked,true);assert.equal(group.showcaseOpen,false);assert.throws(()=>joinExpedition(group,user(5),now));
+for(const p of groupMembers.slice(1))walkThrough(p,expeditionWorld(group,5),group);
+assert.equal(group.showcaseOpen,true);
+for(const p of groupMembers){const box=casePosition(group,p);at(p,{x:box.x,z:box.z+2});act(group,p,{kind:'backpack'},now);act(group,p,{kind:'sword'},now);assert.deepEqual(p.inventory,['sword']);assert.throws(()=>act(group,p,{kind:'sword'},now));}
+assert.equal(cases(group).every(c=>c.backpack&&c.swordTaken&&c.open),true);assert.equal(snapshot(group).players.some(p=>'connection' in p),false);
+const revived=JSON.parse(JSON.stringify(group));
+joinExpedition(revived,user(2),now+1);
+assert.equal(revived.players['2'].backpack,true);assert.deepEqual(revived.players['2'].inventory,['sword']);
+for(const p of groupMembers){p.online=false;p.offlineAt=now}
+sweep(group,now+GRACE);assert.equal(group.deleted,true);assert.equal(snapshot(group).arenaResult.winner,null);
 // Solo arena waits explicitly; a late player creates another case and removes solo opening.
 const solo=createExpedition('solo',2,44,user(8),now);connectPlayer(solo,'8','solo',now);const p=solo.players['8'];p.level=6;const box=casePosition(solo,p);at(p,{x:box.x,z:box.z+2});joinExpedition(solo,user(9),now);assert.equal(cases(solo).length,2);assert.throws(()=>act(solo,p,{kind:'showcase'},now));assert.equal(solo.showcaseOpen,false);
-disconnectPlayer(solo,'9',undefined,now);solo.players['9'].offlineAt=now;solo.players['9'].online=false;p.lastSeen=now+GRACE;sweep(solo,now+GRACE);assert.equal(participants(solo).length,1);assert.equal(solo.entryLocked,false);act(solo,p,{kind:'showcase'},now+GRACE);assert.equal(solo.showcaseOpen,true);assert.throws(()=>joinExpedition(solo,user(10),now));
+disconnectPlayer(solo,'9',undefined,now);solo.players['9'].offlineAt=now;solo.players['9'].online=false;p.lastSeen=now+GRACE;sweep(solo,now+GRACE);assert.equal(participants(solo).length,1);assert.equal(solo.entryLocked,false);act(solo,p,{kind:'showcase'},now+GRACE);assert.equal(solo.showcaseOpen,true);assert.equal(snapshot(solo).arenaResult,null);assert.throws(()=>joinExpedition(solo,user(10),now));
 // A master card drops on its actual floor, no duplicates on reconnect.
 const black=expeditionWorld(s,5);a.level=5;a.inventory=[];s.floors[5].pass={...black.spawn};at(a,black.spawn,-1);act(s,a,{kind:'pickup',item:'pass'},now);disconnectPlayer(s,'1','new-conn',now);for(const p of [b,c,d])p.lastSeen=now+GRACE;sweep(s,now+GRACE);assert.equal(a.inventory.length,0);assert.ok(s.floors[5].pass);connectPlayer(s,'1','again',now+GRACE+1);assert.equal(a.inventory.length,0);
 // Movement and appearance are bounded by server rules.
 a.level=1;at(a,w.spawn);a.seq=0;assert.equal(pose(s,a,{seq:1,x:999,z:999,yaw:0,pitch:0},now+200),false);assert.equal(pose(s,a,{seq:2,x:a.player.x,z:a.player.z,yaw:0,pitch:99},now+200),true);assert.equal(a.player.pitch,1.15);act(s,a,{kind:'appearance',appearance:{shirt:'javascript:evil',shorts:'#3c62a3'}},now);assert.match(a.appearance.shirt,/^#[0-9a-f]{6}$/);
-// Nobody online does not delete the expedition or its shared state.
-for(const p of Object.values(s.players)){p.online=false;p.offlineAt=now;p.counted=true}sweep(s,now+GRACE);assert.equal(participants(s).length,0);assert.equal(s.deleted,false);assert.equal(s.floors[1].key,null);const revived=JSON.parse(JSON.stringify(s));joinExpedition(revived,user(2),now+GRACE+1);assert.equal(revived.players['2'].backpack,true);assert.deepEqual(revived.players['2'].inventory,['sword']);
+// An unfinished exploration remains saved with nobody online.
+for(const p of Object.values(s.players)){p.online=false;p.offlineAt=now;p.counted=true}sweep(s,now+GRACE);assert.equal(participants(s).length,0);assert.equal(s.deleted,false);assert.equal(s.floors[1].key,null);
 // Head-on movement is clipped without penetration. Shared respawn positions can separate.
 const openSpace=expeditionWorld(s,6),nx=openSpace.spawn.x,nz=openSpace.spawn.z-5;
 for(const p of [a,b]){p.level=6;p.online=true;at(p,{x:nx+(p===b?.63:0),z:nz})}
@@ -148,3 +157,40 @@ defender.standsUntil=wallClock-1;
 await expedition.alarm();
 assert.equal(stored.players['2'].health,100);assert.equal(stored.players['2'].standsUntil,undefined);
 assert.equal(broadcast.state.players.find(p=>p.id==='2').health,100);
+
+
+const match=createExpedition('last-standing',7,172,user(1),now);
+for(const i of [2,3])joinExpedition(match,user(i),now);
+for(const p of Object.values(match.players)){connectPlayer(match,p.id,'match-'+p.id,now);p.level=6;}
+barrier(match);
+assert.equal(snapshot(match).arenaLive,true);
+const [winner,first,last]=Object.values(match.players);
+const matchWorld=expeditionWorld(match,6),point={x:matchWorld.spawn.x,z:matchWorld.spawn.z-3};
+at(winner,point);
+at(first,{x:point.x,z:point.z-1});
+at(last,{x:point.x+2,z:point.z-1});
+winner.inventory=['sword'];first.health=last.health=10;
+act(match,winner,{kind:'strike'},now);
+assert.equal(first.eliminated,true);
+assert.equal(snapshot(match).arenaResult,null);
+now+=STANDS_WAIT+100;
+sweep(match,now);
+assert.equal(first.health,0);
+assert.deepEqual(first.player,standsView(matchWorld,first.caseIndex));
+at(last,{x:point.x,z:point.z-1});
+act(match,winner,{kind:'strike'},now);
+assert.deepEqual(snapshot(match).arenaResult,{winner:user(1)});
+assert.equal(expeditionSummary(match).phase,'finished');
+assert.throws(()=>act(match,winner,{kind:'strike'},now+600),/concluso/);
+disconnectPlayer(match,first.id,'match-'+first.id,now);
+connectPlayer(match,first.id,'match-reconnect',now+1);
+assert.equal(first.eliminated,true);
+assert.deepEqual(snapshot(JSON.parse(JSON.stringify(match))).arenaResult,{winner:user(1)});
+const indexed=[];
+expedition.env={ROOMS:{idFromName:()=>'',get:()=>({fetch:async req=>{indexed.push({path:new URL(req.url).pathname,body:await req.json()});return {ok:true}}})}};
+expedition.state=match;
+await expedition.index();await expedition.index();
+assert.deepEqual(indexed.filter(e=>e.path==='/lobby/result').map(e=>e.body),[
+ {key:'last-standing:arena',game:'labyrinth',mode:'people',winners:[{id:'tg:1',name:'Pilota 1'}]}
+]);
+console.log('PASS Arena: persistent eliminations, only the last survivor wins, reconnect preserves result, one ranking record and no solo award.');

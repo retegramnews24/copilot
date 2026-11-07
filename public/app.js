@@ -1,4 +1,3 @@
-import {FIXED_COURSES} from './moto-trial/courses.js?v=5';
 import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
@@ -546,9 +545,9 @@ function renderArchive(){
  for(const game of archived){
   const article=document.createElement('article');article.className='archive-row';
   const heading=document.createElement('strong');heading.textContent='Partita '+game.number+' · '+gameTitle(game);
-  const names=document.createElement('p');names.textContent=game.players.map(p=>p.name).join(' · ');
-  const button=document.createElement('button');button.className='alt';button.textContent=staged(game)?'Apri storico pubblico':'Apri e rivedi le mosse';
-  button.onclick=async()=>{await openRoom(game.room);if(room===game.room)selectPage('game')};
+  const names=document.createElement('p');names.textContent=game.arenaResult?(game.arenaResult.winner?'Vincitore: '+game.arenaResult.winner.name:'Nessun superstite'):game.players.map(p=>p.name).join(' · ');
+  const button=document.createElement('button');button.className='alt';button.textContent=game.game==='labyrinth'?'Apri spedizione':staged(game)?'Apri storico pubblico':'Apri e rivedi le mosse';
+  button.onclick=async()=>{await openRoom(game.room,game.game==='labyrinth');if(room===game.room)selectPage('game')};
   article.append(heading,names,button);$('archive-games').append(article);
  }
 }
@@ -742,7 +741,7 @@ function connectExpedition(){
 }
 async function openLabyrinth(selected,watch=false){
  if(!identity||labyrinthOpening)return;labyrinthOpening=true;
- try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
+ try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1&v=arena2';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
  catch(e){err(e.message)}finally{labyrinthOpening=false}
 }
 $('play-labyrinth').onclick=async()=>{if(!identity||labyrinthOpening)return;$('play-labyrinth').disabled=true;try{const result=await request('/api/create',{game:'labyrinth'});await openLabyrinth(result.state.room,false)}catch(e){err(e.message)}finally{$('play-labyrinth').disabled=false}};
@@ -759,6 +758,9 @@ window.addEventListener('message',event=>{
  if(event.data?.type==='labyrinth:ready')sendLabyrinthIdentity();
  else if(event.data?.type==='labyrinth:net'){const packet=event.data.packet;if(packet&&['pose','action'].includes(packet.type)&&JSON.stringify(packet).length<=2048){if(labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify(packet));else if(packet.type==='action')labPost({type:'labyrinth:packet',packet:{type:'ack',request:packet.request,ok:false,error:'Riconnessione in corso.'}})}}
  else if(event.data?.type==='labyrinth:exit')closeLabyrinth();
+ else if(event.data?.type==='labyrinth:archive'&&labyrinthRoom&&!labyrinthWatch&&labyrinthLastState?.arenaResult&&!labyrinthLastState.archived){
+  request('/api/labyrinth/'+labyrinthRoom+'/archive',{}).catch(error=>labPost({type:'labyrinth:notice',message:error.message}));
+ }
 
  else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
 });
@@ -783,13 +785,11 @@ function closeMotoTrial(){
  try{tg?.enableVerticalSwipes?.()}catch{}
  if(wasRace){sendPresence();$('create-moto-trial').focus()}else motoLaunch.focus();
 }
-const motoCourse=$('moto-course');
-for(const [i,track] of FIXED_COURSES.entries())motoCourse.add(new Option((i+1)+'. '+track.name,i+1));
 function showMotoTrial(multiplayer=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  motoOverlay.hidden=false;
- motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1':'?course='+motoCourse.value);
+ motoFrame.src='/moto-trial/index.html'+(multiplayer?'?multiplayer=1&v=6':'?v=6');
  tg?.BackButton?.show();
 }
 function connectMotoRace(){
@@ -836,7 +836,7 @@ async function openMotoRace(selected){
  if(!identity||motoOpening||!motoOverlay.hidden)return;
  motoOpening=true;$('create-moto-trial').disabled=true;
  try{
-  const {state}=selected?await request('/api/moto-trial/'+selected+'/state'):await request('/api/create',{game:'moto-trial',courseId:Number(motoCourse.value)});
+  const {state}=selected?await request('/api/moto-trial/'+selected+'/state'):await request('/api/create',{game:'moto-trial'});
   if(state.players.length>=8&&!state.players.some(p=>p.id===identity.player))throw Error('Corsa al completo.');
   motoRace=state;showMotoTrial(true);connectMotoRace();sendPresence();
  }catch(e){err(e.message)}finally{motoOpening=false;$('create-moto-trial').disabled=!identity}
@@ -887,8 +887,8 @@ async function loadLeaders(){
   }while(data.pending);
  }catch(e){err(e.message)}finally{leaderBusy=false}
 }
-$('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html';tg?.BackButton?.show()};
-$('tutorial-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?tutorial=1';tg?.BackButton?.show()};
+$('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?v=arena2';tg?.BackButton?.show()};
+$('tutorial-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?tutorial=1&v=arena2';tg?.BackButton?.show()};
 
 $('access-retry').onclick=startSession;
 startSession();

@@ -1,3 +1,4 @@
+import {makeCourse,ground} from '../public/moto-trial/physics.js';
 import {randomFleet} from '../public/naval-data.js';
 // Run after Wrangler --dry-run; uses workerd and SQLite Durable Objects, never production.
 import assert from 'node:assert/strict';
@@ -122,7 +123,6 @@ try{
  }
  await mf.dispose();mf=new Miniflare(options);const restoredSea=(await call(100,'/api/room/'+navalRoom+'/state')).data;assert.deepEqual(restoredSea.naval.fleet,ownFleet);assert.equal((await call(102,'/api/room/'+navalRoom+'/state')).data.naval.fleet,null);const restoredCall=(await call(140,'/api/room/'+calledRoom+'/state')).data;assert.equal(restoredCall.revision,calledState.revision);assert.equal((await call(150,'/api/room/'+calledRoom+'/state')).data.briscola.partner,null);assert.deepEqual((await call(150,'/api/room/'+calledRoom+'/state')).data.briscola.hand,[]);
  console.log('PASS naval/Briscola runtime: private out-of-turn fleet deployment, public shots, invalid/repeated-shot rejection, all player counts, private hands and called partner over HTTP/WebSocket, dealer/turn alignment and private SQLite restart.');
- assert.equal((await call(201,'/api/create',{game:'moto-trial',courseId:11})).status,400);
  const madeRace=await call(201,'/api/create',{game:'moto-trial',courseId:7});
  assert.equal(madeRace.status,200);
  const race=madeRace.data.state;
@@ -131,15 +131,16 @@ try{
  const rider2=await connect(202,race.room,false,'moto-trial');
  const raceState=(await until(rider1,p=>p.type==='state'&&p.state.players.length===2)).state;
  assert.equal(raceState.seed,race.seed);
- assert.equal(raceState.courseVersion,5);
- assert.equal(raceState.seed,7);
- assert.equal(raceState.courseName,'Ruggine');
+ assert.equal(raceState.courseVersion,6);
+ assert.equal(raceState.seed,1);
+ assert.equal(raceState.campaign,true);
+ assert.equal(raceState.courseName,'Campagna Moto Trial');
  assert.equal((await call(202,'/api/moto-trial/'+race.room+'/state')).data.state.seed,race.seed);
  assert.equal(new Set(raceState.players.map(p=>p.color)).size,2);
  const raceListing=(await call(202,'/api/lobby')).data.games.find(g=>g.room===race.room);
  assert.equal(raceListing.online,2);
- assert.equal(raceListing.courseName,'Ruggine');
- const pose={type:'pose',seq:1,x:7,y:-.8,angle:1.05,vx:4,facing:1,lean:1,roll:2,leftSpring:.24,rightSpring:.10,mode:'ride'};
+ assert.equal(raceListing.courseName,'Campagna Moto Trial');
+ const pose={type:'pose',seq:1,x:7,y:-.8,angle:1.05,vx:4,facing:1,lean:1,roll:2,leftSpring:.24,rightSpring:.10,mode:'ride',courseId:1,tier:0};
  rider1.ws.send(JSON.stringify({...pose,x:9000}));
  rider1.ws.send(JSON.stringify({...pose,id:'tg:202'}));
  const motion=await until(rider2,p=>p.type==='pose');
@@ -151,9 +152,20 @@ try{
  const replacement=(await until(rider2OtherWindow,p=>p.type==='state')).state;
  assert.equal(replacement.players.filter(p=>p.id==='tg:202').length,1);
  assert.equal(replacement.players.find(p=>p.id==='tg:202').pose.x,8);
+ const intro=makeCourse(1);
+ rider1.ws.send(JSON.stringify({...pose,seq:2,courseId:7,mode:'finish'}));
+ rider1.ws.send(JSON.stringify({...pose,seq:2,mode:'finish'}));
+ await new Promise(resolve=>setTimeout(resolve,80));
+ assert.equal((await call(201,'/api/moto-trial/'+race.room+'/state')).data.state.players.find(p=>p.id==='tg:201').stage,1);
+ rider1.ws.send(JSON.stringify({...pose,seq:3,x:intro.finish,y:ground(intro.tiers.at(-1),intro.finish)-.4,
+   tier:intro.tiers.length-1,mode:'finish'}));
+ const progressed=(await until(rider1,p=>p.type==='state'&&p.state.players.some(p=>p.id==='tg:201'&&p.stage===2))).state;
+ assert.equal(progressed.players.find(p=>p.id==='tg:202').stage,1);
+ const rider1NewWindow=await connect(201,race.room,false,'moto-trial');
+ assert.equal((await until(rider1NewWindow,p=>p.type==='state')).state.players.find(p=>p.id==='tg:201').stage,2);
  rider2OtherWindow.ws.close();
- await until(rider1,p=>p.type==='state'&&p.state.players.length===1);
+ await until(rider1NewWindow,p=>p.type==='state'&&p.state.players.length===1);
  assert.equal((await call(201,'/api/lobby')).data.games.find(g=>g.room===race.room).online,1);
- console.log('PASS Moto Trial runtime: shared route, authenticated live riders, poses in both directions, reconnect and Lobby presence.');
+ console.log('PASS Moto Trial runtime: shared campaign, authenticated live riders, sequential unlocks, reconnect and Lobby presence.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

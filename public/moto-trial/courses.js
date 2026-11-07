@@ -22,6 +22,18 @@ export const FIXED_COURSES = [
     ['step', 10.6, .4, 9, 22], ['wall', 12, .0, 10, 22], ['tooth', 12, -.25, 9, 22], ['dip', 12.5, .1, 10, 22, 6.7], ['wall', 12.9, .15, 10, 22, 6.6], ['tooth', 12.2, -.25, 10, 22], ['step', 12.5, -.2, 10, 22], ['wall', 13.2, .45]]}
 ];
 
+const CAMPAIGN_START = [
+  {...FIXED_COURSES[0], detail: 'Prendi confidenza con rampe larghe e atterraggi morbidi.', rows: [
+    ['roll', 5.4, 2.5, 8, 28], ['roll', 6.4, 2.3, 8, 28], ['dip', 7.2, 2.1, 8, 27], ['roll', 7.8, 2]]},
+  {...FIXED_COURSES[1], detail: 'Primi cambi di direzione e un balzo più lungo tra gli argini.', rows: [
+    ['roll', 7.3, 1.8, 8.5, 27], ['dip', 8, 1.5, 9, 26], ['step', 8.6, 1.2, 9, 26], ['roll', 9.1, 1.1, 10, 26], ['dip', 9.8, .8]]},
+  {...FIXED_COURSES[2], rows: [
+    ['step', 8.5, 1.3, 9, 25], ['tooth', 9.6, .8, 9.5, 25], ['wall', 10.2, .65, 10, 24], ['tooth', 10.7, .5, 10, 24], ['step', 11, .2]]}
+];
+const CAMPAIGN = [...CAMPAIGN_START, FIXED_COURSES[3], FIXED_COURSES[5], FIXED_COURSES[4], ...FIXED_COURSES.slice(6)];
+export const CAMPAIGN_LENGTH = CAMPAIGN.length;
+const DIFFICULTY = ['Introduzione','Facile','Intermedio','Impegnativo','Difficile','Molto difficile','Esperto','Estremo','Brutale','Quasi impossibile'];
+
 const PROFILES = {
   roll: {before: [1.15, -.15], rise: 4, ramp: 8, launch: .67, exit: [1.1, 1.5]},
   dip: {before: [-.6, 1.25], rise: 4.4, ramp: 8.5, launch: .70, exit: [1.15, .55]},
@@ -30,8 +42,8 @@ const PROFILES = {
   wall: {before: [1.0, .4], rise: 5.4, ramp: 9, launch: .76, exit: [.3, 1.5]}
 };
 
-export function fixedCourse(id) {
-  const track = FIXED_COURSES[id - 1];
+export function fixedCourse(id, version) {
+  const track = (version >= 6 ? CAMPAIGN : FIXED_COURSES)[id - 1];
   if (!track) throw RangeError('Circuito non valido.');
   let start = 0, base = 0, overlap = 0;
   const tiers = track.rows.map(([style, gap, landingDelta, drop, nextOverlap, shelf], i) => {
@@ -65,6 +77,6 @@ export function fixedCourse(id) {
     return tier;
   });
   const last = tiers.at(-1);
-  return {id, seed: id, version: 5, name: track.name, detail: track.detail, theme: track.theme, tiers,
+  return {id, seed: id, version, difficulty:version >= 6 ? DIFFICULTY[id - 1] : undefined, name: track.name, detail: track.detail, theme: track.theme, tiers,
     finish: last.end - last.direction * 5, bottom: last.bottom + 15};
 }

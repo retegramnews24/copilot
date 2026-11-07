@@ -1,4 +1,6 @@
-import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=5';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=6';
+
+import {riderPose, HEAD_RADIUS, SUSPENSION} from './rider.js?v=6';
 
 const THEMES = [
   {sky: ['#193345', '#eaa46d', '#f6d399'], haze: '#96736d', far: '#615c68', near: '#43515a', rock: '#573c37', face: '#724b3d', top: '#d49a66', rim: '#f2c183', dust: '#f4c893'},
@@ -151,7 +153,7 @@ const PAINT = [
   ['#c899ed', '#f3b8d0'], ['#e4cf63', '#a8ded1'], ['#83a2ef', '#dcbbb3'], ['#ee92be', '#efd9a2']
 ];
 
-function motorcycle(c, bike, time, color) {
+function motorcycle(c, bike, time, color, version) {
   const [paint, jersey] = PAINT[color] || PAINT[0];
   c.save();
   c.translate(bike.x, bike.y);
@@ -179,6 +181,25 @@ function motorcycle(c, bike, time, color) {
   polygon(c, [[.57, -.29], [.95, -.41], [1.10, -.28], [.78, -.31]], paint);
   disc(c, -.12, -.31, .146, '#d6c2b4');
   disc(c, -.12, -.31, .084, '#746971');
+  if (version >= 6) {
+    const {hip, shoulder, head, elbow, hand, knee, foot} = riderPose(bike.lean);
+    line(c, [[-AXLE, rearY], SUSPENSION.rear], '#9e8a77', .095);
+    line(c, [[AXLE, frontY], SUSPENSION.front, hand], '#e5cfb7', .076);
+    line(c, [hip, knee, foot], '#242631', .19);
+    line(c, [hip, knee], '#5c5963', .10);
+    line(c, [[foot[0] - .16, foot[1]], [foot[0] + .12, foot[1]]], '#1f222a', .115);
+    line(c, [hip, shoulder], '#1c2630', .30);
+    line(c, [hip, shoulder], jersey, .21);
+    line(c, [shoulder, elbow, hand], '#2a3944', .137);
+    line(c, [elbow, hand], '#c1dbc9', .073);
+    disc(c, hand[0], hand[1], .072, '#292c35');
+    disc(c, head[0], head[1], HEAD_RADIUS, '#252834');
+    disc(c, head[0], head[1] - .015, HEAD_RADIUS - .028, '#fff0c9');
+    polygon(c, [[head[0] - .075, head[1] - .05], [head[0] + .207, head[1] - .055],
+      [head[0] + .18, head[1] + .11], [head[0] + .055, head[1] + .09]], '#384e5a');
+    c.restore();
+    return;
+  }
   const rhythm = Math.sin(time * 13) * Math.min(.026, Math.abs(bike.vx) * .003);
   const shift = bike.lean * .16;
   const hip = [-.42 + shift, -.72], shoulder = [-.15 + shift, -1.11 + rhythm];
@@ -234,10 +255,10 @@ export function drawTrial(c, width, height, course, bike, time, reduced, riders 
     Math.abs(rider.y - bike.y) < below);
   for (const rider of visible) {
     c.globalAlpha = rider.bike.mode === 'crash' ? .48 : .87;
-    motorcycle(c, rider.bike, reduced ? 0 : time, rider.color);
+    motorcycle(c, rider.bike, reduced ? 0 : time, rider.color, course.version);
   }
   c.globalAlpha = 1;
-  motorcycle(c, bike, reduced ? 0 : time, selfColor);
+  motorcycle(c, bike, reduced ? 0 : time, selfColor, course.version);
   c.restore();
   const names = [];
   for (const rider of visible) {

@@ -15,7 +15,7 @@ export const centre=(i,n)=>({x:(i%n+.5)*CELL,z:(Math.floor(i/n)+.5)*CELL});
 export function makeArena(seed){
  const n=17,grid=new Uint8Array(n*n),cx=n*CELL/2,cz=n*CELL/2,rx=20,rz=17.6;
  for(let z=0;z<n;z++)for(let x=0;x<n;x++)if(((x+.5)*CELL-cx)**2/rx**2+((z+.5)*CELL-cz)**2/rz**2>1)grid[index(x,z,n)]=1;
- const spawn={x:cx,z:cz+rz-3.6},showcase={x:cx,z:cz-rz+5.8},nets=[{x:cx,z:cz+2.2,halfWidth:9.25,halfDepth:2.9}],decor=[];
+ const spawn={x:cx,z:cz+rz-3.6},showcase={x:cx,z:cz-rz+5.8},nets=[{x:cx,z:cz+2.2,halfWidth:11.25,halfDepth:4.6}],decor=[];
  for(let i=0;i<12;i++){const angle=i/12*Math.PI*2,x=cx+Math.cos(angle)*rx*.86,z=cz+Math.sin(angle)*rz*.86;if(Math.abs(x-cx)<3)continue;decor.push({x,z,type:i%2?'amphora':'brazier'})}
  const obstacles=[{x:showcase.x,z:showcase.z,halfWidth:1.08,halfDepth:.5},...decor.map(d=>({...d,halfWidth:.47,halfDepth:.47}))];
  return {seed,level:6,arena:true,n,grid,rooms:[],start:index(Math.floor(spawn.x/CELL),Math.floor(spawn.z/CELL),n),spawn:{...spawn,yaw:0},exit:0,key:0,keyPosition:{x:-99,z:-99},door:{x:cx,z:cz+rz-.025,dx:0,dz:1},lamps:[{...showcase,y:5},{...spawn,y:5},...decor.filter(d=>d.type==='brazier').map(d=>({...d,y:1.8}))],showcase,nets,decor,obstacles,oval:{cx,cz,rx,rz}};
@@ -155,6 +155,5 @@ export function readRun(raw){
 }
 export function advanceBounce(state,dt,arena=false){dt=Math.min(.1,Math.max(0,dt));state.height+=state.velocity*dt-6.5*dt*dt;state.velocity-=13*dt;const max=arena?7.2:.92;if(state.height>max){state.height=max;state.velocity=Math.min(0,state.velocity)}if(state.height<0){state.height=0;state.velocity=0}return state}
 
-export function onSpring(world,player){return !!world.arena&&world.nets.some(n=>Math.abs(player.x-n.x)<n.halfWidth-.12&&Math.abs(player.z-n.z)<n.halfDepth-.12)}
 export function advanceAction(state,dt){state.remaining=Math.max(0,state.remaining-Math.max(0,Math.min(.1,dt)));state.cooldown=Math.max(0,state.cooldown-Math.max(0,Math.min(.1,dt)))}
 export function beginAction(state){if(state.cooldown>0)return false;state.remaining=.42;state.cooldown=.55;return true}

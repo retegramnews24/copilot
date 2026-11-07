@@ -112,3 +112,5 @@ body:not(.playing) #stands,.in-stands #inventory-overlay,.in-stands #crosshair,
  .touch #inventory .worn-gear .inventory-slot{width:35px;height:33px}
  .touch .mini-avatar{width:32px;height:51px}
 }
+
+#arena-result{position:fixed;z-index:4;top:calc(var(--ui-safe-top) + 5.5rem);left:50%;transform:translateX(-50%);width:max-content;max-width:70vw;margin:0;padding:.45rem .85rem;border-radius:.65rem;background:#1c190fe8;color:#ffdc8f;font-weight:700;text-align:center;pointer-events:none}
