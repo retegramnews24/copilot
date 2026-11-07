@@ -31,3 +31,10 @@ for(const hz of [20,30,60,120]){
 }
 const ceiling={height:HEIGHT-1.81,velocity:100};advanceJump(ceiling,.1);assert.ok(ceiling.height<=HEIGHT-1.8);assert.equal(ceiling.velocity,0);
 console.log('PASS correction: door UV direction faces the viewer in all four orientations; jump rises and lands consistently, blocks double jumps and respects ceiling height.');
+
+// A diagonal input against a corner slides along the exposed wall, then releases immediately.
+const corner={n:5,grid:new Uint8Array(25)};corner.grid[index(2,2,5)]=1;
+const runner={x:2*CELL-.3,z:3*CELL-.5};
+for(let i=0;i<28;i++){move(corner,runner,.04,.04);assert.ok(free(corner,runner.x,runner.z))}
+assert.ok(runner.x>2*CELL&&runner.z>3*CELL);
+const before={...runner};move(corner,runner,-.2,.2);assert.ok(runner.x<before.x-.19&&runner.z>before.z+.19);

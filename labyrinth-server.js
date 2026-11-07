@@ -24,9 +24,15 @@ export class ExpeditionRoom{
  async message(ws,message){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load();if(!s||s.deleted)return;const a=ws.deserializeAttachment();try{
  if(typeof message!=='string'||message.length>2048)return;const b=JSON.parse(message),p=s.players[a.id],now=Date.now();if(!a.rateAt||now-a.rateAt>=1000){a.rateAt=now;a.messages=0}if(++a.messages>32)return;ws.serializeAttachment(a);if(!a.watch&&(!p||p.connection!==a.connection))return;
  if(sweep(s,now)){await this.save();await this.index()}
- if(b.type==='heartbeat'){const wasOnline=p?.online;if(!a.watch&&!s.archived){connectPlayer(s,a.id,a.connection,now);if(now-this.lastSave>5000||!wasOnline)await this.save();if(!wasOnline)await this.index();await this.schedule()}await this.broadcast();return}
+ if(b.type==='heartbeat'){const wasOnline=p?.online;if(!a.watch&&!s.archived){if(wasOnline)p.lastSeen=now;else connectPlayer(s,a.id,a.connection,now);if(now-this.lastSave>5000||!wasOnline)await this.save();if(!wasOnline)await this.index();await this.schedule()}await this.broadcast();return}
  if(a.watch||s.archived)throw Error('Stai assistendo.');
- if(b.type==='pose'){if(!pose(s,p,b,now))ws.send(JSON.stringify({type:'state',state:snapshot(s),correct:true}));if(now-this.lastSave>5000)await this.save();await this.broadcast(false);return}
+ if(b.type==='pose'){
+  const result=pose(s,p,b,now),important=['warp','level','trap'].includes(result);
+  if(!result||result==='clipped')ws.send(JSON.stringify({type:'state',state:snapshot(s),correct:true,correctSeq:b.seq,serverTime:now}));
+  if(important||now-this.lastSave>5000)await this.save();
+  if(result==='level')await this.index();
+  await this.broadcast(important);return
+ }
  if(b.type==='action'&&Number.isSafeInteger(b.request)){act(s,p,b,now);await this.save();if(b.kind!=='strike'&&b.kind!=='appearance')await this.index();await this.schedule();await this.broadcast();ws.send(JSON.stringify({type:'ack',request:b.request,ok:true}));}
  }catch(e){try{const b=JSON.parse(message);ws.send(JSON.stringify({type:'ack',request:b.request,ok:false,error:e.message}));ws.send(JSON.stringify({type:'state',state:snapshot(s)}))}catch{}}})}
  async close(ws){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load(),a=ws.deserializeAttachment();if(!s||a.watch)return;disconnectPlayer(s,a.id,a.connection,Date.now());await this.save();await this.index();await this.schedule();await this.broadcast()})}

@@ -1,5 +1,6 @@
-import {worldFor,floorState,itemsAt,pickup,drop,openDoor,closeDoor,capacity,hasPass,CLOTHES} from './public/labyrinth/adventure.js';
-import {free,move} from './public/labyrinth/core.js';
+import {worldFor,floorState,itemsAt,pickup,drop,openDoor,capacity,hasPass,CLOTHES} from './public/labyrinth/adventure.js';
+import {crossedDoor,free,move,RADIUS} from './public/labyrinth/core.js';
+import {frameStrike,settledFrames,triggerFrames} from './public/labyrinth/traps.js';
 export const GRACE=60000,STALE=45000,MAX_PLAYERS=16;
 const fail=m=>{throw Error(m)},palette=new Set(CLOTHES.map(c=>c[1]));
 export const clothes=a=>({shirt:palette.has(a?.shirt)?a.shirt:CLOTHES[6][1],shorts:palette.has(a?.shorts)?a.shorts:CLOTHES[7][1]});
@@ -7,14 +8,21 @@ export function createExpedition(room,number,seed,user,now){const s={room,number
 export function participants(s){return Object.values(s.players).filter(p=>p.counted)}
 export function casePosition(s,p){const w=worldFor(s.seed,6),i=p.caseIndex;return {x:w.showcase.x+[0,3,-3,6][i%4],z:w.showcase.z+Math.floor(i/4)*3.2}}
 export function cases(s){return participants(s).map(p=>({id:p.id,name:p.name,...casePosition(s,p),backpack:p.backpack,swordTaken:p.swordTaken,open:s.showcaseOpen}))}
-export function expeditionWorld(s,level){const w=worldFor(s.seed,level);if(level===6){w.obstacles=w.obstacles.filter(b=>b.type);w.obstacles.push(...cases(s).map(c=>({...c,halfWidth:1.08,halfDepth:.5})))}return w}
+const mazeCache=new WeakMap();
+export function expeditionWorld(s,level){
+ if(level!==6){
+  if(!mazeCache.has(s))mazeCache.set(s,new Map());
+  const levels=mazeCache.get(s);if(!levels.has(level))levels.set(level,worldFor(s.seed,level));
+  return levels.get(level);
+ }
+ const w=worldFor(s.seed,level);if(level===6){w.obstacles=w.obstacles.filter(b=>b.type);w.obstacles.push(...cases(s).map(c=>({...c,halfWidth:1.08,halfDepth:.5})))}return w}
 export function runFor(s,p){return {seed:s.seed,level:p.level,inventory:p.inventory,backpack:p.backpack,floors:s.floors,showcaseOpen:s.showcaseOpen,swordTaken:p.swordTaken,test:false}}
 // Initialize shared cards on the server, including persisted rooms from older builds.
 // A held card suppresses ground respawn; repairing missing data must never clone it.
 export function ensureKeycards(s){
  let changed=false;const people=Object.values(s.players),first=people[0];if(!first)return false;
  for(let level=1;level<=5;level++){
-  const w=worldFor(s.seed,level),missing=!s.floors[level],f=floorState(runFor(s,first),w);if(missing)changed=true;
+  const w=expeditionWorld(s,level),missing=!s.floors[level],f=floorState(runFor(s,first),w);if(missing)changed=true;
   const held=people.some(p=>p.inventory.includes('key:'+level));
   if(f.open||held){if(f.key){f.key=null;changed=true}}
   else if(!f.key||!free(w,f.key.x,f.key.z,.28)){f.key={...w.keyPosition};changed=true}
@@ -27,7 +35,7 @@ export function joinExpedition(s,user,now){
  p.counted=true;barrier(s);s.revision++;return p;
 }
 export function barrier(s){
- const arena=expeditionWorld(s,6);for(const p of Object.values(s.players))if(p.level===6&&!free(arena,p.player.x,p.player.z))p.player={...arena.spawn,pitch:0,height:0};
+ const arena=expeditionWorld(s,6);for(const p of Object.values(s.players))if(p.level===6&&!free(arena,p.player.x,p.player.z))relocate(p,arena.spawn,p.lastMove);
  if(s.showcaseOpen||s.archived)return;const members=participants(s),arrived=members.filter(p=>p.level===6);
  if(arrived.length&&members.length>1){s.entryLocked=true;if(arrived.length===members.length&&members.every(p=>p.online)){s.showcaseOpen=true;s.entryLocked=true}}
  else if(members.length<=1)s.entryLocked=false;
@@ -38,14 +46,40 @@ export function sweep(s,now){if(s.archived||s.deleted)return false;let changed=f
  if(p.online&&now-p.lastSeen>=STALE){p.online=false;p.offlineAt=p.lastSeen+STALE;changed=true}
  if(!p.online&&p.counted&&now-(p.offlineAt??now)>=GRACE){const w=expeditionWorld(s,p.level),r=runFor(s,p);for(let i=p.inventory.length-1;i>=0;i--)if(p.inventory[i]!=='sword')drop(r,w,i,free(w,p.player.x,p.player.z)?p.player:w.spawn);p.counted=false;changed=true}
  }if(changed){barrier(s);s.revision++}return changed}
+function relocate(p,position,now){
+ p.player={...position,pitch:0,height:0};
+ p.lastMove=now;
+ p.warp=(p.warp||0)+1;
+}
 export function pose(s,p,b,now){
  if(s.archived||!p.online||!Number.isInteger(b.seq)||b.seq<=p.seq)return false;
+ if((b.level!==undefined&&b.level!==p.level)||(b.warp!==undefined&&b.warp!==(p.warp||0)))return false;
  if(![b.x,b.z,b.yaw,b.pitch].every(Number.isFinite))return false;
- const elapsed=Math.max(.025,Math.min(.7,(now-p.lastMove)/1000)),distance=Math.hypot(b.x-p.player.x,b.z-p.player.z),w=expeditionWorld(s,p.level);
+ const previous=p.player,dx=b.x-previous.x,dz=b.z-previous.z,distance=Math.hypot(dx,dz);
+ const elapsed=Math.max(.025,Math.min(.7,(now-p.lastMove)/1000));
  p.lastSeen=now;
  if(distance>4.1*elapsed+.16)return false;
- const candidate={...p.player};move(w,candidate,b.x-candidate.x,b.z-candidate.z);if(Math.hypot(candidate.x-b.x,candidate.z-b.z)>.02)return false;
- p.player={x:b.x,z:b.z,yaw:((b.yaw%(2*Math.PI))+2*Math.PI)%(2*Math.PI),pitch:Math.max(-1.15,Math.min(1.15,b.pitch)),height:Number.isFinite(b.height)?Math.max(0,Math.min(p.level===6?3.5:.92,b.height)):0};p.weapon=p.inventory.includes('sword')&&b.weapon==='sword'?'sword':null;p.seq=b.seq;p.lastMove=now;return true;
+
+ const w=expeditionWorld(s,p.level),floor=floorState(runFor(s,p),w);
+ const height=Number.isFinite(b.height)?Math.max(0,Math.min(w.arena?7.2:.92,b.height)):0;
+ const people=Object.values(s.players).filter(other=>other!==p&&other.online&&other.level===p.level).map(other=>other.player);
+ const candidate={...previous,height};
+ move(w,candidate,dx,dz,{doorOpen:floor.open,people,frames:settledFrames(w,floor,now),height,fromHeight:previous.height||0});
+ p.seq=b.seq;
+ const triggered=triggerFrames(w,floor,candidate,now);
+ if(frameStrike(w,floor,previous,candidate,p.lastMove,now,RADIUS)){
+  relocate(p,w.spawn,now);p.hitAt=now;s.revision++;
+  return 'warp';
+ }
+ if(floor.open&&crossedDoor(w,previous,candidate)){
+  p.level++;relocate(p,expeditionWorld(s,p.level).spawn,now);barrier(s);s.revision++;
+  return 'level';
+ }
+ p.player={...candidate,yaw:Math.atan2(Math.sin(b.yaw),Math.cos(b.yaw)),pitch:Math.max(-1.15,Math.min(1.15,b.pitch))};
+ p.weapon=p.inventory.includes('sword')&&b.weapon==='sword'?'sword':null;
+ p.lastMove=now;
+ if(triggered){s.revision++;return 'trap'}
+ return Math.hypot(candidate.x-b.x,candidate.z-b.z)>.025?'clipped':true;
 }
 const near=(p,t,d)=>Math.hypot(p.player.x-t.x,p.player.z-t.z)<d;
 const facing=(p,t)=>{const dx=t.x-p.player.x,dz=t.z-p.player.z;return (dx*Math.sin(p.player.yaw)-dz*Math.cos(p.player.yaw))/Math.max(.001,Math.hypot(dx,dz))>.65};
@@ -56,9 +90,7 @@ export function act(s,p,b,now){
  if(b.kind==='pickup'){const item=itemsAt(r,w).find(i=>i.id===b.item);if(!item||!near(p,item,item.type==='pass'?.95:1.25)||!aimCard(p,item))fail('Avvicinati alla carta e guardala.');if(pickup(r,w,item.id)!=='ok')fail('Tasca piena o carta già raccolta.');}
  else if(b.kind==='drop'){if(!Number.isInteger(b.slot)||!drop(r,w,b.slot,p.player))fail('Oggetto non lasciabile.');}
  else if(b.kind==='open'){if(w.arena||!near(p,w.door,1.9)||!openDoor(r,w))fail('Serve la keycard vicino alla porta.');}
- else if(b.kind==='close'){if(w.arena||!near(p,w.door,2.2)||!closeDoor(r,w))fail('Porta non richiudibile.');}
- else if(b.kind==='forward'){if(w.arena||!near(p,w.door,1.9)||!floorState(r,w).open)fail('La porta non è aperta.');p.level++;p.player={...expeditionWorld(s,p.level).spawn,pitch:0,height:0};p.lastMove=now;barrier(s);}
- else if(b.kind==='back'){const entrance=w.arena?w.door:w.spawn;if(p.level<=1||!hasPass(r)||!near(p,entrance,w.arena?1.9:1.1))fail('Per tornare serve il passe-partout.');const slot=p.inventory.indexOf('key:'+p.level);if(slot>=0)drop(r,w,slot,p.player);p.level--;const previous=expeditionWorld(s,p.level);p.player={x:previous.door.x-previous.door.dx*1.25,z:previous.door.z-previous.door.dz*1.25,yaw:Math.atan2(-previous.door.dx,previous.door.dz),pitch:0,height:0};p.lastMove=now;}
+ else if(b.kind==='back'){const entrance=w.arena?w.door:w.spawn;if(p.level<=1||!hasPass(r)||!near(p,entrance,w.arena?1.9:1.1))fail('Per tornare serve il passe-partout.');const slot=p.inventory.indexOf('key:'+p.level);if(slot>=0)drop(r,w,slot,p.player);p.level--;const previous=expeditionWorld(s,p.level);relocate(p,{x:previous.door.x-previous.door.dx*1.25,z:previous.door.z-previous.door.dz*1.25,yaw:Math.atan2(-previous.door.dx,previous.door.dz)},now);}
  else if(['showcase','backpack','sword'].includes(b.kind)){
  const box=casePosition(s,p);if(p.level!==6||!near(p,box,2.5)||!facing(p,box))fail('Avvicinati alla tua vetrina.');
  if(b.kind==='showcase'){if(s.showcaseOpen)fail('Vetrina già aperta.');if(participants(s).length!==1)fail('Attendi gli altri partecipanti.');s.showcaseOpen=true;s.entryLocked=true;}

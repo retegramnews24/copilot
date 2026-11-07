@@ -1,3 +1,4 @@
+import {placeFrames} from './traps.js';
 import {CELL,makeLevel,random,distances,index,free} from './core.js';
 export const FLOORS=[
  {name:'Giallo',stripe:'#ddc267',light:[1,.96,.77],ambient:[.29,.275,.215],fog:[.20,.18,.115],power:1.15,visibility:18,brightness:1},
@@ -18,9 +19,9 @@ export function makeArena(seed){
  return {seed,level:6,arena:true,n,grid,rooms:[],start:index(Math.floor(spawn.x/CELL),Math.floor(spawn.z/CELL),n),spawn:{...spawn,yaw:0},exit:0,key:0,keyPosition:{x:-99,z:-99},door:{x:cx,z:cz+rz-.025,dx:0,dz:1},lamps:[{...showcase,y:5},{...spawn,y:5},...decor.filter(d=>d.type==='lamp').map(d=>({...d,y:2.7}))],showcase,nets,decor,obstacles,oval:{cx,cz,rx,rz}};
 
 }
-export function worldFor(seed,level){const w=level===6?makeArena(seed):makeLevel(seed,level);if(level>1&&level<6)w.lamps=w.lamps.filter((p,i)=>{const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL),cell=index(x,z,w.n);return cell===w.exit||((x+z)%4===2&&(level<4||i%(level===5?4:2)===0))});w.palette=level===6?ARENA_LIGHT:FLOORS[level-1];return w}
+export function worldFor(seed,level){const w=level===6?makeArena(seed):makeLevel(seed,level);if(level>1&&level<6)w.lamps=w.lamps.filter((p,i)=>{const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL),cell=index(x,z,w.n);return cell===w.exit||((x+z)%4===2&&(level<4||i%(level===5?4:2)===0))});w.palette=level===6?ARENA_LIGHT:FLOORS[level-1];w.frames=placeFrames(w,CELL,distances,random);return w}
 export function newRun(seed,test=true){return {version:2,seed:seed>>>0,level:1,seconds:0,player:null,inventory:[],kitRemoved:true,backpack:false,floors:{},showcaseOpen:false,swordTaken:false,test};}
-function randomSpot(world,salt){const rng=random(world.seed^Math.imul(world.level,7717)^salt),choices=[];for(let i=0;i<world.grid.length;i++)if(!world.grid[i]&&i!==world.start&&i!==world.exit&&i!==world.key)choices.push(i);return centre(choices[Math.floor(rng()*choices.length)],world.n)}
+function randomSpot(world,salt){const rng=random(world.seed^Math.imul(world.level,7717)^salt),choices=[];for(let i=0;i<world.grid.length;i++)if(!world.grid[i]&&i!==world.start&&i!==world.exit&&i!==world.key&&!world.frames.some(f=>f.id===i))choices.push(i);return centre(choices[Math.floor(rng()*choices.length)],world.n)}
 export function floorState(run,world){
  if(!run.floors[world.level])run.floors[world.level]={open:false,cycle:0,key:{...world.keyPosition},pass:world.level===5&&!hasPass(run)&&!Object.values(run.floors).some(f=>f.pass)?randomSpot(world,823):null};
  return run.floors[world.level];
@@ -40,10 +41,9 @@ export function drop(run,world,slot,player){
 }
 export function openDoor(run,world){
  const f=floorState(run,world);if(f.open)return true;const key='key:'+world.level,i=run.inventory.indexOf(key);if(i<0)return false;
- if(i>=0)run.inventory.splice(i,1);else if(f.key)f.key=null;
+ run.inventory.splice(i,1);f.key=null;
  f.open=true;return true;
 }
-export function closeDoor(run,world){const f=floorState(run,world);if(!f.open)return false;f.open=false;f.cycle++;f.key=randomSpot(world,104729*f.cycle);return true}
 export function openShowcase(run){if(run.level!==6||run.showcaseOpen)return false;run.showcaseOpen=true;return true}
 export function takeBackpack(run){if(!run.showcaseOpen||run.backpack)return false;run.backpack=true;return true}
 export function takeSword(run){if(!run.showcaseOpen||run.swordTaken||run.inventory.length>=capacity(run))return false;run.inventory.push('sword');run.swordTaken=true;return true}
@@ -56,13 +56,13 @@ export function readRun(raw){
  const r=newRun(raw.seed,raw.test===true);r.level=raw.level;r.seconds=Number.isFinite(raw.seconds)?Math.max(0,Math.min(1e8,raw.seconds)):0;r.backpack=raw.backpack===true;r.showcaseOpen=raw.showcaseOpen===true;r.swordTaken=r.showcaseOpen&&raw.swordTaken===true;
  if(!r.showcaseOpen)r.backpack=false;
  const allowed=new Set(['pass','key:'+r.level,...(r.swordTaken?['sword']:[])]);r.inventory=[...new Set(Array.isArray(raw.inventory)?raw.inventory:[])].filter(i=>allowed.has(i)).slice(0,capacity(r));
- r.floors={};for(let level=1;level<=6;level++){const w=worldFor(r.seed,level),s=raw.floors?.[level];if(!s)continue;const valid=p=>p&&free(w,p.x,p.z)?{x:p.x,z:p.z}:null;const cycle=Number.isInteger(s.cycle)?Math.max(0,Math.min(1e6,s.cycle)):0;r.floors[level]={open:s.open===true,cycle,key:s.open?null:valid(s.key),pass:valid(s.pass)};if(!w.arena&&!s.open&&!r.floors[level].key&&!r.inventory.includes('key:'+level))r.floors[level].key=randomSpot(w,cycle*104729);}
+ r.floors={};for(let level=1;level<=6;level++){const w=worldFor(r.seed,level),s=raw.floors?.[level];if(!s)continue;const valid=p=>p&&free(w,p.x,p.z)?{x:p.x,z:p.z}:null;const cycle=Number.isInteger(s.cycle)?Math.max(0,Math.min(1e6,s.cycle)):0;r.floors[level]={open:s.open===true,cycle,key:s.open?null:valid(s.key),pass:valid(s.pass),traps:Object.fromEntries(w.frames.filter(f=>Number.isFinite(s.traps?.[f.id])).map(f=>[f.id,s.traps[f.id]]))};if(!w.arena&&!s.open&&!r.floors[level].key&&!r.inventory.includes('key:'+level))r.floors[level].key=randomSpot(w,cycle*104729);}
  for(const [level,f] of Object.entries(r.floors))if(r.inventory.includes('key:'+level))f.key=null;
  if(r.test&&raw.kitRemoved!==true){r.inventory=r.inventory.filter(i=>i==='sword');r.floors={}}
  // One master card throughout the expedition, including carried/dropped state.
  let found=hasPass(r);for(let level=1;level<=6;level++){const f=r.floors[level];if(!f?.pass)continue;if(found)f.pass=null;else found=true}
  if(found&&!r.floors[5]){const w=worldFor(r.seed,5);floorState(r,w).pass=null}
- const w=worldFor(r.seed,r.level),p=raw.player;r.player=p&&free(w,p.x,p.z)?{x:p.x,z:p.z,yaw:Number.isFinite(p.yaw)?p.yaw:w.spawn.yaw,pitch:Number.isFinite(p.pitch)?Math.max(-1.15,Math.min(1.15,p.pitch)):0}:{...w.spawn,pitch:0};
+ const w=worldFor(r.seed,r.level),p=raw.player;r.player=p&&free(w,p.x,p.z,undefined,r.floors[r.level]?.open)?{x:p.x,z:p.z,yaw:Number.isFinite(p.yaw)?p.yaw:w.spawn.yaw,pitch:Number.isFinite(p.pitch)?Math.max(-1.15,Math.min(1.15,p.pitch)):0}:{...w.spawn,pitch:0};
  return r;
 }
 export function advanceBounce(state,dt,arena=false){dt=Math.min(.1,Math.max(0,dt));state.height+=state.velocity*dt-6.5*dt*dt;state.velocity-=13*dt;const max=arena?7.2:.92;if(state.height>max){state.height=max;state.velocity=Math.min(0,state.velocity)}if(state.height<0){state.height=0;state.velocity=0}return state}

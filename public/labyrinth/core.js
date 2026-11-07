@@ -1,3 +1,5 @@
+import {frameSupport} from './traps.js';
+
 // Pure deterministic world/physics. No DOM, networking or external assets.
 export const CELL=2.6,HEIGHT=2.72,RADIUS=.23,VERSION=1;
 export function random(seed){let a=seed>>>0;return()=>{a+=0x6D2B79F5;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
@@ -25,19 +27,58 @@ export function makeLevel(seed,level=1){
  const lamps=[];for(let z=1;z<n-1;z++)for(let x=1;x<n-1;x++)if(!grid[index(x,z,n)]&&((x+z)%4===2||index(x,z,n)===key||index(x,z,n)===exit))lamps.push({x:(x+.5)*CELL,y:HEIGHT-.07,z:(z+.5)*CELL,phase:rng()*6.28});
  return {seed:seed>>>0,level,n,grid,rooms,start,exit,key,spawn:{...spawn,yaw:Math.atan2(direction[0],-direction[1])},keyPosition:centre(key),door,lamps};
 }
-export function free(world,x,z,radius=RADIUS){
+export const DOOR_HALF=.61, DOOR_HEIGHT=2.2, PLAYER_CLEARANCE=.58;
+export const forwardVector=yaw=>({x:Math.sin(yaw),z:-Math.cos(yaw)});
+const doorDepth=(door,x,z)=>(x-door.x)*door.dx+(z-door.z)*door.dz;
+const doorOffset=(door,x,z)=>(z-door.z)*door.dx-(x-door.x)*door.dz;
+export function crossedDoor(world,from,to){
+ const door=world.door,wall=0,old=doorDepth(door,from.x,from.z),next=doorDepth(door,to.x,to.z);
+ if(world.arena||old>=wall||next<wall)return false;
+ const t=(wall-old)/(next-old),offset=doorOffset(door,from.x,from.z)*(1-t)+doorOffset(door,to.x,to.z)*t;
+ return Math.abs(offset)<=DOOR_HALF-RADIUS;
+}
+export function free(world,x,z,radius=RADIUS,doorOpen=false){
  if(!Number.isFinite(x)||!Number.isFinite(z)||x<radius||z<radius||x>=world.n*CELL-radius||z>=world.n*CELL-radius)return false;
  if(world.oval){const o=world.oval;if(((x-o.cx)/(o.rx-radius))**2+((z-o.cz)/(o.rz-radius))**2>1)return false;for(const b of world.obstacles||[])if(Math.abs(x-b.x)<b.halfWidth+radius&&Math.abs(z-b.z)<b.halfDepth+radius)return false;return true}
  for(let zz=Math.floor((z-radius)/CELL);zz<=Math.floor((z+radius)/CELL);zz++)for(let xx=Math.floor((x-radius)/CELL);xx<=Math.floor((x+radius)/CELL);xx++){
   if(!world.grid[index(xx,zz,world.n)])continue;
+  const door=world.door;
+  if(doorOpen&&door&&xx===Math.floor((door.x+door.dx*.12)/CELL)&&zz===Math.floor((door.z+door.dz*.12)/CELL)&&
+   doorDepth(door,x,z)<=.055&&Math.abs(doorOffset(door,x,z))<=DOOR_HALF-radius)continue;
   const px=Math.max(xx*CELL,Math.min(x,(xx+1)*CELL)),pz=Math.max(zz*CELL,Math.min(z,(zz+1)*CELL));if((x-px)**2+(z-pz)**2<radius*radius)return false;
  }
  return true;
 }
-export function move(world,player,dx,dz){
- if(!Number.isFinite(dx)||!Number.isFinite(dz))return player;
- const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/.09)),sx=dx/steps,sz=dz/steps;
- for(let i=0;i<steps;i++){if(free(world,player.x+sx,player.z))player.x+=sx;if(free(world,player.x,player.z+sz))player.z+=sz}
+export function move(world,player,dx,dz,{doorOpen=false,people=[],frames=[],height=player.height||0,fromHeight=height}={}){
+ if(!Number.isFinite(dx)||!Number.isFinite(dz)||(!dx&&!dz))return player;
+ const steps=Math.ceil(Math.hypot(dx,dz)/.045),sx=dx/steps,sz=dz/steps;
+ let feet=fromHeight;
+ const canMove=(x,z)=>{
+  if(!free(world,x,z,RADIUS,doorOpen))return false;
+  if(frames.length){
+   const surface=frameSupport(frames,x,z,RADIUS);
+   if(surface>feet+.001&&surface>frameSupport(frames,player.x,player.z,RADIUS)+.001)return false;
+  }
+  for(const other of people){
+   if(Math.abs(feet-(other.height||0))>=1.75)continue;
+   const before=(player.x-other.x)**2+(player.z-other.z)**2,after=(x-other.x)**2+(z-other.z)**2;
+   // Players sharing a spawn may separate freely.
+   if(after<PLAYER_CLEARANCE**2&&after<before-1e-9)return false;
+  }
+  return true;
+ };
+ for(let i=0;i<steps;i++){
+  feet=fromHeight+(height-fromHeight)*(i+1)/steps;
+  const x=player.x+sx,z=player.z+sz;
+  if(canMove(x,z)){player.x=x;player.z=z;continue}
+  if(Math.abs(sx)>=Math.abs(sz)){
+   if(sx&&canMove(x,player.z))player.x=x;
+   if(sz&&canMove(player.x,z))player.z=z;
+  }else{
+   if(sz&&canMove(player.x,z))player.z=z;
+   if(sx&&canMove(x,player.z))player.x=x;
+  }
+ }
  return player;
 }
 export function interaction(world,player,hasKey){

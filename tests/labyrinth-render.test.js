@@ -1,6 +1,6 @@
 // Geometry/API contract test. Actual GPU shader compilation still needs WebGL hardware.
 import assert from 'node:assert/strict';
-import {projectPoint,Renderer} from '../public/labyrinth/render.js';
+import {avatarTransform,projectPoint,Renderer} from '../public/labyrinth/render.js';
 import {worldFor} from '../public/labyrinth/adventure.js';
 const context=new Proxy({createLinearGradient:()=>({addColorStop(){}}),createRadialGradient:()=>({addColorStop(){}}),createImageData:(w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)}),getImageData:(x,y,w,h)=>({width:w,height:h,data:new Uint8ClampedArray(w*h*4)}),putImageData(){},fillRect(){}},{get:(o,k)=>k in o?o[k]:()=>{}});
 globalThis.document={createElement:()=>({width:1,height:1,getContext:()=>context})};globalThis.devicePixelRatio=1;
@@ -11,10 +11,15 @@ const gl=new Proxy({createBuffer:()=>{allocated++;return {}},deleteBuffer:()=>re
 const canvas={width:0,height:0,style:{},getContext:type=>type==='webgl'?gl:context,getBoundingClientRect:()=>({width:300,height:180})};const renderer=new Renderer(canvas);
 for(let level=1;level<=6;level++){
  const w=worldFor(231,level);renderer.load(w);renderer.scene={items:[{...w.keyPosition,color:w.palette.stripe}],appearance:{shirt:'#66b8cf',shorts:'#3c62a3'},showcaseOpen:false,backpack:false,swordTaken:false,players:[{player:{...w.spawn,x:w.spawn.x+.4,height:.2},appearance:{shirt:'#cf514d',shorts:'#529766'},backpack:true,weapon:'sword',actionAt:Date.now()}],...(level===6?{cases:[0,3,-3,6].map(dx=>({...w.showcase,x:w.showcase.x+dx,open:false}))}:{})};renderer.draw({...w.spawn,pitch:-.4},false,0);assert.deepEqual(uniforms.get('uAmbient'),w.palette.ambient);assert.equal(uniforms.get('uPower'),w.palette.power);
- renderer.scene={...renderer.scene,showcaseOpen:true,backpack:true,swordTaken:true,doorOpen:true};renderer.draw({...w.spawn,pitch:0},false,2,2.5);
+ renderer.scene={...renderer.scene,showcaseOpen:true,backpack:true,swordTaken:true,doorOpen:true,traps:Object.fromEntries(w.frames.map(f=>[f.id,1000])),serverNow:2450};
+ renderer.draw({...w.spawn,pitch:0},false,2,2.5);
+ if(w.frames.length){const f=w.frames[0];renderer.draw({x:f.x+f.dx,z:f.z+f.dz,yaw:Math.atan2(-f.dx,f.dz),pitch:-.25},false,2.5)}
+
 }
 renderer.destroy();assert.equal(allocated,released,'All GPU buffers released across floor changes and shutdown');assert.ok(draws>60);
 const fallbackCanvas={...canvas,width:0,height:0,getContext:type=>type==='webgl'?null:context};const software=new Renderer(fallbackCanvas);assert.ok(software.software);for(let level=1;level<=6;level++){const w=worldFor(231,level);software.load(w);software.scene={items:[{...w.keyPosition,color:w.palette.stripe}],appearance:{shirt:'#66b8cf',shorts:'#3c62a3'},players:[{player:{...w.spawn,z:w.spawn.z-1,height:0},appearance:{shirt:'#cf514d',shorts:'#529766'},weapon:'sword',actionAt:Date.now()}],...(level===6?{cases:[0,3,-3,6].map(dx=>({...w.showcase,x:w.showcase.x+dx,open:false}))}:{})};software.draw({...w.spawn,pitch:-1},false,0);software.scene={...software.scene,showcaseOpen:true,swordTaken:true,backpack:true};software.draw({...w.spawn,pitch:0},false,1,3.3);if(level>1&&level<6)software.draw({...w.spawn,yaw:-Math.PI/2,pitch:0},false,2)}software.destroy();
 console.log('PASS rendering contract: six floors, finite geometry/matrices, per-floor uniforms, solo body, cards, case/equipment/springs, GPU resource cleanup and software draw paths. GPU compilation not simulated.');
 
 assert.ok(projectPoint({x:0,z:0,yaw:0,pitch:0},{x:0,y:1.62,z:-3},850,390));assert.equal(projectPoint({x:0,z:0,yaw:0,pitch:0},{x:0,y:1.62,z:3},850,390),null);
+
+for(const yaw of [0,Math.PI/2,Math.PI,-Math.PI/2]){const m=avatarTransform({x:0,z:0,yaw});assert.ok(Math.abs(-m[8]-Math.sin(yaw))<1e-7);assert.ok(Math.abs(-m[10]+Math.cos(yaw))<1e-7)}
