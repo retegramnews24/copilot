@@ -1,6 +1,6 @@
 import { COURSES, COLORS } from './courses.js';
-import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js';
-import { viewFor, drawCourse } from './render.js';
+import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=2';
+import { viewFor, drawCourse } from './render.js?v=2';
 import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});
@@ -90,9 +90,13 @@ function table(){
 }
 function positionAt(p,now){
   const shot=p.shot;
-  if(!shot||now>=shot.until)return p.done&&shot?.sunk?null:p.position;
+  if(!shot||now>=shot.until)return shot?.sunk?null:p.position;
   const elapsed=Math.max(0,now-shot.at);
-  if(shot.penalty&&elapsed>=shot.duration)return null;
+  if(elapsed>=shot.duration){
+    if(shot.penalty)return null;
+    if(shot.sunk)return [...shot.end,(now-shot.at-shot.duration)/Math.max(1,shot.until-shot.at-shot.duration)];
+    return shot.end;
+  }
   const t=elapsed/50, index=Math.min(shot.samples.length-2,Math.floor(t)), next=shot.samples[index+1];
   const a=shot.samples[index], fraction=index===shot.samples.length-2?
     Math.min(1,(elapsed-index*50)/Math.max(1,shot.duration-index*50)):t-index;
@@ -112,10 +116,10 @@ function draw(){
   putText('course',course.name);
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');
-  putText('tip',course.tip+'  ·  Trascina all’indietro e rilascia, oppure usa i comandi.');
+  putText('tip',course.tip+'  ·  Trascina verso il bersaglio e rilascia, oppure usa i comandi.');
   const progress=p?'Colpi '+p.strokes+'/'+LIMIT:'';
   const notice=p?.shot?.penalty&&p.shot.until>now&&now>=p.shot.at+p.shot.duration?'Acqua · ritorno all’ultimo punto':
-    p?.done?(p.shot?.sunk?'In buca!':'Buca chiusa')+' · '+progress:progress;
+    p?.shot?.sunk&&now>=p.shot.at+p.shot.duration?'In buca! · '+progress:p?.done?'Buca chiusa · '+progress:progress;
   putText('status',performance.now()<noteUntil?note:notice);
   $('shoot').disabled=!available;
   updatePanel();
@@ -126,18 +130,18 @@ function draw(){
     const w=Math.round(width*scale),h=Math.round(height*scale);
     if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;}
     ctx.setTransform(scale,0,0,scale,0,0);
-    const balls=(state?.players||[]).filter(p=>p.done||p.id===me||p.shot).flatMap(p=>{
+    const balls=(state?.players||[]).flatMap(p=>{
       const pos=positionAt(p,now);
-      return pos?[{id:p.id,color:p.color,x:pos[0],z:pos[1]}]:[];
+      return pos?[{id:p.id,name:p.name,color:p.color,x:pos[0],z:pos[1],sink:pos[2]||0}]:[];
     });
-    drawCourse(ctx,width,height,course,balls,available?balls.find(p=>p.id===me):null,angle(),value('power')/100,
+    drawCourse(ctx,width,height,course,balls,me,available,angle(),value('power')/100,
       state?.started?Math.max(0,now-state.started)/1000:0);
   }
   frame=requestAnimationFrame(draw);
 }
 
-function pull(e){
-  const dx=drag.x-e.clientX,dy=drag.y-e.clientY;
+function aimDrag(e){
+  const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
   const [x,z]=viewFor(canvas.clientWidth,canvas.clientHeight).direction(dx,dy);
   const length=Math.hypot(dx,dy);
   if(length<6)return false;
@@ -150,10 +154,10 @@ canvas.addEventListener('pointerdown',e=>{
   drag={id:e.pointerId,x:e.clientX,y:e.clientY};
   canvas.setPointerCapture?.(e.pointerId);
 });
-canvas.addEventListener('pointermove',e=>{if(drag?.id===e.pointerId)pull(e);});
+canvas.addEventListener('pointermove',e=>{if(drag?.id===e.pointerId)aimDrag(e);});
 canvas.addEventListener('pointerup',e=>{
   if(drag?.id!==e.pointerId)return;
-  const moved=pull(e);drag=null;if(moved)shoot();
+  const moved=aimDrag(e);drag=null;if(moved)shoot();
 });
 for(const event of ['pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{if(drag?.id===e.pointerId)drag=null;});
 window.addEventListener('keydown',e=>{

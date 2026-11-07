@@ -26,13 +26,19 @@ export function simulateShot(course, x, z, angle, power, startSeconds=0) {
   let sunk=false, penalty=false, step=0;
   for(;step<MAX_STEP;){
     step++;
+    const previousX=ball.x, previousZ=ball.z;
     ball.x+=ball.vx*STEP;ball.z+=ball.vz*STEP;
     for(const rail of walls)rebound(ball,rail,RADIUS+(borders.includes(rail)?0:.12),.77);
     for(const [bx,bz,r] of course.bumpers||[])rebound(ball,{x:bx,z:bz,toX:bx,toZ:bz},r+RADIUS,.94);
     const rotor=rotorWall(course,startSeconds+step*STEP);
     if(rotor)rebound(ball,rotor,RADIUS+.19,.86);
-    const speed=Math.hypot(ball.vx,ball.vz), distance=Math.hypot(ball.x-course.cup[0],ball.z-course.cup[1]);
-    if(distance<CUP*.84 && speed<5.9){[ball.x,ball.z]=course.cup;sunk=true;break}
+    const speed=Math.hypot(ball.vx,ball.vz), dx=ball.x-previousX, dz=ball.z-previousZ;
+    const [cupX,cupZ]=course.cup, travel=dx*dx+dz*dz;
+    const across=travel?clamp(((cupX-previousX)*dx+(cupZ-previousZ)*dz)/travel,0,1):0;
+    const distance=Math.hypot(previousX+dx*across-cupX,previousZ+dz*across-cupZ);
+    // A fast putt must cross closer to the centre, while a slow one can catch the lip.
+    const capture=CUP*(1-.62*clamp((speed-4)/14,0,1));
+    if(distance<=capture){[ball.x,ball.z]=course.cup;sunk=true;break}
     if(course.water?.some(r=>inside(r,ball.x,ball.z))){penalty=true;break}
     if(step%5===0)samples.push([ball.x,ball.z]);
     const drag=course.rough?.some(r=>inside(r,ball.x,ball.z)) ? 5.1 : 2.25;

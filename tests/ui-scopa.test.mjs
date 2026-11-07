@@ -75,7 +75,7 @@ w.fetch=beforeRaceFetch;
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=2');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -402,25 +402,42 @@ assert.ok(raceWindow.__raceTest.bike().vx>0);
 raceDom.window.close();
 console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and sequential campaign progression, startup with unavailable audio and legacy Canvas, and multiplayer readiness.');
 
-const golfPage=new JSDOM(await fs.readFile('public/golf/index.html','utf8'),{
- url:'https://unit.test/golf/',runScripts:'outside-only',pretendToBeVisual:true
-});
-const golfWindow=golfPage.window,golfGet=id=>golfWindow.document.getElementById(id),green=golfGet('green');
-Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
-let ballFrames=0;
-green.getContext=()=>new Proxy({arc(){ballFrames++;},createLinearGradient:()=>({addColorStop(){}})},
- {get:(target,key)=>target[key]??(()=>{})});
-const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state};',
+const golfHtml=await fs.readFile('public/golf/index.html','utf8');
+const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state,draw};',
  resolveDir:process.cwd()+'/public/golf'},bundle:true,write:false,format:'iife',platform:'browser'});
-golfWindow.eval(golfBundle.outputFiles[0].text);
-assert.equal(golfGet('course').textContent,'Pride Park');
-assert.ok(ballFrames>0);
-golfGet('shoot').click();
-assert.equal(golfWindow.__golf.state().players[0].shot.sunk,true);
-golfGet('scores').click();assert.equal(golfGet('card').hidden,false);
-golfGet('scores').click();assert.equal(golfGet('card').hidden,true);
-golfPage.window.close();
-console.log('PASS Golf UI: hub launch and return, rendered course, playable putt and scorecard.');
+function golfFixture(search=''){
+ const instance=new JSDOM(golfHtml,{url:'https://unit.test/golf/'+search,runScripts:'outside-only',pretendToBeVisual:true});
+ const win=instance.window,find=id=>win.document.getElementById(id),green=find('green');
+ Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
+ const labels=[],arcs=[];
+ green.getContext=()=>new Proxy({arc(){arcs.push(this.fillStyle);},createLinearGradient:()=>({addColorStop(){}}),
+   measureText:name=>({width:name.length*6}),fillText:name=>labels.push(name)},{get:(target,key)=>target[key]??(()=>{})});
+ win.eval(golfBundle.outputFiles[0].text);
+ return {instance,win,find,green,labels,arcs};
+}
+const golf=golfFixture();
+assert.equal(golf.find('course').textContent,'Pride Park');
+assert.ok(golf.arcs.length>0);
+for(const [event,x,y] of [['pointerdown',100,100],['pointerup',163,114]]){
+ golf.green.dispatchEvent(Object.assign(new golf.win.MouseEvent(event,{clientX:x,clientY:y,button:0}),{pointerId:1}));
+}
+assert.equal(golf.win.__golf.state().players[0].shot.sunk,true,'Drag forward to reach the cup');
+golf.find('scores').click();assert.equal(golf.find('card').hidden,false);
+golf.find('scores').click();assert.equal(golf.find('card').hidden,true);
+golf.instance.window.close();
+
+const golfOnline=golfFixture('?online=1'),now=Date.now();
+const golfState={revision:1,phase:'playing',hole:0,deadline:now+60000,started:now,players:[
+ {id:'me',name:'Io',color:0,position:[3,8],strokes:0},
+ {id:'friend',name:'Amico',color:1,position:[3,8],strokes:0}
+]};
+golfOnline.win.dispatchEvent(new golfOnline.win.MessageEvent('message',{origin:'https://unit.test',source:golfOnline.win,
+ data:{type:'golf:state',state:golfState,player:'me',now}}));
+golfOnline.win.__golf.draw();
+assert.ok(golfOnline.labels.includes('Amico'));
+assert.ok(golfOnline.arcs.includes('#ff82b6'),'Opponents are drawn before their first putt');
+golfOnline.instance.window.close();
+console.log('PASS Golf UI: hub launch, forward drag, cup capture and opponents visible at the tee.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){

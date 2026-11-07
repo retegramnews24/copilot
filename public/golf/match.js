@@ -1,5 +1,5 @@
 import { COURSES } from './courses.js';
-import { simulateShot } from './physics.js';
+import { simulateShot } from './physics.js?v=2';
 
 export const CAPACITY=8, LIMIT=10, HOLE_TIME=105000, BREAK=3500;
 const fail=message=>{throw Error(message)};
@@ -67,6 +67,6 @@ export function takeShot(match,id,input,now){
      !Number.isFinite(input.power)||input.power<0||input.power>1)fail('Colpo non valido.');
   const shot=simulateShot(COURSES[match.hole],...player.position,input.angle,input.power,(now-match.started)/1000);
   player.position=shot.end;player.strokes++;
-  player.shot={...shot,at:now,until:now+shot.duration+(shot.penalty?480:0)};
+  player.shot={...shot,at:now,until:now+shot.duration+(shot.penalty?480:shot.sunk?210:0)};
   match.revision++;
 }

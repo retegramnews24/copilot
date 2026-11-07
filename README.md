@@ -54,7 +54,7 @@ Il pulsante per creare tavoli è nella pagina Giochi. La Lobby conserva elenco, 
 
 ## Golf with your gay friends
 
-Minigolf isometrico con nove buche originali, sponde, sabbia, acqua, respingenti e mulini. Si tira trascinando all’indietro sul percorso o regolando mira e forza. I tasti A/D e W/S regolano il colpo e Spazio tira. In singolo il giro si svolge nel browser. In multiplayer si crea una stanza dalla pagina Giochi, gli amici entrano dalla Lobby e il creatore avvia la gara. Da due a otto giocatori tirano in contemporanea con palline indipendenti e colpi calcolati dal server. Ciascuna buca dura al massimo 105 secondi e consente dieci colpi. Conta il totale dei colpi e il risultato online entra nella classifica storica.
+Minigolf isometrico con nove buche originali, sponde, sabbia, acqua, respingenti e mulini. Si tira trascinando verso il bersaglio sul percorso o regolando mira e forza. I tasti A/D e W/S regolano il colpo e Spazio tira. In singolo il giro si svolge nel browser. In multiplayer si crea una stanza dalla pagina Giochi, gli amici entrano dalla Lobby e il creatore avvia la gara. Da due a otto giocatori tirano in contemporanea con palline indipendenti e colpi calcolati dal server. Ciascuna buca dura al massimo 105 secondi e consente dieci colpi. Conta il totale dei colpi e il risultato online entra nella classifica storica.
 
 ## Moto Trial · Platform 2D
 

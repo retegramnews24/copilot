@@ -28,6 +28,9 @@ for(const [i,course] of COURSES.entries()){
     if(target===course.cup)assert.equal(best.sunk,true,course.name);
   }
 }
+for(const power of [.43,.65,1])assert.equal(simulateShot(COURSES[0],3,8,0,power).sunk,true);
+assert.equal(simulateShot(COURSES[0],22.6,8.53,0,.04).sunk,true,'A slow putt catches the lip');
+assert.equal(simulateShot(COURSES[0],22.3,8.55,0,1).sunk,false,'A hard glancing shot can pass the lip');
 const water=simulateShot(COURSES[2],3,2,0,.6);
 assert.equal(water.penalty,true);assert.deepEqual(water.end,[3,2]);
 const wall=simulateShot(COURSES[0],3,8,Math.PI,.45);
