@@ -22,6 +22,7 @@ const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Faus
 let lobbySocket;
 w.WebSocket=class{constructor(url){if(url.endsWith('/api/lobby/ws'))lobbySocket=this;this.readyState=1;w.setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?payload():state)})},1)}send(){}close(){this.readyState=3}};
 w.fetch=async(path,opts)=>Response.json(path==='/api/session'?{user,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...payload(),pending:false}:path==='/api/lobby'?payload():state);
+w.localStorage.setItem('binotto-golf-ball',JSON.stringify(['#a11293','#197b61']));
 w.eval(bundle.outputFiles[0].text);await new Promise(r=>setTimeout(r,50));assert.equal(w.document.getElementById('app-shell').hidden,false);assert.equal(w.document.querySelector('input[type=password]'),null);await w.__qa.openRoom(room,true);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-hand button').length,3);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-table .sicilian-card').length,4);assert.equal(w.document.getElementById('tutorial-panel').hidden,false);assert.ok(w.document.getElementById('tutorial-reason').textContent.length);assert.equal(w.document.getElementById('create-cluedo'),null);
 w.__qa.createGame('briscola5','solo');
 w.document.querySelector('[name="solo-mode"][value="tutorial"]').click();
@@ -44,13 +45,27 @@ assert.equal(get('tutorial-labyrinth'),null);
 assert.equal(get('solo-labyrinth').textContent,'Dev Mode');
 assert.match(get('leaderboard-multi').querySelector('details summary').textContent,/Anna/);
 assert.equal(get('leaderboard-multi').querySelector('details').open,false);
-for(const [id,color] of [['golf-ball-top','#a11293'],['golf-ball-bottom','#197b61']]){
- const input=get(id);input.value=color;input.dispatchEvent(new w.Event('input',{bubbles:true}));
-}
-assert.deepEqual(JSON.parse(w.localStorage.getItem('binotto-golf-ball')),['#a11293','#197b61']);
-assert.equal(get('golf-ball-preview').style.getPropertyValue('--golf-ball-top'),'#a11293');
+const golfBall=get('golf-ball-preview'),separateColors=get('golf-ball-separate'),golfPalette=get('golf-ball-colors');
+const ballColors=()=>['--ball-top','--ball-bottom'].map(name=>golfBall.style.getPropertyValue(name));
+const colorButton=(group,name)=>w.document.querySelector('[aria-label="'+group+' · '+name+'"]');
+assert.deepEqual(ballColors(),['#66b8cf','#3c62a3']);
+assert.equal(golfPalette.hidden,true);
+colorButton('Maglietta','Corallo').click();colorButton('Pantaloncini','Verde').click();
+assert.deepEqual(ballColors(),['#cf514d','#529766']);
+separateColors.click();
+assert.equal(golfPalette.hidden,false);
+assert.deepEqual(ballColors(),['#a11293','#197b61'],'Previously saved Golf colors remain available');
+assert.ok(colorButton('Pallina · Sopra','Colore precedente'));
+colorButton('Pallina · Sopra','Giallo').click();colorButton('Pallina · Sotto','Viola').click();
+assert.deepEqual(ballColors(),['#e5be43','#8662b1']);
+assert.deepEqual(JSON.parse(w.localStorage.getItem('labyrinth-appearance')),{shirt:'#cf514d',shorts:'#529766'});
+separateColors.click();
+assert.deepEqual(ballColors(),['#cf514d','#529766']);
+separateColors.click();
+assert.deepEqual(ballColors(),['#e5be43','#8662b1']);
+separateColors.click();
 get('solo-labyrinth').click();
-assert.equal(get('labyrinth-frame').getAttribute('src'),'/labyrinth/index.html?dev=1&v=dev2');
+assert.equal(get('labyrinth-frame').getAttribute('src'),'/labyrinth/index.html?dev=1&v=dev3');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:get('labyrinth-frame').contentWindow,data:{type:'labyrinth:exit'}}));
 assert.equal(get('catalog-platform-title').textContent,'Platform 2D');
 assert.equal(get('moto-course'),null);
@@ -83,7 +98,7 @@ w.fetch=beforeRaceFetch;
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=7');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=8');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -102,7 +117,22 @@ w.fetch=async(path,opts)=>{
 golfLobbyButton.click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=7&online=1');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=8&online=1');
+w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
+let golfCreate;
+w.fetch=async(path,opts)=>{
+ if(path!=='/api/create')return previousFetch(path,opts);
+ golfCreate=JSON.parse(opts.body);
+ return Response.json({state:{...lobbyGolf,phase:'waiting',players:[{id:'tg:1',name:'Fausto'}]},now:Date.now()});
+};
+get('create-golf').click();
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.deepEqual(golfCreate,{game:'golf',appearance:['#cf514d','#529766']});
+w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
+separateColors.click();
+get('create-golf').click();
+await new Promise(resolve=>setTimeout(resolve,30));
+assert.deepEqual(golfCreate,{game:'golf',appearance:['#e5be43','#8662b1']});
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 w.fetch=previousFetch;
 
@@ -433,7 +463,7 @@ console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throt
 const golfHtml=await fs.readFile('public/golf/index.html','utf8');
 const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state,camera:()=>camera,draw};',
  resolveDir:process.cwd()+'/public/golf'},bundle:true,write:false,format:'iife',platform:'browser'});
-function golfFixture(search='',appearance=null){
+function golfFixture(search='',outfit=null){
  const instance=new JSDOM(golfHtml,{url:'https://unit.test/golf/'+search,runScripts:'outside-only',pretendToBeVisual:true});
  const win=instance.window,find=id=>win.document.getElementById(id),green=find('green');
  Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
@@ -441,13 +471,14 @@ function golfFixture(search='',appearance=null){
  const gradient=()=>({addColorStop(){}});
  green.getContext=()=>new Proxy({arc(){arcs.push(this.fillStyle);},createLinearGradient:gradient,createRadialGradient:gradient,
    measureText:name=>({width:name.length*6}),fillText:name=>labels.push(name),rotate:angle=>rotations.push(angle)},{get:(target,key)=>target[key]??(()=>{})});
- if(appearance)win.localStorage.setItem('binotto-golf-ball',JSON.stringify(appearance));
+ if(outfit)win.localStorage.setItem('labyrinth-appearance',JSON.stringify(outfit));
  win.eval(golfBundle.outputFiles[0].text);
  return {instance,win,find,green,labels,arcs,rotations};
 }
-const golf=golfFixture('',['#a11293','#197b61']);
+const golf=golfFixture('',{shirt:'#cf514d',shorts:'#529766'});
 assert.equal(golf.find('course').textContent,'Pride Park');
-assert.ok(golf.arcs.includes('#a11293'));
+assert.ok(golf.arcs.includes('#cf514d'));
+assert.deepEqual(Array.from(golf.win.__golf.state().players[0].appearance),['#cf514d','#529766']);
 const pointer=(event,button,buttons,x,y)=>golf.green.dispatchEvent(Object.assign(
  new golf.win.MouseEvent(event,{clientX:x,clientY:y,button,buttons,cancelable:true}),{pointerId:1}));
 const {yaw,pitch}=golf.win.__golf.camera();

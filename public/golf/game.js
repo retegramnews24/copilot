@@ -1,16 +1,16 @@
-import { COURSES, COURSE_VERSION, courseFor, RADIUS, BALL_KEY, ballColors, validBallColors } from './courses.js?v=7';
+import { COURSES, COURSE_VERSION, courseFor, RADIUS, ballColors } from './courses.js?v=7';
 import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=7';
 import { drawCourse } from './render.js?v=7';
 import { upright, rollBy } from './roll.js';
+import {golfColors,validBallColors} from '../appearance.js?v=8';
 import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});
 const online=new URLSearchParams(location.search).get('online')==='1';
-let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=null, orbit=null, watching=null, watchOptions='';
+let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=golfColors(), orbit=null, watching=null, watchOptions='';
 const ballRolls=new Map();
 const ZOOM_NEAR=.43,ZOOM_FAR=2.5;
 let zoomTarget=1;
-try{appearance=JSON.parse(localStorage.getItem(BALL_KEY));}catch{}
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
 const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},location.origin);
 const time=()=>Date.now()+offset;

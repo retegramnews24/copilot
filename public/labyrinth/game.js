@@ -4,7 +4,7 @@ import {move,free,restoreProgress,beginJump,crossedDoor,forwardVector,CELL,RADIU
 import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction} from './adventure.js?v=arena2';
 import {framePose,struckFrame,frameSupport,settledFrames,triggerFrames} from './traps.js';
 import {projectPoint,Renderer} from './render.js?v=arena2';
-import {readAppearance} from './avatar.js';
+import {readAppearance} from './avatar.js?v=8';
 import {avatarSprite} from './visuals.js';
 import {Atmosphere} from './audio.js';
 import {SPRING_HEIGHT, springAt, resetJump, jumpFromSpring, advanceSpring} from './spring.js?v=arena2';

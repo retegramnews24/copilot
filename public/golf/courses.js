@@ -1,3 +1,6 @@
+import {validBallColors} from '../appearance.js?v=8';
+export {BALL_KEY,validBallColors} from '../appearance.js?v=8';
+
 const wall = (x, z, toX, toZ) => ({x, z, toX, toZ});
 const water = (x, z, w, h) => ({x, z, w, h});
 export const COURSES = [
@@ -72,11 +75,6 @@ export function courseFor(index,version) {
   return (version===2 ? expandedCourses : COURSES)[index];
 }
 
-export const BALL_KEY = 'binotto-golf-ball';
-export function validBallColors(colors) {
-  return Array.isArray(colors) && colors.length===2 &&
-    colors.every(color => typeof color==='string' && /^#[0-9a-f]{6}$/i.test(color));
-}
 export function ballColors(colors,index=0) {
   return validBallColors(colors) ? colors : [COLORS[index] || COLORS[0], '#455aa7'];
 }

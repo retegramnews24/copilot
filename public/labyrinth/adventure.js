@@ -10,7 +10,7 @@ export const FLOORS=[
 ];
 export const ARENA_LIGHT={name:'Colosseo',stripe:'#cead73',light:[1,.92,.78],ambient:[.78,.69,.55],fog:[.65,.60,.51],power:.65,visibility:88,brightness:1};
 export const STANDS_WAIT=5000, CROUCH_OFFSET=.46;
-export const CLOTHES=[['Panna','#eee4c9'],['Giallo','#e5be43'],['Arancio','#d6813c'],['Corallo','#cf514d'],['Rosa','#d58da9'],['Viola','#8662b1'],['Celeste','#66b8cf'],['Blu','#3c62a3'],['Verde','#529766'],['Antracite','#333b42']];
+export {CLOTHES} from '../appearance.js?v=8';
 export const centre=(i,n)=>({x:(i%n+.5)*CELL,z:(Math.floor(i/n)+.5)*CELL});
 export function makeArena(seed){
  const n=17,grid=new Uint8Array(n*n),cx=n*CELL/2,cz=n*CELL/2,rx=20,rz=17.6;

@@ -2,7 +2,8 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {BALL_KEY,ballColors} from './golf/courses.js?v=7';
+import {golfColors} from './appearance.js?v=8';
+import './labyrinth/avatar.js?v=8';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
@@ -756,7 +757,7 @@ function connectExpedition(){
 }
 async function openLabyrinth(selected,watch=false){
  if(!identity||labyrinthOpening)return;labyrinthOpening=true;
- try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1&v=dev2';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
+ try{const result=await request('/api/labyrinth/'+selected+(watch?'/state':'/join'),watch?undefined:{});stopRoom();room=null;state=null;labyrinthRoom=selected;labyrinthWatch=watch;labyrinthLastState=result.state;$('draw-dialog').hidden=true;$('draw-response').hidden=true;enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?multiplayer=1&v=dev3';tg?.BackButton?.show();connectExpedition();trace('LAB','Spedizione '+result.state.number+(watch?' · spettatore':''));sendPresence()}
  catch(e){err(e.message)}finally{labyrinthOpening=false}
 }
 $('play-labyrinth').onclick=async()=>{if(!identity||labyrinthOpening)return;$('play-labyrinth').disabled=true;try{const result=await request('/api/create',{game:'labyrinth'});await openLabyrinth(result.state.room,false)}catch(e){err(e.message)}finally{$('play-labyrinth').disabled=false}};
@@ -871,22 +872,6 @@ window.addEventListener('message',event=>{
 });
 tg?.onEvent('backButtonClicked',()=>{if(!$('golf-overlay').hidden)closeGolf();else if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
 
-const golfColors=['golf-ball-top','golf-ball-bottom'].map($);
-function previewGolfBall(colors){
- const preview=$('golf-ball-preview');
- preview.style.setProperty('--golf-ball-top',colors[0]);
- preview.style.setProperty('--golf-ball-bottom',colors[1]);
-}
-const savedGolfColors=ballColors(read(BALL_KEY,null));
-golfColors.forEach((input,index)=>{
- input.value=savedGolfColors[index];
- input.addEventListener('input',()=>{
-  const colors=golfColors.map(input=>input.value);
-  try{save(BALL_KEY,colors)}catch(error){err(error.message)}previewGolfBall(colors);
- });
-});
-previewGolfBall(savedGolfColors);
-
 function golfPost(type,payload={}){
  if(!$('golf-overlay').hidden)$('golf-frame').contentWindow?.postMessage({type:'golf:'+type,...payload},location.origin);
 }
@@ -896,7 +881,7 @@ function publishGolf(ack=false){
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=7'+(online?'&online=1':'');
+ $('golf-frame').src='/golf/index.html?v=8'+(online?'&online=1':'');
  tg?.BackButton?.show();
 }
 async function syncGolf(){
@@ -915,7 +900,7 @@ async function openGolf(selected){
  if(!identity||golfPending||!$('golf-overlay').hidden)return;
  golfPending=true;$('create-golf').disabled=true;
  try{
-  const appearance=read(BALL_KEY,null);
+  const appearance=golfColors();
   if(!selected){
    golfSnapshot=await request('/api/create',{game:'golf',appearance});
   }else{
@@ -949,7 +934,7 @@ $('create-golf').onclick=()=>openGolf();
 window.addEventListener('message',async event=>{
  if(event.origin!==location.origin||event.source!==$('golf-frame').contentWindow||$('golf-overlay').hidden)return;
  const data=event.data;
- if(data?.type==='golf:ready'){golfPost('insets',{insets:safeInsets(tg)});golfPost('appearance',{colors:read(BALL_KEY,null)});publishGolf();return;}
+ if(data?.type==='golf:ready'){golfPost('insets',{insets:safeInsets(tg)});golfPost('appearance',{colors:golfColors()});publishGolf();return;}
  if(data?.type==='golf:exit'){closeGolf();return;}
  const selected=golfRoom;
  if(!selected||data?.type!=='golf:action'||!['start','shot','close'].includes(data.kind))return;
@@ -1001,7 +986,7 @@ async function loadLeaders(){
   }while(data.pending);
  }catch(e){err(e.message)}finally{leaderBusy=false}
 }
-$('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?dev=1&v=dev2';tg?.BackButton?.show()};
+$('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?dev=1&v=dev3';tg?.BackButton?.show()};
 
 $('access-retry').onclick=startSession;
 startSession();
