@@ -20,5 +20,13 @@ export function playBriscola(state,seat,a,rng=random){if(state.result||seat!==st
  if(g.trick.length<n){g.turn=(seat+1)%n;return g}
  const winner=trickWinner(g.trick,g.trump),points=g.trick.reduce((s,p)=>s+POINTS[p.card.rank],0);g.points[winner]+=points;g.tricks[winner]++;g.captured[winner].push(...g.trick.map(p=>p.card));g.lastTrick={cards:g.trick,winner,points};g.trick=[];g.turn=winner;g.lastEvent='Presa al giocatore '+(winner+1)+' · '+points+' punti';
  for(let d=0;d<n;d++){const i=(winner+d)%n;if(g.deck.length)g.hands[i].push(g.deck.pop());else if(g.bottom){g.hands[i].push(g.bottom);g.bottom=null}}
- if(g.hands.every(h=>!h.length))finish(g);return g;
+ if(g.hands.every(h=>!h.length)){
+  finish(g);
+  if(n<5&&g.result==='draw'){
+   const fresh=initialBriscola(n,rng,g.dealer);
+   fresh.redeals=g.redeals+1;fresh.lastEvent='Parità · nuova smazzata con lo stesso mazziere';
+   return fresh;
+  }
+ }
+ return g;
 }

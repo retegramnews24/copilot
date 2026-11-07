@@ -47,7 +47,7 @@ function portrait(){return document.body.classList.contains('touch')&&innerHeigh
 function updateOrientation(){const blocked=playing&&portrait();$('portrait').hidden=!blocked;sound.active(playing&&!blocked);if(!playing)renderer?.draw(player,hasKey,performance.now()/1000)}
 function look(dx,dy,touch=false){if(!playing||transitioning||portrait())return;const scale=(touch ? .0045 : .0021)*sensitivity;player.yaw+=dx*scale;player.yaw=((player.yaw+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;player.pitch=Math.max(-1.15,Math.min(1.15,player.pitch-dy*scale))}
 function pointerLock(){if(coarse||document.body.classList.contains('touch'))return;try{const result=canvas.requestPointerLock?.();result?.catch(()=>toast('Trascina sullo schermo per guardarti intorno.'))}catch{toast('Trascina sullo schermo per guardarti intorno.')}}
-function resume(){if(!renderer||transitioning)return;if(multiplayer&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent='Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
+function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if(multiplayer&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent='Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
 function pause(){if(!started||transitioning)return;playing=false;if(tutorialBox)tutorialBox.hidden=true;cancelAnimationFrame(raf);raf=0;resetInput();sound.active(false);if(document.pointerLockElement)document.exitPointerLock?.();document.body.classList.remove('playing');$('portrait').hidden=true;$('menu').hidden=false;$('menu-title').textContent='Una pausa.';$('start').textContent='Riprendi l’esplorazione';$('new-run').hidden=!!multiplayer;$('saved-info').textContent=(world.arena?'Arena':'Piano '+level)+(hasPass(run)?' · passe-partout':'');store()}
 function leave(){store();sound.active(false);if(parent!==window)parent.postMessage({type:'labyrinth:exit'},location.origin);else location.href='/'}
 function tryJump(){
@@ -151,7 +151,16 @@ function tick(now){
 $('follow-player').onchange=e=>{followId=e.target.value;if(multiplayer)receiveState(multiplayer.state,true)};
 $('test-travel-go').onclick=()=>{if(multiplayer?.watch)followId='';if(multiplayer&&!multiplayer.watch)return;if(!run.test&&!multiplayer?.watch)return;const next=Number($('test-floor').value);if(!Number.isInteger(next)||next<1||next>6)return;const slot=run.inventory.indexOf('key:'+level);if(slot>=0)drop(run,world,slot,player);level=next;run.level=next;loadWorld();if(world.arena){player.x=world.showcase.x;player.z=world.showcase.z+2.2;player.yaw=0;player.pitch=0}resume();toast('Viaggio rapido · prova')};
 $('start').onclick=resume;
-$('new-run').onclick=()=>{if(multiplayer)return;if(!confirm('Ricominci da un nuovo labirinto? I progressi di questa esplorazione saranno sostituiti.'))return;seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;run=newRun(seed,true);selectedSlot=0;loadWorld();resume()};
+$('new-run').onclick=()=>{
+ if(multiplayer||!renderer||transitioning)return;
+ $('new-run-confirm').hidden=false;$('new-run-start').focus({preventScroll:true});
+};
+$('new-run-cancel').onclick=()=>{$('new-run-confirm').hidden=true;$('new-run').focus({preventScroll:true})};
+$('new-run-start').onclick=()=>{
+ if(multiplayer||!renderer||transitioning)return;
+ seed=crypto.getRandomValues(new Uint32Array(1))[0];level=1;seconds=0;run=newRun(seed,true);selectedSlot=0;
+ loadWorld();resume();
+};
 $('menu-leave').onclick=leave;$('action').onclick=()=>target()?use():strike();$('drop-item').onclick=dropSelected;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=tryJump;
 $('sound').onclick=()=>{sound.toggle();sound.active(playing&&!portrait());write('labyrinth-sound',sound.enabled);updateSound()};
 $('sprint').onclick=()=>{sprinting=!sprinting;$('sprint').setAttribute('aria-pressed',String(sprinting))};
@@ -160,7 +169,6 @@ $('sensitivity').value=String(sensitivity=Math.max(.4,Math.min(2.2,Number(read('
 $('sensitivity').oninput=e=>{sensitivity=Number(e.target.value);write('labyrinth-sensitivity',sensitivity)};
 $('quality').value=quality=['auto','low','high'].includes(read('labyrinth-quality','auto'))?read('labyrinth-quality','auto'):'auto';
 $('quality').onchange=e=>{quality=e.target.value;renderer.quality=quality;frameBudget.reset();renderer.resolutionScale=1;write('labyrinth-quality',quality);renderer.draw(player,hasKey,performance.now()/1000)};
-$('fullscreen').onclick=async()=>{if(parent!==window){parent.postMessage({type:'labyrinth:fullscreen'},location.origin);return}try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{toast('Schermo intero gestito da Telegram su questo dispositivo.')}};
 window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(playing)pause();return}if(!playing||transitioning)return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyE','KeyQ','KeyF','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='KeyF'&&!e.repeat)strike();if(e.code==='KeyE'&&!e.repeat)use();if(e.code==='KeyQ'&&!e.repeat)dropSelected();if(e.code==='Space'&&!e.repeat)tryJump()}});
 window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{resetInput();if(playing&&!transitioning)pause()});
 canvas.addEventListener('mousedown',e=>{if(!playing)return;if(e.button===0){dragging=true;strike();pointerLock()}});window.addEventListener('mouseup',()=>dragging=false);

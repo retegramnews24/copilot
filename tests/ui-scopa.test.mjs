@@ -5,6 +5,10 @@ import assert from 'node:assert/strict';
 import {initialScopa,scopaView} from '../scopa.js';
 import {initialScarabeo,scarabeoView,playScarabeo} from '../scarabeo.js';
 import {tutorial} from '../table-ai.js';
+import * as labCore from '../public/labyrinth/core.js';
+import * as labAdventure from '../public/labyrinth/adventure.js';
+import * as labTraps from '../public/labyrinth/traps.js';
+import {FrameBudget} from '../public/labyrinth/performance.js';
 const source=await fs.readFile('public/app.js','utf8'),bundle=await build({stdin:{contents:source+'\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};',resolveDir:process.cwd()+'/public'},bundle:true,write:false,format:'iife',platform:'browser'});
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
@@ -135,6 +139,31 @@ assert.equal(chat.scrollTop,700);
 assert.match(chat.lastElementChild.textContent,/Ultimo/);
 assert.equal(get('chat-form').previousElementSibling,chat);
 assert.deepEqual(errors,[]);dom.window.close();console.log('PASS UI: Scopa cards and captures, live tutorial, 5-seat solo setup, disabled solo tournaments, leaderboard text safety and out-of-turn human word validation, repeated creation, active tables, both rankings, latest chat and result dismissal.');
+// Telegram embeds Labyrinth in a sandbox where native confirm is suppressed.
+const labDom=new JSDOM(await fs.readFile('public/labyrinth/index.html','utf8'),{url:'https://unit.test/labyrinth/index.html',runScripts:'outside-only',pretendToBeVisual:true});
+const lab=labDom.window,labGet=id=>lab.document.getElementById(id);
+Object.assign(lab,labCore,labAdventure,labTraps,{FrameBudget});
+lab.matchMedia=()=>({matches:false});
+lab.confirm=()=>{throw Error('Native confirmation is unavailable')};
+lab.readAppearance=()=>({shirt:'#66b8cf',shorts:'#3c62a3'});
+lab.Renderer=class{load(world){this.world=world}draw(){}};
+lab.Atmosphere=class{constructor(enabled){this.enabled=enabled}active(){}resume(){}};
+const oldRun={...labAdventure.newRun(41),level:4,inventory:['key:4']};
+const storageKey='binottoland-labyrinth-v2-guest';
+lab.localStorage.setItem(storageKey,JSON.stringify(oldRun));
+lab.eval((await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\n/gm,''));
+assert.equal(labGet('fullscreen'),null);
+assert.equal(labGet('new-run').hidden,false);
+labGet('new-run').click();assert.equal(labGet('new-run-confirm').hidden,false);
+labGet('new-run-cancel').click();assert.equal(labGet('new-run-confirm').hidden,true);
+assert.equal(JSON.parse(lab.localStorage.getItem(storageKey)).level,4);
+labGet('new-run').click();labGet('new-run-start').click();
+assert.equal(labGet('menu').hidden,true);
+const restarted=JSON.parse(lab.localStorage.getItem(storageKey));
+assert.equal(restarted.level,1);assert.deepEqual(restarted.inventory,[]);
+labDom.window.close();
+console.log('PASS Labyrinth menu: reset uses an in-app confirmation, cancel preserves progress, restart saves floor one and there is no fullscreen button.');
+
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
 const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/labyrinth',preview+'/public/labyrinth',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');

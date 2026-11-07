@@ -1,4 +1,5 @@
 export const SUITS=['Coppe','Denari','Spade','Bastoni'];
+export const DENARI=SUITS.indexOf('Denari');
 export const ORDER=[1,3,10,9,8,7,6,5,4,2];
 export const POINTS={1:11,3:10,10:4,9:3,8:2,7:0,6:0,5:0,4:0,2:0};
 export const rankName=r=>({1:'Asso',8:'Fante',9:'Cavallo',10:'Re'}[r]||String(r));

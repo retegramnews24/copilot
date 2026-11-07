@@ -1,3 +1,4 @@
+import {chessSnapshot,claimChessDraw} from './chess-rules.js';
 import {initialNaval,playNaval,navalView} from './naval.js';
 import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
 import {initialScarabeo,playScarabeo,scarabeoView} from './scarabeo.js';
@@ -14,13 +15,6 @@ import { radioNowPlaying } from './radio-metadata.js';
 import { initialCheckers, playCheckers, checkersSnapshot, checkersKey } from './checkers.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const id=()=>crypto.randomUUID();
-function chessSnapshot(game,lastMove=null){
- let result=null;
- if(game.isCheckmate())result=game.turn()==='w'?'0-1':'1-0';
- else if(game.isDraw())result='1/2-1/2';
- const reason=game.isCheckmate()?'Scaccomatto':game.isStalemate()?'Stallo':game.isThreefoldRepetition()?'Triplice ripetizione':game.isInsufficientMaterial()?'Materiale insufficiente':game.isDrawByFiftyMoves()?'Regola delle 50 mosse':null;
- return {fen:game.fen(),check:game.isCheck(),result,reason,lastMove,legalMoves:game.isGameOver()?[]:game.moves({verbose:true}).map(m=>({from:m.from,to:m.to,...(m.promotion?{promotion:m.promotion}:{})}))};
-}
 const bad=(message)=>{throw new Error(message)};
 const BOT_USERNAME='checkmategame_bot';
 const name=x=>{if(typeof x!=='string'||!x.trim())bad('Inserisci un nome.');return x.trim().slice(0,30)};
@@ -202,7 +196,7 @@ export class Room extends DurableObject {
   }
   return s;
  }
- resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno')s.uno=initialUno(s.players.length);else if(s.game==='scarabeo')s.scarabeo=initialScarabeo(s.players.length);else if(s.game==='scopa')s.scopa=initialScopa(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
+ resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno'){s.uno=initialUno(s.players.length);s.turn=s.uno.turn}else if(s.game==='scarabeo'){s.scarabeo=initialScarabeo(s.players.length);s.turn=s.scarabeo.turn}else if(s.game==='scopa')s.scopa=initialScopa(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
  tutorialView(s){const seat=0,view=this.public({...s,mode:'ai'},s.players[0].id),g=view.naval||view.briscola||view[s.game]||view.chess;const can=s.scarabeo?.pending?s.scarabeo.pending.by!==0&&!Object.hasOwn(s.scarabeo.pending.votes,0):s.naval?.phase==='placement'?!s.naval.ready[0]:s.turn===0;return can?tutorial(s.game,g,seat,s.moves.length):{title:'Turno dell’AI',text:'Osserva la risposta dell’avversario. Poi potrai scegliere liberamente o provare la mossa suggerita.',reason:g.lastEvent||'',action:null};}
  botSeat(s){if(s.phase!=='playing'||!['ai','tutorial'].includes(s.mode))return -1;if(s.scarabeo?.pending)return s.players.findIndex((p,i)=>p.bot&&i!==s.scarabeo.pending.by&&!Object.hasOwn(s.scarabeo.pending.votes,i));if(s.naval?.phase==='placement')return s.players.findIndex((p,i)=>p.bot&&!s.naval.ready[i]);return s.players[s.turn]?.bot?s.turn:-1;}
  async record(s){for(const result of resultsFor(s))await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/result',{method:'POST',body:JSON.stringify(result)}));}
@@ -265,14 +259,20 @@ export class Room extends DurableObject {
     }else {
      if(!s.chess)throw Error('Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.');
      if(who!==s.turn)throw Error('Non è il tuo turno.');
-     if(typeof b.from!=='string'||typeof b.to!=='string')throw Error('Mossa non valida.');
      const game=new Chess();
      for(const move of s.moves)game.move(move.san);
+     if(b.kind==='claim-draw'){
+      const proposed=b.move;
+      if(proposed!==undefined&&(!proposed||typeof proposed.from!=='string'||typeof proposed.to!=='string'))throw Error('Mossa proposta non valida.');
+      s.chess=claimChessDraw(game,s.chess.lastMove,proposed);s.phase='finished';s.drawOffer=null;
+      return;
+     }
+     if(typeof b.from!=='string'||typeof b.to!=='string')throw Error('Mossa non valida.');
      let moved;try{moved=game.move({from:b.from,to:b.to,promotion:b.promotion||'q'})}catch{throw Error('Mossa non consentita.')}
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1,san:moved.san,from:moved.from,to:moved.to,...(moved.promotion?{promotion:moved.promotion}:{})});
      s.drawOffer=null;s.turn=game.turn()==='w'?0:1;
      s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
-     if(game.isGameOver())s.phase='finished';
+     if(s.chess.result)s.phase='finished';
 
     }
  }
@@ -402,9 +402,10 @@ export class Room extends DurableObject {
     }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
-    if(path.endsWith('/move')&&!s.scarabeo&&!(s.naval?.phase==='placement')&&who!==s.turn)return json({error:'Non è il tuo turno.'},403);
+    if(path.endsWith('/move')&&!(s.uno&&['uno','catch-uno'].includes(b.kind))&&!s.scarabeo&&!(s.naval?.phase==='placement')&&who!==s.turn)return json({error:'Non è il tuo turno.'},403);
     if(path.endsWith('/offer-draw')){
-     if((!s.chess&&!s.checkers&&!s.connect4)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
+     if((!s.chess&&!s.checkers)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
+     if(s.chess&&s.moves.length<2)return json({error:'Entrambi devono aver giocato almeno una mossa.'},409);
      if(s.drawOffer)return json({error:'C’è già una proposta in attesa.'},409);
      if(s.lastDrawOffer?.by===who&&s.lastDrawOffer?.ply===s.moves.length)return json({error:'Attendi una nuova mossa prima di proporre ancora la patta.'},409);
      s.drawOffer={by:s.players[who].id,name:s.players[who].name};s.lastDrawOffer={by:who,ply:s.moves.length};

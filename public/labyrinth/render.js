@@ -85,15 +85,17 @@ function frameCanvas(){
 }
 export class Renderer{
  constructor(canvas){
-  this.canvas=canvas;const gl=canvas.getContext('webgl',{alpha:false,antialias:false,powerPreference:'high-performance'});if(!gl)return new SoftwareRenderer(canvas);this.gl=gl;
+  this.canvas=canvas;const gl=canvas.getContext('webgl',{alpha:false,antialias:true,powerPreference:'high-performance'});if(!gl)return new SoftwareRenderer(canvas);this.gl=gl;
+  this.anisotropic=gl.getExtension('EXT_texture_filter_anisotropic')||gl.getExtension('WEBKIT_EXT_texture_filter_anisotropic');
+  this.anisotropy=this.anisotropic?Math.min(4,gl.getParameter(this.anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT)):1;
   const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error('Shader non disponibile: '+gl.getShaderInfoLog(s));return s};
   const program=gl.createProgram();gl.attachShader(program,compile(gl.VERTEX_SHADER,VS));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,FS));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Renderer non disponibile.');this.program=program;gl.useProgram(program);
   this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
   gl.uniform1f(this.uniforms.uAlpha,1);const white=document.createElement('canvas');white.width=white.height=1;white.getContext('2d').fillRect(0,0,1,1);const ctx=white.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1,1);this.white=this.texture(white);this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.meshes=[];this.textures=[];this.quality='auto';this.resize();
  }
- texture(canvas){const g=this.gl,t=g.createTexture();g.bindTexture(g.TEXTURE_2D,t);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,canvas);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR_MIPMAP_LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.REPEAT);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.REPEAT);g.generateMipmap(g.TEXTURE_2D);return t}
+ texture(canvas){const g=this.gl,t=g.createTexture();g.bindTexture(g.TEXTURE_2D,t);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,canvas);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR_MIPMAP_LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.REPEAT);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.REPEAT);if(this.anisotropy>1)g.texParameterf(g.TEXTURE_2D,this.anisotropic.TEXTURE_MAX_ANISOTROPY_EXT,this.anisotropy);g.generateMipmap(g.TEXTURE_2D);return t}
  mesh(geometry,texture=null,color=[1,1,1],emission=0){const g=this.gl,buffer=g.createBuffer();g.bindBuffer(g.ARRAY_BUFFER,buffer);g.bufferData(g.ARRAY_BUFFER,new Float32Array(geometry.data),g.STATIC_DRAW);return {buffer,count:geometry.data.length/8,texture:texture||this.white,color,emission}}
- resize(){const rect=this.canvas.getBoundingClientRect(),limit=this.quality==='low'?720:this.quality==='high'?1440:1080,scale=Math.min(devicePixelRatio||1,1.5,limit/Math.max(rect.width,rect.height))*Math.max(.65,Math.min(1,this.resolutionScale||1));const w=Math.max(1,Math.floor(rect.width*scale)),h=Math.max(1,Math.floor(rect.height*scale));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.gl.viewport(0,0,w,h)}}
+ resize(){const rect=this.canvas.getBoundingClientRect(),limit=this.quality==='low'?720:this.quality==='high'?1920:1280,scale=Math.min(devicePixelRatio||1,this.quality==='high'?2:1.5,limit/Math.max(rect.width,rect.height))*Math.max(.65,Math.min(1,this.resolutionScale||1));const w=Math.max(1,Math.floor(rect.width*scale)),h=Math.max(1,Math.floor(rect.height*scale));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.gl.viewport(0,0,w,h)}}
  load(world){
   const generation=++this.generation;this.lightClock=-Infinity;this.boundTexture=null;
   const gl=this.gl;for(const m of this.meshes)gl.deleteBuffer(m.buffer);if(this.keyMesh)gl.deleteBuffer(this.keyMesh.buffer);for(const m of this.props||[])gl.deleteBuffer(m.buffer);for(const t of this.textures)gl.deleteTexture(t);this.world=world;
@@ -101,6 +103,7 @@ export class Renderer{
   const exit=world.door,axes=doorBasis(exit),exitCell=world.exit;
   const doorway=(x,z,dx,dz)=>z*world.n+x===exitCell&&exit.dx===dx&&exit.dz===dz;
   const opening=(u,y)=>[exit.x+axes.rightX*u+exit.dx*.06,y,exit.z+axes.rightZ*u+exit.dz*.06];
+  const skirting=(x,z,xx,zz,n)=>trim.quad([x,.002,z],[xx,.002,zz],[xx,.13,zz],[x,.13,z],n);
   const portalNormal=[axes.normalX,0,axes.normalZ];
   if(!world.arena){
    const face=(left,right,bottom,top)=>wall.quad(opening(left,bottom),opening(right,bottom),opening(right,top),opening(left,top),portalNormal,[0,0,2,2]);
@@ -114,10 +117,10 @@ export class Renderer{
    const a=x*CELL,b=(x+1)*CELL,c=z*CELL,d=(z+1)*CELL;
    floor.quad([a,0,c],[b,0,c],[b,0,d],[a,0,d],[0,1,0],[x*2,z*2,(x+1)*2,(z+1)*2]);
    if(!world.arena)ceiling.quad([a,HEIGHT,d],[b,HEIGHT,d],[b,HEIGHT,c],[a,HEIGHT,c],[0,-1,0],[x,z,x+1,z+1]);
-   if(!world.arena&&world.grid[z*world.n+x-1]&&!doorway(x,z,-1,0)){wall.quad([a,0,d],[a,0,c],[a,HEIGHT,c],[a,HEIGHT,d],[1,0,0],[0,0,2,2]);trim.box(a+.018,0,(c+d)/2,.035,.13,CELL)}
-   if(!world.arena&&world.grid[z*world.n+x+1]&&!doorway(x,z,1,0)){wall.quad([b,0,c],[b,0,d],[b,HEIGHT,d],[b,HEIGHT,c],[-1,0,0],[0,0,2,2]);trim.box(b-.018,0,(c+d)/2,.035,.13,CELL)}
-   if(!world.arena&&world.grid[(z-1)*world.n+x]&&!doorway(x,z,0,-1)){wall.quad([a,0,c],[b,0,c],[b,HEIGHT,c],[a,HEIGHT,c],[0,0,1],[0,0,2,2]);trim.box((a+b)/2,0,c+.018,CELL,.13,.035)}
-   if(!world.arena&&world.grid[(z+1)*world.n+x]&&!doorway(x,z,0,1)){wall.quad([b,0,d],[a,0,d],[a,HEIGHT,d],[b,HEIGHT,d],[0,0,-1],[0,0,2,2]);trim.box((a+b)/2,0,d-.018,CELL,.13,.035)}
+   if(!world.arena&&world.grid[z*world.n+x-1]&&!doorway(x,z,-1,0)){wall.quad([a,0,d],[a,0,c],[a,HEIGHT,c],[a,HEIGHT,d],[1,0,0],[0,0,2,2]);skirting(a+.014,d,a+.014,c,[1,0,0])}
+   if(!world.arena&&world.grid[z*world.n+x+1]&&!doorway(x,z,1,0)){wall.quad([b,0,c],[b,0,d],[b,HEIGHT,d],[b,HEIGHT,c],[-1,0,0],[0,0,2,2]);skirting(b-.014,c,b-.014,d,[-1,0,0])}
+   if(!world.arena&&world.grid[(z-1)*world.n+x]&&!doorway(x,z,0,-1)){wall.quad([a,0,c],[b,0,c],[b,HEIGHT,c],[a,HEIGHT,c],[0,0,1],[0,0,2,2]);skirting(a,c+.014,b,c+.014,[0,0,1])}
+   if(!world.arena&&world.grid[(z+1)*world.n+x]&&!doorway(x,z,0,1)){wall.quad([b,0,d],[a,0,d],[a,HEIGHT,d],[b,HEIGHT,d],[0,0,-1],[0,0,2,2]);skirting(b,d-.014,a,d-.014,[0,0,-1])}
   }
   if(world.oval){const o=world.oval;for(let i=0;i<96;i++){const a=i/96*Math.PI*2,b=(i+1)/96*Math.PI*2,x=o.cx+Math.cos(a)*o.rx,z=o.cz+Math.sin(a)*o.rz,xx=o.cx+Math.cos(b)*o.rx,zz=o.cz+Math.sin(b)*o.rz,n=[-Math.cos((a+b)/2),0,-Math.sin((a+b)/2)];wall.quad([x,0,z],[xx,0,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n,[i/2,0,(i+1)/2,2]);trim.quad([x,HEIGHT-.12,z],[xx,HEIGHT-.12,zz],[xx,HEIGHT,zz],[x,HEIGHT,z],n)}}
   if(!world.arena)for(const p of world.lamps){frames.box(p.x,HEIGHT-.055,p.z,1.18,.04,.34);for(const dz of [-.075,.075])light.quad([p.x-.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz-.025],[p.x+.51,HEIGHT-.06,p.z+dz+.025],[p.x-.51,HEIGHT-.06,p.z+dz+.025],[0,-1,0])}
@@ -126,11 +129,12 @@ export class Renderer{
   const preview=this.surfaces.preview(world.level),textures=[this.texture(surfaceCanvas(preview.wall)),this.texture(surfaceCanvas(preview.floor)),this.texture(surfaceCanvas(preview.ceiling)),this.texture(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'))];this.textures=textures;this.surfaces.request(world.level).then(maps=>{if(this.closed||generation!==this.generation||!maps)return;for(const [i,key] of ['wall','floor','ceiling'].entries()){gl.bindTexture(gl.TEXTURE_2D,textures[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,surfaceCanvas(maps[key]));gl.generateMipmap(gl.TEXTURE_2D)}this.boundTexture=null;this.surfaces.request(world.level===6?1:world.level+1)});
   this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,world.level===1?[1,.98,.79]:world.palette?.light||[1,.98,.79],world.level===1?1:world.arena?.5:world.level===5?.025:world.level===4?.12:.3),this.mesh(door,textures[3])];this.exitMesh=this.meshes.pop();this.keyMesh=this.mesh(key,null,[.64,.64,.6],0);
   const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);this.props=[this.stripeMesh,this.exitMesh];
-  const skin=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry();
-  for(const x of [-.12,.12]){skin.sphere(x,.04,0,.075,.29,.085);shorts.sphere(x,.51,0,.105,.18,.13)}
+  const skin=new Geometry(),legs=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry();
+  for(const x of [-.12,.12]){legs.sphere(x,.04,0,.075,.29,.085);shorts.sphere(x,.51,0,.105,.18,.13)}
   shirt.sphere(0,.78,0,.246,.313,.153);for(const sign of [-1,1])shirt.sphere(sign*.236,1.14,0,.091,.103,.098,5,8);skin.sphere(-.29,.69,0,.07,.27,.075);
   wornPack.sphere(0,.75,.22,.25,.32,.14);
-  this.bodySkin=this.mesh(skin,null,[.90,.65,.58]);this.bodyShirt=this.mesh(shirt);this.bodyShorts=this.mesh(shorts);this.wornPack=this.mesh(wornPack,null,[.27,.36,.22]);this.props.push(this.bodySkin,this.bodyShirt,this.bodyShorts,this.wornPack);
+  this.localLegs=this.mesh(legs,null,[.90,.65,.58]);skin.data.push(...legs.data);
+  this.bodySkin=this.mesh(skin,null,[.90,.65,.58]);this.bodyShirt=this.mesh(shirt);this.bodyShorts=this.mesh(shorts);this.wornPack=this.mesh(wornPack,null,[.27,.36,.22]);this.props.push(this.bodySkin,this.bodyShirt,this.bodyShorts,this.wornPack,this.localLegs);
   const head=new Geometry(),hair=new Geometry(),eyes=new Geometry(),accent=new Geometry(),shoes=new Geometry(),arm=new Geometry(),weapon=new Geometry();
   head.sphere(0,1.38,0,.173,.207,.155);head.sphere(0,1.29,0,.07,.075,.07,5,8);for(const sign of [-1,1]){head.sphere(sign*.166,1.53,0,.032,.06,.027,5,8);eyes.sphere(sign*.059,1.598,-.144,.034,.025,.012,4,8);hair.sphere(sign*.059,1.605,-.158,.013,.017,.007,4,6);hair.sphere(sign*.059,1.655,-.135,.033,.008,.007,4,6);shoes.sphere(sign*.12,.018,-.035,.087,.045,.139,5,8);accent.sphere(sign*.12,.11,0,.074,.06,.085,4,8);accent.sphere(sign*.12,.017,-.038,.089,.013,.14,4,8)}
   head.sphere(0,1.542,-.15,.026,.037,.036,5,8);hair.hair(0,1.383,0,.179,.212,.162);hair.sphere(-.04,1.698,-.118,.068,.034,.036,4,8);hair.sphere(0,1.505,-.143,.036,.005,.005,4,8);accent.sphere(0,1.34,-.103,.073,.02,.035,4,8);for(const sign of [-1,1])accent.box(sign*.12,.565,-.08,.16,.012,.08);
@@ -188,7 +192,12 @@ export class Renderer{
    this.drawMesh(this.frameBoard,m);this.drawMesh(this.frameArt,m);
   }
   for(const item of scene.items||[]){const m=identity();m[12]=item.x;m[14]=item.z;this.drawMesh(this.keyMesh,m);this.stripeMesh.color=hexColor(item.color);this.drawMesh(this.stripeMesh,m)}
-  if(scene.appearance){const m=avatarTransform(player,Math.max(0,bob));this.bodyShirt.color=hexColor(scene.appearance.shirt);this.bodyShorts.color=hexColor(scene.appearance.shorts);for(const mesh of [this.bodySkin,this.bodyShirt,this.bodyShorts,this.bodyAccent,this.bodyShoes,...(scene.backpack?[this.wornPack]:[])])this.drawMesh(mesh,m)}
+  if(scene.appearance&&player.pitch<-.55){
+   // The camera sits inside the upper body, so only feet and legs are visible locally.
+   const m=avatarTransform(player,Math.max(0,bob));
+   this.bodyShorts.color=hexColor(scene.appearance.shorts);
+   for(const mesh of [this.localLegs,this.bodyShorts,this.bodyShoes])this.drawMesh(mesh,m);
+  }
   for(const remote of scene.players||[]){const p=remote.player,distance=Math.hypot(p.x-player.x,p.z-player.z);if(distance>Math.min(32,pal.visibility*1.8)||(p.x-player.x)*Math.sin(player.yaw)-(p.z-player.z)*Math.cos(player.yaw)<-.8)continue;const m=avatarTransform(p,p.height||0);this.bodyShirt.color=hexColor(remote.appearance?.shirt);this.bodyShorts.color=hexColor(remote.appearance?.shorts);for(const mesh of [this.bodySkin,this.bodyShirt,this.bodyShorts,...(distance<10?[this.bodyAccent,this.bodyShoes]:[]),...(remote.backpack?[this.wornPack]:[])])this.drawMesh(mesh,m);
    const head=headTransform(m,p.pitch||0);for(const mesh of [this.remoteHead,this.remoteHair,...(distance<10?[this.remoteEyes]:[])])this.drawMesh(mesh,head);
    const age=((scene.serverNow||Date.now())-(remote.actionAt||0))/1000,swing=age>=0&&age<.42?Math.sin(age/.42*Math.PI)*1.8:0,arm=identity();arm[5]=arm[10]=Math.cos(swing);arm[6]=Math.sin(swing);arm[9]=-Math.sin(swing);arm[12]=.29;arm[13]=1.25;const am=multiply(m,arm);this.drawMesh(this.remoteArm,am);if(remote.weapon==='sword')this.drawMesh(this.remoteSword,am);if(distance<12&&(this.resolutionScale||1)>.7){g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE_MINUS_SRC_ALPHA);g.depthMask(false);g.uniform1f(u.uAlpha,.48);const shadow=identity();shadow[12]=p.x;shadow[14]=p.z;this.drawMesh(this.contactShadow,shadow);g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND)}
@@ -206,7 +215,7 @@ export class Renderer{
 }
 // Canvas first-person fallback for WebViews with unavailable hardware acceleration.
 class SoftwareRenderer{
- constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});if(!this.ctx)throw Error('Grafica non disponibile su questo dispositivo.');this.software=true;this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.quality='auto';this.depth=[];canvas.style.imageRendering='pixelated';this.resize()}
+ constructor(canvas){this.canvas=canvas;this.ctx=canvas.getContext('2d',{alpha:false});if(!this.ctx)throw Error('Grafica non disponibile su questo dispositivo.');this.software=true;this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.quality='auto';this.depth=[];canvas.style.imageRendering='auto';this.resize()}
  resize(){const rect=this.canvas.getBoundingClientRect(),aspect=rect.width/Math.max(1,rect.height),target=this.quality==='high'?640:this.quality==='low'?320:480,w=Math.max(180,Math.floor(Math.min(target,360*aspect)*Math.max(.65,Math.min(1,this.resolutionScale||1)))),h=Math.max(100,Math.floor(w/aspect));if(this.canvas.width!==w||this.canvas.height!==h){this.canvas.width=w;this.canvas.height=h;this.image=this.ctx.createImageData(w,h)}}
  load(world){this.world=world;const generation=++this.generation;this.doorAxes=doorBasis(world.door);const pixels=canvas=>canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height),maps=this.surfaces.preview(world.level);this.wall=maps.wall;this.floor=maps.floor;this.ceiling=maps.ceiling;this.surfaces.request(world.level).then(m=>{if(this.closed||generation!==this.generation||!m)return;this.wall=m.wall;this.floor=m.floor;this.ceiling=m.ceiling;this.surfaces.request(world.level===6?1:world.level+1)});this.door=pixels(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'));this.entry=pixels(doorTexture(world.level-1,'INDIETRO'));this.sky=pixels(skyCanvas());this.portal=world.arena?null:pixels(portalCanvas(world));this.lamps=new Set(world.lamps.map(p=>Math.floor(p.z/CELL)*world.n+Math.floor(p.x/CELL)))}
 
@@ -267,7 +276,7 @@ class SoftwareRenderer{
    for(const box of scene.cases||[{...world.showcase,backpack:scene.backpack,swordTaken:scene.swordTaken,open:scene.showcaseOpen}]){const q=project(box.x,0,box.z);if(q.depth>.2&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const sprite=showcaseSprite(box,pal);c.drawImage(sprite,q.x-1.21*q.scale,q.y-2.32*q.scale,2.42*q.scale,2.36*q.scale)}}
   }
   for(const remote of [...(scene.players||[])].sort((a,b)=>Math.hypot(b.player.x-p.x,b.player.z-p.z)-Math.hypot(a.player.x-p.x,a.player.z-p.z))){const r=remote.player,q=project(r.x,r.height||0,r.z);if(q.depth<.25||q.x<0||q.x>=w||q.depth>this.depth[Math.floor(q.x)])continue;const angle=Math.atan2(p.x-r.x,-(p.z-r.z))-r.yaw,view=Math.round(angle/(Math.PI/4)),sprite=avatarSprite(remote.appearance,remote.backpack,view,pal);c.save();c.translate(q.x,q.y);c.scale(q.scale,q.scale);c.fillStyle='#0003';c.beginPath();c.ellipse(0,.005,.28,.065,0,0,Math.PI*2);c.fill();c.imageSmoothingEnabled=true;c.drawImage(sprite,-.58,-1.92,1.16,1.92);if(remote.weapon==='sword'){const age=((scene.serverNow||Date.now())-(remote.actionAt||0))/1000;c.strokeStyle=litColor('#b8c4c8',pal);c.lineWidth=.035;c.beginPath();c.moveTo(.28,-.79);c.lineTo(age>=0&&age<.42?-.28:.32,age>=0&&age<.42?-1.18:-1.6);c.stroke();c.strokeStyle=litColor('#8b713e',pal);c.lineWidth=.06;c.beginPath();c.moveTo(.19,-.94);c.lineTo(.39,-.94);c.stroke()}c.restore()}
-  if(scene.appearance&&p.pitch<-.55){const fade=Math.min(1,(-p.pitch-.55)/.5),shade=pal.brightness||1;c.save();c.globalAlpha=fade;const tint=hex=>{const v=hexColor(hex);return 'rgb('+v.map((x,i)=>Math.round(x*255*shade*(.35+pal.light[i]*.65))).join(',')+')'};c.fillStyle=tint('#e5ab99');for(const side of [-1,1]){c.beginPath();c.ellipse(w/2+side*w*.055,h*.97,w*.034,h*.13,side*.13,0,Math.PI*2);c.fill()}c.fillStyle=tint(scene.appearance.shorts);c.beginPath();c.ellipse(w/2,h*1.06,w*.13,h*.25,0,0,Math.PI*2);c.fill();c.restore()}
+
 
  }
  destroy(){this.closed=true;this.generation++;this.surfaces.destroy()}

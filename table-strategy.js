@@ -6,7 +6,7 @@ import {UNO_COLORS} from './uno.js';
 import {playScarabeo} from './scarabeo.js';
 import {SIZE,VALUES,premium} from './public/scarabeo-data.js';
 import {randomFleet,SHIPS,shipCells} from './public/naval-data.js';
-import {makeDeck,ORDER,POINTS,trickWinner} from './public/briscola-data.js';
+import {makeDeck,ORDER,POINTS,trickWinner,DENARI} from './public/briscola-data.js';
 
 const MATE=100000;
 const exhausted=Symbol('search budget exhausted');
@@ -204,7 +204,7 @@ export function strongNaval(view,seat){
 
 export function strongUno(view,seat){
  const {hand,counts,direction}=view,n=counts.length;
- const legal=hand.filter(card=>view.legalMoves.includes(card.id));
+ const legal=hand.filter(card=>view.legalMoves.includes(card.id)&&(card.value!=='wild4'||!hand.some(other=>other.color===view.color)));
  if(!legal.length)return {kind:view.canPass?'pass':'draw'};
  const next=(seat+direction+n)%n,previous=(seat-direction+n)%n;
  const threat=player=>Math.max(0,5-counts[player]);
@@ -224,7 +224,7 @@ export function strongUno(view,seat){
   if(retainsTurn)score+=follow?6:-2;
   return score;
  });
- return {kind:'play',card:choice.card.id,color:choice.color};
+ return {kind:'play',card:choice.card.id,color:choice.color,uno:true};
 }
 
 // Only cards from this hand and cards already shown at the table are known.
@@ -237,7 +237,7 @@ export function strongScopa(view,seat){
  const next=(seat+1)%view.counts.length;
  const last=!view.deckCount&&view.counts.every((count,i)=>i===seat?count===1:!count);
  const unseen=unseenCards(view,view.table);
- const prize=card=>3+(card.suit===0?3:0)+(card.rank===7&&card.suit===0?24:0)+(primiera(card)-10)*.47;
+ const prize=card=>3+(card.suit===DENARI?3:0)+(card.rank===7&&card.suit===DENARI?24:0)+(primiera(card)-10)*.47;
  const danger=new Map();
  function replyRisk(table){
   const key=table.map(card=>card.id).join(',');

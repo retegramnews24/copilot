@@ -58,28 +58,29 @@ try{
  console.log('PASS Forza 4 runtime: create, two seats, spectator live updates/read-only permissions, turn/column validation, win, replay and archive.');
  const unoMade=await call(40,'/api/create',{game:'uno'});assert.equal(unoMade.status,200);const unoRoom=unoMade.data.state.room;
  assert.equal((await call(40,'/api/room/'+unoRoom+'/start',{revision:0})).status,409);
- for(let id=41;id<=47;id++)assert.equal((await call(id,'/api/room/'+unoRoom+'/claim',{})).status,200);
- assert.equal((await call(49,'/api/room/'+unoRoom+'/claim',{})).status,409);
+ for(let id=41;id<=49;id++)assert.equal((await call(id,'/api/room/'+unoRoom+'/claim',{})).status,200);
+ assert.equal((await call(50,'/api/room/'+unoRoom+'/claim',{})).status,409);
  let unoState=(await call(40,'/api/room/'+unoRoom+'/state')).data;
  assert.equal((await call(41,'/api/room/'+unoRoom+'/start',{revision:unoState.revision})).status,403);
- const unoClients=[];for(const id of [40,41,48]){const res=await mf.dispatchFetch('https://unit.test/api/room/'+unoRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const client={ws:res.webSocket,packets:[],waiters:[]};client.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);client.packets.push(p);for(const fn of [...client.waiters])fn(p)});client.ws.accept();sockets.push(client.ws);unoClients.push(client)}
+ const unoClients=[];for(const id of [40,41,50]){const res=await mf.dispatchFetch('https://unit.test/api/room/'+unoRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const client={ws:res.webSocket,packets:[],waiters:[]};client.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);client.packets.push(p);for(const fn of [...client.waiters])fn(p)});client.ws.accept();sockets.push(client.ws);unoClients.push(client)}
  assert.equal((await call(40,'/api/room/'+unoRoom+'/start',{revision:0})).status,409);
- const started=await call(40,'/api/room/'+unoRoom+'/start',{revision:unoState.revision});assert.equal(started.status,200);unoState=started.data;assert.equal(unoState.uno.hand.length,7);assert.equal(unoState.players.length,8);
- const ids=[];for(let id=40;id<=47;id++){const view=(await call(id,'/api/room/'+unoRoom+'/state')).data.uno;assert.equal(view.hand.length,7);ids.push(...view.hand.map(c=>c.id));assert.ok(!('deck' in view)&&!('hands' in view))}assert.equal(new Set(ids).size,56);
- const spec=(await call(48,'/api/room/'+unoRoom+'/state')).data.uno;assert.deepEqual(spec.hand,[]);assert.deepEqual(spec.legalMoves,[]);
- for(let i=0;i<unoClients.length;i++){const packet=await until(unoClients[i],p=>p.phase==='playing');assert.equal(packet.uno.hand.length,i===2?0:7);assert.ok(!('deck' in packet.uno)&&!('hands' in packet.uno))}
- assert.equal((await call(48,'/api/room/'+unoRoom+'/move',{kind:'draw',revision:unoState.revision})).status,403);
- const action=unoState.uno.legalMoves.length?{kind:'play',card:unoState.uno.legalMoves[0],color:'red'}:{kind:'draw'};
- const moved=await call(40,'/api/room/'+unoRoom+'/move',{...action,revision:unoState.revision});assert.equal(moved.status,200);const hidden=await until(unoClients[2],p=>p.revision===moved.data.revision);assert.deepEqual(hidden.uno.hand,[]);assert.ok(!JSON.stringify(hidden.moves).includes('"card":'));
- assert.deepEqual((await call(48,'/api/room/'+unoRoom+'/replay')).data.frames,[]);
- assert.equal((await call(40,'/api/room/'+unoRoom+'/archive',{revision:moved.data.revision})).status,200);assert.deepEqual((await call(48,'/api/room/'+unoRoom+'/state')).data.uno.hand,[]);
- console.log('PASS UNO runtime: 2–8 seat staging, creator start, full-table rejection, per-account HTTP/WebSocket hands, spectator privacy before/after archive, legal actions and no hidden replay.');
+ const started=await call(40,'/api/room/'+unoRoom+'/start',{revision:unoState.revision});assert.equal(started.status,200);unoState=started.data;assert.equal(unoState.players.length,10);assert.deepEqual(unoState.uno.scores,Array(10).fill(0));
+ const ids=[];for(let id=40;id<=49;id++){const view=(await call(id,'/api/room/'+unoRoom+'/state')).data.uno;assert.equal(view.hand.length,unoState.uno.counts[id-40]);ids.push(...view.hand.map(c=>c.id));assert.ok(!('deck' in view)&&!('hands' in view))}assert.equal(new Set(ids).size,unoState.uno.counts.reduce((a,b)=>a+b,0));
+ const spec=(await call(50,'/api/room/'+unoRoom+'/state')).data.uno;assert.deepEqual(spec.hand,[]);assert.deepEqual(spec.legalMoves,[]);
+ for(let i=0;i<unoClients.length;i++){const packet=await until(unoClients[i],p=>p.phase==='playing');assert.equal(packet.uno.hand.length,i===2?0:unoState.uno.counts[i]);assert.ok(!('deck' in packet.uno)&&!('hands' in packet.uno))}
+ assert.equal((await call(50,'/api/room/'+unoRoom+'/move',{kind:'draw',revision:unoState.revision})).status,403);
+ const nextId=40+unoState.turn,nextView=(await call(nextId,'/api/room/'+unoRoom+'/state')).data.uno;
+ const action=nextView.chooseColor?{kind:'color',color:'red'}:nextView.legalMoves.length?{kind:'play',card:nextView.legalMoves[0],color:'red'}:{kind:'draw'};
+ const moved=await call(nextId,'/api/room/'+unoRoom+'/move',{...action,revision:unoState.revision});assert.equal(moved.status,200);const hidden=await until(unoClients[2],p=>p.revision===moved.data.revision);assert.deepEqual(hidden.uno.hand,[]);assert.ok(!JSON.stringify(hidden.moves).includes('"card":'));
+ assert.deepEqual((await call(50,'/api/room/'+unoRoom+'/replay')).data.frames,[]);
+ assert.equal((await call(40,'/api/room/'+unoRoom+'/archive',{revision:moved.data.revision})).status,200);assert.deepEqual((await call(50,'/api/room/'+unoRoom+'/state')).data.uno.hand,[]);
+ console.log('PASS UNO runtime: 2–10 seat staging, creator start, full-table rejection, per-account HTTP/WebSocket hands, spectator privacy before/after archive, legal actions and no hidden replay.');
  const wordMade=await call(60,'/api/create',{game:'scarabeo'});assert.equal(wordMade.status,200);const wordRoom=wordMade.data.state.room;
  for(let id=61;id<=63;id++)assert.equal((await call(id,'/api/room/'+wordRoom+'/claim',{})).status,200);assert.equal((await call(64,'/api/room/'+wordRoom+'/claim',{})).status,409);
  let words=(await call(60,'/api/room/'+wordRoom+'/state')).data;words=(await call(60,'/api/room/'+wordRoom+'/start',{revision:words.revision})).data;assert.equal(words.scarabeo.rack.length,8);assert.deepEqual((await call(65,'/api/room/'+wordRoom+'/state')).data.scarabeo.rack,[]);
- const text=words.scarabeo.rack.filter(t=>t.letter!=='?').slice(0,2).map(t=>t.letter).join('');let response=await call(60,'/api/room/'+wordRoom+'/move',{kind:'place',word:text,row:8,col:8,revision:words.revision});assert.equal(response.status,200);words=response.data;assert.ok(words.scarabeo.pending);
+ const author=60+words.turn;words=(await call(author,'/api/room/'+wordRoom+'/state')).data;const text=words.scarabeo.rack.filter(t=>t.letter!=='?').slice(0,2).map(t=>t.letter).join('');let response=await call(author,'/api/room/'+wordRoom+'/move',{kind:'place',word:text,row:8,col:8,revision:words.revision});assert.equal(response.status,200);words=response.data;assert.ok(words.scarabeo.pending);
  assert.equal((await call(65,'/api/room/'+wordRoom+'/move',{kind:'vote',accept:true,revision:words.revision})).status,403);
- for(const id of [61,62]){response=await call(id,'/api/room/'+wordRoom+'/move',{kind:'vote',accept:true,revision:words.revision});assert.equal(response.status,200);words=response.data}assert.equal(words.scarabeo.pending,null);assert.ok(words.scarabeo.scores[0]>0);
+ for(const id of [60,61,62,63].filter(id=>id!==author).slice(0,2)){response=await call(id,'/api/room/'+wordRoom+'/move',{kind:'vote',accept:true,revision:words.revision});assert.equal(response.status,200);words=response.data}assert.equal(words.scarabeo.pending,null);assert.ok(words.scarabeo.scores[author-60]>0);
  assert.equal((await call(70,'/api/create',{game:'cluedo'})).status,400);
  const tournament=await call(80,'/api/create',{game:'connect4',target:3});assert.equal(tournament.status,200);const seriesRoom=tournament.data.state.room;let seriesState=(await call(81,'/api/room/'+seriesRoom+'/claim',{})).data.state;
  for(let round=1;round<=3;round++){

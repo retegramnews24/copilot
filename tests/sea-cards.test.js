@@ -12,7 +12,7 @@ const deck=makeDeck();assert.equal(deck.reduce((s,c)=>s+POINTS[c.rank],0),120);f
 for(const n of [2,3,4,5])for(let match=0;match<60;match++){
  let g=initialBriscola(n,rng,0),count=n===3?39:40;if(n===3)assert.ok(![...g.hands.flat(),...g.deck,g.bottom].filter(Boolean).some(c=>c.id===1));
  if(n===5){g=playBriscola(g,1,{kind:'bid',rank:2,target:61},rng);for(const seat of [2,3,4,0])g=playBriscola(g,seat,{kind:'bid-pass'},rng);assert.equal(g.phase,'call');assert.equal(g.caller,1);const option=briscolaView(g,1).callOptions[Math.floor(rng()*4)];g=playBriscola(g,1,{kind:'call',suit:option.suit,rank:2},rng);assert.equal(briscolaView(g).partner,null);assert.ok(!('partner' in g.hands));}
- let steps=0;while(!g.result){const all=[...g.hands.flat(),...g.deck,...(g.bottom?[g.bottom]:[]),...g.trick.map(p=>p.card),...g.captured.flat()];assert.equal(all.length,count);assert.equal(new Set(all.map(c=>c.id)).size,count);const seat=g.turn,v=briscolaView(g,seat),watch=briscolaView(g);assert.deepEqual(watch.hand,[]);assert.equal(watch.points,null);assert.ok(!('deck' in v)&&!('hands' in v)&&!('captured' in v));assert.throws(()=>playBriscola(g,(seat+1)%n,{kind:'play',card:g.hands[seat][0].id},rng));const card=g.hands[seat][Math.floor(rng()*g.hands[seat].length)];g=playBriscola(g,seat,{kind:'play',card:card.id},rng);if(g.called?.id===card.id)assert.equal(briscolaView(g).partner,seat);steps++;assert.ok(steps<=40)}
+ let steps=0,redeals=g.redeals;while(!g.result){const all=[...g.hands.flat(),...g.deck,...(g.bottom?[g.bottom]:[]),...g.trick.map(p=>p.card),...g.captured.flat()];assert.equal(all.length,count);assert.equal(new Set(all.map(c=>c.id)).size,count);const seat=g.turn,v=briscolaView(g,seat),watch=briscolaView(g);assert.deepEqual(watch.hand,[]);assert.equal(watch.points,null);assert.ok(!('deck' in v)&&!('hands' in v)&&!('captured' in v));assert.throws(()=>playBriscola(g,(seat+1)%n,{kind:'play',card:g.hands[seat][0].id},rng));const card=g.hands[seat][Math.floor(rng()*g.hands[seat].length)];g=playBriscola(g,seat,{kind:'play',card:card.id},rng);if(g.called?.id===card.id)assert.equal(briscolaView(g).partner,seat);steps=g.redeals>redeals?0:steps+1;redeals=g.redeals;assert.ok(steps<=40)}
  assert.equal(steps,count);assert.equal(g.points.reduce((a,b)=>a+b),120);assert.equal(g.hands.flat().length,0);assert.equal(g.captured.flat().length,count);if(n===4&&g.winners.length)assert.equal(g.winners[1]-g.winners[0],2);if(n===5){assert.equal(g.deltas.reduce((a,b)=>a+b),0);assert.equal(g.tricks.reduce((a,b)=>a+b),8);const team=[...new Set([g.caller,g.partner])],success=team.reduce((s,i)=>s+g.points[i],0)>=g.target;assert.deepEqual(g.winners,Array.from({length:5},(_,i)=>i).filter(i=>team.includes(i)===success))}
 }
 let g=initialBriscola(5,rng,4);g=playBriscola(g,0,{kind:'bid',rank:2,target:61},rng);g=playBriscola(g,1,{kind:'bid',rank:2,target:62},rng);assert.throws(()=>playBriscola(g,2,{kind:'bid',rank:2,target:62},rng));assert.throws(()=>playBriscola(g,2,{kind:'bid',rank:1,target:61},rng));g=playBriscola(g,2,{kind:'bid',rank:2,target:120},rng);for(const seat of [3,4,0,1])g=playBriscola(g,seat,{kind:'bid-pass'},rng);assert.equal(g.caller,2);const self=g.hands[2].find(c=>c.rank===2);if(self){g=playBriscola(g,2,{kind:'call',suit:self.suit,rank:2},rng);assert.equal(g.partner,2);assert.equal(briscolaView(g).partner,null);assert.ok(briscolaView(g,2).role.includes('solo'))}
@@ -34,11 +34,15 @@ assert.deepEqual(options.ranks,[2,missing]);
 const solo=playBriscola(special,0,{kind:'call',suit:ownTwo.suit,rank:2},rng);assert.equal(solo.partner,0);assert.equal(briscolaView(solo).partner,null);
 const paired=playBriscola(special,0,{kind:'call',suit:ownTwo.suit,rank:missing},rng);assert.notEqual(paired.partner,0);assert.equal(briscolaView(paired).partner,null);
 assert.throws(()=>playBriscola(special,0,{kind:'call',suit:ownTwo.suit,rank:ORDER.find(r=>!options.ranks.includes(r))},rng));
-// Final zero-point trick preserves a 60–60 draw for both classical formats.
-for(const n of [2,4]){
- let tied=initialBriscola(n,rng,n-1);tied.hands=Array.from({length:n},(_,i)=>[c(i,2)]);tied.deck=[];tied.bottom=null;tied.points=n===2?[60,60]:[30,30,30,30];
- for(let seat=0;seat<n;seat++)tied=playBriscola(tied,seat,{kind:'play',card:c(seat,2).id});
- assert.equal(tied.result,'draw');assert.deepEqual(tied.winners,[]);
-}
 const series={game:'briscola',players:Array(4).fill({}),phase:'finished',series:createSeries(3),briscola:{winners:[0,2]}};for(let i=0;i<3;i++){settleSeries(series);if(i<2){series.series.recorded=false;series.series.round++}}assert.deepEqual(series.series.winners,[0,2]);
+
+for(const points of [[60,60],[40,40,40],[30,30,30,30]]){
+ const n=points.length,starting=initialBriscola(n,rng,n-1);
+ starting.hands=Array.from({length:n},(_,i)=>[c(i,2)]);
+ starting.deck=[];starting.bottom=null;starting.trump=0;starting.points=points;
+ let game=starting;
+ for(let i=0;i<n;i++)game=playBriscola(game,i,{kind:'play',card:c(i,2).id},rng);
+ assert.equal(game.dealer,n-1);assert.equal(game.redeals,1);assert.equal(game.result,null);assert.equal(game.hands[0].length,3);
+}
+
 console.log('PASS sea/cards: 60 complete naval battles, secret fleets, placements and duplicate shots; 240 complete Briscola deals, 120 points, 39/40 unique cards, all trick comparisons, called partner secrecy, auction/redeal, final trump draw and shared tournament winners.');

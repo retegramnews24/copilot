@@ -21,9 +21,10 @@ try{
   const uid=user++,made=await call(uid,'/api/create',{game,mode,seats:game==='briscola5'?5:game==='uno'?8:2});assert.equal(made.status,200,JSON.stringify(made));const room=made.data.state.room;let s=made.data.state;assert.equal(s.phase,'playing');assert.equal(s.mode,mode);assert.ok(s.players.slice(1).every(p=>p.bot));assert.equal((await call(9999,'/api/room/'+room+'/claim',{})).status,409);
   const watch=(await call(9999,'/api/room/'+room+'/state')).data;assert.equal(watch.tutorial,null);for(const key of ['uno','scopa','briscola'])if(watch[key])assert.deepEqual(watch[key].hand,[]);if(watch.scarabeo)assert.deepEqual(watch.scarabeo.rack,[]);if(watch.naval)assert.equal(watch.naval.fleet,null);
   const response=await mf.dispatchFetch('https://unit.test/api/room/'+room+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(uid)}});assert.equal(response.status,101);const c={ws:response.webSocket,packets:[],waiters:[]};c.ws.addEventListener('message',e=>{const p=JSON.parse(e.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});c.ws.accept();sockets.push(c.ws);await until(c,p=>p.room===room);
-  if(s.turn!==0)s=await until(c,p=>p.turn===0&&p.revision>s.revision);
+  const humanCanAct=p=>p.turn===0||p.scarabeo?.pending?.by>0;
+  if(!humanCanAct(s))s=await until(c,p=>humanCanAct(p)&&p.revision>s.revision);
   s=(await call(uid,'/api/room/'+room+'/state')).data;const v=s.naval||s.briscola||s[game]||s.chess;if(mode==='tutorial'){assert.ok(s.tutorial.text);assert.ok(s.tutorial.action)}const a=chooseAction(game,v,0);let moved=await call(uid,'/api/room/'+room+'/move',{...a,revision:s.revision});assert.equal(moved.status,200,game+' '+JSON.stringify(moved));
-  const before=moved.data.revision;if(game==='scarabeo')await until(c,p=>p.revision>before);else if(moved.data.turn!==0||game==='naval'&&!moved.data.naval.ready[1])await until(c,p=>p.revision>before);
+  const before=moved.data.revision;if(!humanCanAct(moved.data)||moved.data.scarabeo?.pending?.by===0||game==='naval'&&!moved.data.naval.ready[1])await until(c,p=>p.revision>before);
   const latest=(await call(uid,'/api/room/'+room+'/state')).data;assert.ok(latest.revision>=before);
   if(mode==='ai'&&game==='chess'){
    const position={...moved.data.chess,moves:moved.data.moves};

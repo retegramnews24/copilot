@@ -1,4 +1,4 @@
-export const SHIPS=[{name:'Portaerei',length:5},{name:'Corazzata',length:4},{name:'Incrociatore',length:3},{name:'Sommergibile',length:3},{name:'Pattugliatore',length:2}];
+export const SHIPS=[{name:'Portaerei',length:5},{name:'Corazzata',length:4},{name:'Cacciatorpediniere',length:3},{name:'Sommergibile',length:3},{name:'Pattugliatore',length:2}];
 export const coordinate=i=>'ABCDEFGHIJ'[Math.floor(i/10)]+(i%10+1);
 export function shipCells(start,length,vertical=false){if(!Number.isInteger(start)||start<0||start>99)return null;const r=Math.floor(start/10),c=start%10;if((vertical?r:c)+length>10)return null;return Array.from({length},(_,i)=>start+i*(vertical?10:1))}
 export function randomFleet(rng=Math.random){for(let retry=0;retry<20;retry++){const fleet=[],used=new Set();for(const ship of SHIPS){let cells;for(let t=0;t<150;t++){const candidate=shipCells(Math.floor(rng()*100),ship.length,rng()<.5);if(candidate&&candidate.every(i=>!used.has(i))){cells=candidate;break}}if(!cells)break;fleet.push(cells);cells.forEach(i=>used.add(i))}if(fleet.length===5)return fleet}return SHIPS.map((s,i)=>shipCells(i*20,s.length))}

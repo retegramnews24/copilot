@@ -36,7 +36,7 @@ function api(action,data){return request(action==='create'?'/api/create':'/api/r
 const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola siciliana':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
 const staged=g=>['uno','scarabeo','scopa','naval','briscola','briscola5'].includes(g?.game);
-const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:8}:{min:2,max:2});
+const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:10}:{min:2,max:2});
 const ongoing=g=>!g.archived&&(g.phase!=='finished'||g.series&&!g.series.done);
 function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 
@@ -160,8 +160,14 @@ function render(s){
 
  $('pass').hidden=!!boardState()||s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
  $('finish').hidden=s.phase==='finished'||mine<0;
- $('offer-draw').hidden=staged(s)||!boardState()||s.phase!=='playing'||mine<0;
- $('offer-draw').disabled=busy||!!s.drawOffer;
+ $('offer-draw').hidden=(!s.chess&&!s.checkers)||s.phase!=='playing'||mine<0;
+ $('offer-draw').disabled=busy||!!s.drawOffer||!!s.chess&&s.moves.length<2;
+ const claims=s.chess?.claimMoves||[],claimable=!!s.chess?.claim||claims.length>0;
+ $('chess-draw-claim').hidden=!s.chess||!canMove()||!claimable;
+ $('chess-claim-label').hidden=!!s.chess?.claim;
+ const claimSelect=$('chess-claim-move'),choice=claimSelect.value;
+ claimSelect.replaceChildren(...claims.map((move,i)=>new Option(move.san,String(i))));
+ if(claims[Number(choice)])claimSelect.value=choice;
 
  $('draw-info').textContent=s.drawOffer?(s.drawOffer.by===credentials.player?'Hai offerto la patta. In attesa dell’avversario.':s.drawOffer.name+' propone la patta.'):'';
  const responder=mine>=0&&s.drawOffer&&s.drawOffer.by!==credentials.player;
@@ -281,6 +287,10 @@ action('next-round',async()=>render(await api('next-round',{revision:state.revis
 function renderSeries(s,mine){const q=s.series,root=$('series-status');root.hidden=!q;$('next-round').hidden=!q||q.done||s.phase!=='finished'||mine!==0;if(!q)return;root.textContent=(q.cancelled?'Torneo interrotto':q.done?'Torneo vinto da '+(q.winners||[q.winner]).map(i=>s.players[i].name).join(' + '):'Torneo · prima persona a '+q.target+' vittorie · manche '+q.round)+' · '+s.players.map((p,i)=>p.name+' '+(q.wins[i]||0)).join(' / ')}
 $('uno-draw').onclick=()=>sendMove({kind:'draw',revision:state.revision});
 $('uno-pass').onclick=()=>sendMove({kind:'pass',revision:state.revision});
+for(const [id,kind] of Object.entries({'uno-accept-four':'accept-four','uno-challenge-four':'challenge-four','uno-declare':'uno','uno-catch':'catch-uno'})){
+ $(id).onclick=()=>sendMove({kind,revision:state.revision});
+}
+$('uno-opening-color').onclick=()=>sendMove({kind:'color',color:$('uno-color').value,revision:state.revision});
 
 action('pass',async()=>render(await api('pass',{revision:state.revision})));
 action('finish',async()=>{if(confirm('Concludere la partita per tutti?'))render(await api('finish',{revision:state.revision}))});
@@ -408,13 +418,20 @@ const unoNames={red:'Rosso',yellow:'Giallo',green:'Verde',blue:'Blu'},unoSymbols
 function unoCard(card,button=false){const el=document.createElement(button?'button':'div');el.className='uno-card '+(card.color||'wild');el.textContent=unoSymbols[card.value]||card.value;el.setAttribute('aria-label',(unoNames[card.color]||'Jolly')+' · '+(unoSymbols[card.value]||card.value));return el}
 function renderUno(){
  const u=state.uno,mine=state.players.findIndex(p=>p.id===credentials.player),waiting=state.phase==='waiting',active=canMove();
- $('uno-message').textContent=waiting?state.players.length+'/8 giocatori · '+(mine===0?'Avvia quando siete pronti.':'Attendi che il creatore avvii.'):u.lastEvent;
- $('uno-top').replaceChildren(unoCard(u.top));$('uno-active-color').textContent='Colore · '+unoNames[u.color];$('uno-active-color').dataset.color=u.color;
+ $('uno-message').textContent=waiting?state.players.length+'/10 giocatori · '+(mine===0?'Avvia quando siete pronti.':'Attendi che il creatore avvii.'):u.lastEvent;
+ $('uno-top').replaceChildren(unoCard(u.top));$('uno-active-color').textContent=u.color?'Colore · '+unoNames[u.color]:'Scegli il colore iniziale';$('uno-active-color').dataset.color=u.color||'';
  $('uno-draw').hidden=waiting||mine<0||state.phase==='finished';$('uno-draw').disabled=!active||!u.canDraw;
  $('uno-pass').hidden=!active||!u.canPass;$('uno-color-row').hidden=mine<0||waiting||state.phase==='finished';
+ $('uno-opening-color').hidden=!active||!u.chooseColor;
+ $('uno-accept-four').hidden=$('uno-challenge-four').hidden=!active||!u.decidePenalty;
+ $('uno-declare').hidden=busy||state.phase!=='playing'||!u.canDeclare;
+ $('uno-catch').hidden=busy||state.phase!=='playing'||!u.canCatch;
+ $('uno-call-option').hidden=!active||u.hand.length!==2||!u.legalMoves.length;
+ $('uno-score').textContent=waiting?'':('Manche '+(u.round||1)+' · traguardo 500 · '+(u.scores||[]).map((points,i)=>state.players[i].name+' '+points).join(' · '));
+ const revealed=$('uno-revealed');revealed.hidden=!u.shownHand?.length;revealed.replaceChildren(...(u.shownHand||[]).map(c=>unoCard(c)));
  const hand=$('uno-hand');hand.replaceChildren();
  if(mine<0||waiting){const p=document.createElement('p');p.className='hint';p.textContent=mine<0?'Le mani dei giocatori sono private.':'Sette carte a testa all’avvio.';hand.append(p)}
- else for(const c of u.hand){const b=unoCard(c,true);b.disabled=!active||!u.legalMoves.includes(c.id);b.onclick=()=>sendMove({kind:'play',card:c.id,color:$('uno-color').value,revision:state.revision});hand.append(b)}
+ else for(const c of u.hand){const b=unoCard(c,true);b.disabled=!active||!u.legalMoves.includes(c.id);b.onclick=()=>{const uno=u.hand.length===2&&$('uno-call-with-card').checked;$('uno-call-with-card').checked=false;sendMove({kind:'play',card:c.id,color:$('uno-color').value,uno,revision:state.revision})};hand.append(b)}
  const history=$('uno-history');history.replaceChildren();for(const m of state.moves.slice(-12).reverse()){const p=document.createElement('p');p.textContent=m.by+' · '+m.description;history.append(p)}
 }
 function renderConnect4(){
@@ -483,8 +500,9 @@ function selectSquare(square,pieces){
  selectedSquare=piece&&white===(state.turn===0)&&square!==selectedSquare?square:null;renderBoard();
 }
 async function sendMove(move){
- if(!canMove())return;
- busy=true;capturePath=[];selectedSquare=null;promotionMove=null;$('promotion').hidden=true;renderBoard();trace('MOVE',move.path?move.path.join(' → '):move.from+' → '+move.to+(move.promotion?' = '+move.promotion:''));
+ const unoCall=state?.phase==='playing'&&!busy&&!state.archived&&replayPly===null&&(move.kind==='uno'&&state.uno?.canDeclare||move.kind==='catch-uno'&&state.uno?.canCatch);
+ if(!canMove()&&!unoCall)return;
+ busy=true;capturePath=[];selectedSquare=null;promotionMove=null;$('promotion').hidden=true;renderBoard();trace('MOVE',move.kind|| (move.path?move.path.join(' → '):move.from+' → '+move.to+(move.promotion?' = '+move.promotion:'')));
  const current=room;
  try{const result=await api('move',move);if(room===current)render(result)}
  catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch{}}
@@ -576,6 +594,10 @@ action('delete-game',async()=>{
 });
 
 
+$('chess-claim-draw').onclick=()=>{
+ const move=state.chess.claim?undefined:state.chess.claimMoves[Number($('chess-claim-move').value)];
+ sendMove({kind:'claim-draw',move,revision:state.revision});
+};
 $('offer-draw').onclick=()=>{$('draw-dialog').hidden=false;$('confirm-draw').focus()};
 $('cancel-draw').onclick=()=>{$('draw-dialog').hidden=true;$('offer-draw').focus()};
 window.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('draw-dialog').hidden){$('draw-dialog').hidden=true;$('offer-draw').focus()}});
@@ -719,7 +741,6 @@ window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==labyrinthFrame.contentWindow||labyrinthOverlay.hidden)return;
  if(event.data?.type==='labyrinth:ready')sendLabyrinthIdentity();
  else if(event.data?.type==='labyrinth:net'){const packet=event.data.packet;if(packet&&['pose','action'].includes(packet.type)&&JSON.stringify(packet).length<=2048){if(labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify(packet));else if(packet.type==='action')labPost({type:'labyrinth:packet',packet:{type:'ack',request:packet.request,ok:false,error:'Riconnessione in corso.'}})}}
- else if(event.data?.type==='labyrinth:fullscreen'){enterFullscreen();fitViewport()}
  else if(event.data?.type==='labyrinth:exit')closeLabyrinth();
 
  else if(event.data?.type==='labyrinth:trace'&&typeof event.data.message==='string')trace('LAB',event.data.message.slice(0,200));
