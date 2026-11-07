@@ -5,12 +5,13 @@ const json = (data, status = 200) => Response.json(data, {status, headers: {'Cac
 const modes = new Set(['ready', 'ride', 'paused', 'crash', 'finish']);
 
 function readPose(packet, bounds) {
-  const {x, y, angle, vx, facing, lean, roll, mode} = packet;
-  if (![x, y, angle, vx, lean, roll].every(Number.isFinite) || !modes.has(mode) ||
+  const {x, y, angle, vx, facing, lean, roll, leftSpring = 0, rightSpring = 0, mode} = packet;
+  if (![x, y, angle, vx, lean, roll, leftSpring, rightSpring].every(Number.isFinite) || !modes.has(mode) ||
       x < bounds.min - 60 || x > bounds.max + 60 || y < -70 || y > bounds.bottom + 1 ||
       Math.abs(angle) > 4 || Math.abs(vx) > 13 || Math.abs(lean) > 1 || Math.abs(roll) > 7 ||
+      leftSpring < 0 || leftSpring > .26 || rightSpring < 0 || rightSpring > .26 ||
       (facing !== -1 && facing !== 1)) return null;
-  return {x, y, angle, vx, facing, lean, roll, mode};
+  return {x, y, angle, vx, facing, lean, roll, leftSpring, rightSpring, mode};
 }
 
 export class MotoTrialRoom {

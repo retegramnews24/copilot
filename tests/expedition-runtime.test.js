@@ -123,15 +123,15 @@ try{
  const rider2=await connect(202,race.room,false,'moto-trial');
  const raceState=(await until(rider1,p=>p.type==='state'&&p.state.players.length===2)).state;
  assert.equal(raceState.seed,race.seed);
- assert.equal(raceState.courseVersion,2);
+ assert.equal(raceState.courseVersion,3);
  assert.equal((await call(202,'/api/moto-trial/'+race.room+'/state')).data.state.seed,race.seed);
  assert.equal(new Set(raceState.players.map(p=>p.color)).size,2);
  assert.equal((await call(202,'/api/lobby')).data.games.find(g=>g.room===race.room).online,2);
- const pose={type:'pose',seq:1,x:7,y:-.8,angle:1.05,vx:4,facing:1,lean:1,roll:2,mode:'ride'};
+ const pose={type:'pose',seq:1,x:7,y:-.8,angle:1.05,vx:4,facing:1,lean:1,roll:2,leftSpring:.24,rightSpring:.10,mode:'ride'};
  rider1.ws.send(JSON.stringify({...pose,x:9000}));
  rider1.ws.send(JSON.stringify({...pose,id:'tg:202'}));
  const motion=await until(rider2,p=>p.type==='pose');
- assert.equal(motion.id,'tg:201');assert.equal(motion.pose.x,7);assert.equal(motion.pose.angle,1.05);
+ assert.equal(motion.id,'tg:201');assert.equal(motion.pose.x,7);assert.equal(motion.pose.angle,1.05);assert.equal(motion.pose.leftSpring,.24);
  rider2.ws.send(JSON.stringify({...pose,x:8,facing:-1,angle:-.9}));
  const opposite=await until(rider1,p=>p.type==='pose');
  assert.equal(opposite.id,'tg:202');assert.equal(opposite.pose.facing,-1);

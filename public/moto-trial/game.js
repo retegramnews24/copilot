@@ -1,7 +1,7 @@
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=2';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=3';
 import {TrialAudio} from './audio.js';
-import {drawTrial} from './render.js?v=2';
+import {drawTrial} from './render.js?v=3';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -26,10 +26,10 @@ function message(type, payload = {}) {
 
 function sendPose() {
   if (!connected || !race) return;
-  const {x, y, angle, vx, facing, lean, roll} = bike;
+  const {x, y, angle, vx, facing, lean, roll, leftSpring, rightSpring} = bike;
   const compact = value => Math.round(value * 1000) / 1000;
   const pose = {x: compact(x), y: compact(y), angle: compact(angle), vx: compact(vx),
-    facing, lean: compact(lean), roll: compact(roll), mode};
+    facing, lean: compact(lean), roll: compact(roll), leftSpring: compact(leftSpring), rightSpring: compact(rightSpring), mode};
   const signature = JSON.stringify(pose);
   if (lastPose === signature) return;
   lastPose = signature;
@@ -42,7 +42,9 @@ function blendPose(member, now) {
   if (t >= 1 || !from) return pose;
   const angle = (a, b) => a + Math.atan2(Math.sin(b - a), Math.cos(b - a)) * t;
   return {...pose, x: from.x + (pose.x - from.x) * t, y: from.y + (pose.y - from.y) * t,
-    angle: angle(from.angle, pose.angle), roll: angle(from.roll, pose.roll)};
+    angle: angle(from.angle, pose.angle), roll: angle(from.roll, pose.roll),
+    leftSpring: (from.leftSpring ?? 0) * (1 - t) + (pose.leftSpring ?? 0) * t,
+    rightSpring: (from.rightSpring ?? 0) * (1 - t) + (pose.rightSpring ?? 0) * t};
 }
 
 function receivePose(id, pose) {
@@ -104,6 +106,8 @@ function updateHUD() {
   if (mode === 'ride') {
     if (!bike.onGround && bike.tier < course.tiers.length - 1 && (bike.x - tier.end) * tier.direction >= 0) cue = 'Atterra sul sentiero sotto';
     else if (bike.facing !== tier.direction) cue = 'Gira ' + (tier.direction > 0 ? 'verso destra →' : 'verso sinistra ←');
+    else if (tier.jump && (tier.jump.lip - bike.x) * tier.direction >= 0 &&
+        Math.abs(tier.jump.lip - bike.x) < 17) cue = 'Salto · prendi slancio';
     else if (bike.tier < course.tiers.length - 1 && Math.abs(tier.end - bike.x) < 15) cue = 'Discesa · rallenta dopo l’atterraggio';
   }
   const hint = $('cue');

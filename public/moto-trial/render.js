@@ -1,4 +1,4 @@
-import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=2';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=3';
 
 const THEMES = [
   {sky: ['#193345', '#eaa46d', '#f6d399'], haze: '#96736d', far: '#615c68', near: '#43515a', rock: '#573c37', face: '#724b3d', top: '#d49a66', rim: '#f2c183', dust: '#f4c893'},
@@ -51,8 +51,8 @@ function sky(c, w, h, course, bike, theme) {
   }
 }
 
-function ledge(c, tier, theme) {
-  const points = tier.points.map(({x, y}) => [x, y]);
+function ledge(c, track, theme) {
+  const points = track.map(({x, y}) => [x, y]);
   const underside = points.slice().reverse().map(([x, y], i) => [x, y + (i % 3 === 1 ? 2.2 : 1.4)]);
   polygon(c, [...points, ...underside], theme.rock);
   const strip = points.slice().reverse().map(([x, y], i) => [x, y + (i % 2 ? .46 : .66)]);
@@ -108,19 +108,21 @@ function motorcycle(c, bike, time, color) {
   c.scale(bike.facing, 1);
   c.lineJoin = 'round';
   c.lineCap = 'round';
-  for (const x of [-AXLE, AXLE]) {
-    disc(c, x, 0, WHEEL, '#211f28');
-    disc(c, x, 0, WHEEL - .075, '#b0a7a0');
-    disc(c, x, 0, WHEEL - .113, '#38363f');
+  const rearY = -(bike.facing > 0 ? bike.leftSpring ?? 0 : bike.rightSpring ?? 0);
+  const frontY = -(bike.facing > 0 ? bike.rightSpring ?? 0 : bike.leftSpring ?? 0);
+  for (const [x, y] of [[-AXLE, rearY], [AXLE, frontY]]) {
+    disc(c, x, y, WHEEL, '#211f28');
+    disc(c, x, y, WHEEL - .075, '#b0a7a0');
+    disc(c, x, y, WHEEL - .113, '#38363f');
     for (let i = 0; i < 6; i++) {
       const a = i * Math.PI / 3 + bike.roll * bike.facing;
-      line(c, [[x, 0], [x + Math.cos(a) * .251, Math.sin(a) * .251]], '#a39892', .025);
+      line(c, [[x, y], [x + Math.cos(a) * .251, y + Math.sin(a) * .251]], '#a39892', .025);
     }
-    disc(c, x, 0, .067, '#f3dabb');
+    disc(c, x, y, .067, '#f3dabb');
   }
-  line(c, [[-AXLE, 0], [-.21, -.19], [.38, -.51], [-.55, -.57], [-AXLE, 0]], '#1d242a', .17);
-  line(c, [[-AXLE, 0], [-.18, -.18], [.42, -.52], [-.56, -.55], [-AXLE, 0]], '#efac57', .088);
-  line(c, [[AXLE, 0], [.48, -.64], [.34, -.83], [.57, -.85]], '#e5cfb7', .081);
+  line(c, [[-AXLE, rearY], [-.21, -.19], [.38, -.51], [-.55, -.57], [-AXLE, rearY]], '#1d242a', .17);
+  line(c, [[-AXLE, rearY], [-.18, -.18], [.42, -.52], [-.56, -.55], [-AXLE, rearY]], '#efac57', .088);
+  line(c, [[AXLE, frontY], [.48, -.64], [.34, -.83], [.57, -.85]], '#e5cfb7', .081);
   polygon(c, [[-.83, -.62], [-.31, -.63], [.30, -.56], [.12, -.34], [-.38, -.42]], paint);
   polygon(c, [[-.88, -.67], [-.32, -.67], [-.23, -.60], [-.83, -.60]], '#31313a');
   polygon(c, [[.57, -.29], [.95, -.41], [1.10, -.28], [.78, -.31]], paint);
@@ -154,7 +156,13 @@ export function drawTrial(c, width, height, course, bike, time, reduced, riders 
   for (const [i, tier] of course.tiers.entries()) {
     if (tier.points[0].x > bike.x + reach || tier.points.at(-1).x < bike.x - reach ||
         tier.top > bike.y + below + 3 || tier.bottom < bike.y - below - 3) continue;
-    ledge(c, tier, theme);
+    if (tier.jump) {
+      const cut = tier.points.findIndex(p => p.gapAfter) + 1;
+      ledge(c, tier.points.slice(0, cut), theme);
+      ledge(c, tier.points.slice(cut), theme);
+      const warning = tier.jump.lip - 4 * tier.direction;
+      sign(c, warning, ground(tier, warning), tier.direction);
+    } else ledge(c, tier.points, theme);
     sign(c, tier.marker, ground(tier, tier.marker), tier.direction, true);
     const isLast = i === course.tiers.length - 1;
     const x = isLast ? course.finish : tier.end - 4 * tier.direction;
