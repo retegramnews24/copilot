@@ -890,7 +890,7 @@ golfCampaign.onchange=()=>{try{save('binotto-golf-campaign',golfCampaign.value)}
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=9'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
+ $('golf-frame').src='/golf/index.html?v=10'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
  tg?.BackButton?.show();
 }
 async function syncGolf(){

@@ -100,7 +100,7 @@ get('golf-campaign').value='coast';
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=9&campaign=coast');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=10&campaign=coast');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -119,7 +119,7 @@ w.fetch=async(path,opts)=>{
 golfLobbyButton.click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=9&online=1');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=10&online=1');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 let golfCreate;
 w.fetch=async(path,opts)=>{
@@ -526,10 +526,10 @@ assert.ok(golf.win.__golf.camera().x>teeX+3,'The camera follows the rolling ball
 assert.notEqual(golf.rotations.at(-1),initialRotation,'The color seam follows the ball rotation');
 for(let i=0;i<14;i++)golf.find('zoom-in').click();
 paintGolf();paintGolf();
-assert.ok(golf.win.__golf.camera().zoom<.5&&golf.find('zoom-in').disabled);
+assert.ok(golf.win.__golf.camera().zoom<.34&&golf.find('zoom-in').disabled);
 for(let i=0;i<14;i++)golf.find('zoom-out').click();
 paintGolf();paintGolf();
-assert.ok(golf.win.__golf.camera().zoom>2.35&&golf.find('zoom-out').disabled);
+assert.ok(golf.win.__golf.camera().zoom>3.3&&golf.find('zoom-out').disabled);
 golf.find('scores').click();assert.equal(golf.find('card').hidden,false);
 assert.equal(golf.find('score-head').querySelectorAll('th').length,12);
 golf.find('scores').click();assert.equal(golf.find('card').hidden,true);
@@ -537,10 +537,12 @@ golf.instance.window.close();
 
 const standaloneGolf=golfFixture('?choose=1');
 assert.equal(standaloneGolf.find('route-picker').hidden,false);
+assert.equal(standaloneGolf.win.document.body.classList.contains('golf-playing'),false);
 standaloneGolf.find('route-choice').value='neon';
 standaloneGolf.find('start').click();
 standaloneGolf.win.__golf.draw();
 assert.equal(standaloneGolf.find('route-title').textContent,'Circuito al Neon');
+assert.ok(standaloneGolf.win.document.body.classList.contains('golf-playing'));
 assert.equal(standaloneGolf.find('course').textContent,'Portale Viola');
 assert.match(standaloneGolf.find('counter').textContent,/1 \/ 10/);
 standaloneGolf.instance.window.close();

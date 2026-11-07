@@ -40,3 +40,39 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 #route-picker label{display:grid;gap:4px;color:var(--muted);font-size:13px}
 #route-choice{max-width:100%;min-height:40px;padding:6px 8px;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px}
 #route-note{font-size:12px}
+
+/* The playfield fills the viewport. Only the interactive HUD intercepts input. */
+.golf-playing{position:relative;padding:0;isolation:isolate;--hud:#152b38e8}
+.golf-playing .course-view{position:absolute;inset:0;min-height:0;border:0;border-radius:0}
+.golf-playing header,.golf-playing .course-info{
+  position:absolute;z-index:2;left:calc(var(--left) + 8px);right:calc(var(--right) + 8px);pointer-events:none
+}
+.golf-playing header{top:calc(var(--top) + 7px);display:flex;justify-content:space-between;padding:0}
+.golf-playing header>div{display:none}
+.golf-playing header button,.golf-playing #close-game{pointer-events:auto;background:var(--hud)}
+.golf-playing .course-info{top:calc(var(--top) + 51px);padding:0;gap:5px;align-items:flex-start}
+.golf-playing .course-info>div,.golf-playing #status{
+  border:1px solid var(--line);border-radius:10px;background:var(--hud);padding:4px 8px
+}
+.golf-playing .course-info h2{font-size:clamp(14px,3.5vw,20px)}
+.golf-playing .course-actions{gap:6px}
+.golf-playing #close-game{min-height:29px}
+.golf-playing .zoom-tools{z-index:2;top:calc(var(--top) + 111px);right:calc(var(--right) + 8px)}
+.golf-playing .glass{z-index:4;max-height:calc(100% - var(--top) - var(--bottom) - 14px)}
+.golf-playing .controls,.golf-playing #watch-tools{
+  position:absolute;z-index:2;bottom:calc(var(--bottom) + 8px);
+  left:calc(var(--left) + 8px);right:calc(var(--right) + 8px);width:auto;
+  max-width:760px;margin:auto;padding:5px 8px;border:1px solid var(--line);
+  border-radius:12px;background:var(--hud)
+}
+.golf-playing #status{
+  position:absolute;z-index:2;bottom:calc(var(--bottom) + 62px);
+  left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);
+  width:max-content;text-align:center;pointer-events:none
+}
+.golf-playing #status:empty,.golf-playing #tip{display:none}
+@media(max-height:380px){
+  .golf-playing .course-info{top:calc(var(--top) + 45px)}
+  .golf-playing header button{min-height:34px}
+  .golf-playing .zoom-tools{top:calc(var(--top) + 93px)}
+}

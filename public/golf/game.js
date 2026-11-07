@@ -1,6 +1,6 @@
 import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=9';
 import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=9';
-import { drawCourse } from './render.js?v=9';
+import { drawCourse } from './render.js?v=10';
 import { upright, rollBy } from './roll.js';
 import {golfColors,validBallColors} from '../appearance.js?v=8';
 import { applyInsets } from '../safe-area.js';
@@ -12,7 +12,7 @@ campaignSelect.replaceChildren(...CAMPAIGNS.map(set=>new Option(set.difficulty+'
 let waitingCampaign=null;
 let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=golfColors(), orbit=null, watching=null, watchOptions='';
 const ballRolls=new Map();
-const ZOOM_NEAR=.43,ZOOM_FAR=2.5;
+const ZOOM_NEAR=.29,ZOOM_FAR=3.5;
 let zoomTarget=1;
 let me='solo', state=null, offset=0, busy=false, drag=null, revision='', hole=-1, note='', noteUntil=0, frame=0;
 const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},location.origin);
@@ -176,6 +176,7 @@ function watchPlayer(p){
 const putText=(id,text)=>{const node=$(id);if(node.textContent!==text)node.textContent=text;};
 function draw(stamp=performance.now()){
   if(state&&!online)advanceMatch(state,time());
+  document.body.classList.toggle('golf-playing',state?.phase==='playing');
   const courses=coursesFor(state?state.courseVersion:COURSE_VERSION,state?.campaign);
   const course=courses[state?.hole??0], now=time();
   if(hole!==(state?.hole??0)||camera?.course!==course){
@@ -194,6 +195,7 @@ function draw(stamp=performance.now()){
   putText('counter','BUCA '+(hole+1)+' / '+courses.length+'  ·  PAR '+course.par);
   putText('course',course.name);
   putText('route-title',campaignInfo(state?.campaign)?.name??'');
+  putText('score-tip',course.tip);
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');
   putText('tip',watched?'Su PC, tieni premuto il destro per ruotare la visuale.':
@@ -270,8 +272,8 @@ function zoomBy(factor){
   $('zoom-in').disabled=zoomTarget===ZOOM_NEAR;
   $('zoom-out').disabled=zoomTarget===ZOOM_FAR;
 }
-$('zoom-in').onclick=()=>zoomBy(1/1.18);
-$('zoom-out').onclick=()=>zoomBy(1.18);
+$('zoom-in').onclick=()=>zoomBy(1/1.23);
+$('zoom-out').onclick=()=>zoomBy(1.23);
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();
   const unit=e.deltaMode===1 ? 16 : e.deltaMode===2 ? 240 : 1;

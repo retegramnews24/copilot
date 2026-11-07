@@ -310,7 +310,7 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
   for(const ball of balls)queue(ball.x,ball.z,()=>{
     const p=view.point([ball.x,ball.z,radius*(1-2*ball.sink)]);
     if(!p||p.x<-48||p.x>w+48||p.y<0||p.y>h+48)return;
-    const r=clamp(radius*p.size,3,52)*(1-ball.sink*.88);
+    const r=clamp(radius*p.size,3,Math.min(104,Math.max(3,Math.min(w,h)*.2)))*(1-ball.sink*.88);
     const palette=ballColors(ball.appearance,ball.color);
     poly(circle(ball.x,ball.z,radius*1.25,.032,12),'#1c35296b');
     paintBall(ctx,p,r,palette,ball.id===self,ball.rotation,view);
