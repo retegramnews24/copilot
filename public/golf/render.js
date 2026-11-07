@@ -1,6 +1,6 @@
-import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWall } from './courses.js?v=7';
+import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWalls } from './courses.js?v=9';
 
-import { estimateRoll } from './physics.js?v=7';
+import { estimateRoll } from './physics.js?v=9';
 import { rotateVector } from './roll.js';
 
 const NEAR=.35, ORBIT_DISTANCE=Math.hypot(7.3,2.95), ORBIT_OFFSET=Math.atan2(2.95,7.3)-.18;
@@ -27,6 +27,32 @@ const circle=(x,z,r,y=0,segments=24)=>Array.from({length:segments},(_,i)=>{
   const a=i*Math.PI*2/segments;
   return [x+Math.cos(a)*r,z+Math.sin(a)*r,y];
 });
+// Keep the generated world-space scenery for the life of each layout.
+const sceneryCache=new WeakMap();
+function sceneryFor(course,width,depth,scale){
+  const previous=sceneryCache.get(course);
+  if(previous)return previous;
+  let seed=course.sceneSeed??(19+(course.theme??0)*23);
+  const random=()=>((seed=Math.imul(seed,1664525)+1013904223>>>0)/4294967296);
+  const plants=Array.from({length:28},(_,i)=>{
+    const t=(Math.floor(i/4)+.25+random()*.5)/7;
+    const edge=(1.7+random()*4.6)*scale;
+    const side=i%4;
+    const x=side<2?t*width:side===2?-edge:width+edge;
+    const z=side>=2?t*depth:side===0?-edge:depth+edge;
+    return {x,z,height:(.85+random()*1.3)*scale,hue:Math.floor(random()*PARADE.length)};
+  });
+  const grass=Array.from({length:38},(_,i)=>{
+    const x=(.06+random()*.88)*width,z=(.03+random()*.94)*depth,r=(.13+random()*.25)*scale;
+    return {mesh:circle(x,z,r,.006,6),color:i%3===0?'#f9f6b019':'#204d381c'};
+  });
+  const clouds=Array.from({length:7},(_,i)=>({angle:(i+random()*.6)*Math.PI*2/7,
+    height:.055+random()*.17,radius:.025+random()*.045}));
+  const scene={plants,grass,clouds};
+  sceneryCache.set(course,scene);
+  return scene;
+}
+
 function viewFor(width,height,{x,z,yaw,pitch,zoom}){
   const fx=Math.cos(yaw),fz=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch);
   const tilt=pitch+ORBIT_OFFSET, along=Math.cos(tilt), above=Math.sin(tilt);
@@ -63,12 +89,20 @@ function viewFor(width,height,{x,z,yaw,pitch,zoom}){
   return {point,polygon,ballVector,horizon:centerY-focal*sp/cp,depth:world=>transform(world)[2]};
 }
 
-function backdrop(ctx,w,h,horizon,yaw,skyTop,skyLight,accent){
+function backdrop(ctx,w,h,horizon,yaw,skyTop,skyLight,accent,clouds){
   const sky=ctx.createLinearGradient(0,0,0,Math.max(1,horizon+26));
   sky.addColorStop(0,skyTop);sky.addColorStop(1,skyLight);
   ctx.fillStyle=sky;ctx.fillRect(0,0,w,h);
   const sunX=w*(.5+.34*Math.sin(yaw-.9)),sunY=horizon-h*.13;
   ctx.fillStyle=skyLight;ctx.beginPath();ctx.arc(sunX,sunY,Math.min(w,h)*.049,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=skyLight+'48';
+  for(const cloud of clouds){
+    const angle=Math.atan2(Math.sin(cloud.angle-yaw),Math.cos(cloud.angle-yaw));
+    if(Math.abs(angle)>1)continue;
+    const x=w*(.5+.65*angle),y=horizon-h*cloud.height,r=Math.min(w,h)*cloud.radius;
+    ctx.beginPath();ctx.ellipse(x,y,r*1.75,r*.3,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(x-r*.38,y-r*.16,r*.9,r*.32,0,0,Math.PI*2);ctx.fill();
+  }
   const colors=[accent+'4f',accent+'79',accent+'b0'];
   for(let layer=0;layer<3;layer++){
     ctx.beginPath();ctx.moveTo(0,horizon+30);
@@ -129,19 +163,25 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
   const area=(x,z,w,d,y,color)=>poly(quad(x,z,w,d,y),color);
   const [a,b,c]=course.colors;
   const [skyTop,skyLight,land,darkTurf,lightTurf,prop]=THEMES[course.theme??0];
-  backdrop(ctx,w,h,view.horizon,camera.yaw,skyTop,skyLight,land);
+  const scene=sceneryFor(course,width,depth,scale);
+  backdrop(ctx,w,h,view.horizon,camera.yaw,skyTop,skyLight,land,scene.clouds);
   area(-90,-90,width+180,depth+180,-.34,land);
   area(-1.4,-1.4,width+2.8,depth+2.8,-.02,prop==='lantern'?c:'#d9ba8b');
   for(let x=0;x<width;x+=2*scale){
     const stripe=Math.round(x/(2*scale));
     area(x,0,Math.min(2*scale,width-x)+.015,depth,0,stripe%2?darkTurf:lightTurf);
   }
+  for(const fleck of scene.grass)poly(fleck.mesh,fleck.color);
+  area(0,0,width,.28*scale,.009,darkTurf);
+  area(0,depth-.28*scale,width,.28*scale,.009,darkTurf);
   for(const r of course.rough||[]){
-    area(r.x,r.z,r.w,r.h,.012,'#c59965');
+    area(r.x,r.z,r.w,r.h,.012,'#9d795a');
+    area(r.x+.09,r.z+.09,r.w-.18,r.h-.18,.014,'#c59965');
     for(let i=.45;i<r.h-.3;i+=.64)area(r.x+.15,r.z+i,r.w-.3,.075,.017,'#e1b484');
   }
   for(const r of course.water||[]){
-    area(r.x,r.z,r.w,r.h,.012,'#3796ad');
+    area(r.x,r.z,r.w,r.h,.012,prop==='lantern'?'#3c477a':'#27768a');
+    area(r.x+.09,r.z+.09,r.w-.18,r.h-.18,.014,prop==='lantern'?'#7657af':'#3796ad');
     for(let i=.28;i<r.h-.28;i+=.52){
       const ripple=.23*Math.sin(i*3+seconds*2);
       area(r.x+.36+ripple,r.z+i,r.w*.63,.06,.018,'#97e6e6');
@@ -185,10 +225,9 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
     rail({x,z,toX,toZ},.09*scale,.26*scale,prop==='park'?'#e7c69a':a,prop==='park'?'#99664b':c);
   }
   for(const wall of course.walls)rail(wall,.12*scale,.68*scale,a,c);
-  const rotor=rotorWall(course,seconds);
-  if(rotor){
+  for(const rotor of rotorWalls(course,seconds)){
     rail(rotor,.19*scale,.47*scale,'#f8c877','#ab5362');
-    const [x,z]=course.rotor;
+    const x=(rotor.x+rotor.toX)/2,z=(rotor.z+rotor.toZ)/2;
     queue(x,z,()=>poly(circle(x,z,.17*scale,.49*scale),'#fff3bf'));
   }
   for(const [x,z,r] of course.bumpers||[])queue(x,z,()=>{
@@ -201,13 +240,13 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
     poly(circle(x,z,r*.72,.355*scale),b);
     poly(circle(x,z,r*.35,.36*scale),'#ffd2ac');
   });
-  for(let i=0;i<16;i++){
-    const x=(i%8+.25)*width/7.5,z=i<8?-2.4-(i%3)*1.35:depth+2.6+(i%4)*.9;
+  for(const [i,{x,z,height,hue}] of scene.plants.entries()){
     queue(x,z,()=>{
       const p=view.point([x,z,-.29]);
       if(!p||p.x<-120||p.x>w+120||p.y<0||p.y>h+120)return;
-      const size=Math.min(96,p.size*(1.55+i%3*.36));
-      const pigment=PARADE[i%PARADE.length];
+      const size=Math.min(104,p.size*height);
+      const pigment=PARADE[hue];
+      ctx.fillStyle='#14232130';ctx.beginPath();ctx.ellipse(p.x,p.y,size*.49,size*.12,0,0,Math.PI*2);ctx.fill();
       const shape=(points,color)=>{
         ctx.beginPath();ctx.moveTo(p.x+points[0][0]*size,p.y+points[0][1]*size);
         for(const [x,y] of points.slice(1))ctx.lineTo(p.x+x*size,p.y+y*size);
@@ -215,7 +254,10 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
       };
       if(prop==='lantern'||prop==='park'&&i%3===0){
         ctx.fillStyle=c;ctx.fillRect(p.x-size*.06,p.y-size*1.26,size*.12,size*1.26);
-        shape([[0,-1.43],[.6,-1.3],[0,-1.03]],pigment);
+        if(prop==='lantern'){
+          ctx.fillStyle=pigment+'42';ctx.beginPath();ctx.arc(p.x,p.y-size*1.27,size*.37,0,Math.PI*2);ctx.fill();
+          shape([[-.17,-1.41],[.17,-1.41],[.13,-1.1],[-.13,-1.1]],pigment);
+        }else shape([[0,-1.43],[.6,-1.3],[0,-1.03]],pigment);
       }else if(prop==='coral'||prop==='crystal'){
         shape([[-.48,0],[-.38,-.71],[.08,-1.18],[.48,-.63],[.58,0]],prop==='coral'?pigment:a);
         shape([[.08,-1.18],[.48,-.63],[.58,0],[.12,0]],b);
@@ -229,12 +271,14 @@ export function drawCourse(ctx,w,h,course,balls,self,available,angle,power,secon
         }else{
           ctx.fillStyle=prop==='autumn'?pigment:i%2?'#39685b':'#467b65';
           ctx.beginPath();ctx.arc(p.x,p.y-size*.94,size*.42,0,Math.PI*2);ctx.fill();
+          ctx.fillStyle='#e3f6bd32';ctx.beginPath();ctx.arc(p.x-size*.13,p.y-size*1.08,size*.25,0,Math.PI*2);ctx.fill();
         }
       }
     });
   }
   const [hx,hz]=course.cup;
-  poly(circle(hx,hz,cup*1.17,.02),'#b7d29a');
+  poly(circle(hx,hz,cup*1.55,.019),'#25443135');
+  poly(circle(hx,hz,cup*1.17,.02),'#d2dca5');
   poly(circle(hx,hz,cup,.027),'#203332');
   queue(hx,hz,()=>{
     const height=2.25*scale, flag=(.83+Math.sin(seconds*3)*.11)*scale;

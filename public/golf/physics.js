@@ -1,4 +1,4 @@
-import { WIDTH, DEPTH, RADIUS, CUP, rotorWall } from './courses.js?v=7';
+import { WIDTH, DEPTH, RADIUS, CUP, rotorWalls } from './courses.js?v=9';
 
 const STEP = 1 / 100, MAX_STEP = 900;
 const clamp = (x,min,max) => Math.max(min,Math.min(max,x));
@@ -39,8 +39,9 @@ export function simulateShot(course, x, z, angle, power, startSeconds=0) {
     ball.x+=ball.vx*STEP;ball.z+=ball.vz*STEP;
     for(const rail of walls)rebound(ball,rail,(RADIUS+(borders.includes(rail)?0:.12))*scale,.77);
     for(const [bx,bz,r] of course.bumpers||[])rebound(ball,{x:bx,z:bz,toX:bx,toZ:bz},r+RADIUS*scale,.94);
-    const rotor=rotorWall(course,startSeconds+step*STEP);
-    if(rotor)rebound(ball,rotor,(RADIUS+.19)*scale,.86);
+    if(course.rotor||course.rotors?.length){
+      for(const rotor of rotorWalls(course,startSeconds+step*STEP))rebound(ball,rotor,(RADIUS+.19)*scale,.86);
+    }
     const speed=Math.hypot(ball.vx,ball.vz), dx=ball.x-previousX, dz=ball.z-previousZ;
     const [cupX,cupZ]=course.cup, travel=dx*dx+dz*dz;
     const across=travel?clamp(((cupX-previousX)*dx+(cupZ-previousZ)*dz)/travel,0,1):0;

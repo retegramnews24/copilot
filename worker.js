@@ -433,7 +433,7 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:s.game==='golf'?{capacity:s.capacity,hole:s.hole}:{})};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:s.game==='golf'?{capacity:s.capacity,hole:s.hole,campaign:s.campaign,holes:s.holes}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
   return [...entries.values()].filter(s=>s.game!=='cluedo'&&(isArcade(s.game)||!activeTable(s)||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
@@ -527,7 +527,7 @@ export class Room extends DurableObject {
    if(isArcade(body.game)){
     const room=id(),prefix=body.game==='labyrinth'?'lab:':body.game==='golf'?'golf:':'moto:';
     const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix+room));
-    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,appearance:body.game==='golf'?body.appearance:undefined,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
+    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,appearance:body.game==='golf'?body.appearance:undefined,campaign:body.game==='golf'?body.campaign:undefined,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
     if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
    }
    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));

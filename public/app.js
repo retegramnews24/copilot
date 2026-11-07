@@ -2,6 +2,7 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
+import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=9';
 import {golfColors} from './appearance.js?v=8';
 import './labyrinth/avatar.js?v=8';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
@@ -80,6 +81,8 @@ function renderLobby(){
    card.className='table-card';info.className='turn-note';
    title.textContent='Golf '+game.number+' · '+gameTitle(game);
    info.textContent=game.players.length+'/'+game.capacity+' giocatori'+(game.phase==='playing'?' · Buca '+(game.hole+1):' · In attesa');
+   const route=campaignInfo(game.campaign);
+   if(route)info.textContent+=' · '+route.name+' · '+route.difficulty;
    const mine=game.players.some(p=>p.id===identity?.player);
    enter.disabled=!identity;
    enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';
@@ -878,10 +881,16 @@ function golfPost(type,payload={}){
 function publishGolf(ack=false){
  if(golfSnapshot)golfPost('state',{...golfSnapshot,player:identity.player,ack});
 }
+const golfCampaign=$('golf-campaign');
+golfCampaign.replaceChildren(...CAMPAIGNS.map(set=>new Option(set.difficulty+' · '+set.name,set.id)));
+const lastGolfCampaign=read('binotto-golf-campaign',DEFAULT_CAMPAIGN);
+golfCampaign.value=campaignInfo(lastGolfCampaign)?lastGolfCampaign:DEFAULT_CAMPAIGN;
+golfCampaign.onchange=()=>{try{save('binotto-golf-campaign',golfCampaign.value)}catch(error){err(error.message)}};
+
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=8'+(online?'&online=1':'');
+ $('golf-frame').src='/golf/index.html?v=9'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
  tg?.BackButton?.show();
 }
 async function syncGolf(){
@@ -902,7 +911,7 @@ async function openGolf(selected){
  try{
   const appearance=golfColors();
   if(!selected){
-   golfSnapshot=await request('/api/create',{game:'golf',appearance});
+   golfSnapshot=await request('/api/create',{game:'golf',appearance,campaign:golfCampaign.value});
   }else{
    const path='/api/golf/'+selected, game=games.find(g=>g.room===selected);
    const watching=game&&!game.players.some(p=>p.id===identity.player)&&(game.phase!=='waiting'||game.players.length>=game.capacity);
@@ -938,7 +947,7 @@ window.addEventListener('message',async event=>{
  if(data?.type==='golf:exit'){closeGolf();return;}
  const selected=golfRoom;
  if(!selected||data?.type!=='golf:action'||!['start','shot','close'].includes(data.kind))return;
- const payload=data.kind==='shot'?data.payload:{};
+ const payload=data.kind==='close'?{}:data.payload;
  try{
   const result=await request('/api/golf/'+selected+'/'+data.kind,payload);
   if(golfRoom===selected){

@@ -1,3 +1,5 @@
+import {CAMPAIGNS} from './campaigns.js?v=9';
+export {CAMPAIGNS};
 import {validBallColors} from '../appearance.js?v=8';
 export {BALL_KEY,validBallColors} from '../appearance.js?v=8';
 
@@ -28,12 +30,17 @@ export const COURSES = [
 export const WIDTH = 26, DEPTH = 16, RADIUS = .24, CUP = .61;
 export const COLORS = ['#ffd972','#ff82b6','#70eaff','#b39bff','#aaf58c','#ff9a70','#f9f3ed','#74a3ff'];
 export function rotorWall(course, seconds) {
-  if (!course.rotor) return null;
-  const [x,z,length,rate] = course.rotor, dx = Math.cos(seconds*rate)*length, dz = Math.sin(seconds*rate)*length;
-  return wall(x-dx,z-dz,x+dx,z+dz);
+  return rotorWalls(course,seconds)[0]??null;
 }
 
-export const COURSE_VERSION = 3;
+export function rotorWalls(course,seconds) {
+  return (course.rotors??(course.rotor?[course.rotor]:[])).map(([x,z,length,rate])=>{
+    const dx=Math.cos(seconds*rate)*length,dz=Math.sin(seconds*rate)*length;
+    return wall(x-dx,z-dz,x+dx,z+dz);
+  });
+}
+
+export const COURSE_VERSION = 4;
 const scale = 1.55;
 const scalePoint = point => point.map(value => value * scale);
 const scaleAreas = areas => areas?.map(({x,z,w,h}) => water(x*scale,z*scale,w*scale,h*scale));
@@ -70,9 +77,54 @@ const renovatedCourses=COURSES.map((course,index)=>{
     bumpers:[...(course.bumpers??[]),...(extraBumpers??[])]});
 });
 
-export function courseFor(index,version) {
-  if(version===COURSE_VERSION)return renovatedCourses[index];
-  return (version===2 ? expandedCourses : COURSES)[index];
+export const DEFAULT_CAMPAIGN=CAMPAIGNS[0].id;
+export const campaignInfo=id=>CAMPAIGNS.find(c=>c.id===id);
+
+function buildHole(spec,scale,seed){
+  const [name,par,w,d,teeZ,cupZ,theme,gates]=spec;
+  const rect=(x,z,width,depth)=>water(x*scale,z*scale,width*scale,depth*scale);
+  const rail=(x,z,toX,toZ)=>wall(x*scale,z*scale,toX*scale,toZ*scale);
+  const course={name,par,scale,width:w*scale,depth:d*scale,theme,sceneSeed:seed,colors:COURSES[theme].colors,
+    tee:[3*scale,teeZ*scale],cup:[(w-3)*scale,cupZ*scale],walls:[],water:[],rough:[],bridges:[],bumpers:[],rotors:[]};
+  const tips={rail:'Passa tra le sponde. Puoi anche usare il rimbalzo.',water:'Dosa il tiro e attraversa i ponti lungo il centro.',
+    sand:'La sabbia frena la pallina. Cerca le corsie di prato.',bumper:'Gli ostacoli rotondi cambiano la direzione del tiro.',
+    rotor:'Guarda le pale prima di passare e sfrutta il lato libero.'};
+  course.tip=tips[gates.find(g=>g[3]==='water')?.[3]??gates.at(-1)?.[3]]??'Il centro è libero. Usa il primo green per provare la potenza.';
+  for(const [index,[x,z,gap,kind]] of gates.entries()){
+    const lo=z-gap/2,hi=z+gap/2,direction=index%2?1:-1;
+    if(kind==='water'){
+      const span=3.25;
+      course.water.push(rect(x,0,span,lo),rect(x,hi,span,d-hi));
+      course.bridges.push(rect(x,lo,span,gap));
+      course.walls.push(rail(x,lo,x+span,lo),rail(x,hi,x+span,hi));
+    }else if(kind==='sand'){
+      course.rough.push(rect(x-2,0,4,lo),rect(x-2,hi,4,d-hi));
+    }else if(kind==='bumper'){
+      course.bumpers.push([x*scale,(lo-1)*scale,1.08*scale],[(x+.75)*scale,(hi+1)*scale,1.08*scale]);
+      course.walls.push(rail(x-1.6,0,x-1.6,lo-2),rail(x+1.6,hi+2,x+1.6,d));
+    }else if(kind==='rotor'){
+      const side=z<d/2?1:-1,length=2.1;
+      course.rotors.push([x*scale,(z+side*(gap/2+1.6))*scale,length*scale,direction*1.5]);
+      const edge=side===1?lo:hi;
+      course.walls.push(rail(x-1.1,side===1?0:d,x,edge));
+    }else{
+      course.walls.push(rail(x+2*direction,0,x,lo),rail(x-2*direction,d,x,hi));
+    }
+  }
+  return course;
+}
+
+const campaignCourses=new Map(CAMPAIGNS.map((set,i)=>[set.id,
+  set.holes.map((spec,hole)=>buildHole(spec,set.scale,100*(i+1)+hole))]));
+
+export function coursesFor(version,setId) {
+  if(version===COURSE_VERSION)return campaignCourses.get(setId)??campaignCourses.get(DEFAULT_CAMPAIGN);
+  if(version===3)return renovatedCourses;
+  return version===2 ? expandedCourses : COURSES;
+}
+
+export function courseFor(index,version,setId) {
+  return coursesFor(version,setId)[index];
 }
 
 export function ballColors(colors,index=0) {

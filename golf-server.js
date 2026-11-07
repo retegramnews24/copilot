@@ -1,3 +1,4 @@
+import { coursesFor } from './public/golf/courses.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, CAPACITY } from './public/golf/match.js';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const WAIT=900000, KEEP=300000;
@@ -6,7 +7,7 @@ export class GolfRoom {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
   summary(match){
     const {room,number,game,phase,created,revision}=match;
-    return {room,number,game,phase,created,revision,capacity:CAPACITY,hole:match.hole,
+    return {room,number,game,phase,created,revision,capacity:CAPACITY,hole:match.hole,campaign:match.campaign,holes:coursesFor(match.courseVersion,match.campaign).length,
       players:match.players.map(({id,name})=>({id,name})),expires:null};
   }
   async lobby(path,body){
@@ -41,8 +42,8 @@ export class GolfRoom {
       let match=await this.ctx.storage.get('golf');
       try {
         if(action==='init' && !match && req.method==='POST'){
-          const {room,number,appearance}=await req.json();
-          match=makeMatch(room,number,user,now,appearance);
+          const {room,number,appearance,campaign}=await req.json();
+          match=makeMatch(room,number,user,now,appearance,campaign);
           await this.save(match);
           return json({state:match,summary:this.summary(match),now});
         }
@@ -58,7 +59,7 @@ export class GolfRoom {
           return json({ok:true});
         }
         if(action==='join')joinMatch(match,user,raw ? JSON.parse(raw)?.appearance : null);
-        else if(action==='start')startMatch(match,user.player,now);
+        else if(action==='start')startMatch(match,user.player,now,2,raw ? JSON.parse(raw)?.campaign : undefined);
         else if(action==='shot')takeShot(match,user.player,JSON.parse(raw),now);
         else return json({error:'Operazione non disponibile.'},404);
         await this.save(match);

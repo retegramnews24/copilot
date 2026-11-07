@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { COURSES, COURSE_VERSION, courseFor, ballColors } from '../public/golf/courses.js';
+import { COURSES, COURSE_VERSION, CAMPAIGNS, coursesFor, courseFor, ballColors } from '../public/golf/courses.js';
 import { upright, rollBy, rotateVector } from '../public/golf/roll.js';
 import { simulateShot, estimateRoll } from '../public/golf/physics.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, HOLE_TIME, BREAK } from '../public/golf/match.js';
@@ -11,6 +11,14 @@ near(rotateVector(rolled,[0,1,0]),[1,0,0]);
 near(rollBy(rolled,-quarter,0,.24),upright);
 near(rotateVector(rollBy(upright,0,quarter,.24),[0,1,0]),[0,0,1]);
 
+function powerFor(distance){
+  let low=0,high=1;
+  for(let step=0;step<20;step++){
+    const power=(low+high)/2;
+    if(estimateRoll(COURSES[0],0,0,power)<distance+.06)low=power;else high=power;
+  }
+  return high;
+}
 const routes=[
   [],
   [[8,12],[14,12],[15.5,5],[20,5]],
@@ -22,25 +30,41 @@ const routes=[
   [[8,4.6],[16,4.6],[16,8],[21,8]],
   [[8,12],[10.7,12],[11,6.7],[16,6.7],[20,5],[23,5]]
 ];
-for(const version of [undefined,2,COURSE_VERSION])for(const i of COURSES.keys()){
+for(const version of [undefined,2,3])for(const i of COURSES.keys()){
   const course=courseFor(i,version),scale=course.scale??1;
   let position=course.tee;
   const goals=[...routes[i].map(point=>point.map(value=>value*scale)),course.cup];
   for(const target of goals){
     const dx=target[0]-position[0],dz=target[1]-position[1];
-    const distance=Math.hypot(dx,dz)/scale+.06;
-    let low=0,high=1;
-    for(let step=0;step<20;step++){
-      const power=(low+high)/2;
-      if(estimateRoll(COURSES[0],0,0,power)<distance)low=power;else high=power;
-    }
-    const power=high;
+    const power=powerFor(Math.hypot(dx,dz)/scale);
     const choices=Array.from({length:24},(_,phase)=>simulateShot(course,...position,Math.atan2(dz,dx),power,phase*.18));
     const error=shot=>shot.penalty?Infinity:Math.hypot(shot.end[0]-target[0],shot.end[1]-target[1]);
     const best=choices.sort((a,b)=>error(a)-error(b))[0];
     assert.ok(error(best)<.68*scale,course.name+' has a playable route toward '+target);
     position=best.end;
     if(target===course.cup)assert.equal(best.sunk,true,course.name);
+  }
+}
+for(const set of CAMPAIGNS){
+  const courses=coursesFor(COURSE_VERSION,set.id);
+  assert.equal(courses.length,10);
+  for(const [i,course] of courses.entries()){
+    assert.ok(course.width>courseFor(0,3).width&&course.depth>courseFor(0,3).depth);
+    let position=course.tee;
+    const gates=set.holes[i].at(-1);
+    const goals=[...gates.flatMap(([x,z,,kind])=>kind==='water'?[[x-1,z],[x+4.25,z]]:[[x+.65,z]])
+      .map(point=>point.map(value=>value*set.scale)),course.cup];
+    assert.ok(goals.length<=10);
+    for(const target of goals){
+      const dx=target[0]-position[0],dz=target[1]-position[1];
+      const error=shot=>shot.penalty?Infinity:Math.hypot(shot.end[0]-target[0],shot.end[1]-target[1]);
+      const candidates=Array.from({length:16},(_,phase)=>simulateShot(course,...position,Math.atan2(dz,dx),
+        powerFor(Math.hypot(dx,dz)/set.scale),phase*.27));
+      const best=candidates.sort((a,b)=>error(a)-error(b))[0];
+      assert.ok(error(best)<.8*set.scale,course.name+' has a playable route toward '+target);
+      position=best.end;
+      if(target===course.cup)assert.equal(best.sunk,true,course.name);
+    }
   }
 }
 for(const power of [.43,.65,1])assert.equal(simulateShot(COURSES[0],3,8,0,power).sunk,true);
@@ -64,7 +88,7 @@ assert.deepEqual(match.players[0].appearance,skin);
 assert.throws(()=>startMatch(match,a.player,0),/Aspetta/);
 joinMatch(match,b);assert.throws(()=>startMatch(match,b.player,0),/Solo/);
 startMatch(match,a.player,0);assert.throws(()=>joinMatch(match,{player:'tg:3',name:'Tre'}),/iniziata/);
-const input={hole:0,strokes:0,angle:0,power:.43};
+const input={hole:0,strokes:0,angle:0,power:.54};
 takeShot(match,a.player,input,1);takeShot(match,b.player,input,1);
 assert.equal(match.players.every(p=>p.shot.sunk),true);
 assert.throws(()=>takeShot(match,a.player,input,2),/Attendi/);
@@ -74,10 +98,10 @@ advanceMatch(match,landed);
 assert.equal(match.players.every(p=>p.total===1),true);
 advanceMatch(match,landed+BREAK);
 assert.equal(match.hole,1);
-for(let i=1;i<COURSES.length;i++){
+for(let i=1;i<10;i++){
   advanceMatch(match,match.deadline);
   if(match.nextAt)advanceMatch(match,match.nextAt);
 }
 assert.equal(match.phase,'finished');assert.equal(match.winners.length,2);
-assert.equal(match.players[0].total,1+8*11);
-console.log('PASS Golf: all nine courses, bank shots, water reset, simultaneous shots, scoring and automatic transitions.');
+assert.equal(match.players[0].total,1+9*11);
+console.log('PASS Golf: all 30 campaign holes and nine legacy courses, bank shots, water reset, simultaneous shots, scoring and automatic transitions.');

@@ -1,12 +1,15 @@
-import { COURSES, COURSE_VERSION, courseFor, RADIUS, ballColors } from './courses.js?v=7';
-import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=7';
-import { drawCourse } from './render.js?v=7';
+import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=9';
+import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=9';
+import { drawCourse } from './render.js?v=9';
 import { upright, rollBy } from './roll.js';
 import {golfColors,validBallColors} from '../appearance.js?v=8';
 import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});
-const online=new URLSearchParams(location.search).get('online')==='1';
+const query=new URLSearchParams(location.search),online=query.get('online')==='1';
+const campaignSelect=$('route-choice');
+campaignSelect.replaceChildren(...CAMPAIGNS.map(set=>new Option(set.difficulty+' · '+set.name,set.id)));
+let waitingCampaign=null;
 let audio=null, lastSound=null, camera=null, lastFrame=0, appearance=golfColors(), orbit=null, watching=null, watchOptions='';
 const ballRolls=new Map();
 const ZOOM_NEAR=.43,ZOOM_FAR=2.5;
@@ -28,10 +31,11 @@ function resetAim(course){
   setPower(43);drag=null;orbit=null;ballRolls.clear();
 }
 
-function solo(){
+function solo(campaign=DEFAULT_CAMPAIGN,autostart=false){
   offset=0;me='solo';
-  state=makeMatch('solo',0,{player:me,name:'Tu'},Date.now(),appearance);
-  startMatch(state,me,Date.now(),1);
+  state=makeMatch('solo',0,{player:me,name:'Tu'},Date.now(),appearance,campaign);
+  waitingCampaign=null;
+  if(autostart)startMatch(state,me,Date.now(),1);
   hole=-1;
   $('card').hidden=true;$('scores').setAttribute('aria-expanded','false');
 }
@@ -66,26 +70,38 @@ function shoot(heading=camera.yaw){
 function say(message){note=message;noteUntil=performance.now()+3500;}
 function updatePanel(){
   const panel=$('panel'), btn=$('start'), title=$('panel-title'), text=$('panel-text');
+  const canChoose=state?.phase==='waiting'&&state.host===me&&state.courseVersion===COURSE_VERSION;
+  $('route-picker').hidden=!canChoose;
+  if(canChoose){
+    if(waitingCampaign!==state.campaign){
+      waitingCampaign=state.campaign;
+      campaignSelect.value=waitingCampaign??DEFAULT_CAMPAIGN;
+    }
+    putText('route-note',campaignInfo(campaignSelect.value)?.description??'');
+  }
   panel.hidden=!!state&&state.phase==='playing'&&!state.nextAt;
   if(panel.hidden)return;
   btn.hidden=true;
   if(!state){title.textContent='Collegamento…';text.textContent='Apertura della stanza.';return;}
   if(state.phase==='waiting'){
-    title.textContent='Stanza '+state.number;
-    text.textContent=state.players.map(p=>p.name).join(' · ')+' — '+state.players.length+'/8 giocatori. '+
-      (player()?'Gli amici possono entrare dalla lobby.':'Stai assistendo. La gara deve ancora iniziare.');
-    btn.hidden=state.host!==me;btn.disabled=state.players.length<2||busy;btn.textContent='Inizia la gara';
+    title.textContent=online?'Stanza '+state.number:'Scegli il percorso';
+    text.textContent=online ? state.players.map(p=>p.name).join(' · ')+' — '+state.players.length+'/8 giocatori. '+
+      (player()?'Gli amici possono entrare dalla lobby.':'Stai assistendo. La gara deve ancora iniziare.') : 'Tre percorsi da dieci buche.';
+    if(online&&!canChoose&&campaignInfo(state.campaign))text.textContent+=' '+campaignInfo(state.campaign).name+'.';
+    btn.hidden=state.host!==me;btn.disabled=(online&&state.players.length<2)||busy;btn.textContent=online?'Inizia la gara':'Inizia il giro';
   }else if(state.phase==='finished'){
     title.textContent=online?'Risultato finale':'Giro completato';
     text.textContent=online?state.winners.map(p=>p.name).join(' e ')+' · '+state.players.find(p=>p.id===state.winners[0].id).total+' colpi'
-      : player().total+' colpi in nove buche.';
+      : player().total+' colpi in '+coursesFor(state.courseVersion,state.campaign).length+' buche.';
     btn.hidden=false;btn.disabled=false;btn.textContent=online?'Torna ai giochi':'Nuovo giro';
   }else{
     title.textContent='Buca completata';text.textContent='Tra poco si passa alla prossima buca.';
   }
 }
 function table(){
-  const signature=JSON.stringify(state?.players.map(p=>[p.id,p.scores,p.total,p.strokes,p.done,p.appearance]));
+  const count=coursesFor(state?state.courseVersion:COURSE_VERSION,state?.campaign).length;
+  const columns=Array.from({length:count},(_,i)=>i);
+  const signature=JSON.stringify([count,state?.players.map(p=>[p.id,p.scores,p.total,p.strokes,p.done,p.appearance])]);
   if(signature===revision)return;
   revision=signature;
   const row=(values,tag)=>{
@@ -93,10 +109,10 @@ function table(){
     for(const value of values){const td=document.createElement(tag);td.textContent=value;tr.append(td);}
     return tr;
   };
-  $('score-head').replaceChildren(row(['Giocatore',...COURSES.map((_,i)=>i+1),'Tot.'],'th'));
+  $('score-head').replaceChildren(row(['Giocatore',...columns.map(i=>i+1),'Tot.'],'th'));
   const rows=(state?.players||[]).slice().sort((a,b)=>b.scores.length-a.scores.length||a.total-b.total);
   $('score-body').replaceChildren(...rows.map(p=>{
-    const tr=row([p.name,...COURSES.map((_,i)=>p.scores[i]??(i===state?.hole&&state?.phase==='playing'?p.strokes:'–')),p.total],'td');
+    const tr=row([p.name,...columns.map(i=>p.scores[i]??(i===state?.hole&&state?.phase==='playing'?p.strokes:'–')),p.total],'td');
     const marker=document.createElement('span');marker.className='ball-color';
     const [top,bottom]=ballColors(p.appearance,p.color);
     marker.style.background='linear-gradient('+top+' 50%, '+bottom+' 50%)';
@@ -138,7 +154,7 @@ function rotationAt(p,now,[x,z],radius){
 }
 function watchPlayer(p){
   const watchingRound=online&&state?.phase==='playing'&&(!p||p.done&&!state.nextAt);
-  $('controls').hidden=online&&!!state&&(!p||watchingRound);
+  $('controls').hidden=state?.phase==='waiting'||online&&!!state&&(!p||watchingRound);
   $('watch-tools').hidden=!watchingRound;
   if(!watchingRound)return null;
   const active=state.players.filter(p=>!p.done), players=active.length?active:state.players;
@@ -160,7 +176,8 @@ function watchPlayer(p){
 const putText=(id,text)=>{const node=$(id);if(node.textContent!==text)node.textContent=text;};
 function draw(stamp=performance.now()){
   if(state&&!online)advanceMatch(state,time());
-  const course=courseFor(state?.hole??0,state ? state.courseVersion : COURSE_VERSION), now=time();
+  const courses=coursesFor(state?state.courseVersion:COURSE_VERSION,state?.campaign);
+  const course=courses[state?.hole??0], now=time();
   if(hole!==(state?.hole??0)||camera?.course!==course){
     hole=state?.hole??0;resetAim(course);
     camera={course,x:course.tee[0],z:course.tee[1],yaw:angle(),targetYaw:angle(),pitch:.18,free:false,zoom:zoomTarget};
@@ -174,8 +191,9 @@ function draw(stamp=performance.now()){
     lastSound=p.shot.at;
     if(p.shot.sunk||p.shot.penalty)sound(p.shot.sunk?'sunk':'water');
   }
-  putText('counter','BUCA '+(hole+1)+' / '+COURSES.length+'  ·  PAR '+course.par);
+  putText('counter','BUCA '+(hole+1)+' / '+courses.length+'  ·  PAR '+course.par);
   putText('course',course.name);
+  putText('route-title',campaignInfo(state?.campaign)?.name??'');
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');
   putText('tip',watched?'Su PC, tieni premuto il destro per ruotare la visuale.':
@@ -340,8 +358,12 @@ $('scores').onclick=()=>{
 };
 $('start').onclick=()=>{
   if(!$('close-confirm').hidden)return;
-  if(state?.phase==='finished'){if(online)leave();else solo();}
-  else if(online)action('start');
+  if(state?.phase==='finished'){if(online)leave();else solo(state.campaign);}
+  else if(state?.phase==='waiting'){
+    const campaign=state.courseVersion===COURSE_VERSION?campaignSelect.value:undefined;
+    if(online)action('start',{campaign});
+    else startMatch(state,me,time(),1,campaign);
+  }
 };
 
 window.addEventListener('message',e=>{
@@ -357,7 +379,10 @@ window.addEventListener('message',e=>{
   }
   if(data?.type==='golf:error'){busy=false;say(data.message);}
 });
-if(!online)solo();
+if(!online){
+  const campaign=campaignInfo(query.get('campaign'));
+  solo(campaign?.id,!!campaign);
+}
 window.addEventListener('pagehide',()=>cancelAnimationFrame(frame));
 post('ready');
 draw();
