@@ -1,0 +1,26 @@
+import assert from 'node:assert/strict';
+import {initialScopa,scopaView,playScopa,captures} from '../scopa.js';
+import {initialUno,unoView,playUno} from '../uno.js';
+import {initialBriscola,briscolaView,playBriscola} from '../briscola.js';
+import {initialNaval,navalView,playNaval} from '../naval.js';
+import {initialScarabeo,scarabeoView,playScarabeo} from '../scarabeo.js';
+import {initialConnect4,playConnect4} from '../connect4.js';
+import {initialCheckers,playCheckers,checkersSnapshot,checkersKey} from '../checkers.js';
+import {Chess} from 'chess.js';
+import {chooseAction,tutorial} from '../table-ai.js';
+import {winningSeats,resultsFor,topFive} from '../leaderboard.js';
+let seed=79;const rng=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);
+// Capture priority, exact sum, last-trick exception, side-effect-free rejection.
+const c=(suit,rank)=>({id:suit*10+rank-1,suit,rank});
+assert.deepEqual(captures([c(0,3),c(0,5),c(0,8)],8),[[7]]);
+assert.deepEqual(captures([c(0,3),c(0,5)],8),[[2,4]]);
+let last=initialScopa(2,rng);last.hands=[[c(0,7)],[]];last.deck=[];last.table=[c(1,7)];last.captured=[[],[]];last.scores=[10,0];last=playScopa(last,0,{kind:'play',card:6,take:[16]},rng);assert.equal(last.scope[0],0);assert.ok(last.result);assert.equal(last.breakdown[0].settebello,1);
+for(const n of [2,3,4])for(let round=0;round<30;round++){let g=initialScopa(n,rng),moves=0;while(!g.result){const v=scopaView(g,g.turn),watch=scopaView(g);assert.deepEqual(watch.hand,[]);assert.ok(!('hands'in watch)&&!('deck'in watch));const all=[...g.hands.flat(),...g.deck,...g.table,...g.captured.flat()];assert.equal(all.length,40);assert.equal(new Set(all.map(c=>c.id)).size,40);const m=round%2?chooseAction('scopa',v,g.turn):v.legalMoves[Math.floor(rng()*v.legalMoves.length)];assert.ok(m);assert.throws(()=>playScopa(g,(g.turn+1)%n,m,rng));g=playScopa(g,g.turn,m,rng);assert.ok(++moves<3000)}assert.ok(g.scores[g.winners[0]]>=11);if(n===4)assert.deepEqual(g.winners,[g.winners[0],g.winners[0]+2]);}
+console.log('PASS Scopa: 90 full matches to 11, 2/3/4 players, unique deck, privacy, sum/equal priority, no last-card scopa and team scoring.');
+for(const game of ['uno','briscola','briscola5','naval','scarabeo','connect4','checkers','chess']){const counts=game==='uno'?[2,8]:game==='briscola'?[2,3,4]:game==='briscola5'?[5]:[2];for(const n of counts){let g=game==='uno'?initialUno(n,rng):game.startsWith('briscola')?initialBriscola(n,rng):game==='naval'?initialNaval():game==='scarabeo'?initialScarabeo(n,rng):game==='connect4'?initialConnect4():game==='checkers'?checkersSnapshot(initialCheckers()):new Chess(),plies=0;const repeats={};while(!(game==='chess'?g.isGameOver():g.result)){let seat=game==='chess'?(g.turn()==='w'?0:1):g.turn;if(game==='naval'&&g.phase==='placement')seat=g.ready.findIndex(r=>!r);if(game==='scarabeo'&&g.pending)seat=g.pending.by===0?1:0;const v=game==='uno'?unoView(g,seat):game.startsWith('briscola')?briscolaView(g,seat):game==='naval'?navalView(g,seat):game==='scarabeo'?scarabeoView(g,seat):game==='chess'?{fen:g.fen()}:g;const a=chooseAction(game,v,seat);assert.ok(a,game+' has action');if(plies<3){const help=tutorial(game,v,seat,plies);assert.ok(help.text&&help.action)}if(game==='uno')g=playUno(g,seat,a,rng);else if(game.startsWith('briscola'))g=playBriscola(g,seat,a,rng);else if(game==='naval')g=playNaval(g,seat,a);else if(game==='scarabeo')g=playScarabeo(g,seat,a,rng);else if(game==='connect4')g=playConnect4(g,a.column);else if(game==='checkers'){const played=playCheckers(g,a.path),key=checkersKey(played.game);repeats[key]=(repeats[key]||0)+1;g=checkersSnapshot(played.game,played.move,repeats[key])}else g.move(a);if(++plies>1500)throw Error(game+' did not finish');}console.log('PASS AI full match',game,n,plies)}}
+const players=Array.from({length:8},(_,i)=>({id:'tg:'+i,name:'Player '+i}));let records=[];for(let i=0;i<8;i++)for(let j=0;j<=i;j++)records.push(...resultsFor({room:i+'-'+j,game:j%2?'uno':'scopa',phase:'finished',players,[j%2?'uno':'scopa']:{result:'win',winners:[i]}}));const top=topFive(records);assert.equal(top.length,5);assert.deepEqual(top.map(p=>p.wins),[8,7,6,5,4]);assert.equal(top[0].games.uno,4);assert.equal(resultsFor({mode:'tutorial',phase:'finished',game:'connect4',connect4:{result:'1-0'},players}).length,0);assert.deepEqual(winningSeats({game:'briscola',briscola:{result:'win',winners:[0,2]}}),[0,2]);assert.equal(topFive(records,'ai').length,0);
+console.log('PASS historical ranking: top five, game breakdown, tutorial exclusion, team winners and separate AI ranking.');
+
+assert.deepEqual(winningSeats({game:'scarabeo',scarabeo:{result:'draw',winners:[0,1]}}),[]);assert.equal(resultsFor({room:'old-archived',game:'chess',phase:'finished',archived:true,players,chess:{result:'1-0'}}).length,1);
+
+const soloResult=resultsFor({room:'solo-win',game:'connect4',mode:'ai',phase:'finished',players:[players[0],{id:'bot:1',name:'AI 1'}],connect4:{result:'1-0'}});assert.equal(topFive(soloResult,'ai')[0].wins,1);assert.deepEqual(topFive(soloResult),[]);assert.deepEqual(resultsFor({room:'bot-win',game:'connect4',mode:'ai',phase:'finished',players:[players[0],{id:'bot:1',name:'AI 1'}],connect4:{result:'0-1'}})[0].winners,[]);

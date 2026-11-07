@@ -6,11 +6,15 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node tests/sea-cards.test.js && node tests/new-table-games.test.js && node tests/uno.test.js && node tests/connect4.test.js && node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js && node tests/labyrinth-graphics.test.js",
-    "test:multiplayer-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/expedition-runtime.test.js .test-bundle/worker.js"
+    "test": "node tests/scopa-ai.test.js && node tests/sea-cards.test.js && node tests/new-table-games.test.js && node tests/uno.test.js && node tests/connect4.test.js && node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js && node tests/labyrinth-graphics.test.js",
+    "test:multiplayer-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/expedition-runtime.test.js .test-bundle/worker.js",
+    "test:table-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/table-ai-runtime.test.js .test-bundle/worker.js",
+    "test:ui": "node tests/ui-scopa.test.mjs"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.0.0",
+    "esbuild": "0.28.2",
+    "jsdom": "31.0.0"
   },
   "dependencies": {
     "chess.js": "1.4.0"

@@ -1,7 +1,9 @@
 import {initialNaval,playNaval,navalView} from './naval.js';
 import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
 import {initialScarabeo,playScarabeo,scarabeoView} from './scarabeo.js';
-import {initialCluedo,playCluedo,cluedoView} from './cluedo.js';
+import {initialScopa,playScopa,scopaView} from './scopa.js';
+import {chooseAction,tutorial} from './table-ai.js';
+import {winningSeats,resultsFor,topFive} from './leaderboard.js';
 import {stagedGame,limits,activeTable,createSeries,settleSeries} from './match-series.js';
 import {initialUno,playUno,unoView} from './uno.js';
 import {initialConnect4,playConnect4} from './connect4.js';
@@ -137,6 +139,7 @@ export default {
   if(lab)return env.ROOMS.get(env.ROOMS.idFromName('lab:'+lab[1])).fetch(new Request(u.origin+'/labyrinth/'+lab[2]+u.search,req));
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
+  if(u.pathname==='/api/leaderboard'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/leaderboard'+u.search));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
   if(u.pathname==='/api/lobby/ws'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/ws',req));
   if(req.method==='POST'&&u.pathname==='/api/create'){
@@ -152,15 +155,56 @@ export default {
   if(response.ok&&(req.method==='POST'||match[2]==='state')){
    const result=await response.clone().json();
    const s=result.state||result;
-   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,created:s.created,expires:s.expires})}));
+   await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires})}));
   }
   return response;
  }
 };
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,async()=>hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));}
- public(s,viewer=null){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name})),turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,cluedo:s.cluedo?cluedoView(s.cluedo,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
- resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno')s.uno=initialUno(s.players.length);else if(s.game==='scarabeo')s.scarabeo=initialScarabeo(s.players.length);else if(s.game==='cluedo')s.cluedo=initialCluedo(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
+ public(s,viewer=null){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
+ resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno')s.uno=initialUno(s.players.length);else if(s.game==='scarabeo')s.scarabeo=initialScarabeo(s.players.length);else if(s.game==='scopa')s.scopa=initialScopa(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
+ tutorialView(s){const seat=0,view=this.public({...s,mode:'ai'},s.players[0].id),g=view.naval||view.briscola||view[s.game]||view.chess;const can=s.scarabeo?.pending?s.scarabeo.pending.by!==0&&!Object.hasOwn(s.scarabeo.pending.votes,0):s.naval?.phase==='placement'?!s.naval.ready[0]:s.turn===0;return can?tutorial(s.game,g,seat,s.moves.length):{title:'Turno dell’AI',text:'Osserva la risposta dell’avversario. Poi potrai scegliere liberamente o provare la mossa suggerita.',reason:g.lastEvent||'',action:null};}
+ botSeat(s){if(s.phase!=='playing'||!['ai','tutorial'].includes(s.mode))return -1;if(s.scarabeo?.pending)return s.players.findIndex((p,i)=>p.bot&&i!==s.scarabeo.pending.by&&!Object.hasOwn(s.scarabeo.pending.votes,i));if(s.naval?.phase==='placement')return s.players.findIndex((p,i)=>p.bot&&!s.naval.ready[i]);return s.players[s.turn]?.bot?s.turn:-1;}
+ async record(s){for(const result of resultsFor(s))await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/result',{method:'POST',body:JSON.stringify(result)}));}
+ async saveState(s){await this.ctx.storage.put('state',s);await this.record(s);if(!s.archived)await this.ctx.storage.setAlarm(this.botSeat(s)>=0?Date.now()+650:s.expires);}
+ async syncLobby(s){await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(this.summary(this.public(s)))}));}
+ applyMove(s,who,b){
+    if(s.naval||s.briscola){
+     const key=s.naval?'naval':'briscola',next=s.naval?playNaval(s.naval,who,b):playBriscola(s.briscola,who,b);s[key]=next;s.turn=next.turn;
+     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
+    }else if((s.scarabeo||s.scopa)){
+     const key=s.scarabeo?'scarabeo':'scopa',next=s.scarabeo?playScarabeo(s.scarabeo,who,b):playScopa(s.scopa,who,b);s[key]=next;s.turn=next.turn;
+     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
+    }else if(s.uno){
+     const next=playUno(s.uno,who,b);s.uno=next;s.turn=next.turn;s.drawOffer=null;
+     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
+    }else if(s.connect4){
+     if(who!==s.turn)throw Error('Non è il tuo turno.');
+     const next=playConnect4(s.connect4,b.column);s.connect4=next;s.turn=next.turn;s.drawOffer=null;
+     s.moves.push({column:b.column,row:next.lastMove.row,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
+    }else if(s.checkers){
+     if(who!==s.turn)throw Error('Non è il tuo turno.');
+     const played=playCheckers(s.checkers,b.path),key=checkersKey(played.game);
+     s.positions=s.positions||{};s.positions[key]=(s.positions[key]||0)+1;
+     s.moves.push({...played.move,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});
+     s.drawOffer=null;s.turn=played.game.turn;
+     s.checkers=checkersSnapshot(played.game,played.move,s.positions[key]);
+     if(s.checkers.result)s.phase='finished';
+    }else {
+     if(!s.chess)throw Error('Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.');
+     if(who!==s.turn)throw Error('Non è il tuo turno.');
+     if(typeof b.from!=='string'||typeof b.to!=='string')throw Error('Mossa non valida.');
+     const game=new Chess();
+     for(const move of s.moves)game.move(move.san);
+     let moved;try{moved=game.move({from:b.from,to:b.to,promotion:b.promotion||'q'})}catch{throw Error('Mossa non consentita.')}
+     s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1,san:moved.san,from:moved.from,to:moved.to,...(moved.promotion?{promotion:moved.promotion}:{})});
+     s.drawOffer=null;s.turn=game.turn()==='w'?0:1;
+     s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
+     if(game.isGameOver())s.phase='finished';
+
+    }
+ }
  async broadcast(s){const tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
@@ -171,11 +215,14 @@ export class Room extends DurableObject {
     const path=new URL(req.url).pathname;
     if(path.startsWith('/lobby/'))return this.lobby(req,path);
     let s=await this.ctx.storage.get('state');
+    if(path==='/results')return json(s?resultsFor(s):[]);
+    if(s?.game==='cluedo')return json({error:'Cluedo è stato rimosso. Crea un nuovo tavolo di Scopa.'},410);
     if(path==='/init'){
      if(s)return json({error:'Stanza già esistente.'},409);
      const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],series:createSeries(b.target),game:['checkers','connect4','uno','scarabeo','cluedo','naval','briscola','briscola5'].includes(b.game)?b.game:'chess',chess:['checkers','connect4','uno','scarabeo','cluedo','naval','briscola','briscola5'].includes(b.game)?null:chessSnapshot(new Chess()),...(b.game==='naval'?{naval:initialNaval()}:{}),...(['briscola','briscola5'].includes(b.game)?{briscola:initialBriscola()}:{}),...(b.game==='scarabeo'?{scarabeo:initialScarabeo()}:{}),...(b.game==='cluedo'?{cluedo:initialCluedo()}:{}),...(b.game==='uno'?{uno:initialUno()}:{}),...(b.game==='connect4'?{connect4:initialConnect4()}:{}),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
-     await this.ctx.storage.put('state',s);await this.ctx.storage.setAlarm(s.expires);
+     s={room:req.headers.get('X-Room'),number:b.number||null,phase:'waiting',players:[{id:b.playerId||id(),name:name(b.name),token}],turn:0,revision:0,moves:[],series:createSeries(b.target),game:['checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5'].includes(b.game)?b.game:'chess',chess:['checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5'].includes(b.game)?null:chessSnapshot(new Chess()),...(b.game==='naval'?{naval:initialNaval()}:{}),...(['briscola','briscola5'].includes(b.game)?{briscola:initialBriscola()}:{}),...(b.game==='scarabeo'?{scarabeo:initialScarabeo()}:{}),...(b.game==='scopa'?{scopa:initialScopa()}:{}),...(b.game==='uno'?{uno:initialUno()}:{}),...(b.game==='connect4'?{connect4:initialConnect4()}:{}),...(b.game==='checkers'?{checkers:checkersSnapshot(initialCheckers()),positions:{[checkersKey(initialCheckers())]:1}}:{}),created:Date.now(),expires:Date.now()+7*86400000};
+     s.mode=['ai','tutorial'].includes(b.mode)?b.mode:'people';if(s.mode!=='people'){if(b.target>1)throw Error('Il singolo è disponibile in partita veloce o tutorial.');const count=b.seats??limits(s.game).min;if(!Number.isInteger(count)||count<limits(s.game).min||count>limits(s.game).max)throw Error('Numero posti non valido.');while(s.players.length<count)s.players.push({id:'bot:'+s.players.length,name:'AI '+s.players.length,bot:true});this.resetRound(s);}
+     await this.saveState(s);
      return json({token,player:s.players[0].id,state:this.public(s,viewer)});
     }
     if(!s||(!s.archived&&s.expires<Date.now()))return json({error:'Stanza inesistente o scaduta.'},404);
@@ -199,22 +246,23 @@ export class Room extends DurableObject {
      return json({room:s.room,revision:s.revision,frames});
     }
     if(path.endsWith('/state')&&req.method==='GET'){
+     await this.record(s);if(this.botSeat(s)>=0)await this.ctx.storage.setAlarm(Date.now()+650);
      const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null'),legacy=req.headers.get('X-Player-Token');
      const old=s.players.find(p=>!p.id.startsWith('tg:')&&legacy&&p.token===legacy);
      if(user&&old&&!s.players.some(p=>p.id===user.player)){
       old.id=user.player;old.name=name(user.name);s.revision++;
-      await this.ctx.storage.put('state',s);await this.broadcast(s);
+      await this.saveState(s);await this.broadcast(s);
      }
      return json(this.public(s,viewer));
     }
     if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
     const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw||'{}');
     if(path.endsWith('/claim')){
-     if(s.phase!=='waiting'||(stagedGame(s.game)&&s.players.length>=limits(s.game).max))return json({error:stagedGame(s.game)?'Tavolo pieno o partita già avviata. Puoi assistere.':'Il secondo posto è già occupato. Puoi assistere.'},409);
+     if(s.mode==='ai'||s.mode==='tutorial'||s.phase!=='waiting'||(stagedGame(s.game)&&s.players.length>=limits(s.game).max))return json({error:stagedGame(s.game)?'Tavolo pieno o partita già avviata. Puoi assistere.':'Il secondo posto è già occupato. Puoi assistere.'},409);
      const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
      if(s.players.some(p=>p.id===user?.player))return json({error:'Sei già un giocatore di questa partita.'},409);
      const token=id(),p={id:user?.player||id(),name:name(user?.name||b.name),token};s.players.push(p);s.phase=stagedGame(s.game)?'waiting':'playing';s.revision++;
-     await this.ctx.storage.put('state',s);await this.broadcast(s);return json({token,player:p.id,state:this.public(s,viewer)});
+     await this.saveState(s);await this.broadcast(s);return json({token,player:p.id,state:this.public(s,viewer)});
     }
     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');const legacy=req.headers.get('X-Player-Token');const who=s.players.findIndex(p=>p.id===user?.player||(!p.id.startsWith('tg:')&&legacy&&p.token===legacy));
     if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
@@ -230,19 +278,20 @@ export class Room extends DurableObject {
      if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
      if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:s.checkers.reason||'Archiviata'};
      if(s.connect4)s.connect4={...s.connect4,legalMoves:[],reason:s.connect4.reason||'Archiviata'};
-     await this.ctx.storage.deleteAlarm();await this.ctx.storage.put('state',s);await this.broadcast(s);
+     await this.ctx.storage.deleteAlarm();await this.saveState(s);await this.broadcast(s);
      return json(this.public(s,viewer));
     }
     if(path.endsWith('/next-round')){
      if(who!==0||s.archived||s.phase!=='finished'||!s.series||s.series.done||!s.series.recorded||b.revision!==s.revision)return json({error:'La prossima manche può essere avviata dal creatore.'},409);
-     s.series.round++;s.series.recorded=false;this.resetRound(s);s.revision++;await this.ctx.storage.put('state',s);await this.broadcast(s);return json(this.public(s,viewer));
+     s.series.round++;s.series.recorded=false;this.resetRound(s);s.revision++;await this.saveState(s);await this.broadcast(s);return json(this.public(s,viewer));
     }
     if(stagedGame(s.game)&&path.endsWith('/start')){
      if(who!==0||s.phase!=='waiting'||s.players.length<limits(s.game).min||b.revision!==s.revision)return json({error:'Il creatore può avviare con almeno '+limits(s.game).min+' giocatori.'},409);
-     this.resetRound(s);if(s.series)s.series.wins=Array(s.players.length).fill(0);s.revision++;await this.ctx.storage.put('state',s);await this.broadcast(s);return json(this.public(s,viewer));
+     this.resetRound(s);if(s.series)s.series.wins=Array(s.players.length).fill(0);s.revision++;await this.saveState(s);await this.broadcast(s);return json(this.public(s,viewer));
     }
     if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
+    if(path.endsWith('/move')&&!s.scarabeo&&!(s.naval?.phase==='placement')&&who!==s.turn)return json({error:'Non è il tuo turno.'},403);
     if(path.endsWith('/offer-draw')){
      if((!s.chess&&!s.checkers&&!s.connect4)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
      if(s.drawOffer)return json({error:'C’è già una proposta in attesa.'},409);
@@ -252,53 +301,21 @@ export class Room extends DurableObject {
      if(!s.drawOffer||s.drawOffer.by===s.players[who].id)return json({error:'Non puoi rispondere a questa proposta.'},403);
      if(path.endsWith('/accept-draw')){s.phase='finished';const key=s.connect4?'connect4':s.checkers?'checkers':'chess';s[key]={...s[key],legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
      s.drawOffer=null;
-    }else if(path.endsWith('/move')&&(s.naval||s.briscola)){
-     const key=s.naval?'naval':'briscola',next=s.naval?playNaval(s.naval,who,b):playBriscola(s.briscola,who,b);s[key]=next;s.turn=next.turn;
-     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(path.endsWith('/move')&&(s.scarabeo||s.cluedo)){
-     const key=s.scarabeo?'scarabeo':'cluedo',next=s.scarabeo?playScarabeo(s.scarabeo,who,b):playCluedo(s.cluedo,who,b);s[key]=next;s.turn=next.turn;
-     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(path.endsWith('/move')&&s.uno){
-     const next=playUno(s.uno,who,b);s.uno=next;s.turn=next.turn;s.drawOffer=null;
-     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(path.endsWith('/move')&&s.connect4){
-     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
-     const next=playConnect4(s.connect4,b.column);s.connect4=next;s.turn=next.turn;s.drawOffer=null;
-     s.moves.push({column:b.column,row:next.lastMove.row,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(path.endsWith('/move')&&s.checkers){
-     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
-     const played=playCheckers(s.checkers,b.path),key=checkersKey(played.game);
-     s.positions=s.positions||{};s.positions[key]=(s.positions[key]||0)+1;
-     s.moves.push({...played.move,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});
-     s.drawOffer=null;s.turn=played.game.turn;
-     s.checkers=checkersSnapshot(played.game,played.move,s.positions[key]);
-     if(s.checkers.result)s.phase='finished';
-    }else if(path.endsWith('/move')){
-     if(!s.chess)return json({error:'Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.'},409);
-     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
-     if(typeof b.from!=='string'||typeof b.to!=='string')return json({error:'Mossa non valida.'},400);
-     const game=new Chess();
-     for(const move of s.moves)game.move(move.san);
-     let moved;try{moved=game.move({from:b.from,to:b.to,promotion:b.promotion||'q'})}catch{return json({error:'Mossa non consentita.'},400)}
-     s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1,san:moved.san,from:moved.from,to:moved.to,...(moved.promotion?{promotion:moved.promotion}:{})});
-     s.drawOffer=null;s.turn=game.turn()==='w'?0:1;
-     s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
-     if(game.isGameOver())s.phase='finished';
-    }else if(path.endsWith('/pass')){
-     if(s.chess||s.checkers||s.connect4||s.uno||s.scarabeo||s.cluedo||s.naval||s.briscola)return json({error:'Devi effettuare una mossa.'},409);
+    }else if(path.endsWith('/move')){this.applyMove(s,who,b);    }else if(path.endsWith('/pass')){
+     if(s.chess||s.checkers||s.connect4||s.uno||s.scarabeo||s.scopa||s.naval||s.briscola)return json({error:'Devi effettuare una mossa.'},409);
      if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
      s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
      if(s.moves.length>=500)s.phase='finished';
     }else if(path.endsWith('/finish')){if(s.series){s.series.done=true;s.series.cancelled=true}s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:'Partita chiusa',result:null};if(s.connect4)s.connect4={...s.connect4,legalMoves:[],reason:'Partita chiusa',result:null};if(s.uno)s.uno={...s.uno,result:'closed',reason:'Partita chiusa'};}else bad('Azione non valida.');
-    settleSeries(s);s.revision++;await this.ctx.storage.put('state',s);await this.broadcast(s);return json(this.public(s,viewer));
+    settleSeries(s);s.revision++;await this.saveState(s);await this.broadcast(s);return json(this.public(s,viewer));
    }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
-  return [...entries.values()].filter(s=>s.game==='labyrinth'||s.archived||s.expires>Date.now()).sort((a,b)=>a.number-b.number);
+  return [...entries.values()].filter(s=>s.game!=='cluedo'&&(s.game==='labyrinth'||s.archived||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
  }
 
  async lobbyPayload(){
@@ -312,7 +329,7 @@ export class Room extends DurableObject {
    const watching=games.find(g=>g.room===a.room);
    return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
   }).sort((a,b)=>a.name.localeCompare(b.name));
-  return {games,users,messages:await this.ctx.storage.get('chat')||[]};
+  const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()];return {games,users,messages:await this.ctx.storage.get('chat')||[],leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai')};
  }
  async lobbyBroadcast(force=true){
   const payload=await this.lobbyPayload(),signature=JSON.stringify(payload.users);
@@ -322,6 +339,7 @@ export class Room extends DurableObject {
   for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
  }
  async lobby(req,path){
+  if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&g.game!=='labyrinth'&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
   if(path==='/lobby/list')return json(await this.lobbyPayload());
   if(path==='/lobby/ws'){
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
@@ -333,6 +351,7 @@ export class Room extends DurableObject {
   }
   if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
   const body=await req.json();
+  if(path==='/lobby/result'){const old=await this.ctx.storage.get('result:'+body.key);if(!old)await this.ctx.storage.put('result:'+body.key,body);return json({ok:true});}
   if(path==='/lobby/access'){
    if(!this.env.ACCESS_PASSWORD)return json({error:'Accesso riservato in configurazione.'},503);
    const key='access-attempt:'+body.userId,now=Date.now(),saved=await this.ctx.storage.get(key);
@@ -363,7 +382,7 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','cluedo','naval','briscola','briscola5','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
+   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5','labyrinth'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
    if((await this.lobbyList()).some(g=>g.game!=='labyrinth'&&activeTable(g)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    createSeries(body.target);
    const number=(await this.ctx.storage.get('lobbyCounter')||0)+1;
@@ -374,7 +393,7 @@ export class Room extends DurableObject {
     if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
    }
    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));
-   const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room,'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({name:playerName,number,playerId:user.player,game:body.game||'chess',target:body.target})}));
+   const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room,'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({name:playerName,number,playerId:user.player,game:body.game||'chess',target:body.target,mode:body.mode,seats:body.seats})}));
    if(!response.ok)return response;
    const result=await response.json();
    await this.ctx.storage.put('game:'+room,this.summary(result.state));
@@ -416,7 +435,9 @@ export class Room extends DurableObject {
   if((await this.lobbyList()).some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+3600000);
   return;
  }
- if((await this.ctx.storage.get('state'))?.archived)return;
+ const s=await this.ctx.storage.get('state');if(s?.archived)return;
+ if(s&&s.expires>Date.now()){return this.ctx.blockConcurrencyWhile(async()=>{const current=await this.ctx.storage.get('state'),who=this.botSeat(current);if(who>=0){const v=this.public(current,current.players[who].id),g=v.naval||v.briscola||v[current.game]||v.chess;const action=chooseAction(current.game,g,who);if(!action)throw Error('AI: nessuna azione disponibile');this.applyMove(current,who,action);settleSeries(current);current.revision++;await this.saveState(current);await this.broadcast(current);await this.syncLobby(current);}else await this.ctx.storage.setAlarm(current.expires);});}
+
  for(const ws of this.ctx.getWebSockets())ws.close(1000,'Stanza scaduta.');await this.ctx.storage.deleteAll();}
 }
 
