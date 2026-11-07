@@ -165,6 +165,12 @@ const labDom=new JSDOM(await fs.readFile('public/labyrinth/index.html','utf8'),{
 const lab=labDom.window,labGet=id=>lab.document.getElementById(id);
 Object.assign(lab,labCore,labAdventure,labTraps,{FrameBudget});
 lab.matchMedia=()=>({matches:false});
+let locked=null,lockRequests=0;
+Object.defineProperty(lab.document,'pointerLockElement',{get:()=>locked});
+const lockChange=()=>lab.document.dispatchEvent(new lab.Event('pointerlockchange'));
+labGet('scene').requestPointerLock=()=>{lockRequests++;locked=labGet('scene');lockChange()};
+lab.document.exitPointerLock=()=>{locked=null;lockChange()};
+const mKey=(repeat=false)=>lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'KeyM',repeat}));
 lab.confirm=()=>{throw Error('Native confirmation is unavailable')};
 lab.readAppearance=()=>({shirt:'#66b8cf',shorts:'#3c62a3'});
 lab.Renderer=class{load(world){this.world=world}draw(){}};
@@ -181,7 +187,14 @@ assert.equal(labGet('inventory').children[1].getAttribute('aria-label'),'Tasca Â
 labGet('new-run').click();assert.equal(labGet('new-run-confirm').hidden,false);
 labGet('new-run-cancel').click();assert.equal(labGet('new-run-confirm').hidden,true);
 assert.equal(JSON.parse(lab.localStorage.getItem(storageKey)).level,4);
-labGet('start').click();labGet('inventory').children[1].click();
+labGet('start').click();assert.equal(locked,labGet('scene'));
+mKey();assert.equal(locked,null);assert.equal(labGet('menu').hidden,true);
+mKey(true);assert.equal(locked,null);
+labGet('scene').dispatchEvent(new lab.MouseEvent('mousedown',{button:0}));
+assert.equal(lockRequests,1);
+labGet('inventory').children[1].click();
+assert.equal(labGet('menu').hidden,true);assert.equal(locked,null);
+mKey();assert.equal(locked,labGet('scene'));assert.equal(lockRequests,2);
 assert.deepEqual(JSON.parse(lab.localStorage.getItem(storageKey)).inventory,['pass','key:4']);
 lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'Escape'}));
 labGet('new-run').click();labGet('new-run-start').click();

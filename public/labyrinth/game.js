@@ -7,7 +7,7 @@ import {projectPoint,Renderer} from './render.js';
 import {readAppearance} from './avatar.js';
 import {Atmosphere} from './audio.js';
 const $=id=>document.getElementById(id),canvas=$('scene'),keys=new Set(),coarse=matchMedia('(pointer: coarse)').matches,debug=new URLSearchParams(location.search).get('debug')==='1';
-let playerId='guest',seed=crypto.getRandomValues(new Uint32Array(1))[0],level=1,world,player,hasKey=false,seconds=0,started=false,playing=false,transitioning=false,renderer,raf=0,lastTime=0,saveClock=0,stepDistance=0,bob=0,walk=0,quality='auto',sensitivity=1,joystick={x:0,y:0,id:null},lookId=null,lastLook=null,lookVector={x:0,y:0},dragging=false,toastTimer=0,frameBudget=new FrameBudget();
+let playerId='guest',seed=crypto.getRandomValues(new Uint32Array(1))[0],level=1,world,player,hasKey=false,seconds=0,started=false,playing=false,transitioning=false,renderer,raf=0,lastTime=0,saveClock=0,stepDistance=0,bob=0,walk=0,quality='auto',sensitivity=1,joystick={x:0,y:0,id:null},lookId=null,lastLook=null,lookVector={x:0,y:0},dragging=false,cursorFree=false,releasingCursor=false,toastTimer=0,frameBudget=new FrameBudget();
 let tutorialBox=null,trapNotice=null;
 const tutorialMode=new URLSearchParams(location.search).get('tutorial')==='1';
 let run=newRun(seed,true),guideEnabled=true,guideClock=0;
@@ -50,7 +50,18 @@ function loadSaved(){
 function portrait(){return document.body.classList.contains('touch')&&innerHeight>innerWidth}
 function updateOrientation(){const blocked=playing&&portrait();$('portrait').hidden=!blocked;sound.active(playing&&!blocked);if(!playing)renderer?.draw(player,hasKey,performance.now()/1000)}
 function look(dx,dy,touch=false){if(!playing||transitioning||portrait())return;const scale=(touch ? .0045 : .0021)*sensitivity;player.yaw+=dx*scale;player.yaw=((player.yaw+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;player.pitch=Math.max(-1.15,Math.min(1.15,player.pitch-dy*scale))}
-function pointerLock(){if(coarse||document.body.classList.contains('touch'))return;try{const result=canvas.requestPointerLock?.();result?.catch(()=>toast('Trascina sullo schermo per guardarti intorno.'))}catch{toast('Trascina sullo schermo per guardarti intorno.')}}
+function pointerLock(){if(cursorFree||coarse||document.body.classList.contains('touch'))return;try{const result=canvas.requestPointerLock?.();result?.catch(()=>toast('Trascina sullo schermo per guardarti intorno.'))}catch{toast('Trascina sullo schermo per guardarti intorno.')}}
+function toggleCursor(){
+ if(releasingCursor||coarse||document.body.classList.contains('touch'))return;
+ cursorFree=!cursorFree;dragging=false;
+ if(cursorFree){
+  if(document.pointerLockElement===canvas){releasingCursor=true;document.exitPointerLock?.()}
+  toast('Cursore libero · premi M per riprendere la visuale');
+ }else{
+  canvas.focus({preventScroll:true});
+  pointerLock();
+ }
+}
 function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if(multiplayer&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent='Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
 function pause(){if(!started||transitioning)return;playing=false;if(tutorialBox)tutorialBox.hidden=true;cancelAnimationFrame(raf);raf=0;resetInput();sound.active(false);if(document.pointerLockElement)document.exitPointerLock?.();document.body.classList.remove('playing');$('portrait').hidden=true;$('menu').hidden=false;$('menu-title').textContent='Una pausa.';$('start').textContent='Riprendi l’esplorazione';$('new-run').hidden=!!multiplayer;$('saved-info').textContent=(world.arena?'Arena':'Piano '+level)+(hasPass(run)?' · passe-partout':'');store()}
 function leave(){store();sound.active(false);if(parent!==window)parent.postMessage({type:'labyrinth:exit'},location.origin);else location.href='/'}
@@ -172,11 +183,18 @@ $('sensitivity').value=String(sensitivity=Math.max(.4,Math.min(2.2,Number(read('
 $('sensitivity').oninput=e=>{sensitivity=Number(e.target.value);write('labyrinth-sensitivity',sensitivity)};
 $('quality').value=quality=['auto','low','high'].includes(read('labyrinth-quality','auto'))?read('labyrinth-quality','auto'):'auto';
 $('quality').onchange=e=>{quality=e.target.value;renderer.quality=quality;frameBudget.reset();renderer.resolutionScale=1;write('labyrinth-quality',quality);renderer.draw(player,hasKey,performance.now()/1000)};
-window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(playing)pause();return}if(!playing||transitioning)return;if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyE','KeyQ','KeyF','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='KeyF'&&!e.repeat)strike();if(e.code==='KeyE'&&!e.repeat)use();if(e.code==='KeyQ'&&!e.repeat)dropHeld();if(e.code==='Space'&&!e.repeat)tryJump()}});
+window.addEventListener('keydown',e=>{if(e.code==='Escape'){if(playing)pause();return}if(!playing||transitioning)return;if(e.code==='KeyM'&&!coarse&&!document.body.classList.contains('touch')){e.preventDefault();if(!e.repeat)toggleCursor();return}if(['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','ShiftLeft','ShiftRight','KeyE','KeyQ','KeyF','Space'].includes(e.code)){e.preventDefault();keys.add(e.code);if(e.code==='KeyF'&&!e.repeat)strike();if(e.code==='KeyE'&&!e.repeat)use();if(e.code==='KeyQ'&&!e.repeat)dropHeld();if(e.code==='Space'&&!e.repeat)tryJump()}});
 window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{resetInput();if(playing&&!transitioning)pause()});
-canvas.addEventListener('mousedown',e=>{if(!playing)return;if(e.button===0){dragging=true;strike();pointerLock()}});window.addEventListener('mouseup',()=>dragging=false);
-window.addEventListener('mousemove',e=>{if(document.pointerLockElement===canvas||dragging)look(e.movementX,e.movementY)});
-document.addEventListener('pointerlockchange',()=>{if(!document.pointerLockElement&&playing&&!transitioning&&!dragging)pause()});
+canvas.addEventListener('mousedown',e=>{if(!playing||cursorFree)return;if(e.button===0){dragging=true;strike();pointerLock()}});window.addEventListener('mouseup',()=>dragging=false);
+window.addEventListener('mousemove',e=>{if(!cursorFree&&(document.pointerLockElement===canvas||dragging))look(e.movementX,e.movementY)});
+document.addEventListener('pointerlockchange',()=>{
+ if(cursorFree){
+  if(document.pointerLockElement===canvas){releasingCursor=true;document.exitPointerLock?.()}
+  else releasingCursor=false;
+  return;
+ }
+ if(!document.pointerLockElement&&playing&&!transitioning&&!dragging)pause();
+});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 const joyElement=$('joystick');
 function moveStick(e){const r=joyElement.getBoundingClientRect(),dx=e.clientX-r.left-r.width/2,dy=e.clientY-r.top-r.height/2,len=Math.hypot(dx,dy),max=r.width*.34,scale=len>max?max/len:1;joystickState(dx*scale/max,dy*scale/max,e.pointerId);$('stick').style.transform='translate('+dx*scale+'px,'+dy*scale+'px)'}
