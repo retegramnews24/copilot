@@ -1,7 +1,7 @@
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=3';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=4';
 import {TrialAudio} from './audio.js';
-import {drawTrial} from './render.js?v=3';
+import {drawTrial} from './render.js?v=4';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
@@ -105,9 +105,10 @@ function updateHUD() {
   let cue = '';
   if (mode === 'ride') {
     if (!bike.onGround && bike.tier < course.tiers.length - 1 && (bike.x - tier.end) * tier.direction >= 0) cue = 'Atterra sul sentiero sotto';
-    else if (bike.facing !== tier.direction) cue = 'Gira ' + (tier.direction > 0 ? 'verso destra →' : 'verso sinistra ←');
+    else if (bike.facing !== tier.direction) cue = 'Frena e gira ' + (tier.direction > 0 ? 'verso destra →' : 'verso sinistra ←');
     else if (tier.jump && (tier.jump.lip - bike.x) * tier.direction >= 0 &&
         Math.abs(tier.jump.lip - bike.x) < 17) cue = 'Salto · prendi slancio';
+    else if (tier.precisionDrop && Math.abs(tier.end - bike.x) < 17) cue = 'Atterraggio stretto · frena prima del bordo';
     else if (bike.tier < course.tiers.length - 1 && Math.abs(tier.end - bike.x) < 15) cue = 'Discesa · rallenta dopo l’atterraggio';
   }
   const hint = $('cue');

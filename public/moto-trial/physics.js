@@ -14,17 +14,44 @@ function random(seed) {
   };
 }
 
-export const COURSE_VERSION = 3;
+export const COURSE_VERSION = 4;
 
-function addJump(tier, ridgeStart, ridge, rng, index) {
+// X-Moto Classic: original.xml, Scene.h and BikePlayer.cpp.
+const CLASSIC_STEP = .01, CLASSIC_SPEED = .6;
+const CLASSIC_TORQUE = 10000, CLASSIC_DECAY = .75, CLASSIC_REPEAT_STEPS = 60;
+const CLASSIC_FRAME_INERTIA = 90 * (1.2 ** 2 + 1.8 ** 2) / 12;
+const CLASSIC_WHEEL_INERTIA = 2 * 10 * (.7 ** 2 + .55 ** 2 + .4 * .35 ** 2);
+const CLASSIC_RIDER_INERTIA = 2 * 5 * [
+  [-.25, .75], [.10, .525], [-.15, .85], [.15, -.085], [0, .30], [0, -.37], [.30, .45]
+].reduce((sum, [x, y]) => sum + x * x + y * y + .4 * .4 ** 2, 0);
+// Rigid aggregate of the Classic masses at rest. X-Moto solves the individual joints.
+const CLASSIC_INERTIA = CLASSIC_FRAME_INERTIA + CLASSIC_WHEEL_INERTIA + CLASSIC_RIDER_INERTIA;
+
+function classicTurn(bike, lean, dt, airborne) {
+  bike.turnClock += dt;
+  while (bike.turnClock + 1e-10 >= CLASSIC_STEP) {
+    bike.turnClock -= CLASSIC_STEP;
+    bike.turnTick++;
+    if (lean && (bike.turnTick > bike.nextTurn || lean !== bike.turnDirection)) {
+      bike.turnTorque = lean * CLASSIC_TORQUE;
+      bike.nextTurn = bike.turnTick + CLASSIC_REPEAT_STEPS;
+      bike.turnDirection = lean;
+    }
+    if (airborne) bike.spin += bike.turnTorque / CLASSIC_INERTIA * CLASSIC_STEP * CLASSIC_SPEED ** 2;
+    bike.turnTorque *= CLASSIC_DECAY;
+    if (Math.abs(bike.turnTorque) < 100) bike.turnTorque = 0;
+  }
+}
+
+function addJump(tier, ridgeStart, ridge, rng, index, expert) {
   const direction = tier.direction;
   const approach = ridgeStart + direction * (ridge * (.27 + rng() * .07));
   const ramp = 7, lip = approach + direction * ramp;
-  const width = (index < 5 ? 7.8 : 9.8) + rng() * 1.9;
+  const width = (index < 5 ? 7.8 : expert ? 10.45 : 9.8) + rng() * 1.9;
   const landing = lip + direction * width, exit = landing + direction * 17;
   const runupY = ground(tier, approach);
   const lipY = runupY - 3.85;
-  const landingY = lipY + (index < 5 ? 2 : 1.1);
+  const landingY = lipY + (index < 5 ? 2 : expert && index % 4 === 2 ? -.20 : 1.1);
   const exitY = landingY + 1.45, offset = exitY - ground(tier, exit);
   tier.points = tier.points.filter(p => (p.x - approach) * direction < 0 || (p.x - exit) * direction > 0);
   for (const p of tier.points) if ((p.x - exit) * direction > 0) p.y += offset;
@@ -42,7 +69,7 @@ export function makeCourse(seed, version = COURSE_VERSION) {
   for (let i = 0; i < count; i++) {
     const direction = i % 2 ? -1 : 1;
     const pad = i ? overlap + 7 : 10;
-    const ridge = 48 + rng() * 29;
+    const ridge = (version >= 4 ? 68 : 48) + rng() * 29;
     const end = start + direction * (pad + ridge + 9);
     const points = [{x: start, y: base}, {x: start + direction * pad, y: base}];
     const bumps = Math.ceil(ridge / 4.2);
@@ -65,13 +92,15 @@ export function makeCourse(seed, version = COURSE_VERSION) {
     points.push({x: end, y: y + (i === count - 1 ? 0 : 1.15)});
     const marker = start + direction * (i ? overlap - 5 : 4);
     const tier = {start, end, direction, marker, points: direction > 0 ? points : points.reverse()};
-    if (version >= 3 && i >= 1 && i < count - 1 && (i % 2 || i === 8 || i === 12)) {
-      addJump(tier, start + direction * pad, ridge, rng, i);
+    const expert = version >= 4;
+    if (expert && [2, 5, 9, 12].includes(i)) tier.precisionDrop = true;
+    if (version >= 3 && i >= 1 && i < count - 1 && (expert ? i !== 4 && i !== 11 : i % 2 || i === 8 || i === 12)) {
+      addJump(tier, start + direction * pad, ridge, rng, i, expert);
     }
     tier.top = Math.min(...tier.points.map(p => p.y));
     tier.bottom = Math.max(...tier.points.map(p => p.y));
     tiers.push(tier);
-    overlap = (version === 1 ? 23 : version === 2 ? 32 : 39) + rng() * 5;
+    overlap = (version === 1 ? 23 : version === 2 ? 32 : tier.precisionDrop ? 21.5 : 39) + rng() * 5;
     start = end + direction * overlap;
     base = Math.max(y + 1.15 + 7.1 + rng() * 2.1, tier.bottom + (version >= 3 ? 12.6 : 6.6));
   }
@@ -150,7 +179,9 @@ function contact(tier, x) {
 export function resetBike(course) {
   const tier = course.tiers[0], x = tier.marker;
   return {x, y: contact(tier, x).y, vx: 0, vy: 0, angle: 0, spin: 0, balance: 0,
-    lean: 0, roll: 0, leftSpring: 0, rightSpring: 0, pitchRate: 0, roadPitch: 0, clearedJump: false, jumping: false, facing: tier.direction, tier: 0, onGround: true, status: 'ride'};
+    lean: 0, roll: 0, leftSpring: 0, rightSpring: 0, pitchRate: 0, roadPitch: 0, edgePivot: 0,
+    clearedJump: false, jumping: false, turnClock: 0, turnTick: 0, nextTurn: 0, turnTorque: 0,
+    turnDirection: 0, facing: tier.direction, tier: 0, onGround: true, status: 'ride'};
 }
 
 export function turnBike(bike) {
@@ -212,22 +243,25 @@ function findLanding(course, bike, from, leaving) {
 export function stepBike(course, bike, input, dt = FIXED_STEP) {
   if (bike.status !== 'ride') return;
   const from = {x: bike.x, y: bike.y, angle: bike.angle, lean: bike.lean}, lean = input.lean || 0;
-  const tier = course.tiers[bike.tier], technical = course.version >= 3;
+  const tier = course.tiers[bike.tier], technical = course.version >= 3, expert = course.version >= 4;
   const previousSpeed = bike.vx;
   const surface = bike.onGround && contact(tier, bike.x);
   if (surface) {
+    const [left, right] = technical ? wheelLimits(tier, bike.x, bike.angle, bike.leftSpring, bike.rightSpring) : [];
+    const oneWheel = expert && Math.abs(left - right) > .14;
     if (input.brake) bike.vx *= Math.exp(-6.8 * dt);
     else {
       let traction = 1;
       if (technical && input.throttle) {
-        const [left, right] = wheelLimits(tier, bike.x, bike.angle, bike.leftSpring, bike.rightSpring);
         const rear = bike.facing > 0 ? left : right;
-        if (rear - Math.min(left, right) > .24) traction = .22;
+        if (!expert && rear - Math.min(left, right) > .24) traction = .22;
+        if (oneWheel) traction = 1.08;
       }
       const drive = input.throttle ? bike.facing * 8.1 * traction : 0;
       bike.vx += (drive + Math.sin(surface.angle) * 5.5 - bike.vx * (input.throttle ? .35 : .86)) * dt;
     }
-    bike.vx = clamp(bike.vx, -12.8, 12.8);
+    const limit = expert ? Math.max(oneWheel ? 13.4 : 12.8, Math.abs(previousSpeed) - dt * 3) : 12.8;
+    bike.vx = clamp(bike.vx, -limit, limit);
   } else if (!technical && input.throttle) {
     bike.vx = clamp(bike.vx + bike.facing * .85 * dt, -12.8, 12.8);
   }
@@ -244,10 +278,20 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
   }
   const next = surface && contact(tier, bike.x);
   const weightShift = technical ? clamp((previousSpeed - bike.vx) / dt, -12, 12) * .27 : 0;
-  const spin = bike.spin + (lean * 25 + weightShift - bike.spin * 5.4 - bike.balance * 9.2) * dt;
-  const balance = bike.balance + spin * dt;
+  let spin = bike.spin + (lean * 25 + weightShift - bike.spin * 5.4 - bike.balance * 9.2) * dt;
+  let balance = bike.balance + spin * dt;
   const roadPitch = next && technical ? bike.roadPitch + wrap(next.angle - bike.roadPitch) * Math.min(1, dt * 14) : next?.angle;
-  const nextAngle = next ? roadPitch + balance : bike.angle;
+  let nextAngle = next ? roadPitch + balance : bike.angle;
+  let pivot = 0;
+  if (expert && next) {
+    const [left, right] = wheelLimits(tier, bike.x, bike.angle, bike.leftSpring, bike.rightSpring);
+    if (Number.isFinite(left) !== Number.isFinite(right)) {
+      pivot = Number.isFinite(left) ? 1 : -1;
+      spin = bike.spin + (pivot * 11.8 + lean * 11 - bike.spin * 1.4) * dt;
+      nextAngle = bike.angle + spin * dt;
+      balance = wrap(nextAngle - roadPitch);
+    }
+  }
   const support = !next ? Infinity : balance === 0 && !technical ? next.y : bikeSupport(tier, bike.x, nextAngle, bike.leftSpring, bike.rightSpring);
   const withinTier = bike.x > tier.points[0].x + AXLE + WHEEL &&
     bike.x < tier.points.at(-1).x - AXLE - WHEEL;
@@ -260,11 +304,13 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
     (bike.x - jump.lip) * tier.direction >= 0;
   const rebound = technical && !onRamp && surface && bike.vy < -1 && bike.rebound;
   if (Number.isFinite(support) && !liftsAtCrest && !overLip && !rebound) {
+    if (expert) classicTurn(bike, lean, dt, false);
+    bike.edgePivot = pivot;
     bike.spin = spin;
     bike.balance = balance;
     bike.roadPitch = roadPitch;
     bike.y = support;
-    bike.vy = clamp((next.y - surface.y) / dt, -5.2, 7.8);
+    bike.vy = clamp((pivot ? bike.y - from.y : next.y - surface.y) / dt, -5.2, 7.8);
     bike.pitchRate = clamp(wrap(nextAngle - bike.angle) / dt, -2, 2);
     bike.angle = nextAngle;
     const helmet = helmetSupport(tier, bike.x, bike.angle, bike.facing, bike.lean);
@@ -277,19 +323,23 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
     if (overLip) {
       bike.jumping = true;
       bike.vy = -Math.abs(bike.vx) * .67;
-    } else if (leaving && !liftsAtCrest && !rebound) {
+    } else if (leaving && !liftsAtCrest && !rebound && !(expert && bike.edgePivot)) {
       const lip = (bike.x - tier.end) * tier.direction >= 0 ? tier.end : tier.start;
       const at = lip + Math.sign((tier.start + tier.end) / 2 - lip) * AXLE;
       bike.vy = clamp(Math.tan(terrainAngle(tier, at)) * bike.vx, -5.2, 7.8);
       if ((bike.x - tier.end) * tier.direction < 0) bike.vy = Math.max(0, bike.vy);
     }
-    if (leaving && technical && !rebound) bike.spin = bike.pitchRate * .32;
+    if (leaving && technical && !rebound) {
+      bike.spin = bike.pitchRate * (expert && bike.edgePivot ? 1 : .32);
+      bike.edgePivot = 0;
+    }
     bike.rebound = false;
     bike.onGround = false;
     bike.vy = Math.min(22, bike.vy + GRAVITY * dt);
     bike.y += bike.vy * dt;
     const wheelTorque = technical ? (input.brake ? .85 : input.throttle ? -.18 : 0) * bike.facing : 0;
-    bike.spin = clamp((bike.spin + (lean * (technical ? 15.8 : 12.4) + wheelTorque) * dt) * Math.exp(-(technical ? .8 : 1.7) * dt), -4.4, 4.4);
+    if (expert) classicTurn(bike, lean, dt, true);
+    else bike.spin = clamp((bike.spin + (lean * (technical ? 15.8 : 12.4) + wheelTorque) * dt) * Math.exp(-(technical ? .8 : 1.7) * dt), -4.4, 4.4);
     bike.angle = wrap(bike.angle + bike.spin * dt);
     const hit = findLanding(course, bike, from, leaving);
     if (hit) {
@@ -315,9 +365,14 @@ export function stepBike(course, bike, input, dt = FIXED_STEP) {
           const [left, right] = wheelLimits(landing, hit.x, hit.angle, bike.leftSpring, bike.rightSpring);
           const travel = Math.min(.26, impact * .026);
           if (Math.abs(right - left) > .16) landingTorque = Math.sign(right - left) * Math.min(.65, impact * .057);
-          if (left < right + .13) bike.leftSpring = Math.max(bike.leftSpring, travel);
-          if (right < left + .13) bike.rightSpring = Math.max(bike.rightSpring, travel);
-          bike.y = bikeSupport(landing, hit.x, hit.angle, bike.leftSpring, bike.rightSpring);
+          const leftSpring = left < right + .13 ? Math.max(bike.leftSpring, travel) : bike.leftSpring;
+          const rightSpring = right < left + .13 ? Math.max(bike.rightSpring, travel) : bike.rightSpring;
+          const compressed = bikeSupport(landing, hit.x, hit.angle, leftSpring, rightSpring);
+          if (Number.isFinite(compressed)) {
+            bike.leftSpring = leftSpring;
+            bike.rightSpring = rightSpring;
+            bike.y = compressed;
+          }
           const helmet = helmetSupport(landing, hit.x, hit.angle, bike.facing, bike.lean);
           if (bike.y >= helmet) {
             bike.y = helmet;

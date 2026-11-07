@@ -12,16 +12,27 @@ for (let seed = 0; seed < 320; seed++) {
   let steps = 0;
   for (; steps < 210 / FIXED_STEP && bike.status === 'ride'; steps++) {
     const previousTier = bike.tier;
-    if (bike.onGround && bike.facing !== course.tiers[bike.tier].direction) turnBike(bike);
     const tier = course.tiers[bike.tier], cleared = bike.clearedJump;
-    if (steps % 6 === 0) {
-      const preview = bike.x + bike.vx * .18;
+    let throttle = true, brake = false;
+    if (bike.onGround && bike.facing !== tier.direction) {
+      if (bike.vx * tier.direction < -1.25) { brake = true; throttle = false; }
+      else turnBike(bike);
+    }
+    const distance = (tier.end - bike.x) * tier.direction;
+    if (bike.onGround && tier.precisionDrop && distance < 9 && distance >= -1 && bike.facing === tier.direction) {
+      const speed = bike.vx * tier.direction;
+      if (speed > 8.15) brake = true;
+      if (speed > 7.6) throttle = false;
+    }
+    if (steps % 4 === 0) {
+      const preview = bike.x + bike.vx * .15;
       const front = ground(tier, preview + .7), back = ground(tier, preview - .7);
       const target = front === null || back === null ? 0 : Math.atan2(front - back, 1.4);
-      const error = Math.atan2(Math.sin(target - bike.angle), Math.cos(target - bike.angle)) - .21 * bike.spin;
-      lean = !bike.onGround && Math.abs(error) > .23 ? Math.sign(error) : 0;
+      const spin = bike.spin + bike.turnTorque * .000205;
+      const error = Math.atan2(Math.sin(target - bike.angle), Math.cos(target - bike.angle)) - .36 * spin;
+      lean = !bike.onGround && Math.abs(error) > .37 ? Math.sign(error) : 0;
     }
-    stepBike(course, bike, {throttle: true, lean});
+    stepBike(course, bike, {throttle, brake, lean});
     if (!cleared && bike.clearedJump) jumps++;
     if (!bike.onGround) airSteps++;
     else {
@@ -32,7 +43,8 @@ for (let seed = 0; seed < 320; seed++) {
   }
   assert.equal(bike.status, 'finish', 'Seed ' + seed + ' must be possible to finish');
   assert.equal(course.tiers.length, 16);
-  assert.equal(jumps, 9);
+  assert.equal(jumps, 12);
+  assert.equal(course.tiers.filter(tier => tier.precisionDrop).length, 4);
   assert.deepEqual(landings, course.tiers.slice(1).map((_, i) => i + 1));
   const duration = steps * FIXED_STEP;
   assert.ok(duration >= 165 && duration <= 200, 'Completion should be around three minutes: ' + duration);
@@ -116,8 +128,43 @@ assert.equal(safeJump.jumping.clearedJump, true);
 assert.ok(safeJump.compression > .15, 'A hard landing compresses the suspension');
 assert.equal(makeCourse(71, 2).tiers.length, 17);
 assert.ok(makeCourse(71, 2).tiers.every(tier => !tier.jump));
+const cliff = {version: 4, tiers: [flat(0, 10, 0), flat(-5, 20, 12)], finish: 18, bottom: 24};
+for (const direction of [-1, 1]) {
+  const x = direction > 0 ? 9.6 : .4;
+  const tipping = {...resetBike(cliff), x, y: bikeSupport(cliff.tiers[0], x, 0), vx: direction * 2.5};
+  for (let i = 0; i < 12; i++) stepBike(cliff, tipping, {});
+  assert.equal(tipping.onGround, true, 'The second wheel is still supported');
+  assert.ok(tipping.angle * direction > .03, 'The free wheel drops before the second wheel leaves');
+}
+const speedTest = {version: 4, tiers: [flat(0, 90, 0)], finish: 85, bottom: 12};
+const flatBike = {...resetBike(speedTest), x: 10, y: -.38, vx: 12.8};
+const angle = .45, oneWheel = {...flatBike, angle, balance: angle, y: bikeSupport(speedTest.tiers[0], 10, angle)};
+stepBike(speedTest, flatBike, {throttle: true});
+stepBike(speedTest, oneWheel, {throttle: true});
+assert.ok(oneWheel.vx > flatBike.vx);
+
+const freeFlight = {...resetBike(cliff), x: 30, y: -60, onGround: false};
+stepBike(cliff, freeFlight, {lean: 1}, .01);
+assert.equal(freeFlight.turnTorque, 7500);
+stepBike(cliff, freeFlight, {lean: 1}, .01);
+assert.equal(freeFlight.turnTorque, 5625);
+stepBike(cliff, freeFlight, {lean: -1}, .01);
+assert.equal(freeFlight.turnTorque, -7500, 'Opposite input immediately retriggers the Classic impulse');
+for (let i = 0; i < 26; i++) stepBike(cliff, freeFlight, {}, .01);
+assert.equal(freeFlight.turnTorque, 0);
+const inertialSpin = freeFlight.spin;
+stepBike(cliff, freeFlight, {}, .01);
+assert.equal(freeFlight.spin, inertialSpin, 'Free flight has no artificial self-leveling or angular drag');
+assert.equal(makeCourse(71, 3).tiers.filter(tier => tier.jump).length, 9);
+const flatOut = makeCourse(4), unbraked = resetBike(flatOut);
+for (let i = 0; i < 24000 && unbraked.status === 'ride'; i++) {
+  if (unbraked.onGround && unbraked.facing !== flatOut.tiers[unbraked.tier].direction) turnBike(unbraked);
+  stepBike(flatOut, unbraked, {throttle: true});
+  assert.ok(Number.isFinite(unbraked.y), 'A clipped suspension at the lip keeps a finite pose');
+}
+assert.equal(unbraked.status, 'crash');
 const legacy = makeCourse(71, 1);
 assert.equal(legacy.tiers.length, 5);
 assert.notEqual(legacy.finish, makeCourse(71).finish);
 console.log('PASS Moto Trial: 320 descents (' + Math.round(Math.min(...durations)) + '–' +
-  Math.round(Math.max(...durations)) + ' s), nine gaps, speed-sensitive jumps, suspension travel and recoverable wheelies.');
+  Math.round(Math.max(...durations)) + ' s), twelve gaps, precision drops, edge pivots and Classic air impulses.');

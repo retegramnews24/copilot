@@ -1,4 +1,4 @@
-import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=3';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=4';
 
 const THEMES = [
   {sky: ['#193345', '#eaa46d', '#f6d399'], haze: '#96736d', far: '#615c68', near: '#43515a', rock: '#573c37', face: '#724b3d', top: '#d49a66', rim: '#f2c183', dust: '#f4c893'},
@@ -65,7 +65,7 @@ function ledge(c, track, theme) {
   }
 }
 
-function sign(c, x, y, direction, flag = false) {
+function sign(c, x, y, direction, flag = false, brake = false) {
   line(c, [[x, y], [x, y - 1.9]], '#38292a', .13);
   if (flag) {
     polygon(c, [[x, y - 1.87], [x + direction * 1.25, y - 1.63], [x, y - 1.30]], '#f5bd73');
@@ -73,12 +73,17 @@ function sign(c, x, y, direction, flag = false) {
     c.save();
     c.translate(x, y - 1.67);
     c.scale(direction, 1);
-    c.fillStyle = '#332a2b';
+    c.fillStyle = brake ? '#913f24' : '#332a2b';
     c.beginPath();
     c.roundRect(-.67, -.42, 1.34, .84, .14);
     c.fill();
-    line(c, [[-.34, 0], [.27, 0], [.04, -.22]], '#ffe1a4', .10);
-    line(c, [[.27, 0], [.04, .22]], '#ffe1a4', .10);
+    if (brake) {
+      line(c, [[0, -.24], [0, .05]], '#fff1ce', .11);
+      disc(c, 0, .21, .057, '#fff1ce');
+    } else {
+      line(c, [[-.34, 0], [.27, 0], [.04, -.22]], '#ffe1a4', .10);
+      line(c, [[.27, 0], [.04, .22]], '#ffe1a4', .10);
+    }
     c.restore();
   }
 }
@@ -168,7 +173,7 @@ export function drawTrial(c, width, height, course, bike, time, reduced, riders 
     const x = isLast ? course.finish : tier.end - 4 * tier.direction;
     const y = ground(tier, x);
     if (isLast) gate(c, x, y);
-    else sign(c, x, y, tier.direction);
+    else sign(c, x, y, tier.direction, false, tier.precisionDrop);
   }
   if (!reduced && bike.onGround && Math.abs(bike.vx) > 2 && bike.status === 'ride') {
     for (let i = 0; i < 6; i++) {
