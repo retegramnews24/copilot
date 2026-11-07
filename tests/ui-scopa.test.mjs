@@ -72,6 +72,13 @@ assert.equal(get('moto-trial-overlay').hidden,true);
 w.fetch=beforeRaceFetch;
 
 
+get('play-golf').click();
+const golfFrame=get('golf-frame');
+assert.equal(get('golf-overlay').hidden,false);
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html');
+w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
+assert.equal(get('golf-overlay').hidden,true);
+
 const wait=()=>new Promise(resolve=>setTimeout(resolve,100));
 const create=(game,kind)=>w.document.querySelector('[data-create-game="'+game+'"][data-creation-kind="'+kind+'"]');
 const format=value=>w.document.querySelector('[name="table-format"][value="'+value+'"]');
@@ -395,9 +402,29 @@ assert.ok(raceWindow.__raceTest.bike().vx>0);
 raceDom.window.close();
 console.log('PASS Moto Trial UI: launch and exit bridge, Space, two-finger throttle and turn, pause and sequential campaign progression, startup with unavailable audio and legacy Canvas, and multiplayer readiness.');
 
+const golfPage=new JSDOM(await fs.readFile('public/golf/index.html','utf8'),{
+ url:'https://unit.test/golf/',runScripts:'outside-only',pretendToBeVisual:true
+});
+const golfWindow=golfPage.window,golfGet=id=>golfWindow.document.getElementById(id),green=golfGet('green');
+Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
+let ballFrames=0;
+green.getContext=()=>new Proxy({arc(){ballFrames++;},createLinearGradient:()=>({addColorStop(){}})},
+ {get:(target,key)=>target[key]??(()=>{})});
+const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state};',
+ resolveDir:process.cwd()+'/public/golf'},bundle:true,write:false,format:'iife',platform:'browser'});
+golfWindow.eval(golfBundle.outputFiles[0].text);
+assert.equal(golfGet('course').textContent,'Pride Park');
+assert.ok(ballFrames>0);
+golfGet('shoot').click();
+assert.equal(golfWindow.__golf.state().players[0].shot.sunk,true);
+golfGet('scores').click();assert.equal(golfGet('card').hidden,false);
+golfGet('scores').click();assert.equal(golfGet('card').hidden,true);
+golfPage.window.close();
+console.log('PASS Golf UI: hub launch and return, rendered course, playable putt and scorecard.');
+
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
-const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/labyrinth',preview+'/public/labyrinth',{recursive:true});await fs.cp('public/moto-trial',preview+'/public/moto-trial',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');
+const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/labyrinth',preview+'/public/labyrinth',{recursive:true});await fs.cp('public/moto-trial',preview+'/public/moto-trial',{recursive:true});await fs.cp('public/golf',preview+'/public/golf',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');
 const fixture=`window.Telegram={WebApp:{ready(){},expand(){},onEvent(){},initData:'preview'}};const qaUser=${JSON.stringify(user)};const qaState=${JSON.stringify({...state,game:'scopa',scopa:view,scarabeo:null,turn:0,tutorial:tutorial('scopa',view,0,0)})};const qaPayload=${JSON.stringify(payload())};window.WebSocket=class{constructor(url){this.readyState=1;setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?qaPayload:qaState)})},10)}send(){}close(){this.readyState=3}};window.fetch=async(path)=>Response.json(path==='/api/session'?{user:qaUser,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...qaPayload,pending:false}:path==='/api/lobby'?qaPayload:qaState);window.addEventListener('load',()=>{setTimeout(()=>window.__qa.openRoom(qaState.room,true),200)});`;
 await fs.writeFile(preview+'/public/fixture.js',fixture);
 

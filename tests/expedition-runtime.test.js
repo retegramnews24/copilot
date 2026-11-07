@@ -167,5 +167,26 @@ try{
  await until(rider1NewWindow,p=>p.type==='state'&&p.state.players.length===1);
  assert.equal((await call(201,'/api/lobby')).data.games.find(g=>g.room===race.room).online,1);
  console.log('PASS Moto Trial runtime: shared campaign, authenticated live riders, sequential unlocks, reconnect and Lobby presence.');
+ const golf=await call(301,'/api/create',{game:'golf'});
+ assert.equal(golf.status,200);
+ const golfPath='/api/golf/'+golf.data.state.room;
+ assert.equal((await mf.dispatchFetch('https://unit.test'+golfPath+'/state')).status,401);
+ assert.equal((await call(301,golfPath+'/start',{})).status,409);
+ assert.equal((await call(302,golfPath+'/join',{})).status,200);
+ assert.equal((await call(302,golfPath+'/start',{})).status,409);
+ assert.equal((await call(301,golfPath+'/start',{})).data.state.phase,'playing');
+ assert.equal((await call(303,golfPath+'/join',{})).status,409);
+ const putt={hole:0,strokes:0,angle:0,power:.43};
+ assert.equal((await call(303,golfPath+'/shot',putt)).status,409);
+ const scores=await Promise.all([301,302].map(player=>call(player,golfPath+'/shot',putt)));
+ assert.ok(scores.every(result=>result.status===200));
+ assert.equal((await call(302,golfPath+'/shot',putt)).status,409);
+ const golfState=(await call(301,golfPath+'/state')).data.state;
+ assert.ok(golfState.players.every(player=>player.strokes===1&&player.shot.sunk));
+ assert.equal((await call(302,golfPath+'/state?after='+golfState.revision)).data.state,undefined);
+ const golfListing=(await call(302,'/api/lobby')).data.games.find(entry=>entry.room===golfState.room);
+ assert.equal(golfListing.capacity,8);
+ assert.equal(golfListing.players.length,2);
+ console.log('PASS Golf runtime: authenticated lobby, host start, concurrent authoritative shots and compact polling.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

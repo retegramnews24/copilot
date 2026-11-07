@@ -5,6 +5,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
+let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
@@ -34,12 +35,12 @@ async function request(path,data,keepalive=false){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='labyrinth'?'Labyrinth':g?.game==='moto-trial'?'Moto Trial':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const gameTitle=g=>g?.game==='golf'?'Golf with your gay friends':g?.game==='labyrinth'?'Labyrinth':g?.game==='moto-trial'?'Moto Trial':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
 const staged=g=>['uno','scarabeo','scopa','naval','briscola','briscola5'].includes(g?.game);
 const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:10}:{min:2,max:2});
 const ongoing=g=>!g.archived&&(g.phase!=='finished'||g.series&&!g.series.done);
-function ownedGame(){return games.find(g=>g.game!=='labyrinth'&&g.game!=='moto-trial'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -56,6 +57,7 @@ function makeAvatar(user){
 }
 function renderLobby(){
  $('play-labyrinth').disabled=!identity;
+ $('create-golf').disabled=!identity||golfPending;
  $('create-moto-trial').disabled=!identity||motoOpening;
  const own=ownedGame();
  document.querySelectorAll('[data-create-game]').forEach(button=>{button.disabled=!identity;});
@@ -71,6 +73,16 @@ function renderLobby(){
  $('empty-games').hidden=active.length>0;
  $('empty-games').textContent='Nessun tavolo attivo.';
  for(const game of active){
+  if(game.game==='golf'){
+   const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
+   card.className='table-card';info.className='turn-note';
+   title.textContent='Golf '+game.number+' · '+gameTitle(game);
+   info.textContent=game.players.length+'/'+game.capacity+' giocatori'+(game.phase==='playing'?' · Buca '+(game.hole+1):' · In attesa');
+   const mine=game.players.some(p=>p.id===identity?.player);
+   enter.disabled=!identity||!mine&&(game.phase!=='waiting'||game.players.length>=game.capacity);
+   enter.textContent=mine?'Riprendi':enter.disabled?'Ingresso chiuso':'Entra';
+   enter.onclick=()=>openGolf(game.room);card.append(title,info,enter);$('games').append(card);continue;
+  }
   if(game.game==='moto-trial'){
    const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
    card.className='table-card';info.className='turn-note';
@@ -126,6 +138,7 @@ function leaveRoom(){
  showLobby();
 }
 async function openRoom(nextRoom,watchOnly=false){
+ if(games.find(g=>g.room===nextRoom)?.game==='golf')return openGolf(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='moto-trial')return openMotoRace(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='labyrinth')return openLabyrinth(nextRoom,watchOnly);
  if(busy)return;
@@ -363,6 +376,7 @@ function fitViewport(){
  const insets=safeInsets(tg);applyInsets(document.documentElement,insets);
  if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets},location.origin);
  sendMotoInsets(insets);
+ golfPost('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
 for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
@@ -659,7 +673,7 @@ async function startSession(){
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:motoRace?.room||labyrinthRoom||room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:golfRoom||motoRace?.room||labyrinthRoom||room,away}));
 }
 
 function renderSpectators(){
@@ -854,8 +868,66 @@ window.addEventListener('message',event=>{
   if(packet?.length<=420)motoSocket.send(packet);
  }
 });
-tg?.onEvent('backButtonClicked',()=>{if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
+tg?.onEvent('backButtonClicked',()=>{if(!$('golf-overlay').hidden)closeGolf();else if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
 
+function golfPost(type,payload={}){
+ if(!$('golf-overlay').hidden)$('golf-frame').contentWindow?.postMessage({type:'golf:'+type,...payload},location.origin);
+}
+function publishGolf(ack=false){
+ if(golfSnapshot)golfPost('state',{...golfSnapshot,player:identity.player,ack});
+}
+function showGolf(online){
+ enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
+ $('golf-overlay').hidden=false;
+ $('golf-frame').src='/golf/index.html'+(online?'?online=1':'');
+ tg?.BackButton?.show();
+}
+async function syncGolf(){
+ const selected=golfRoom;
+ if(!selected||document.hidden||golfPolling)return;
+ golfPolling=true;
+ try{
+  const result=await request('/api/golf/'+selected+'/state?after='+golfSnapshot.state.revision);
+  if(golfRoom===selected&&result.state&&result.state.revision>=golfSnapshot.state.revision){
+   golfSnapshot=result;publishGolf();
+   if(result.state.phase==='finished')clearInterval(golfSync);
+  }
+ }catch(error){if(golfRoom===selected&&error.status===404){closeGolf();err(error.message)}}
+ finally{golfPolling=false}
+}
+async function openGolf(selected){
+ if(!identity||golfPending||!$('golf-overlay').hidden)return;
+ golfPending=true;$('create-golf').disabled=true;
+ try{
+  golfSnapshot=await request(selected?'/api/golf/'+selected+'/join':'/api/create',selected?{}:{game:'golf'});
+  golfRoom=golfSnapshot.state.room;showGolf(true);sendPresence();
+  golfSync=setInterval(syncGolf,850);
+ }catch(error){err(error.message)}finally{golfPending=false;$('create-golf').disabled=!identity}
+}
+function closeGolf(){
+ if($('golf-overlay').hidden)return;
+ clearInterval(golfSync);const online=!!golfRoom;golfRoom=null;golfSnapshot=null;
+ $('golf-overlay').hidden=true;$('golf-frame').src='about:blank';tg?.BackButton?.hide();
+ try{tg?.enableVerticalSwipes?.()}catch{}sendPresence();$(online?'create-golf':'play-golf').focus();
+}
+$('play-golf').onclick=()=>{if(!golfPending)showGolf(false)};
+$('create-golf').onclick=()=>openGolf();
+window.addEventListener('message',async event=>{
+ if(event.origin!==location.origin||event.source!==$('golf-frame').contentWindow||$('golf-overlay').hidden)return;
+ const data=event.data;
+ if(data?.type==='golf:ready'){golfPost('insets',{insets:safeInsets(tg)});publishGolf();return;}
+ if(data?.type==='golf:exit'){closeGolf();return;}
+ const selected=golfRoom;
+ if(!selected||data?.type!=='golf:action'||!['start','shot'].includes(data.kind))return;
+ const payload=data.kind==='start'?{}:data.payload;
+ try{
+  const result=await request('/api/golf/'+selected+'/'+data.kind,payload);
+  if(golfRoom===selected){
+   if(result.state.revision>=golfSnapshot.state.revision)golfSnapshot=result;
+   publishGolf(true);
+  }
+ }catch(error){if(golfRoom===selected)golfPost('error',{message:error.message})}
+});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify({type:'heartbeat'}))});
 
 function renderTutorial(s){const box=$('tutorial-panel'),hint=s.tutorial;box.hidden=!hint;if(!hint)return;$('tutorial-title').textContent=hint.title;$('tutorial-text').textContent=hint.text;$('tutorial-reason').textContent=hint.reason;$('tutorial-move').hidden=!hint.action;$('tutorial-move').disabled=busy;$('tutorial-move').onclick=()=>sendMove({...hint.action,revision:state.revision});}

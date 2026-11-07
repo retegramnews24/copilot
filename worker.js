@@ -8,6 +8,7 @@ import {winningSeats,resultsFor,topFive} from './leaderboard.js';
 import {stagedGame,limits,activeTable,createSeries,settleSeries} from './match-series.js';
 import {initialUno,playUno,unoView} from './uno.js';
 import {initialConnect4,playConnect4} from './connect4.js';
+import { GolfRoom } from './golf-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
@@ -128,6 +129,8 @@ export default {
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
+  const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot)$/);
+  if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
   const moto=u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
   if(moto)return env.ROOMS.get(env.ROOMS.idFromName('moto:'+moto[1])).fetch(new Request(u.origin+'/moto-trial/'+moto[2],req));
   const lab=u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
@@ -159,11 +162,11 @@ export default {
   return response;
  }
 };
-const isArcade=game=>game==='labyrinth'||game==='moto-trial';
+const isArcade=game=>game==='labyrinth'||game==='moto-trial'||game==='golf';
 const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived;
 
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.golf=new GolfRoom(ctx,env);}
  public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
  newTable(room,b,token){
   const game=b.game??'chess';
@@ -283,6 +286,7 @@ export class Room extends DurableObject {
  async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
+  if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
   if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
@@ -429,7 +433,7 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:{})};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:s.game==='golf'?{capacity:s.capacity,hole:s.hole}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
   return [...entries.values()].filter(s=>s.game!=='cluedo'&&(isArcade(s.game)||!activeTable(s)||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
@@ -446,7 +450,7 @@ export class Room extends DurableObject {
   const users=[...unique.values()].map(a=>{
    const own=games.find(g=>!isArcade(g.game)&&activeTable(g)&&g.players.some(p=>p.id===a.user.player));
    const watching=tables.find(g=>g.room===a.room);
-   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':watching.game==='moto-trial'?'Moto Trial ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
+   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':watching.game==='moto-trial'?'Moto Trial ':watching.game==='golf'?'Golf ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
   }).sort((a,b)=>a.name.localeCompare(b.name));
   const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()];return {games,users,messages:await this.ctx.storage.get('chat')||[],leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai')};
  }
@@ -513,15 +517,15 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5','labyrinth','moto-trial'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
+   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5','labyrinth','moto-trial','golf'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
    const active=(await this.lobbyList()).filter(activeTable);
-   if(body.game!=='moto-trial'&&active.some(g=>!isArcade(g.game)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
+   if(body.game!=='moto-trial'&&body.game!=='golf'&&active.some(g=>!isArcade(g.game)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    createSeries(body.target);
    const occupied=new Set(active.map(g=>g.number));
    let number=1;
    while(occupied.has(number))number++;
    if(isArcade(body.game)){
-    const room=id(),prefix=body.game==='labyrinth'?'lab:':'moto:';
+    const room=id(),prefix=body.game==='labyrinth'?'lab:':body.game==='golf'?'golf:':'moto:';
     const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix+room));
     const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
     if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
@@ -580,6 +584,7 @@ export class Room extends DurableObject {
  webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
+ if(await this.ctx.storage.get('golf'))return this.golf.alarm();
  if(await this.ctx.storage.get('moto-trial'))return this.moto.alarm();
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('checkmate-lobby-v1').toString()){
   return this.ctx.blockConcurrencyWhile(async()=>{
