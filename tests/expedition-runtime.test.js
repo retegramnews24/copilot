@@ -6,15 +6,29 @@ import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
 import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
-const directory=await mkdtemp(join(tmpdir(),'binottoland-test-')),bot='synthetic-test-bot',password='synthetic-test-password';
+const directory=await mkdtemp(join(tmpdir(),'binottoland-test-')),bot='synthetic-test-bot';
 const mac=(k,v)=>createHmac('sha256',k).update(v).digest('hex');
-const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payload=Buffer.from(JSON.stringify({user,expires:Date.now()+3600000,accessTag:mac(bot,'club-access:'+password)})).toString('base64url');return 'session.'+payload+'.'+mac(bot,'session.'+payload)};
-const options=convertV4MiniflareOptions({rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot,ACCESS_PASSWORD:password}});let mf=new Miniflare(options);const sockets=[];
+const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payload=Buffer.from(JSON.stringify({user,expires:Date.now()+3600000,accessTag:mac(bot,'telegram-session-v1')})).toString('base64url');return 'session.'+payload+'.'+mac(bot,'session.'+payload)};
+const options=convertV4MiniflareOptions({rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot}});let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
 function until(client,predicate){const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet'))},7000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
 async function connect(id,room,watch=false){const res=await mf.dispatchFetch('https://unit.test/api/labyrinth/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
 try{
  const unauth=await mf.dispatchFetch('https://unit.test/api/labyrinth/00000000-0000-4000-8000-000000000000/state',{headers:{'X-Checkmate-User':JSON.stringify({id:'1'})}});assert.equal(unauth.status,401);
+ const telegramData=new URLSearchParams({
+  auth_date:String(Math.floor(Date.now()/1000)),
+  user:JSON.stringify({id:1,first_name:'Test 1'})
+ });
+ const telegramKey=createHmac('sha256','WebAppData').update(bot).digest();
+ const signedFields=[...telegramData].sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>key+'='+value).join('\n');
+ telegramData.set('hash',mac(telegramKey,signedFields));
+ const login=await call(1,'/api/session',{initData:telegramData.toString()});
+ assert.equal(login.status,200);
+ assert.equal(login.data.user.player,'tg:1');
+ const lobby=await mf.dispatchFetch('https://unit.test/api/lobby',{headers:{Authorization:'Bearer '+login.data.token}});
+ assert.equal(lobby.status,200);
+ telegramData.set('user',JSON.stringify({id:2,first_name:'Test 2'}));
+ assert.equal((await call(1,'/api/session',{initData:telegramData.toString()})).status,401);
  const made=await call(1,'/api/create',{game:'labyrinth'});assert.equal(made.status,200);const room=made.data.state.room;assert.equal(made.data.state.players.length,1);for(let i=2;i<=4;i++)assert.equal((await call(i,'/api/labyrinth/'+room+'/join',{})).status,200);
  const clients=[];for(let i=1;i<=4;i++)clients.push(await connect(i,room));await until(clients[0],p=>p.type==='state'&&p.state.players.filter(p=>p.online).length===4);
  const watcher=await connect(5,room,true);const latest=(await call(1,'/api/labyrinth/'+room+'/state')).data.state;assert.equal(latest.players.length,4);assert.equal(latest.cases.length,4);

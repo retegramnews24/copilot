@@ -518,18 +518,18 @@ trace('BOOT','Binottoland 1.1 · registro sessione attivo');
 
 
 function enterFullscreen(){try{if(tg?.requestFullscreen&&!tg.isFullscreen)tg.requestFullscreen()}catch{}}
-async function startSession(password){
+async function startSession(){
  enterFullscreen();
- $('access-submit').disabled=true;$('access-error').textContent='Verifica dell’accesso…';
+ $('access-retry').hidden=true;$('access-error').textContent='Collegamento a Telegram…';
  try{
   if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
-  const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData,password})});
+  const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData})});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chatMessages=payload.messages||[];
-  renderLobby();$('access-password').blur();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();
- }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;trace('AUTH','Accesso non completato')}finally{$('access-password').value='';$('access-submit').disabled=false}
+  renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();
+ }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:labyrinthRoom||room,away}));
@@ -586,8 +586,7 @@ $('chat-form').onsubmit=async event=>{
 };
 setInterval(()=>{if(!document.hidden)sendPresence()},25000);
 window.addEventListener('pagehide',()=>{sendPresence(true);lobbyWS?.close()});
-$('access-form').onsubmit=event=>{event.preventDefault();startSession($('access-password').value)};
-if(!tg?.initData){$('access-submit').disabled=true;$('access-password').disabled=true;$('access-error').textContent='Apri Binottoland da Telegram per accedere.';$('access-telegram').hidden=false;}
+
 
 
 
@@ -642,3 +641,6 @@ async function loadLeaders(){if(!sessionToken||leaderBusy)return;leaderBusy=true
 $('leaderboard-mode').onchange=()=>{leaderMode=$('leaderboard-mode').value;loadLeaders()};$('leaderboard-game').onchange=()=>{leaderGame=$('leaderboard-game').value;loadLeaders()};
 $('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html';tg?.BackButton?.show()};
 $('tutorial-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?tutorial=1';tg?.BackButton?.show()};
+
+$('access-retry').onclick=startSession;
+startSession();

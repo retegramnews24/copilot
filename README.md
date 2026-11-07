@@ -4,14 +4,7 @@ Mini App Telegram del circolo: una Lobby condivisa con account verificati, prese
 
 ## Configurazione privata
 
-Nel Worker Cloudflare di produzione aggiungere due secret, mai nel repository:
-
-- `BOT_TOKEN`: token del bot Telegram.
-- `ACCESS_PASSWORD`: password condivisa del circolo, scelta dal proprietario.
-
-L'accesso richiede sia i dati Telegram firmati sia la password. In assenza di ACCESS_PASSWORD il servizio rifiuta l'accesso. Cinque tentativi errati per account bloccano nuovi tentativi per 15 minuti. Le sessioni durano 12 ore e una modifica della password invalida le sessioni precedenti. La password non è salvata dal client né nel database; le sessioni del browser restano in memoria.
-
-Questo è un accesso con password condivisa: non è un controllo dell'appartenenza a un gruppo Telegram. I permessi di archiviazione e cancellazione restano ai partecipanti delle rispettive partite.
+Configura il secret `BOT_TOKEN` del bot Telegram nel Worker Cloudflare di produzione. Il server verifica i dati firmati da Telegram e crea una sessione di 12 ore, conservata in memoria dal client. Chi può aprire la Mini App da Telegram può entrare. I permessi di archiviazione e cancellazione restano ai partecipanti delle rispettive partite.
 
 ## Avvio e pubblicazione
 
@@ -38,7 +31,7 @@ Binottoland è il circolo. DABradio e binottoland_hub rimangono progetti separat
 
 ## Verifica
 
-Controlli locali eseguiti con API Durable Object e DOM simulati: identità firmata, autorizzazioni, partite, patta, archivio/replay, presenza/chat, accesso con password e navigazione/radio. La verifica degli stream e della resa audio nel client Telegram richiede dispositivi reali.
+Controlli locali eseguiti con API Durable Object e DOM simulati: identità firmata, autorizzazioni, partite, patta, archivio/replay, presenza/chat, accesso automatico con Telegram e navigazione/radio. La verifica degli stream e della resa audio nel client Telegram richiede dispositivi reali.
 
 ## Dama italiana
 

@@ -84,6 +84,7 @@ async function mac(key,text){
  return new Uint8Array(await crypto.subtle.sign('HMAC',k,encoder.encode(text)));
 }
 const hex=bytes=>[...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
+const telegramAccessTag=async env=>env.BOT_TOKEN?hex(await mac(env.BOT_TOKEN,'telegram-session-v1')):null;
 async function login(req,env){
  try{
   if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN mancante.'},503);
@@ -97,10 +98,7 @@ async function login(req,env){
   if(!Number.isFinite(age)||age< -60||age>86400)throw Error();
   const u=JSON.parse(p.get('user')||'null');if(!u||!Number.isSafeInteger(u.id)||u.id<=0)throw Error();
   const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):'',photo:typeof u.photo_url==='string'&&u.photo_url.startsWith('https://')&&u.photo_url.length<=512?u.photo_url:''};
-  if(!env.ACCESS_PASSWORD)return json({error:'Accesso riservato in configurazione.'},503);
-  const access=await env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/access',{method:'POST',body:JSON.stringify({userId:user.id,password:typeof body.password==='string'?body.password:''})}));
-  if(!access.ok)return access;
-  const accessTag=hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD));
+  const accessTag=await telegramAccessTag(env);
   const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,accessTag,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
   const token='session.'+payload+'.'+hex(await mac(env.BOT_TOKEN,'session.'+payload));
   return json({user,token});
@@ -113,7 +111,7 @@ async function sessionUser(req,env){
   const m=String(token||'').match(/^session\.([A-Za-z0-9_-]+)\.([a-f0-9]{64})$/);
   if(!m||!env.BOT_TOKEN||hex(await mac(env.BOT_TOKEN,'session.'+m[1]))!==m[2])return null;
   const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[1].replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))));
-  if(!env.ACCESS_PASSWORD||payload.accessTag!==hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)))return null;
+  if(payload.accessTag!==await telegramAccessTag(env))return null;
   return payload.expires>Date.now()?payload.user:null;
  }catch{return null}
 }
@@ -134,7 +132,7 @@ export default {
   const user=await sessionUser(req,env);
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
-  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));req=new Request(req,{headers:trustedHeaders});
+  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
   const lab=u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
   if(lab)return env.ROOMS.get(env.ROOMS.idFromName('lab:'+lab[1])).fetch(new Request(u.origin+'/labyrinth/'+lab[2]+u.search,req));
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
@@ -161,7 +159,7 @@ export default {
  }
 };
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,async()=>hex(await mac(env.BOT_TOKEN,'club-access:'+env.ACCESS_PASSWORD)));}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));}
  public(s,viewer=null){return {room:s.room,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
  resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno')s.uno=initialUno(s.players.length);else if(s.game==='scarabeo')s.scarabeo=initialScarabeo(s.players.length);else if(s.game==='scopa')s.scopa=initialScopa(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
  tutorialView(s){const seat=0,view=this.public({...s,mode:'ai'},s.players[0].id),g=view.naval||view.briscola||view[s.game]||view.chess;const can=s.scarabeo?.pending?s.scarabeo.pending.by!==0&&!Object.hasOwn(s.scarabeo.pending.votes,0):s.naval?.phase==='placement'?!s.naval.ready[0]:s.turn===0;return can?tutorial(s.game,g,seat,s.moves.length):{title:'Turno dell’AI',text:'Osserva la risposta dell’avversario. Poi potrai scegliere liberamente o provare la mossa suggerita.',reason:g.lastEvent||'',action:null};}
@@ -205,7 +203,7 @@ export class Room extends DurableObject {
 
     }
  }
- async broadcast(s){const tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
+ async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
@@ -319,7 +317,7 @@ export class Room extends DurableObject {
  }
 
  async lobbyPayload(){
-  const games=await this.lobbyList(),unique=new Map(),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;
+  const games=await this.lobbyList(),unique=new Map(),tag=await telegramAccessTag(this.env);
   for(const ws of this.ctx.getWebSockets()){
    const a=ws.deserializeAttachment();if(!tag||!a||a.accessTag!==tag||a.kind!=='lobby'||a.closed||Date.now()-a.seen>65000)continue;
    const prior=unique.get(a.user.id);if(!prior||a.room)unique.set(a.user.id,a);
@@ -335,7 +333,7 @@ export class Room extends DurableObject {
   const payload=await this.lobbyPayload(),signature=JSON.stringify(payload.users);
   if(!force&&signature===this.presenceSignature)return;
   this.presenceSignature=signature;
-  const message=JSON.stringify(payload),tag=this.env.ACCESS_PASSWORD?hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD)):null;
+  const message=JSON.stringify(payload),tag=await telegramAccessTag(this.env);
   for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
  }
  async lobby(req,path){
@@ -352,14 +350,6 @@ export class Room extends DurableObject {
   if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
   const body=await req.json();
   if(path==='/lobby/result'){const old=await this.ctx.storage.get('result:'+body.key);if(!old)await this.ctx.storage.put('result:'+body.key,body);return json({ok:true});}
-  if(path==='/lobby/access'){
-   if(!this.env.ACCESS_PASSWORD)return json({error:'Accesso riservato in configurazione.'},503);
-   const key='access-attempt:'+body.userId,now=Date.now(),saved=await this.ctx.storage.get(key);
-   const attempt=saved&&now-saved.start<15*60000?saved:{count:0,start:now};
-   if(attempt.count>=5)return json({error:'Troppi tentativi. Riprova tra 15 minuti.'},429);
-   if(body.password!==this.env.ACCESS_PASSWORD){attempt.count++;await this.ctx.storage.put(key,attempt);return json({error:'Password non corretta.'},403)}
-   await this.ctx.storage.delete(key);return json({ok:true});
-  }
   if(path==='/lobby/join'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    if((await this.lobbyList()).some(g=>g.game!=='labyrinth'&&g.room!==body.room&&activeTable(g)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta. Puoi guardare le altre.'},409);
@@ -416,7 +406,7 @@ export class Room extends DurableObject {
  }
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.ACCESS_PASSWORD||a?.accessTag!==hex(await mac(this.env.BOT_TOKEN,'club-access:'+this.env.ACCESS_PASSWORD))){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;
