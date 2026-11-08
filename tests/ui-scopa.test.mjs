@@ -94,11 +94,25 @@ assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map
 assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
 get('cinema-rooms').querySelector('button').click();
 const cinemaFrame=get('cinema-frame');
-const cinemaEvent=type=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type}}));
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=4');
+const cinemaEvent=(type,data={})=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type,...data}}));
+assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=5');
 cinemaEvent('ready');
 assert.deepEqual(cinemaMessages.at(-1),{type:'enter',room:cinemaId});
 cinemaSocket.onmessage({data:JSON.stringify({type:'rooms',rooms:cinemaRooms,active:{id:cinemaId}})});
+const searchReplies=[],previousCinemaFetch=w.fetch;
+cinemaFrame.contentWindow.postMessage=packet=>searchReplies.push(packet);
+w.fetch=async(path,options)=>{
+ if(!path.startsWith('/api/cinema/youtube?'))return previousCinemaFetch(path,options);
+ assert.equal(options.headers.Authorization,'Bearer synthetic');
+ assert.equal(new URL(path,w.location.origin).searchParams.get('q'),'motorsport');
+ return Response.json({error:'Google ha rifiutato la chiave.'},{status:503});
+};
+cinemaEvent('youtube-search',{id:17,params:{mode:'search',type:'video',q:'motorsport'}});
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(searchReplies.at(-1).type,'cinema:youtube-result');
+assert.equal(searchReplies.at(-1).id,17);
+assert.match(searchReplies.at(-1).error,/rifiutato la chiave/);
+w.fetch=previousCinemaFetch;
 cinemaSocket.onmessage({data:JSON.stringify({type:'room-closed',id:cinemaId})});
 assert.equal(get('cinema-overlay').hidden,true);
 assert.equal(get('page-game').hidden,false);

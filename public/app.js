@@ -1131,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=4';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=5';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=$('cinema-lobby-create').onclick=()=>openCinema();
@@ -1156,6 +1156,7 @@ async function lookupCinemaYouTube(id,params){
  if(!Number.isSafeInteger(id)||!params||typeof params!=='object')return;
  cinemaLookup?.abort();
  const controller=new AbortController();cinemaLookup=controller;
+ const timeout=setTimeout(()=>controller.abort(),32000);
  const query=new URLSearchParams();
  for(const key of ['mode','q','type','id','handle'])if(typeof params[key]==='string')query.set(key,params[key].slice(0,200));
  let result,error;
@@ -1163,9 +1164,12 @@ async function lookupCinemaYouTube(id,params){
   const response=await fetch('/api/cinema/youtube?'+query,{
    headers:{Authorization:'Bearer '+sessionToken},signal:controller.signal
   });
-  result=await response.json();
-  if(!response.ok)error=result.error||'Ricerca YouTube non disponibile.';
- }catch{error='Ricerca YouTube non disponibile.';}
+  result=await response.json().catch(()=>null);
+  if(response.status===401)error='La sessione è scaduta. Riapri Binottoland da Telegram.';
+  else if(!response.ok)error=result?.error||'Ricerca YouTube non disponibile (HTTP '+response.status+').';
+  else if(!Array.isArray(result?.items))error='Il server ha restituito una risposta YouTube incompleta.';
+ }catch{error=controller.signal.aborted?'YouTube non ha risposto in tempo. Riprova.':'Collegamento al servizio YouTube interrotto. Riprova.';}
+ finally{clearTimeout(timeout);}
  if(cinemaLookup===controller){cinemaLookup=null;cinemaPost('youtube-result',{id,result,error});}
 }
 window.addEventListener('message',event=>{

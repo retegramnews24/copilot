@@ -17,9 +17,33 @@ const validVideo=id=>/^[\w-]{11}$/.test(id??'');
 const response=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const failure=(message,status)=>Object.assign(Error(message),{status});
 
+function googleFailure(status,error){
+  const reasons=new Set();
+  for(const entries of [error?.errors,error?.details]){
+    if(Array.isArray(entries))for(const entry of entries)if(typeof entry?.reason==='string')reasons.add(entry.reason);
+  }
+  const has=(...codes)=>codes.some(code=>reasons.has(code));
+  if(status===429||has('quotaExceeded','dailyLimitExceeded','rateLimitExceeded','userRateLimitExceeded','RATE_LIMIT_EXCEEDED','QUOTA_EXCEEDED')){
+    return failure('Quota YouTube esaurita o troppe richieste. Puoi ancora riprodurre un link diretto.',429);
+  }
+  if(has('API_KEY_INVALID','keyInvalid','keyExpired','API_KEY_EXPIRED')){
+    return failure('Google ha rifiutato la chiave. Verifica il valore del secret YOUTUBE_API_KEY su Cloudflare.',503);
+  }
+  if(has('API_KEY_HTTP_REFERRER_BLOCKED','API_KEY_IP_ADDRESS_BLOCKED','API_KEY_ANDROID_APP_BLOCKED','API_KEY_IOS_APP_BLOCKED','ipRefererBlocked','refererNotAllowed')){
+    return failure('Le restrizioni applicazione della chiave bloccano il Worker. Su Google Cloud impostale su Nessuna.',503);
+  }
+  if(has('SERVICE_DISABLED','accessNotConfigured','serviceDisabled','API_KEY_SERVICE_BLOCKED')){
+    return failure('Google blocca YouTube Data API v3. Verifica che sia abilitata nel progetto della chiave e consentita nelle restrizioni API.',503);
+  }
+  if(status===401||status===403){
+    return failure('Google ha negato l’accesso a YouTube. Verifica la chiave e le restrizioni del progetto Google Cloud.',503);
+  }
+  return failure('YouTube ha restituito un errore. Riprova tra poco o usa un link diretto.',502);
+}
+
 export class YouTubeCatalog{
   constructor(key){
-    this.key=key;
+    this.key=typeof key==='string'?key.trim():'';
     this.cache=new Map();
     this.pending=new Map();
     this.searchers=new Map();
@@ -27,32 +51,29 @@ export class YouTubeCatalog{
   async api(resource,params){
     const url=new URL(resource,API);
     url.search=new URLSearchParams({...params,key:this.key});
-    const reply=await fetch(url,{signal:AbortSignal.timeout(8000),redirect:'error'});
-    const data=await reply.json();
-    if(!reply.ok){
-      const reason=data.error?.errors?.[0]?.reason;
-      if(reply.status===429||['quotaExceeded','dailyLimitExceeded','rateLimitExceeded'].includes(reason)){
-        throw failure('Quota YouTube esaurita. Puoi ancora riprodurre un link diretto.',429);
-      }
-      throw failure('YouTube non è disponibile in questo momento. Puoi usare un link diretto.',502);
-    }
-    return data.items??[];
+    const reply=await fetch(url,{signal:AbortSignal.timeout(8000),redirect:'manual'});
+    const data=await reply.json().catch(()=>null);
+    if(!reply.ok)throw googleFailure(reply.status,data?.error);
+    if(!Array.isArray(data?.items))throw failure('YouTube ha inviato una risposta incompleta. Riprova tra poco.',502);
+    return data.items;
   }
   async search(q,type){
-    const params={part:'snippet',maxResults:String(LIMIT),q,type:type==='channel'?'channel':'video',regionCode:'IT',relevanceLanguage:'it'};
+    const params={part:'snippet',maxResults:String(LIMIT),q,type:type==='channel'?'channel':'video',relevanceLanguage:'it'};
     if(type!=='channel')params.videoEmbeddable='true';
     if(type==='live')params.eventType='live';
-    const items=await this.api('search',params);
-    return {items:items.flatMap(({id,snippet})=>{
+    const results=await this.api('search',params);
+    const items=results.flatMap(item=>{
+      const {id,snippet}=item??{};
       if(!snippet)return [];
-      if(type==='channel'&&validYouTubeChannelId(id?.channelId))return [channel(id.channelId,snippet.title)];
-      if(validVideo(id?.videoId))return [video(id.videoId,snippet.title,snippet.channelTitle,snippet.liveBroadcastContent==='live')];
-      return [];
-    })};
+      if(type==='channel')return validYouTubeChannelId(id?.channelId)?[channel(id.channelId,snippet.title)]:[];
+      return validVideo(id?.videoId)?[video(id.videoId,snippet.title,snippet.channelTitle,snippet.liveBroadcastContent==='live')]:[];
+    });
+    if(results.length&&!items.length)throw failure('I risultati YouTube ricevuti sono incompleti. Riprova tra poco.',502);
+    return {items};
   }
   async feed(id){
     const url='https://www.youtube.com/feeds/videos.xml?channel_id='+id;
-    const reply=await fetch(url,{signal:AbortSignal.timeout(8000),redirect:'error'});
+    const reply=await fetch(url,{signal:AbortSignal.timeout(8000),redirect:'manual'});
     if(reply.status===404)throw failure('Canale YouTube non trovato.',404);
     if(!reply.ok)throw failure('Elenco dei video del canale non disponibile. Puoi usare un link diretto.',502);
     const xml=await reply.text();
@@ -120,8 +141,10 @@ export class YouTubeCatalog{
         }
         const lookup=searching?this.search(q,type):this.uploads(id,handle);
         pending=lookup.then(result=>{
-          if(this.cache.size>=100)this.cache.delete(this.cache.keys().next().value);
-          this.cache.set(key,{result,expires:Date.now()+(type==='live'?90000:600000)});
+          if(result.items.length||result.channel){
+            if(this.cache.size>=100)this.cache.delete(this.cache.keys().next().value);
+            this.cache.set(key,{result,expires:Date.now()+(type==='live'?90000:600000)});
+          }
           return result;
         }).finally(()=>this.pending.delete(key));
         this.pending.set(key,pending);

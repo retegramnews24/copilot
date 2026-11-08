@@ -10,7 +10,8 @@ import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 const directory=await mkdtemp(join(tmpdir(),'binottoland-test-')),bot='synthetic-test-bot';
 const mac=(k,v)=>createHmac('sha256',k).update(v).digest('hex');
 const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payload=Buffer.from(JSON.stringify({user,expires:Date.now()+3600000,accessTag:mac(bot,'telegram-session-v1')})).toString('base64url');return 'session.'+payload+'.'+mac(bot,'session.'+payload)};
-const options=convertV4MiniflareOptions({rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot}});let mf=new Miniflare(options);const sockets=[];
+const runtimeConfig={rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot}};
+const options=convertV4MiniflareOptions(runtimeConfig);let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
 function until(client,predicate){const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet'))},7000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
 async function connect(id,room,watch=false,game='labyrinth'){const res=await mf.dispatchFetch('https://unit.test/api/'+game+'/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
@@ -325,3 +326,47 @@ try{
  console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}
+
+const searchKey='synthetic-youtube-key',publicChannelId='UC_x5XG1OV2P6uZZ5FSM9Ttw';
+const searchWorker=new Miniflare(convertV4MiniflareOptions({
+ ...runtimeConfig,resourcePersistencePath:undefined,bindings:{BOT_TOKEN:bot,YOUTUBE_API_KEY:searchKey},
+ outboundService:async req=>{
+  const url=new URL(req.url);
+  if(url.origin==='https://www.youtube.com'){
+   assert.equal(url.pathname,'/feeds/videos.xml');
+   assert.equal(url.searchParams.get('channel_id'),publicChannelId);
+   assert.equal(url.searchParams.has('key'),false);
+   return new Response('<feed><title>Canale prova</title><entry><yt:videoId>M7lc1UVf-VE</yt:videoId><title>Video</title></entry></feed>');
+  }
+  assert.equal(url.origin,'https://www.googleapis.com');
+  assert.equal(url.searchParams.get('key'),searchKey);
+  assert.equal(req.headers.has('Authorization'),false);
+  if(url.searchParams.get('q')==='redirect')return new Response(null,{status:302,headers:{Location:'https://outside.example'}});
+  if(url.pathname==='/youtube/v3/channels')return Response.json({error:{details:[{reason:'SERVICE_DISABLED'}]}},{status:403});
+  assert.equal(url.pathname,'/youtube/v3/search');
+  assert.equal(url.searchParams.get('part'),'snippet');
+  assert.equal(url.searchParams.get('videoEmbeddable'),'true');
+  if(url.searchParams.get('q')==='bloccato')return Response.json({error:{details:[{reason:'API_KEY_SERVICE_BLOCKED'}]}},{status:403});
+  return Response.json({items:[{id:{videoId:'M7lc1UVf-VE'},snippet:{title:'Motorsport',channelTitle:'Test'}}]});
+ }
+}));
+try{
+ const search=q=>searchWorker.dispatchFetch('https://unit.test/api/cinema/youtube?mode=search&type=video&q='+q,{
+  headers:{Authorization:'Bearer '+token(801)}
+ });
+ const success=await search('motorsport'),body=await success.json();
+ assert.equal(success.status,200,JSON.stringify(body));
+ assert.deepEqual(body.items.map(item=>item.id),['M7lc1UVf-VE']);
+ const blocked=await search('bloccato');
+ assert.equal(blocked.status,503);
+ const error=await blocked.json();
+ assert.match(error.error,/Google blocca YouTube Data API v3/);
+ assert.doesNotMatch(error.error,new RegExp(searchKey));
+ assert.equal((await search('redirect')).status,502);
+ const feed=await searchWorker.dispatchFetch('https://unit.test/api/cinema/youtube?mode=channel&id='+publicChannelId,{
+  headers:{Authorization:'Bearer '+token(801)}
+ });
+ assert.equal(feed.status,200);
+ assert.equal((await feed.json()).items[0].id,'M7lc1UVf-VE');
+ console.log('PASS YouTube runtime: Telegram auth, configured key, live DO route, Google request parameters and safe error forwarding.');
+}finally{await searchWorker.dispose();}

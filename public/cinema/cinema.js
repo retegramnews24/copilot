@@ -301,7 +301,7 @@ $('tv-feed-form').onsubmit=async event=>{
   }catch(error){status.textContent=error.message==='Failed to fetch'?'Playlist non raggiungibile dal browser. Verifica il link e l’accesso pubblico.':error.message;}
   finally{button.disabled=false;}
 };
-let youtubeSearchId=0,youtubeResults=[],youtubeQueryResults=[],youtubeChannel=null;
+let youtubeSearchId=0,youtubeLastRequest=null,youtubeResults=[],youtubeQueryResults=[],youtubeChannel=null;
 function selectSource(source){
   const isTV=source==='tv';
   $('source-tv').setAttribute('aria-pressed',String(isTV));
@@ -335,7 +335,7 @@ function drawYouTube(){
   }));
 }
 function lookupYouTube(params){
-  youtubeChannel=null;youtubeResults=[];drawYouTube();
+  youtubeLastRequest=params;youtubeChannel=null;youtubeResults=[];drawYouTube();
   $('youtube-search-status').textContent='Caricamento da YouTube…';
   send('youtube-search',{id:++youtubeSearchId,params});
 }
@@ -486,7 +486,9 @@ window.addEventListener('message',event=>{
     youtubeResults=data.result?.items??[];
     youtubeChannel=data.result?.channel??null;
     if(!youtubeChannel)youtubeQueryResults=youtubeResults;
-    $('youtube-search-status').textContent=data.error||(youtubeResults.length?(youtubeChannel?'Video recenti':'Risultati YouTube'):'Nessun video o canale trovato.');
+    const empty=youtubeLastRequest?.type==='live'?'Nessuna diretta trovata. Prova anche con il filtro Video.':
+      youtubeLastRequest?.mode==='search'?'Nessun risultato per «'+youtubeLastRequest.q+'». Prova un altro nome o filtro.':'Nessun video recente trovato.';
+    $('youtube-search-status').textContent=data.error||(youtubeResults.length?(youtubeChannel?'Video recenti':'Risultati YouTube'):empty);
     drawYouTube();return;
   }
   if(data?.type==='cinema:upload-result'){

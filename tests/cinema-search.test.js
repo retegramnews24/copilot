@@ -34,6 +34,11 @@ globalThis.fetch=async raw=>{
     case 'videos.xml':
       return new Response(`<feed><title>Canale &amp; Video</title><entry><yt:videoId>${first}</yt:videoId><title>Video &quot;uno&quot;</title></entry></feed>`);
     case 'search':
+      if(args.get('q')==='chiave')return Response.json({error:{details:[{reason:'API_KEY_INVALID'}]}},{status:400});
+      if(args.get('q')==='bloccata')return Response.json({error:{details:[{reason:'API_KEY_HTTP_REFERRER_BLOCKED'}]}},{status:403});
+      if(args.get('q')==='disabilitata')return Response.json({error:{details:[{reason:'SERVICE_DISABLED'}]}},{status:403});
+      if(args.get('q')==='incompleta')return Response.json({items:[{snippet:{title:'Senza ID'}}]});
+      if(args.get('q')==='vuoto')return Response.json({items:[]});
       if(args.get('q')==='quota')return Response.json({error:{errors:[{reason:'quotaExceeded'}]}},{status:403});
       if(args.get('type')==='channel')return Response.json({items:[{id:{channelId:id},snippet:{title:'Canale'}}]});
       return Response.json({items:[{id:{videoId:first},snippet:{title:'Titolo &amp; video',channelTitle:'Autore',liveBroadcastContent:args.get('eventType')}}]});
@@ -58,13 +63,16 @@ try{
   assert.equal(calls[0].searchParams.get('channel_id'),id);
   assert.equal(feed.channel.name,'Canale & Video');
   assert.equal(feed.items[0].name,'Video "uno"');
-  const full=new YouTubeCatalog('synthetic-yt-key');
+  const full=new YouTubeCatalog('  synthetic-yt-key  ');
   const [result]=await Promise.all([full.fetch(q,'tg:1'),full.fetch(q,'tg:2')]);
   assert.equal((await result.json()).items[0].name,'Titolo & video');
   assert.equal(calls.length,2);
   await full.fetch(request({mode:'search',type:'video',q:' titolo '}),'tg:3');
   assert.equal(calls.length,2);
   assert.equal(calls[1].searchParams.get('videoEmbeddable'),'true');
+  assert.equal(calls[1].searchParams.get('part'),'snippet');
+  assert.equal(calls[1].searchParams.get('key'),'synthetic-yt-key');
+  assert.equal(calls[1].searchParams.has('regionCode'),false);
   const live=await (await full.fetch(request({mode:'search',type:'live',q:'titolo'}),'tg:1')).json();
   assert.equal(live.items[0].live,true);
   assert.equal(calls.at(-1).searchParams.get('eventType'),'live');
@@ -77,5 +85,16 @@ try{
   const limited=await full.fetch(request({mode:'search',type:'video',q:'quota'}),'tg:1');
   assert.equal(limited.status,429);
   assert.doesNotMatch(await limited.text(),/synthetic-yt-key/);
+  for(const [q,expected] of [['chiave',/rifiutato la chiave/],['bloccata',/restrizioni applicazione/],['disabilitata',/sia abilitata/],['incompleta',/risultati .* incompleti/]]){
+    const result=await full.fetch(request({mode:'search',type:'video',q}),'tg:4');
+    assert.equal(result.status,q==='incompleta'?502:503);
+    assert.match((await result.json()).error,expected);
+  }
+  const before=calls.length;
+  for(let attempt=0;attempt<2;attempt++){
+    const empty=await full.fetch(request({mode:'search',type:'video',q:'vuoto'}),'tg:5');
+    assert.deepEqual((await empty.json()).items,[]);
+  }
+  assert.equal(calls.length,before+2,'Empty responses must not stay cached');
 }finally{globalThis.fetch=initialFetch;}
 console.log('PASS Cinema search: country and category filters, source deduplication, YouTube RSS, quota, caching, public channels and embeddable videos.');
