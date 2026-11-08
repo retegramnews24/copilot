@@ -5,7 +5,6 @@ import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
 import {WindowShare} from './screen-share.js?v=2';
 import {CinemaMosaic} from './mosaic.js?v=2';
-import {audienceAudio,showPopcorn} from './audience-effects.js?v=1';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar');
@@ -237,12 +236,7 @@ multisala.onclose=()=>{
   if(target&&target!==room?.id&&connected){action('enter',{room:target});return;}
   drawScreenShare();tune(room?.channel,true);
 };
-const audience=audienceAudio(),seats=new Map();
-document.addEventListener('pointerdown',audience.unlock,{passive:true});
-document.addEventListener('keydown',audience.unlock);
-$('audience-shush').onclick=()=>{
-  audience.unlock();action('audience-effect',{effect:'shush'});
-};
+const seats=new Map();
 function drawAudience(people){
   const present=new Set(people.map(person=>person.id));
   for(const [id,seat] of seats)if(!present.has(id)){
@@ -251,31 +245,18 @@ function drawAudience(people){
   people.forEach(({id,name,appearance},index)=>{
     let seat=seats.get(id);
     if(!seat){
-      const sofa=node(id===me?'button':'div','','sofa');
-      if(id===me){
-        sofa.type='button';
-        sofa.setAttribute('aria-label','Mangia popcorn');
-        sofa.onclick=()=>{audience.unlock();action('audience-effect',{effect:'popcorn'});};
-      }
+      const sofa=node('div','','sofa');
       const figure=node('span'),label=node('small');
       sofa.append(figure,label);
       seat={sofa,figure,label,appearance:null};
       seats.set(id,seat);$('sofas').append(sofa);
     }
     seat.sofa.style.setProperty('--seat-color',['#926283','#58728f','#777347','#9a5f55'][index%4]);
-    seat.sofa.title=id===me?'Mangia popcorn':name;
+    seat.sofa.title=name;
     seat.label.textContent=id===me?'Tu · '+name:name;
     const avatar=avatarSVG(appearance);
     if(seat.appearance!==avatar){seat.figure.innerHTML=avatar;seat.appearance=avatar;}
   });
-}
-function audienceEffect({room:id,player,effect}){
-  if(room?.id!==id||!['popcorn','shush'].includes(effect))return;
-  audience.play(effect,settings.volume);
-  if(effect==='popcorn'){
-    const seat=seats.get(player);
-    if(seat)showPopcorn(seat.sofa);
-  }
 }
 const closeDialog=$('close-dialog');
 $('close-room').onclick=()=>{closeDialog.returnValue='';closeDialog.showModal();};
@@ -609,7 +590,6 @@ window.addEventListener('message',event=>{
   const packet=data.packet;
   if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;mosaic.clock=clockOffset;mosaicPreviews=packet.previews??[];drawRooms(packet.rooms,packet.active);}
   else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();drawYouTube();if(catalogController)drawSearch();}
-  else if(packet.type==='audience-effect')audienceEffect(packet);
   else if(packet.type?.startsWith('screen-')){screenShare.receive(packet);if(multisala.open)mosaic.packet(packet);}
   else if(packet.type==='error')notice(packet.message);
 });

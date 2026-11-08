@@ -235,16 +235,6 @@ export class Cinema {
           socket.serializeAttachment({...info,mosaic});
           this.publish(data);return;
         }
-        if(input.type==='audience-effect'){
-          const effect=input.effect;
-          if(effect!=='popcorn'&&effect!=='shush')return;
-          const now=Date.now(),last=info.effects?.[effect]??0;
-          if(now-last<(effect==='popcorn'?1050:1400))return;
-          socket.serializeAttachment({...info,effects:{...info.effects,[effect]:now}});
-          const packet={type:'audience-effect',room:room.id,player:info.user.player,effect};
-          for(const client of this.connections())if(client.info.room===room.id)send(client.socket,packet);
-          return;
-        }
         if(input.type==='close-room'){
           if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può chiuderla.');
           const rooms=data.rooms.filter(entry=>entry!==room);

@@ -104,14 +104,3 @@ calc(8px + max(env(safe-area-inset-left),var(--system-safe-left,0px)))}
 
 .mosaic-caption .mosaic-audio{margin-left:auto}
 .mosaic-audio[aria-pressed=true]{border-color:#b9778f;color:#ffe3b4}
-
-#sofas{padding-top:9px}
-#sofas button.sofa{border:0;background:transparent;cursor:pointer}
-#sofas button.sofa:hover::before{border-color:var(--gold)}
-#audience-count{margin-left:auto}
-#audience-shush{font-size:11px;min-height:25px;padding:2px 6px}
-.popcorn-effect{position:absolute;z-index:1;top:19px;left:50%;pointer-events:none}
-.popcorn-effect span{position:absolute;opacity:0;font-size:18px;animation:popcorn-float .34s ease-out var(--pop-delay) both}
-@keyframes popcorn-float{0%{opacity:0;transform:translate(-50%,0) scale(.58)}20%{opacity:1;transform:translate(-50%,-5px) scale(1.1)}76%{opacity:1}100%{opacity:0;transform:translate(calc(-50% + var(--pop-x)),-25px) scale(.84)}}
-@media(prefers-reduced-motion:reduce){.popcorn-effect span{animation-name:popcorn-fade}}
-@keyframes popcorn-fade{0%,100%{opacity:0}20%,75%{opacity:1}}

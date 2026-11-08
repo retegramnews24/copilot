@@ -1131,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=8';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=9';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=()=>openCinema();

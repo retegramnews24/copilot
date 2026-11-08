@@ -96,7 +96,7 @@ assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
 get('cinema-rooms').querySelector('button').click();
 const cinemaFrame=get('cinema-frame');
 const cinemaEvent=(type,data={})=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type,...data}}));
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=8');
+assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=9');
 cinemaEvent('ready');
 assert.deepEqual(cinemaMessages.at(-1),{type:'enter',room:cinemaId});
 cinemaSocket.onmessage({data:JSON.stringify({type:'rooms',rooms:cinemaRooms,active:{id:cinemaId}})});
@@ -658,35 +658,9 @@ const activeCinema={id:cinemaId,canClose:true,channel:null};
 const currentAudience={...cinemaRooms[0],viewers:[...cinemaRooms[0].viewers,{id:'tg:2',name:'Ospite'}]};
 const roomPacket={type:'rooms',rooms:[currentAudience,otherRoom],active:activeCinema,me:'tg:1'};
 frameMessage('packet',{packet:roomPacket});
-const starts=[];
-const connectable=()=>({connect(){},disconnect(){}});
-cw.AudioContext=class{
- sampleRate=8000;state='running';currentTime=10;destination={};
- createBuffer(_channels,size){const samples=new Float32Array(size);return {getChannelData:()=>samples};}
- createBiquadFilter(){return {...connectable(),frequency:{setValueAtTime(){},exponentialRampToValueAtTime(){}},Q:{}};}
- createGain(){return {...connectable(),gain:{}};}
- createDynamicsCompressor(){return {...connectable(),threshold:{},ratio:{}};}
- createBufferSource(){return {...connectable(),playbackRate:{},start:time=>starts.push(time)};}
-};
-const ownSeat=cinemaElement('sofas').querySelector('button.sofa');
-assert.equal(ownSeat.getAttribute('aria-label'),'Mangia popcorn');
-assert.equal(cinemaElement('sofas').querySelectorAll('button.sofa').length,1);
-ownSeat.click();
-assert.equal(frameCommands.at(-1).action.effect,'popcorn');
-frameMessage('packet',{packet:{type:'audience-effect',room:cinemaId,player:'tg:1',effect:'popcorn'}});
-assert.equal(starts.length,3);
-assert.deepEqual(starts.map(time=>Math.round((time-starts[0])*100)),[0,32,65]);
-const kernels=ownSeat.querySelectorAll('.popcorn-effect span');
-assert.equal(kernels.length,3);
-frameMessage('packet',{packet:roomPacket});
-assert.equal(cinemaElement('sofas').querySelector('button.sofa'),ownSeat);
-assert.equal(ownSeat.querySelectorAll('.popcorn-effect span').length,3);
-cinemaElement('audience-shush').click();
-assert.equal(frameCommands.at(-1).action.effect,'shush');
-frameMessage('packet',{packet:{type:'audience-effect',room:cinemaId,player:'tg:2',effect:'shush'}});
-assert.equal(starts.length,4);
-frameMessage('packet',{packet:{type:'audience-effect',room:'other',player:'tg:1',effect:'popcorn'}});
-assert.equal(starts.length,4);
+assert.equal(cinemaElement('audience-shush'),null);
+assert.equal(cinemaElement('sofas').querySelector('button.sofa'),null);
+assert.match(cinemaElement('sofas').textContent,/Tu · Fausto/);
 assert.equal(cinemaElement('remote'),null);
 assert.deepEqual([...cinemaElement('sidebar').querySelectorAll('section')].map(el=>el.id),['favorites-panel','search-panel']);
 cinemaElement('source-youtube').click();
@@ -856,7 +830,7 @@ assert.equal(rtc.closed,true);
 
 await new Promise(resolve=>setTimeout(resolve,0));
 cinemaDOM.window.close();
-console.log('PASS Cinema UI: shared controls, live mosaic layout, room popcorn and silence effects, window capture and viewer audio activation.');
+console.log('PASS Cinema UI: shared controls, live mosaic layout, window capture and viewer audio activation.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){

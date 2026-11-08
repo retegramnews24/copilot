@@ -290,16 +290,6 @@ try{
  await until(cinemaA,p=>p.type==='screen-signal'&&p.signal?.sdp==='preview answer');
  cinemaSend(cinemaB,'mosaic',{open:false});
  await until(cinemaA,p=>p.type==='screen-peer-left'&&p.peer===previewPeer.peer);
- cinemaSend(cinemaA,'audience-effect',{effect:'popcorn',player:'spoofed'});
- cinemaSend(cinemaA,'audience-effect',{effect:'popcorn'});
- const popcorn=await until(cinemaD,p=>p.type==='audience-effect'&&p.effect==='popcorn');
- assert.equal(popcorn.player,'tg:801');
- assert.equal(popcorn.room,cinemaRoomA);
- cinemaSend(cinemaD,'audience-effect',{effect:'shush'});
- const shush=await until(cinemaA,p=>p.type==='audience-effect'&&p.effect==='shush');
- assert.equal(shush.player,'tg:804');
- assert.equal(cinemaD.packets.filter(p=>p.type==='audience-effect'&&p.effect==='popcorn').length,1);
- assert.ok(!cinemaB.packets.some(p=>p.type==='audience-effect'));
  cinemaSend(cinemaD,'screen-watch',{share:screenId});
  const {peer:screenPeer}=await until(cinemaA,p=>p.type==='screen-peer'&&p.share===screenId&&p.peer!==previewPeer.peer);
  cinemaSend(cinemaB,'screen-signal',{share:screenId,peer:sharing.active.screen.peer,signal:{type:'answer',sdp:'injected'}});
