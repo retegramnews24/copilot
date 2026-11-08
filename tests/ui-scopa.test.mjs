@@ -15,7 +15,14 @@ import {CAMPAIGN_LENGTH} from '../public/moto-trial/courses.js';
 import {drawTrial} from '../public/moto-trial/render.js';
 import * as trialPhysics from '../public/moto-trial/physics.js';
 import {FrameBudget} from '../public/labyrinth/performance.js';
-const source=await fs.readFile('public/app.js','utf8'),bundle=await build({stdin:{contents:source+'\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};',resolveDir:process.cwd()+'/public'},bundle:true,write:false,format:'iife',platform:'browser'});
+const source=await fs.readFile('public/app.js','utf8');
+const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};';
+const importLines=/^import .+;$/gm;
+const root=process.cwd()+'/public';
+const imports=await build({stdin:{
+ contents:source.match(importLines).join('\n')+'\nObject.assign(window,{renderScopa,renderNaval,renderBriscola,renderScarabeo,safeInsets,applyInsets,viewportHeight,CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN,golfColors,readAppearance});',
+ resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
+
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
 const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Fausto'},{id:'bot:1',name:'AI 1',bot:true}],user={id:'1',player:'tg:1',name:'Fausto'},scopa=initialScopa(2),view=scopaView(scopa,0);let state={room,number:1,phase:'playing',game:'scopa',players,turn:0,revision:0,moves:[],scopa:view,mode:'tutorial',tutorial:tutorial('scopa',view,0,0),expires:Date.now()+86400000};const payload=()=>({games:[state],users:[],messages:[],leaderboard:[{id:'tg:9',name:'Anna <b>',wins:5,games:{scopa:3,chess:2}}],aiLeaderboard:[{id:'tg:1',name:'Fausto',wins:2,games:{scopa:2}}]});
@@ -37,7 +44,7 @@ w.WebSocket=class{
 };
 w.fetch=async(path,opts)=>Response.json(path==='/api/session'?{user,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...payload(),pending:false}:path==='/api/lobby'?payload():state);
 w.localStorage.setItem('binotto-golf-ball',JSON.stringify(['#a11293','#197b61']));
-w.eval(bundle.outputFiles[0].text);await new Promise(r=>setTimeout(r,50));assert.equal(w.document.getElementById('app-shell').hidden,false);assert.equal(w.document.querySelector('input[type=password]'),null);await w.__qa.openRoom(room,true);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-hand button').length,3);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-table .sicilian-card').length,4);assert.equal(w.document.getElementById('tutorial-panel').hidden,false);assert.ok(w.document.getElementById('tutorial-reason').textContent.length);assert.equal(w.document.getElementById('create-cluedo'),null);
+w.eval(imports.outputFiles[0].text);w.eval(source.replace(importLines,'')+exposed);await new Promise(r=>setTimeout(r,50));assert.equal(w.document.getElementById('app-shell').hidden,false);assert.equal(w.document.querySelector('input[type=password]'),null);await w.__qa.openRoom(room,true);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-hand button').length,3);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-table .sicilian-card').length,4);assert.equal(w.document.getElementById('tutorial-panel').hidden,false);assert.ok(w.document.getElementById('tutorial-reason').textContent.length);assert.equal(w.document.getElementById('create-cluedo'),null);
 w.__qa.createGame('briscola5','solo');
 w.document.querySelector('[name="solo-mode"][value="tutorial"]').click();
 assert.equal(w.document.getElementById('creation-format').hidden,true);
@@ -666,6 +673,7 @@ console.log('PASS Cinema UI: general Lobby, live Multisala, direct file picker a
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
+const bundle=await build({stdin:{contents:source+exposed,resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
 const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/labyrinth',preview+'/public/labyrinth',{recursive:true});await fs.cp('public/moto-trial',preview+'/public/moto-trial',{recursive:true});await fs.cp('public/golf',preview+'/public/golf',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');
 const fixture=`window.Telegram={WebApp:{ready(){},expand(){},onEvent(){},initData:'preview'}};const qaUser=${JSON.stringify(user)};const qaState=${JSON.stringify({...state,game:'scopa',scopa:view,scarabeo:null,turn:0,tutorial:tutorial('scopa',view,0,0)})};const qaPayload=${JSON.stringify(payload())};window.WebSocket=class{constructor(url){this.readyState=1;setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?qaPayload:qaState)})},10)}send(){}close(){this.readyState=3}};window.fetch=async(path)=>Response.json(path==='/api/session'?{user:qaUser,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...qaPayload,pending:false}:path==='/api/lobby'?qaPayload:qaState);window.addEventListener('load',()=>{setTimeout(()=>window.__qa.openRoom(qaState.room,true),200)});`;
 await fs.writeFile(preview+'/public/fixture.js',fixture);

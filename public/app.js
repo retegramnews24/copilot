@@ -11,6 +11,9 @@ const $=id=>document.getElementById(id);
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
+let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
+let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
+let cinemaUpload=null;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
@@ -1034,9 +1037,6 @@ async function loadLeaders(){
 $('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?dev=1&v=dev3';tg?.BackButton?.show()};
 
 $('access-retry').onclick=startSession;
-let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
-let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
-let cinemaUpload=null;
 function cinemaPost(type,payload={}){
  if(cinemaReady)$('cinema-frame').contentWindow?.postMessage({type:'cinema:'+type,...payload},location.origin);
 }
