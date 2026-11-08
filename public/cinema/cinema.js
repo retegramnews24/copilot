@@ -4,7 +4,7 @@ import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=5';
 import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
 import {WindowShare} from './screen-share.js?v=2';
-import {CinemaMosaic} from './mosaic.js?v=2';
+import {CinemaMosaic} from './mosaic.js?v=3';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar');
@@ -38,7 +38,7 @@ function stopVideo(){
   videoRevision++;
   hls?.destroy();hls=null;
   disposeYouTube?.();disposeYouTube=null;youtube=null;youtubeBlocked=false;youtubeAutoPause=false;fileBlocked=false;fileStarting=false;
-  video.hidden=false;$('youtube').hidden=true;$('youtube-message').hidden=true;
+  video.hidden=false;video.loop=false;$('group-animation').hidden=true;$('group-animation').removeAttribute('src');$('youtube').hidden=true;$('youtube-message').hidden=true;
   video.pause();video.removeAttribute('src');video.load();
 }
 function message(text,retry=false){
@@ -54,7 +54,7 @@ async function startPlayback(){
 function targetPosition(){
   const position=positionAt(room?.playback,Date.now()+clockOffset);
   const duration=youtube?.getDuration()||video.duration;
-  return Number.isFinite(duration)&&duration>0?Math.min(position,duration):position;
+  return Number.isFinite(duration)&&duration>0?(room?.channel?.loop?position%duration:Math.min(position,duration)):position;
 }
 function youtubeVisible(){
   if(document.hidden||(mobile.matches&&cinema.classList.contains('tools-open')&&!cinema.classList.contains('wide')))return false;
@@ -145,13 +145,16 @@ function tune(channel,force=false,seek=false){
   }
   if(!force&&url===playingURL){syncYouTube(seek);syncFile(seek);return;}
   playingURL=url;stopVideo();
-  $('on-air').textContent=url?((channel.youtube||channel.file)?'VIDEO':'LIVE'):'';
+  $('on-air').textContent=url?((channel.youtube||channel.file||channel.image)?'VIDEO':'LIVE'):'';
   if(!settings.monitor){message('Riproduzione fermata qui');return;}
   if(!url){message('In attesa di un canale');return;}
   message('Collegamento al video…');
   if(channel.youtube){showYouTube(channel.youtube);return;}
+  if(channel.image){
+    const image=$('group-animation');video.hidden=true;image.hidden=false;image.src=url;return;
+  }
   video.volume=settings.volume/100;video.muted=settings.volume===0;
-  if(channel.file){video.preload='auto';video.src=url;return;}
+  if(channel.file){video.loop=!!channel.loop;video.preload='auto';video.src=url;return;}
   video.preload='none';
   const hlsURL=/\.m3u8?(?:[?#]|$)/i.test(url);
   if(hlsURL&&!video.canPlayType('application/vnd.apple.mpegurl')&&window.Hls?.isSupported()){
@@ -164,8 +167,10 @@ function tune(channel,force=false,seek=false){
   }else{video.src=url;startPlayback();}
 }
 video.addEventListener('error',()=>{
-  if(playingURL&&settings.monitor)message('Canale non riproducibile su questo dispositivo',true);
+  if(playingURL&&settings.monitor)message(room?.channel?.group?'Media disponibile per i membri del gruppo Telegram.':'Canale non riproducibile su questo dispositivo',true);
 });
+$('group-animation').onload=()=>{if(room?.channel?.image&&settings.monitor)$('screen-empty').hidden=true;};
+$('group-animation').onerror=()=>{if(room?.channel?.image&&settings.monitor)message('Media disponibile per i membri del gruppo Telegram.',true);};
 video.addEventListener('playing',()=>{$('screen-empty').hidden=true;});
 $('start-video').onclick=()=>{
   if(youtube){youtubeLocalPaused=false;youtubeBlocked=false;syncYouTube(true);}
@@ -459,7 +464,7 @@ $('youtube-form').onsubmit=event=>{
 function updateFavoriteButton(){
   const button=$('save-playing'),url=room?.channel?.url;
   const saved=favorites.some(item=>item.url===url);
-  button.hidden=!!room?.screen||!url||room?.channel?.file===true;button.disabled=saved;button.textContent=saved?'★':'☆';
+  button.hidden=!!room?.screen||!url||room?.channel?.file===true||room?.channel?.group===true;button.disabled=saved;button.textContent=saved?'★':'☆';
 }
 $('save-playing').onclick=()=>{if(room?.channel)action('favorite-add',{channel:packetChannel(room.channel)});};
 function drawFavorites(){
@@ -580,6 +585,7 @@ window.addEventListener('message',event=>{
     $('youtube-search-status').textContent=data.error||(youtubeResults.length?(youtubeChannel?'Video recenti':'Risultati YouTube'):empty);
     drawYouTube();return;
   }
+  if(data?.type==='cinema:group-result'){groupResult(data);return;}
   if(data?.type==='cinema:upload-result'){
     setUploading(false);
     if(data.error)$('watch-error').textContent=data.error;
@@ -593,6 +599,78 @@ window.addEventListener('message',event=>{
   else if(packet.type?.startsWith('screen-')){screenShare.receive(packet);if(multisala.open)mosaic.packet(packet);}
   else if(packet.type==='error')notice(packet.message);
 });
+const groupDialog=$('group-dialog'),groupSelect=$('group-select'),groupStatus=$('group-status');
+const groupVideo=$('group-preview-video'),groupImage=$('group-preview-image');
+let groupRequestId=0,groups=[],groupItems=[],groupSelection=null,groupPreview=null;
+function requestGroup(op,params={}){
+  groupStatus.textContent='Caricamento…';
+  $('group-link').disabled=$('group-play').disabled=true;
+  send('group-request',{id:++groupRequestId,op,...params});
+}
+function clearGroupPreview(){
+  groupVideo.pause();groupVideo.removeAttribute('src');groupVideo.load();groupVideo.hidden=true;
+  groupImage.removeAttribute('src');groupImage.hidden=true;
+  groupPreview=null;$('group-preview').hidden=true;$('group-catalog').hidden=false;
+}
+function groupMediaURL(item,kind='media'){
+  return '/api/cinema/group/'+kind+'/'+groupSelection.id+'/'+item.id;
+}
+function drawGroupItems(){
+  const filter=$('group-filter').value;
+  const visible=groupItems.filter(item=>filter==='all'||(filter==='gif'?item.loop:!item.loop));
+  $('group-items').replaceChildren(...visible.map(item=>{
+    const card=node('button','','group-card');card.type='button';
+    const badge=node('i',item.loop?'GIF':'▶');
+    if(item.thumb){
+      const thumb=node('img');thumb.alt='';thumb.loading='lazy';thumb.src=groupMediaURL(item,'thumb');
+      thumb.onerror=()=>thumb.replaceWith(badge);card.append(thumb);
+    }else card.append(badge);
+    card.append(node('span',item.title),node('small',item.loop?'GIF':'Video'));
+    card.onclick=()=>{
+      groupPreview=item;groupStatus.textContent='';
+      $('group-catalog').hidden=true;$('group-preview').hidden=false;$('group-preview-title').textContent=item.title;
+      $('group-play').disabled=false;
+      if(item.type==='image/gif'){groupImage.hidden=false;groupImage.src=groupMediaURL(item);}
+      else{groupVideo.hidden=false;groupVideo.loop=item.loop;groupVideo.src=groupMediaURL(item);}
+    };
+    return card;
+  }));
+  if(groupSelection?.linked)groupStatus.textContent=visible.length?'':groupItems.length?'Nessun media per questo filtro.':'Nessun media indicizzato. Pubblica un nuovo video o GIF nel gruppo.';
+}
+function selectGroup(id){
+  groupSelection=groups.find(group=>group.id===id)??null;
+  clearGroupPreview();groupItems=[];
+  $('group-link').hidden=!groupSelection||groupSelection.linked;
+  $('group-link').disabled=false;
+  drawGroupItems();
+  if(groupSelection?.linked)requestGroup('items',{group:groupSelection.id});
+  else groupStatus.textContent=groupSelection?'Collega il gruppo per indicizzare i prossimi video e GIF.':'Gruppo ancora da rilevare. Dopo aver dato al bot i permessi di admin, pubblica un normale messaggio nel gruppo e premi Aggiorna.';
+}
+$('group-media').onclick=()=>{clearGroupPreview();groupDialog.showModal();requestGroup('groups');};
+$('group-refresh').onclick=()=>requestGroup('groups');
+$('group-close').onclick=()=>groupDialog.close();
+groupDialog.onclose=()=>{groupRequestId++;clearGroupPreview();};
+groupSelect.onchange=()=>selectGroup(groupSelect.value);
+$('group-filter').onchange=drawGroupItems;
+$('group-link').onclick=()=>{if(groupSelection)requestGroup('link',{group:groupSelection.id});};
+$('group-back').onclick=()=>{clearGroupPreview();drawGroupItems();};
+$('group-play').onclick=()=>{if(groupSelection&&groupPreview)requestGroup('play',{group:groupSelection.id,item:groupPreview.id});};
+groupVideo.onerror=groupImage.onerror=()=>{if(groupPreview)groupStatus.textContent='Anteprima Telegram non disponibile.';};
+function groupResult({id,op,result,error}){
+  if(id!==groupRequestId||!groupDialog.open)return;
+  $('group-link').disabled=$('group-play').disabled=false;
+  if(error){groupStatus.textContent=error;return;}
+  if(op==='groups'){
+    groups=result.groups;
+    const selected=groups.find(group=>group.id===groupSelection?.id)??groups.find(group=>group.linked)??groups[0];
+    groupSelect.replaceChildren(...groups.map(group=>new Option(group.title,group.id)));
+    groupSelect.hidden=!groups.length;
+    if(selected)groupSelect.value=selected.id;
+    selectGroup(selected?.id);
+  }else if(op==='link')requestGroup('groups');
+  else if(op==='items'){groupItems=result.items;drawGroupItems();}
+  else if(op==='play')groupDialog.close();
+}
 const watchDialog=$('watch-dialog');
 let uploading=false;
 function updateWatchType(){

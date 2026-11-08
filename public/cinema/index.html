@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=8"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=9"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=9"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=10"></script></head>
 <body>
 <header>
  <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button><button id="close-room" hidden>Chiudi sala</button></div>
@@ -8,7 +8,7 @@
 <main id="cinema" hidden>
  <div class="auditorium">
   <section id="screen" aria-label="Schermo del cinema">
-   <video id="video" playsinline webkit-playsinline preload="none"></video>
+   <img id="group-animation" alt="GIF del gruppo Telegram" hidden><video id="video" playsinline webkit-playsinline preload="none"></video>
    <div id="youtube" hidden></div>
    <video id="share-video" playsinline webkit-playsinline hidden></video>
    <div id="share-placeholder" hidden><strong id="share-message" role="status"></strong><button id="share-retry" type="button" hidden>Riprova</button></div>
@@ -27,7 +27,7 @@
     <button id="mode" type="button" aria-pressed="false">Cinema Mode</button><label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
     <button id="share-audio" type="button" hidden>Attiva audio</button><span id="share-audio-state" role="status" hidden></span>
    </div>
-   <div id="cinema-sources"><button id="watch-together" type="button">Guarda insieme</button>
+   <div id="cinema-sources"><button id="watch-together" type="button">Guarda insieme</button><button id="group-media" type="button">Media del gruppo</button>
     <button id="upload-video" type="button" title="Carica video" aria-label="Carica video">↑</button>
     <button id="share-window" type="button">Condividi finestra</button>
    </div>
@@ -60,6 +60,16 @@
  </aside>
 </main>
 <dialog id="multisala-dialog" aria-labelledby="multisala-title"><div class="dialog-heading"><h2 id="multisala-title">Multisala</h2><form method="dialog"><button>Chiudi</button></form></div><div id="multisala-rooms"></div><p id="multisala-empty" hidden>Nessuna sala aperta.</p></dialog>
+<dialog id="group-dialog" aria-labelledby="group-title">
+ <div class="dialog-heading"><h2 id="group-title">Media del gruppo</h2><button id="group-close" type="button">Chiudi</button></div>
+ <div id="group-catalog">
+  <div class="group-toolbar"><select id="group-select" aria-label="Gruppo Telegram" hidden></select><button id="group-refresh" type="button">Aggiorna</button><button id="group-link" type="button" hidden>Collega gruppo</button></div>
+  <div class="group-toolbar"><select id="group-filter" aria-label="Tipo di media"><option value="all">Tutti</option><option value="video">Video</option><option value="gif">GIF</option></select></div>
+  <div id="group-items"></div>
+ </div>
+ <div id="group-preview" hidden><button id="group-back" type="button">← Galleria</button><h3 id="group-preview-title"></h3><video id="group-preview-video" controls playsinline hidden></video><img id="group-preview-image" alt="" hidden><button id="group-play" type="button">Riproduci per tutti</button></div>
+ <p id="group-status" role="status"></p>
+</dialog>
 <dialog id="close-dialog" aria-labelledby="close-title"><form method="dialog"><h2 id="close-title">Chiudere la sala per tutti?</h2><p>Gli spettatori torneranno alla lobby di Binottoland.</p><div class="dialog-actions"><button value="cancel" autofocus>Annulla</button><button value="close">Chiudi sala</button></div></form></dialog>
 <dialog id="watch-dialog" aria-labelledby="watch-title"><form id="watch-form"><h2 id="watch-title">Guarda insieme</h2>
 <label>Tipo <select id="watch-type"><option value="stream">Link stream</option><option value="youtube">YouTube</option><option value="file">Carica un video</option></select></label>

@@ -28,7 +28,7 @@ function cleanURL(value,max){
 function cleanChannel(input,allowChannel=false){
   const name=typeof input?.name==='string'?input.name.trim().slice(0,96):'';
   const url=cleanURL(input?.url,1400),youtube=youtubeId(url);
-  if(!name||!url||/\/api\/cinema\/media\//.test(new URL(url).pathname))return null;
+  if(!name||!url||/\/api\/cinema\/(?:group\/)?media\//.test(new URL(url).pathname))return null;
   const channelId=youtubeChannelId(url),catalog=input.catalog===true?{catalogUntil:Date.now()+METADATA_TTL}:{};
   if(channelId)return allowChannel?{name,url:'https://www.youtube.com/channel/'+channelId,youtubeChannel:channelId,logo:'',...catalog}:null;
   if(youtube){
@@ -153,6 +153,17 @@ export class Cinema {
     return this.ctx.blockConcurrencyWhile(async()=>{
       const path=new URL(req.url).pathname;
       if(path==='/cinema/upload')return this.upload(req);
+      if(path==='/cinema/group-play'){
+        const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+        const {room:id,channel}=await req.json(),data=await this.data();
+        const room=data.rooms.find(entry=>entry.id===id);
+        if(!room)return response('Questa sala è stata chiusa.',404);
+        if(!user||!this.connections().some(c=>c.info.room===id&&c.info.user.player===user.player))return response('Entra nella sala per condividere un media.',403);
+        room.channel=channel;room.updated=Date.now();
+        room.playback=channel.file?{position:0,playing:true,updated:room.updated,seek:0}:null;
+        await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);
+        return new Response(null,{status:204});
+      }
       if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
       if(!user)return response('Accesso richiesto.',401);

@@ -1131,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=9';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=10';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=()=>openCinema();
@@ -1172,6 +1172,26 @@ async function lookupCinemaYouTube(id,params){
  finally{clearTimeout(timeout);}
  if(cinemaLookup===controller){cinemaLookup=null;cinemaPost('youtube-result',{id,result,error});}
 }
+async function cinemaGroupRequest(source,data){
+ const {id,op,group,item}=data;
+ if(!Number.isSafeInteger(id)||!['groups','link','items','play'].includes(op))return;
+ const uuid=/^[a-f0-9-]{36}$/;
+ if(op!=='groups'&&!uuid.test(group??''))return;
+ if(op==='play'&&(!uuid.test(item??'')||!cinemaRoom))return;
+ const query=new URLSearchParams();
+ if(op!=='groups')query.set('group',group);
+ if(op==='play'){query.set('item',item);query.set('room',cinemaRoom);}
+ let result,error;
+ try{
+  const response=await fetch('/api/cinema/group/'+op+'?'+query,{
+   method:op==='play'||op==='link'?'POST':'GET',
+   headers:{Authorization:'Bearer '+sessionToken},signal:AbortSignal.timeout(15000)
+  });
+  if(response.status!==204)result=await response.json();
+  if(!response.ok)error=result?.error||'Operazione non riuscita.';
+ }catch{error='Catalogo Telegram non raggiungibile. Riprova.';}
+ if(source===$('cinema-frame').contentWindow)cinemaPost('group-result',{id,op,result,error});
+}
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
  const data=event.data;
@@ -1186,6 +1206,7 @@ window.addEventListener('message',event=>{
  if(data?.type==='cinema:action')cinemaSend(data.action);
  if(data?.type==='cinema:upload')uploadCinemaFile(data.file,data.name);
  if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);
+ if(data?.type==='cinema:group-request')cinemaGroupRequest(event.source,data);
 });
 
 startSession();

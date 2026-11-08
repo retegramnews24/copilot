@@ -5,12 +5,14 @@ export const MEDIA_TTL=2*60*60*1000;
 export const MEDIA_TYPES=new Set(['video/mp4','video/webm']);
 
 function validHeader(bytes,type){
+  if(type==='image/gif')return bytes.length>=13&&/^GIF8[79]a$/.test(String.fromCharCode(...bytes.subarray(0,6)));
+  if(type==='image/jpeg')return bytes[0]===255&&bytes[1]===216&&bytes[2]===255;
   if(type==='video/mp4')return bytes.length>=12&&String.fromCharCode(...bytes.subarray(4,8))==='ftyp';
   return bytes.length>=4&&bytes[0]===0x1a&&bytes[1]===0x45&&bytes[2]===0xdf&&bytes[3]===0xa3;
 }
 export async function storeCinemaMedia(req,storage){
   const type=req.headers.get('Content-Type'),expected=Number(req.headers.get('Content-Length'));
-  if(!MEDIA_TYPES.has(type)||!req.body)return new Response(null,{status:415});
+  if((!MEDIA_TYPES.has(type)&&!['image/gif','image/jpeg'].includes(type))||!req.body)return new Response(null,{status:415});
   if(expected>MEDIA_LIMIT)return new Response(null,{status:413});
   const expires=Number(req.headers.get('X-Media-Expires'));
   await storage.put(META,{type,size:0,expires});

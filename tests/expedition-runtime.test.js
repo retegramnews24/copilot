@@ -2,7 +2,7 @@ import {makeCourse,ground} from '../public/moto-trial/physics.js';
 import {randomFleet} from '../public/naval-data.js';
 // Run after Wrangler --dry-run; uses workerd and SQLite Durable Objects, never production.
 import assert from 'node:assert/strict';
-import {createHmac} from 'node:crypto';
+import {createHash,createHmac} from 'node:crypto';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname,resolve} from 'node:path';
@@ -374,6 +374,25 @@ const searchWorker=new Miniflare(convertV4MiniflareOptions({
  ...runtimeConfig,resourcePersistencePath:undefined,bindings:{BOT_TOKEN:bot,YOUTUBE_API_KEY:searchKey},
  outboundService:async req=>{
   const url=new URL(req.url);
+  if(url.origin==='https://api.telegram.org'){
+   if(url.pathname.startsWith('/file/')){
+    if(url.pathname.endsWith('/videos/test.mp4'))return new Response(Buffer.from('000000186674797069736f6d0000000069736f6d61766331','hex'));
+    if(url.pathname.endsWith('/thumbs/test.jpg'))return new Response(Buffer.from('ffd8ffe00000ffd9','hex'));
+    assert.ok(url.pathname.endsWith('/animations/test.gif'));
+    return new Response(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7','base64'));
+   }
+   const action=url.pathname.split('/').at(-1),payload=await req.json();
+   if(action==='getMe')return Response.json({ok:true,result:{id:999}});
+   if(action==='getChatMember'){
+    assert.equal(payload.chat_id,-100123);
+    const status=payload.user_id===999||payload.user_id===801?'administrator':payload.user_id===802?'member':'left';
+    return Response.json({ok:true,result:{status}});
+   }
+   assert.equal(action,'getFile');
+   const files={'telegram-gif-file':'animations/test.gif','telegram-video':'videos/test.mp4','telegram-thumb':'thumbs/test.jpg'};
+   assert.ok(files[payload.file_id]);
+   return Response.json({ok:true,result:{file_path:files[payload.file_id],file_size:42}});
+  }
   if(url.origin==='https://www.youtube.com'){
    assert.equal(url.pathname,'/feeds/videos.xml');
    assert.equal(url.searchParams.get('channel_id'),publicChannelId);
@@ -411,5 +430,64 @@ try{
  });
  assert.equal(feed.status,200);
  assert.equal((await feed.json()).items[0].id,'M7lc1UVf-VE');
+ const base='https://unit.test/api/cinema/group/';
+ const tgRequest=(user,path,method='GET')=>searchWorker.dispatchFetch(base+path,{method,headers:{Authorization:'Bearer '+token(user)}});
+ const webhook=(message,valid=true)=>searchWorker.dispatchFetch('https://unit.test/api/telegram/webhook',{
+  method:'POST',headers:{'Content-Type':'application/json','X-Telegram-Bot-Api-Secret-Token':valid?webhookHash:'bad'},
+  body:JSON.stringify({message:{chat:{id:-100123,type:'supergroup',title:'Gruppo privato test'},...message}})
+ });
+ const webhookHash=createHash('sha256').update(bot).digest('hex');
+ assert.equal((await webhook({text:'ciao'},false)).status,403);
+ assert.equal((await webhook({text:'ciao'})).status,200);
+ const candidate=(await (await tgRequest(801,'groups')).json()).groups[0];
+ assert.equal(candidate.linked,false);
+ assert.equal((await (await tgRequest(802,'groups')).json()).groups.length,0);
+ assert.equal((await tgRequest(802,'link?group='+candidate.id,'POST')).status,403);
+ assert.equal((await tgRequest(801,'link?group='+candidate.id,'POST')).status,200);
+ const animation={file_id:'telegram-gif-file',mime_type:'image/gif',file_size:42};
+ await webhook({message_id:21,animation,has_protected_content:true});
+ await webhook({message_id:22,animation,caption:'GIF privata'});
+ await webhook({message_id:22,animation,caption:'GIF privata'});
+ const catalog=await (await tgRequest(802,'items?group='+candidate.id)).json();
+ assert.equal(catalog.items.length,1);
+ const item=catalog.items[0];
+ assert.equal(item.loop,true);
+ assert.equal(item.file,undefined);
+ assert.equal((await tgRequest(803,'items?group='+candidate.id)).status,403);
+ const path='media/'+candidate.id+'/'+item.id;
+ assert.equal((await searchWorker.dispatchFetch(base+path)).status,401);
+ assert.equal((await tgRequest(803,path)).status,403);
+ const cookie={Cookie:'binottoland_cinema='+token(802)};
+ const media=await searchWorker.dispatchFetch(base+path,{headers:cookie});
+ assert.equal(media.status,200);
+ assert.equal(media.headers.get('Content-Type'),'image/gif');
+ const gif=Buffer.from(await media.arrayBuffer());
+ assert.ok(gif.includes(Buffer.from('NETSCAPE2.0')));
+ const range=await searchWorker.dispatchFetch(base+path,{headers:{...cookie,Range:'bytes=0-5'}});
+ assert.equal(range.status,206);
+ assert.equal(await range.text(),'GIF89a');
+ const websocket=await searchWorker.dispatchFetch('https://unit.test/api/cinema/ws',{
+  headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(801)}
+ });
+ const groupClient={ws:websocket.webSocket,packets:[],waiters:[]};
+ groupClient.ws.addEventListener('message',event=>{const packet=JSON.parse(event.data);groupClient.packets.push(packet);for(const fn of [...groupClient.waiters])fn(packet);});
+ groupClient.ws.accept();
+ groupClient.ws.send(JSON.stringify({type:'create'}));
+ const {active}=await until(groupClient,p=>p.active);
+ const play='play?group='+candidate.id+'&item='+item.id+'&room='+active.id;
+ assert.equal((await tgRequest(802,play,'POST')).status,403);
+ assert.equal((await tgRequest(801,play,'POST')).status,204);
+ await until(groupClient,p=>p.active?.channel?.group&&p.active.channel.image);
+ await webhook({message_id:23,video:{file_id:'telegram-video',mime_type:'video/mp4',file_size:24,thumbnail:{file_id:'telegram-thumb'}}});
+ const latest=(await (await tgRequest(802,'items?group='+candidate.id)).json()).items[0];
+ assert.equal(latest.type,'video/mp4');
+ assert.equal(latest.thumb,true);
+ const thumbnail=await searchWorker.dispatchFetch(base+'thumb/'+candidate.id+'/'+latest.id,{headers:cookie});
+ assert.equal(thumbnail.headers.get('Content-Type'),'image/jpeg');
+ assert.equal((await searchWorker.dispatchFetch(base+'media/'+candidate.id+'/'+latest.id,{headers:cookie})).headers.get('Content-Type'),'video/mp4');
+ assert.equal((await tgRequest(801,'play?group='+candidate.id+'&item='+latest.id+'&room='+active.id,'POST')).status,204);
+ await until(groupClient,p=>p.active?.channel?.group&&p.active.channel.file&&p.active.playback?.playing);
+ groupClient.ws.close();
+ console.log('PASS Telegram Cinema: admin linking, private catalog, protected media exclusion, group access, GIF loop, ranges and room publishing.');
  console.log('PASS YouTube runtime: Telegram auth, configured key, live DO route, Google request parameters and safe error forwarding.');
 }finally{await searchWorker.dispose();}

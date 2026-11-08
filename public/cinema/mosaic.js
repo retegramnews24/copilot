@@ -49,10 +49,10 @@ export class CinemaMosaic {
       if(!tile){
         const el=document.createElement('article');
         el.className='mosaic-tile';el.dataset.room=room.id;
-        el.innerHTML='<div class="mosaic-media"><video playsinline muted hidden></video><div class="mosaic-youtube" hidden></div><span></span></div><div class="mosaic-caption"><div><strong></strong><small></small><small class="mosaic-note" hidden></small></div><button type="button" class="mosaic-audio" aria-label="Attiva audio dell’anteprima" aria-pressed="false" hidden>♬</button><button type="button"></button></div>';
-        const [video,youtube,status]=el.querySelector('.mosaic-media').children;
+        el.innerHTML='<div class="mosaic-media"><video playsinline muted hidden></video><img alt="" hidden><div class="mosaic-youtube" hidden></div><span></span></div><div class="mosaic-caption"><div><strong></strong><small></small><small class="mosaic-note" hidden></small></div><button type="button" class="mosaic-audio" aria-label="Attiva audio dell’anteprima" aria-pressed="false" hidden>♬</button><button type="button"></button></div>';
+        const [video,image,youtube,status]=el.querySelector('.mosaic-media').children;
         const [title,meta,note,audio,button]=el.querySelectorAll('strong,small,button');
-        tile={el,video,youtube,status,title,meta,note,audio,button,visible:!this.observer,key:null};
+        tile={el,video,image,youtube,status,title,meta,note,audio,button,visible:!this.observer,key:null};
         audio.onclick=()=>this.toggleAudio(tile);
         button.dataset.room=room.id;button.onclick=()=>this.enter(room.id);
         this.tiles.set(room.id,tile);this.list.append(el);this.observer?.observe(el);
@@ -118,11 +118,15 @@ export class CinemaMosaic {
       }
     }
     if(preview?.channel?.file&&playback&&video.readyState>0){
-      const time=positionAt(playback,Date.now()+this.clock);
+      const time=this.fileTime(tile,playback);
       if(Math.abs(video.currentTime-time)>3)video.currentTime=Math.min(time,video.duration||time);
       if(playback.playing&&video.paused&&!video.ended&&!tile.starting)this.play(tile);
       if(!playback.playing){video.pause();this.message(tile,'');}
     }
+  }
+  fileTime(tile,playback){
+    const time=positionAt(playback,Date.now()+this.clock),duration=tile.video.duration;
+    return Number.isFinite(duration)&&duration>0?(tile.preview?.channel?.loop?time%duration:Math.min(time,duration)):time;
   }
   async play(tile){
     const key=tile.key;
@@ -149,6 +153,12 @@ export class CinemaMosaic {
       }
       return;
     }
+    if(channel.image){
+      tile.image.hidden=false;tile.image.src=channel.url;
+      tile.image.onload=()=>this.message(tile,'');
+      tile.image.onerror=()=>this.message(tile,'Media riservato al gruppo Telegram');
+      return;
+    }
     if(channel.youtube){
       youtube.hidden=false;
       this.message(tile,'Premi play nel riquadro YouTube');
@@ -162,12 +172,12 @@ export class CinemaMosaic {
     }
     video.hidden=false;video.muted=true;tile.audio.hidden=false;
     this.message(tile,'Apertura anteprima…');
-    video.onerror=()=>this.message(tile,'Anteprima non disponibile');
+    video.onerror=()=>this.message(tile,channel.group?'Media del gruppo Telegram non disponibile':'Anteprima non disponibile');
     if(channel.file){
-      video.preload='auto';
+      video.preload='auto';video.loop=!!channel.loop;
       video.onloadedmetadata=()=>{
         const playback=tile.preview?.playback;
-        if(playback)video.currentTime=Math.min(positionAt(playback,Date.now()+this.clock),video.duration||Infinity);
+        if(playback)video.currentTime=this.fileTime(tile,playback);
         this.syncTile(tile);
       };
       video.src=channel.url;
@@ -190,7 +200,8 @@ export class CinemaMosaic {
     if(tile.share){tile.share.disconnect(true);tile.share=null;}
     tile.video.onloadedmetadata=null;tile.video.onerror=null;tile.video.pause();
     tile.video.srcObject=null;tile.video.removeAttribute('src');tile.video.load();
-    tile.video.hidden=true;tile.youtube.hidden=true;tile.starting=false;tile.key=null;
+    tile.image.onload=null;tile.image.onerror=null;tile.image.removeAttribute('src');tile.image.hidden=true;
+    tile.video.loop=false;tile.video.hidden=true;tile.youtube.hidden=true;tile.starting=false;tile.key=null;
   }
   clear(){
     for(const tile of this.tiles.values()){this.observer?.unobserve(tile.el);this.dispose(tile);}
