@@ -487,7 +487,21 @@ try{
  assert.equal((await searchWorker.dispatchFetch(base+'media/'+candidate.id+'/'+latest.id,{headers:cookie})).headers.get('Content-Type'),'video/mp4');
  assert.equal((await tgRequest(801,'play?group='+candidate.id+'&item='+latest.id+'&room='+active.id,'POST')).status,204);
  await until(groupClient,p=>p.active?.channel?.group&&p.active.channel.file&&p.active.playback?.playing);
+ for(let first=24;first<106;first+=10){
+  const delivered=await Promise.all(Array.from({length:Math.min(10,106-first)},(_,index)=>webhook({message_id:first+index,animation,caption:String(first+index)})));
+  assert.ok(delivered.every(entry=>entry.ok));
+ }
+ const history=[];
+ let before;
+ do{
+  const {items,next}=await (await tgRequest(802,'items?group='+candidate.id+(before?'&before='+before:''))).json();
+  history.push(...items.map(entry=>entry.title));before=next;
+ }while(before);
+ assert.deepEqual(history,[...Array.from({length:82},(_,index)=>String(105-index)),'Video','GIF privata']);
+ const onlyVideos=await (await tgRequest(802,'items?group='+candidate.id+'&filter=video')).json();
+ assert.deepEqual(onlyVideos.items.map(entry=>entry.id),[latest.id]);
+ assert.equal(onlyVideos.next,null);
  groupClient.ws.close();
- console.log('PASS Telegram Cinema: admin linking, private catalog, protected media exclusion, group access, GIF loop, ranges and room publishing.');
+ console.log('PASS Telegram Cinema: admin linking, private catalog, protected media exclusion, group access, GIF loop, ranges, room publishing and pagination beyond 80.');
  console.log('PASS YouTube runtime: Telegram auth, configured key, live DO route, Google request parameters and safe error forwarding.');
 }finally{await searchWorker.dispose();}

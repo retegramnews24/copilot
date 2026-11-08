@@ -179,7 +179,7 @@ async function groupCinema(req,env,u,user){
   if(!asset.ok)return asset;
   const {file,thumb,type}=await asset.json(),thumbnail=kind==='thumb';
   if(thumbnail&&!thumb)return json({error:'Miniatura non disponibile.'},404);
-  const target=env.ROOMS.get(env.ROOMS.idFromName('cinema-telegram-file:'+item+':'+kind));
+  const target=env.ROOMS.get(env.ROOMS.idFromName('cinema-telegram-file:'+group+':'+item+':'+kind));
   const address=u.origin+'/cinema/group-file';
   const prepared=await target.fetch(address,{method:'POST',body:JSON.stringify({file:thumbnail?thumb:file,type:thumbnail?'image/jpeg':type})});
   if(!prepared.ok)return prepared;
@@ -193,7 +193,10 @@ async function groupCinema(req,env,u,user){
  const group=u.searchParams.get('group'),item=u.searchParams.get('item');
  if(route==='groups'&&req.method==='GET')return telegramCinemaDirectory(env,u.origin,'groups',{},user);
  if(!telegramCinemaId.test(group??''))return json({error:'Seleziona un gruppo Telegram.'},400);
- if(route==='items'&&req.method==='GET')return telegramCinemaDirectory(env,u.origin,'items',{group},user);
+ if(route==='items'&&req.method==='GET'){
+  const filter=u.searchParams.get('filter'),before=u.searchParams.get('before');
+  return telegramCinemaDirectory(env,u.origin,'items',{group,...(filter?{filter}:{}),...(before?{before}:{})},user);
+ }
  if(route==='link'&&req.method==='POST')return telegramCinemaDirectory(env,u.origin,'link',{group},user);
  if(route==='play'&&req.method==='POST'&&telegramCinemaId.test(item??'')){
   const room=u.searchParams.get('room');

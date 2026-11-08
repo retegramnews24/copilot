@@ -600,66 +600,82 @@ window.addEventListener('message',event=>{
   else if(packet.type==='error')notice(packet.message);
 });
 const groupDialog=$('group-dialog'),groupSelect=$('group-select'),groupStatus=$('group-status');
-const groupVideo=$('group-preview-video'),groupImage=$('group-preview-image');
-let groupRequestId=0,groups=[],groupItems=[],groupSelection=null,groupPreview=null;
-function requestGroup(op,params={}){
-  groupStatus.textContent='Caricamento…';
-  $('group-link').disabled=$('group-play').disabled=true;
-  send('group-request',{id:++groupRequestId,op,...params});
+const groupFilter=$('group-filter'),groupMore=$('group-more'),groupLink=$('group-link'),groupList=$('group-items');
+let groupRequestId=0,groupPending=null,groupTimer=0;
+let groups=[],groupItems=[],groupSelection=null,groupNext=null,groupHasOlder=false,groupRendered='';
+function requestGroup(op,params={},quiet=false){
+  if(!quiet)groupStatus.textContent=op==='play'?'Avvio in sala…':'Caricamento…';
+  groupPending={id:++groupRequestId,op,quiet,append:!!params.before};
+  groupLink.disabled=groupMore.disabled=true;
+  send('group-request',{id:groupPending.id,op,...params});
 }
-function clearGroupPreview(){
-  groupVideo.pause();groupVideo.removeAttribute('src');groupVideo.load();groupVideo.hidden=true;
-  groupImage.removeAttribute('src');groupImage.hidden=true;
-  groupPreview=null;$('group-preview').hidden=true;$('group-catalog').hidden=false;
+function groupPage(before=null,quiet=false){
+  if(!groupSelection?.linked)return;
+  requestGroup('items',{group:groupSelection.id,filter:groupFilter.value,...(before?{before}:{})},quiet);
 }
-function groupMediaURL(item,kind='media'){
-  return '/api/cinema/group/'+kind+'/'+groupSelection.id+'/'+item.id;
+function resetGroupItems(){
+  groupItems=[];groupNext=null;groupHasOlder=false;groupRendered='';
+  groupList.replaceChildren();groupMore.hidden=true;
 }
 function drawGroupItems(){
-  const filter=$('group-filter').value;
-  const visible=groupItems.filter(item=>filter==='all'||(filter==='gif'?item.loop:!item.loop));
-  $('group-items').replaceChildren(...visible.map(item=>{
-    const card=node('button','','group-card');card.type='button';
-    const badge=node('i',item.loop?'GIF':'▶');
-    if(item.thumb){
-      const thumb=node('img');thumb.alt='';thumb.loading='lazy';thumb.src=groupMediaURL(item,'thumb');
-      thumb.onerror=()=>thumb.replaceWith(badge);card.append(thumb);
-    }else card.append(badge);
-    card.append(node('span',item.title),node('small',item.loop?'GIF':'Video'));
-    card.onclick=()=>{
-      groupPreview=item;groupStatus.textContent='';
-      $('group-catalog').hidden=true;$('group-preview').hidden=false;$('group-preview-title').textContent=item.title;
-      $('group-play').disabled=false;
-      if(item.type==='image/gif'){groupImage.hidden=false;groupImage.src=groupMediaURL(item);}
-      else{groupVideo.hidden=false;groupVideo.loop=item.loop;groupVideo.src=groupMediaURL(item);}
-    };
-    return card;
-  }));
-  if(groupSelection?.linked)groupStatus.textContent=visible.length?'':groupItems.length?'Nessun media per questo filtro.':'Nessun media indicizzato. Pubblica un nuovo video o GIF nel gruppo.';
+  const key=groupItems.map(item=>item.id).join(',');
+  if(key!==groupRendered){
+    groupRendered=key;
+    const focused=document.activeElement?.dataset.groupItem;
+    groupList.replaceChildren(...groupItems.map(item=>{
+      const card=node('button','','group-card');card.type='button';card.dataset.groupItem=item.id;
+      const badge=node('i',item.loop?'GIF':'▶');
+      if(item.thumb){
+        const thumb=node('img');thumb.alt='';thumb.loading='lazy';
+        thumb.src='/api/cinema/group/thumb/'+groupSelection.id+'/'+item.id;
+        thumb.onerror=()=>thumb.replaceWith(badge);card.append(thumb);
+      }else card.append(badge);
+      card.append(node('span',item.title),node('small',item.loop?'GIF':'Video'));
+      card.setAttribute('aria-label','Riproduci in sala · '+item.title);
+      card.onclick=()=>{
+        if(groupPending?.op==='play')return;
+        requestGroup('play',{group:groupSelection.id,item:item.id});
+      };
+      return card;
+    }));
+    if(focused)Array.from(groupList.children).find(card=>card.dataset.groupItem===focused)?.focus();
+  }
+  groupMore.hidden=!groupNext;
+  groupStatus.textContent=groupItems.length?'':groupFilter.value==='all'
+    ?'Nessun media indicizzato. Pubblica un nuovo video o GIF nel gruppo.':'Nessun media per questo filtro.';
 }
 function selectGroup(id){
   groupSelection=groups.find(group=>group.id===id)??null;
-  clearGroupPreview();groupItems=[];
-  $('group-link').hidden=!groupSelection||groupSelection.linked;
-  $('group-link').disabled=false;
-  drawGroupItems();
-  if(groupSelection?.linked)requestGroup('items',{group:groupSelection.id});
-  else groupStatus.textContent=groupSelection?'Collega il gruppo per indicizzare i prossimi video e GIF.':'Gruppo ancora da rilevare. Dopo aver dato al bot i permessi di admin, pubblica un normale messaggio nel gruppo e premi Aggiorna.';
+  resetGroupItems();
+  groupLink.hidden=!groupSelection||groupSelection.linked;
+  if(groupSelection?.linked)groupPage();
+  else groupStatus.textContent=groupSelection?'Collega il gruppo per indicizzare i prossimi video e GIF.':'Gruppo ancora da rilevare. Manda un messaggio nel gruppo Telegram: apparirà qui appena il bot lo riceve.';
 }
-$('group-media').onclick=()=>{clearGroupPreview();groupDialog.showModal();requestGroup('groups');};
-$('group-refresh').onclick=()=>requestGroup('groups');
+function refreshGroup(){
+  if(!groupDialog.open||document.hidden||groupPending)return;
+  if(groupSelection?.linked)groupPage(null,true);
+  else requestGroup('groups',{},true);
+}
+$('group-media').onclick=()=>{
+  if(groupDialog.open)return;
+  resetGroupItems();groupDialog.showModal();requestGroup('groups');
+  groupTimer=setInterval(refreshGroup,4000);
+};
 $('group-close').onclick=()=>groupDialog.close();
-groupDialog.onclose=()=>{groupRequestId++;clearGroupPreview();};
+groupDialog.onclose=()=>{clearInterval(groupTimer);groupPending=null;resetGroupItems();};
+document.addEventListener('visibilitychange',refreshGroup);
 groupSelect.onchange=()=>selectGroup(groupSelect.value);
-$('group-filter').onchange=drawGroupItems;
-$('group-link').onclick=()=>{if(groupSelection)requestGroup('link',{group:groupSelection.id});};
-$('group-back').onclick=()=>{clearGroupPreview();drawGroupItems();};
-$('group-play').onclick=()=>{if(groupSelection&&groupPreview)requestGroup('play',{group:groupSelection.id,item:groupPreview.id});};
-groupVideo.onerror=groupImage.onerror=()=>{if(groupPreview)groupStatus.textContent='Anteprima Telegram non disponibile.';};
-function groupResult({id,op,result,error}){
-  if(id!==groupRequestId||!groupDialog.open)return;
-  $('group-link').disabled=$('group-play').disabled=false;
-  if(error){groupStatus.textContent=error;return;}
+groupFilter.onchange=()=>{resetGroupItems();groupPage();};
+groupLink.onclick=()=>{if(groupSelection)requestGroup('link',{group:groupSelection.id});};
+groupMore.onclick=()=>{if(groupNext)groupPage(groupNext);};
+function groupResult({id,op,result,error,status}){
+  const pending=groupPending;
+  if(!pending||id!==pending.id||!groupDialog.open)return;
+  groupPending=null;groupLink.disabled=groupMore.disabled=false;
+  if(error){
+    if(op==='items'&&status===403)resetGroupItems();
+    groupStatus.textContent=error;return;
+  }
   if(op==='groups'){
     groups=result.groups;
     const selected=groups.find(group=>group.id===groupSelection?.id)??groups.find(group=>group.linked)??groups[0];
@@ -668,8 +684,18 @@ function groupResult({id,op,result,error}){
     if(selected)groupSelect.value=selected.id;
     selectGroup(selected?.id);
   }else if(op==='link')requestGroup('groups');
-  else if(op==='items'){groupItems=result.items;drawGroupItems();}
-  else if(op==='play')groupDialog.close();
+  else if(op==='items'){
+    const page=result.items;
+    if(pending.append){
+      groupItems=[...new Map([...groupItems,...page].map(item=>[item.id,item])).values()];
+      groupHasOlder=true;groupNext=result.next;
+    }else if(pending.quiet&&groupHasOlder&&page.some(item=>groupItems.some(previous=>previous.id===item.id))){
+      groupItems=[...new Map([...page,...groupItems].map(item=>[item.id,item])).values()];
+    }else{
+      groupItems=page;groupNext=result.next;groupHasOlder=false;
+    }
+    drawGroupItems();
+  }else if(op==='play')groupDialog.close();
 }
 const watchDialog=$('watch-dialog');
 let uploading=false;

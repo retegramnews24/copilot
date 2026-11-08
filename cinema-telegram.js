@@ -1,6 +1,11 @@
 import {MEDIA_LIMIT,MEDIA_TTL,storeCinemaMedia} from './cinema-media.js';
 
-const GROUPS='cinema-groups', ID=/^[a-f0-9-]{36}$/;
+const GROUPS='cinema-groups', ID=/^[a-f0-9-]{36}$/, PAGE_SIZE=30;
+const MESSAGE=/^[1-9]\d{0,15}$/;
+const validMessage=value=>MESSAGE.test(value??'')&&Number.isSafeInteger(Number(value));
+const prefix=(group,kind)=>'media:'+group+':'+kind+':';
+const assetKey=(group,id)=>'asset:'+group+':'+id;
+const messageKey=message=>String(Number.MAX_SAFE_INTEGER-Number(message)).padStart(16,'0');
 const reply=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const denied=()=>reply({error:'Questo media è riservato ai membri del gruppo Telegram.'},403);
 const isAdmin=member=>['creator','administrator'].includes(member?.status);
@@ -24,7 +29,7 @@ export function groupUpdate(message){
   const group={chatId:String(chat.id),title:String(chat.title||'Gruppo Telegram').slice(0,90)};
   if(chat.has_protected_content||message.has_protected_content||message.has_media_spoiler||message.from?.is_bot)return group;
   const source=message.animation||message.video||message.document;
-  if(!source||!Number.isSafeInteger(message.message_id)||typeof source.file_id!=='string'||source.file_id.length>512)return group;
+  if(!source||!Number.isSafeInteger(message.message_id)||message.message_id<=0||typeof source.file_id!=='string'||source.file_id.length>512)return group;
   const mime=String(source.mime_type||'').toLowerCase();
   const gif=mime==='image/gif'||/\.gif$/i.test(source.file_name??'');
   const type=gif?'image/gif':mime==='video/webm'?'video/webm':!mime||mime==='video/mp4'?'video/mp4':null;
@@ -67,12 +72,12 @@ export class TelegramCinema {
         group.title=input.title;await this.ctx.storage.put(GROUPS,groups);
       }
       if(!group.linked||!input.media)return reply({ok:true});
-      const key='group:'+group.id,items=await this.ctx.storage.get(key)??[];
-      if(items.some(item=>item.message===input.media.message))return reply({ok:true});
+      const legacy=await this.ctx.storage.get('group:'+group.id)??[];
+      if(legacy.some(item=>item.message===input.media.message))return reply({ok:true});
       const media={id:crypto.randomUUID(),...input.media};
-      items.unshift(media);
-      items.sort((a,b)=>b.date-a.date||b.message-a.message);
-      await this.ctx.storage.put(key,items.slice(0,80));
+      const key=prefix(group.id,media.loop?'gif':'video')+messageKey(media.message);
+      if(await this.ctx.storage.get(key))return reply({ok:true});
+      await this.ctx.storage.put({[key]:media,[assetKey(group.id,media.id)]:key});
       return reply({ok:true});
     });
   }
@@ -107,9 +112,24 @@ export class TelegramCinema {
       });
     }
     if(!group.linked||!isMember(member))return denied();
-    const items=await this.ctx.storage.get('group:'+group.id)??[];
-    if(op==='items')return reply({items:items.map(({id,title,date,type,loop,thumb})=>({id,title,date,type,loop,thumb:!!thumb}))});
-    const item=items.find(entry=>entry.id===url.searchParams.get('item'));
+    const legacy=await this.ctx.storage.get('group:'+group.id)??[];
+    if(op==='items'){
+      const filter=url.searchParams.get('filter'),before=url.searchParams.get('before');
+      if(before!==null&&!validMessage(before))return reply({error:'Pagina non valida.'},400);
+      const kinds=filter==='gif'||filter==='video'?[filter]:['gif','video'];
+      const pages=await Promise.all(kinds.map(kind=>{
+        const key=prefix(group.id,kind);
+        return this.ctx.storage.list({prefix:key,limit:PAGE_SIZE+1,...(before?{startAfter:key+messageKey(before)}:{})});
+      }));
+      const old=legacy.filter(item=>(!before||item.message<Number(before))&&kinds.includes(item.loop?'gif':'video'));
+      const all=[...old,...pages.flatMap(page=>[...page.values()])].sort((a,b)=>b.message-a.message);
+      const page=all.slice(0,PAGE_SIZE);
+      return reply({items:page.map(({id,title,date,type,loop,thumb})=>({id,title,date,type,loop,thumb:!!thumb})),
+        next:all.length>PAGE_SIZE?String(page.at(-1).message):null});
+    }
+    const id=url.searchParams.get('item');
+    const key=ID.test(id??'')&&await this.ctx.storage.get(assetKey(group.id,id));
+    const item=key?await this.ctx.storage.get(key):legacy.find(entry=>entry.id===id);
     if(op==='asset'&&item)return reply({file:item.file,thumb:item.thumb,type:item.type,loop:item.loop});
     return reply({error:'Media non disponibile.'},404);
   }

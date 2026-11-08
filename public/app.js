@@ -1131,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=10';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=11';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=()=>openCinema();
@@ -1173,24 +1173,30 @@ async function lookupCinemaYouTube(id,params){
  if(cinemaLookup===controller){cinemaLookup=null;cinemaPost('youtube-result',{id,result,error});}
 }
 async function cinemaGroupRequest(source,data){
- const {id,op,group,item}=data;
+ const {id,op,group,item,filter,before}=data;
  if(!Number.isSafeInteger(id)||!['groups','link','items','play'].includes(op))return;
  const uuid=/^[a-f0-9-]{36}$/;
  if(op!=='groups'&&!uuid.test(group??''))return;
+ const message=/^[1-9]\d{0,15}$/;
  if(op==='play'&&(!uuid.test(item??'')||!cinemaRoom))return;
  const query=new URLSearchParams();
  if(op!=='groups')query.set('group',group);
  if(op==='play'){query.set('item',item);query.set('room',cinemaRoom);}
- let result,error;
+ if(op==='items'){
+  if(filter==='video'||filter==='gif')query.set('filter',filter);
+  if(message.test(before??''))query.set('before',before);
+ }
+ let result,error,status;
  try{
   const response=await fetch('/api/cinema/group/'+op+'?'+query,{
    method:op==='play'||op==='link'?'POST':'GET',
    headers:{Authorization:'Bearer '+sessionToken},signal:AbortSignal.timeout(15000)
   });
+  status=response.status;
   if(response.status!==204)result=await response.json();
   if(!response.ok)error=result?.error||'Operazione non riuscita.';
  }catch{error='Catalogo Telegram non raggiungibile. Riprova.';}
- if(source===$('cinema-frame').contentWindow)cinemaPost('group-result',{id,op,result,error});
+ if(source===$('cinema-frame').contentWindow)cinemaPost('group-result',{id,op,result,error,status});
 }
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
