@@ -1,7 +1,7 @@
 import {normalizeAppearance} from './public/appearance.js';
-import {youtubeId,positionAt} from './public/cinema/media.js';
+import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
-const MAX_ROOMS=24, MAX_FAVORITES=120;
+const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
 const response=(message,status)=>Response.json({error:message},{status});
 
 function cleanURL(value,max){
@@ -11,11 +11,17 @@ function cleanURL(value,max){
     return url.protocol==='https:'&&!url.username&&!url.password ? url.href : '';
   }catch{return '';}
 }
-function cleanChannel(input){
+function cleanChannel(input,allowChannel=false){
   const name=typeof input?.name==='string'?input.name.trim().slice(0,96):'';
   const url=cleanURL(input?.url,1400),youtube=youtubeId(url);
   if(!name||!url||/\/api\/cinema\/media\//.test(new URL(url).pathname))return null;
-  return youtube ? {name,url:'https://www.youtube.com/watch?v='+youtube,youtube,logo:''} : {name,url,logo:cleanURL(input.logo,900)};
+  const channelId=youtubeChannelId(url),catalog=input.catalog===true?{catalogUntil:Date.now()+METADATA_TTL}:{};
+  if(channelId)return allowChannel?{name,url:'https://www.youtube.com/channel/'+channelId,youtubeChannel:channelId,logo:'',...catalog}:null;
+  if(youtube){
+    const live=!allowChannel&&(input.live===true||new URL(url).pathname.startsWith('/live/'));
+    return {name,url:'https://www.youtube.com/watch?v='+youtube,youtube,logo:'',...(live?{live}:{}),...catalog};
+  }
+  return {name,url,logo:cleanURL(input.logo,900)};
 }
 
 export class Cinema {
@@ -23,6 +29,28 @@ export class Cinema {
   async data(){
     const saved=await this.ctx.storage.get([ROOMS,FAVORITES]);
     return {rooms:saved.get(ROOMS)??[],favorites:saved.get(FAVORITES)??[]};
+  }
+  async scheduleMetadata(expires){
+    if(!expires)return;
+    const scheduled=await this.ctx.storage.getAlarm();
+    if(scheduled===null||scheduled>expires)await this.ctx.storage.setAlarm(expires);
+  }
+  alarm(){
+    return this.ctx.blockConcurrencyWhile(async()=>{
+      const data=await this.data(),now=Date.now();
+      let next=Infinity,changed=false;
+      for(const item of [...data.favorites,...data.rooms.map(room=>room.channel)]){
+        if(!item?.catalogUntil)continue;
+        if(item.catalogUntil>now){next=Math.min(next,item.catalogUntil);continue;}
+        item.name=item.youtubeChannel?'Canale YouTube · '+item.youtubeChannel.slice(-6):'Video YouTube · '+item.youtube;
+        delete item.catalogUntil;delete item.live;changed=true;
+      }
+      if(changed){
+        await this.ctx.storage.put({[ROOMS]:data.rooms,[FAVORITES]:data.favorites});
+        this.publish(data,true);
+      }
+      if(Number.isFinite(next))await this.ctx.storage.setAlarm(next);
+    });
   }
   connections(){
     return this.ctx.getWebSockets().flatMap(socket=>{
@@ -134,10 +162,10 @@ export class Cinema {
         if(input.type==='channel'){
           const channel=cleanChannel(input.channel);
           if(!channel)throw Error('Canale non valido.');
-          if(room.channel?.url===channel.url)return;
+          if(room.channel?.url===channel.url&&!channel.catalogUntil&&!!room.channel.live===!!channel.live)return;
           room.channel=channel;room.updated=Date.now();
           room.playback=channel.youtube?{position:0,playing:true,updated:room.updated,seek:0}:null;
-          await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
+          await this.ctx.storage.put(ROOMS,data.rooms);await this.scheduleMetadata(channel.catalogUntil);this.publish(data);return;
         }
         if(input.type==='playback'){
           if(!(room.channel?.youtube||room.channel?.file)||input.url!==room.channel.url||!room.playback)return;
@@ -145,18 +173,19 @@ export class Cinema {
           let position=positionAt(playback,now),playing=playback.playing,seek=playback.seek??0;
           if(input.command==='play')playing=true;
           else if(input.command==='pause')playing=false;
-          else if(input.command==='seek'&&Number.isFinite(input.position)&&input.position>=0&&input.position<=86400){position=input.position;seek++;}
+          else if(input.command==='seek'&&!room.channel.live&&Number.isFinite(input.position)&&input.position>=0&&input.position<=86400){position=input.position;seek++;}
           else throw Error('Comando video non valido.');
           room.updated=now;room.playback={position,playing,updated:now,seek};
           await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
         }
         const favorites=data.favorites;
         if(input.type==='favorite-add'){
-          const channel=cleanChannel(input.channel);
+          const channel=cleanChannel(input.channel,true);
           if(!channel)throw Error('Canale non valido.');
           if(favorites.some(item=>item.url===channel.url))return;
           if(favorites.length>=MAX_FAVORITES)throw Error('La lista condivisa è piena.');
           favorites.push({...channel,id:crypto.randomUUID()});
+          await this.scheduleMetadata(channel.catalogUntil);
         }else if(input.type==='favorite-remove'||input.type==='favorite-move'){
           const index=favorites.findIndex(item=>item.id===input.id);
           if(index<0||input.before===input.id)return;

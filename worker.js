@@ -1,4 +1,5 @@
 import { Cinema } from './cinema-server.js';
+import { YouTubeCatalog } from './cinema-youtube.js';
 import {MEDIA_LIMIT,MEDIA_TTL,MEDIA_TYPES,readCinemaMedia,storeCinemaMedia} from './cinema-media.js';
 import {chessSnapshot,claimChessDraw} from './chess-rules.js';
 import {initialNaval,playNaval,navalView} from './naval.js';
@@ -175,6 +176,7 @@ export default {
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
   if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return cinemaHub(env).fetch(new Request(u.origin+'/cinema/ws',req));
+  if(u.pathname==='/api/cinema/youtube'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-youtube-v1')).fetch(new Request(u.origin+'/cinema/youtube'+u.search,req));
   if(u.pathname==='/api/cinema/upload'&&req.method==='POST')return uploadCinema(req,env,u);
   const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
   if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
@@ -335,6 +337,7 @@ export class Room extends DurableObject {
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
   const path=new URL(req.url).pathname;
   if(path==='/cinema/ws'||path==='/cinema/upload')return this.cinema.fetch(req);
+  if(path==='/cinema/youtube')return (this.youtube??=new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req,viewer);
   if(path==='/cinema/file')return req.method==='POST'?storeCinemaMedia(req,this.ctx.storage):readCinemaMedia(req,this.ctx.storage);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
@@ -634,6 +637,7 @@ export class Room extends DurableObject {
  }
  webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
+ if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
  if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
  if(await this.ctx.storage.get('golf'))return this.golf.alarm();

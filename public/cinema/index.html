@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=3"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=3"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=4"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=4"></script></head>
 <body>
 <header>
  <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button></div>
@@ -21,9 +21,10 @@
    <button id="screen-full" title="Video a schermo intero" aria-label="Video a schermo intero">⛶</button>
   </section>
   <div id="shared-playback" hidden>
+   <small>Per tutti</small>
    <button id="play-shared" aria-label="Riproduci per tutti">▶</button><button id="pause-shared" aria-label="Metti in pausa per tutti">Ⅱ</button>
    <form id="seek-shared"><input id="seek-time" type="text" placeholder="12:30" inputmode="text" aria-label="Minuti e secondi"><button type="submit">Vai</button></form>
-   <output id="shared-time"></output>
+   <output id="shared-time"></output><div id="youtube-message" role="status" hidden><span id="youtube-status"></span> <button id="youtube-start" hidden>Riproduci qui</button></div>
   </div>
   <button class="split split-y" data-size="seats" aria-label="Ridimensiona schermo e divanetti"></button>
   <section id="audience"><div class="section-title"><strong id="room-name">Sala</strong><span id="audience-count"></span></div><div id="sofas"></div></section>
@@ -32,7 +33,24 @@
  <aside id="sidebar" aria-label="Canali">
   <section id="favorites-panel"><h2>Preferiti <small>Condivisi</small></h2><div id="favorites" class="channel-list"></div></section>
   <button class="split split-y" data-size="favorites" aria-label="Ridimensiona preferiti e ricerca"></button>
-  <section id="search-panel"><h2>Ricerca</h2><input id="query" type="search" placeholder="Nome, paese, categoria o URL" aria-label="Cerca canali"><p id="catalog-status"></p><div id="results" class="channel-list"></div></section>
+  <section id="search-panel"><div class="search-title"><h2>Ricerca</h2>
+   <div class="source-switch" role="group" aria-label="Sorgente di ricerca"><button id="source-tv" type="button" aria-pressed="true">TV</button><button id="source-youtube" type="button" aria-pressed="false">YouTube</button></div></div>
+   <div id="tv-search" class="search-view"><input id="query" type="search" placeholder="Nome, paese, lingua, fonte o URL" aria-label="Cerca canali TV">
+    <div class="tv-filters"><select id="tv-country" aria-label="Paese"><option value="">Paesi</option></select>
+     <select id="tv-category" aria-label="Categoria"><option value="">Categorie</option></select><select id="tv-source" aria-label="Fonte"><option value="">Fonti</option></select></div>
+    <details id="tv-feed"><summary>Aggiungi feed M3U</summary><form id="tv-feed-form"><input id="tv-feed-url" type="url" required maxlength="1400" aria-label="Link della playlist" placeholder="https://…"><button>Carica</button></form><p id="tv-feed-status" role="status"></p></details>
+    <p id="catalog-status" role="status"></p><div id="results" class="channel-list"></div>
+    <div id="tv-pages" hidden><button id="tv-prev" aria-label="Risultati precedenti">‹</button><output id="tv-page"></output><button id="tv-next" aria-label="Altri risultati">›</button></div>
+   </div>
+   <div id="youtube-search" class="search-view" hidden>
+    <form id="youtube-form"><input id="youtube-query" type="search" required maxlength="200" placeholder="Nome, @canale o link YouTube" aria-label="Cerca su YouTube">
+    <select id="youtube-filter" aria-label="Tipo di risultati"><option value="video">Video</option><option value="channel">Canali</option><option value="live">Dirette</option></select><button type="submit">Cerca</button></form>
+    <p id="youtube-search-status" role="status">Cerca per nome o incolla un link YouTube.</p>
+    <div id="youtube-channel" hidden><button id="youtube-back" type="button">← Risultati</button><strong id="youtube-channel-name"></strong><button id="youtube-save" type="button">☆ Salva canale</button></div>
+    <div id="youtube-results" aria-label="Risultati YouTube"></div>
+    <a class="youtube-terms" href="https://www.youtube.com/t/terms" target="_blank" rel="noopener noreferrer">Termini di YouTube</a>
+   </div>
+  </section>
  </aside>
 </main>
 <dialog id="multisala-dialog" aria-labelledby="multisala-title"><div class="dialog-heading"><h2 id="multisala-title">Multisala</h2><form method="dialog"><button>Chiudi</button></form></div><div id="multisala-rooms"></div></dialog>

@@ -1,7 +1,7 @@
-import {loadCatalog,searchChannels} from './catalog.js?v=1';
+import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=2';
 import {avatarSVG} from '../labyrinth/avatar.js?v=9';
-import {youtubeId,positionAt} from './media.js?v=2';
-import {embedYouTube} from './youtube.js?v=2';
+import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=3';
+import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
 
 const $=id=>document.getElementById(id);
@@ -13,7 +13,7 @@ try{
   const saved=JSON.parse(localStorage.getItem('binotto-cinema-ui-v1'));
   settings={monitor:saved?.monitor!==false,volume:Number.isFinite(saved?.volume)?Math.max(0,Math.min(100,saved.volume)):65,sizes:{...saved?.sizes}};
 }catch{}
-let connected=false,room=null,me=null,favorites=[],catalog=[],catalogStarted=false,playingURL=null,hls=null,drag=null;
+let connected=false,room=null,me=null,favorites=[],catalog=[],catalogController=null,playingURL=null,hls=null,drag=null;
 let videoRevision=0,noticeTimer,clockOffset=0,youtube=null,disposeYouTube=null,youtubeBlocked=false,fileBlocked=false,fileStarting=false;
 const send=(type,payload={})=>parent.postMessage({type:'cinema:'+type,...payload},location.origin);
 const action=(type,data={})=>connected?send('action',{action:{type,...data}}):notice('Collegamento alla sala in corso.');
@@ -35,7 +35,7 @@ function stopVideo(){
   videoRevision++;
   hls?.destroy();hls=null;
   disposeYouTube?.();disposeYouTube=null;youtube=null;youtubeBlocked=false;fileBlocked=false;fileStarting=false;
-  video.hidden=false;$('youtube').hidden=true;
+  video.hidden=false;$('youtube').hidden=true;$('youtube-message').hidden=true;
   video.pause();video.removeAttribute('src');video.load();
 }
 function message(text,retry=false){
@@ -55,10 +55,17 @@ function targetPosition(){
 }
 function syncYouTube(force=false){
   if(!youtube||!room?.playback)return;
+  if(document.hidden||(mobile.matches&&cinema.classList.contains('tools-open')&&!cinema.classList.contains('wide'))){
+    if(youtube.getPlayerState()===1)youtube.pauseVideo();
+    return;
+  }
+  const bounds=screen.getBoundingClientRect(),auditorium=screen.parentElement.getBoundingClientRect();
+  const visible=Math.min(bounds.bottom,auditorium.bottom)-Math.max(bounds.top,auditorium.top);
+  if(bounds.height&&visible<bounds.height/2){if(youtube.getPlayerState()===1)youtube.pauseVideo();return;}
   const position=targetPosition(),state=youtube.getPlayerState();
   const duration=youtube.getDuration();
   if(state===0&&duration>0&&position>=duration-.5)return;
-  if(force||Math.abs(youtube.getCurrentTime()-position)>2)youtube.seekTo(position,true);
+  if(!room.channel.live&&(force||Math.abs(youtube.getCurrentTime()-position)>2))youtube.seekTo(position,true);
   if(room.playback.playing){
     if(!youtubeBlocked&&state!==1&&state!==3)youtube.playVideo();
   }else{
@@ -66,21 +73,29 @@ function syncYouTube(force=false){
     $('screen-empty').hidden=true;
   }
 }
+function youtubeMessage(text,retry=false){
+  $('youtube-message').hidden=!text;
+  $('youtube-status').textContent=text;
+  $('youtube-start').hidden=!retry;
+}
+$('youtube-start').onclick=()=>{youtubeBlocked=false;syncYouTube(true);};
 function showYouTube(id){
+  youtubeMessage('Collegamento a YouTube…');
   video.hidden=true;$('youtube').hidden=false;
   disposeYouTube=embedYouTube($('youtube'),id,{
     ready:player=>{
       youtube=player;youtube.setVolume(settings.volume);
       if(settings.volume===0)youtube.mute();
+      if(!room?.playback?.playing)youtubeMessage('');
       syncYouTube(true);
     },
     state:state=>{
       if(state===1&&youtube&&!room?.playback?.playing)youtube.pauseVideo();
-      if(state===1||state===2||state===0)$('screen-empty').hidden=true;
+      if(state===1||state===0||(state===2&&!room?.playback?.playing))youtubeMessage('');
     },
-    blocked:()=>{youtubeBlocked=true;message('Tocca per avviare YouTube',true);},
+    blocked:()=>{youtubeBlocked=true;youtubeMessage('Tocca per avviare YouTube',true);},
     error:code=>{
-      message(code===101||code===150?'Questo video non consente la riproduzione incorporata.':'YouTube non disponibile per questo video.',false);
+      youtubeMessage(code===101||code===150?'Questo video non consente la riproduzione incorporata.':'YouTube non disponibile per questo video.');
     }
   });
 }
@@ -105,9 +120,9 @@ video.addEventListener('loadedmetadata',()=>syncFile(true));
 
 function tune(channel,force=false,seek=false){
   const url=channel?.url??null;
+  $('channel-name').textContent=channel?.name??'';
   if(!force&&url===playingURL){syncYouTube(seek);syncFile(seek);return;}
   playingURL=url;stopVideo();
-  $('channel-name').textContent=channel?.name??'';
   $('on-air').textContent=url?((channel.youtube||channel.file)?'VIDEO':'LIVE'):'';
   if(!settings.monitor){message('Monitor spento');return;}
   if(!url){message('In attesa di un canale');return;}
@@ -167,6 +182,7 @@ function drawRooms(rooms,active){
   $('connecting').hidden=!!active;cinema.hidden=!active;$('cinema-actions').hidden=!active;
   $('close-room').hidden=!active?.canClose;
   $('shared-playback').hidden=!active?.playback;
+  $('seek-shared').hidden=!!active?.channel?.live;
   updateFavoriteButton();
   if(!active){if(previous)tune(null);return;}
   const current=rooms.find(entry=>entry.id===active.id);
@@ -181,14 +197,13 @@ function drawRooms(rooms,active){
     sofa.append(figure,node('small',id===me?'Tu · '+name:name));
     return sofa;
   }));
-  if(!catalogStarted){
-    catalogStarted=true;
-    loadCatalog((rows,sourceCount,done)=>{
+  if(!catalogController){
+    catalogController=loadCatalog((rows,sourceCount,done)=>{
       catalog=rows;
       $('catalog-status').textContent=done
-        ? (sourceCount?rows.length.toLocaleString('it-IT')+' stream · '+sourceCount+' fonti':'Cataloghi offline · elenco di base')
+        ? (sourceCount?rows.length.toLocaleString('it-IT')+' stream · '+sourceCount+' cataloghi':'Cataloghi offline · elenco di base')
         : 'Aggiornamento cataloghi…';
-      drawSearch();
+      updateTVFilters();drawSearch();
     });
   }
   tune(active.channel,previous?.id!==active.id,previous?.playback?.seek!==active.playback?.seek);
@@ -203,7 +218,7 @@ function channelCard(channel,favorite=false){
     image.src=channel.logo;logo.append(image);
   }
   pick.title=channel.name;pick.append(logo,node('span',channel.name));
-  pick.onclick=()=>action('channel',{channel:packetChannel(channel)});
+  pick.onclick=()=>channel.youtubeChannel?openYouTubeChannel(channel.youtubeChannel):action('channel',{channel:packetChannel(channel)});
   const isFavorite=favorite||favorites.some(entry=>entry.url===channel.url);
   const star=node('button',favorite?'×':isFavorite?'★':'☆');
   star.setAttribute('aria-label',(favorite?'Rimuovi ':isFavorite?'Già nei preferiti: ':'Aggiungi ai preferiti: ')+channel.name);
@@ -228,12 +243,132 @@ function channelCard(channel,favorite=false){
   }
   return item;
 }
-const packetChannel=({name,url,logo})=>({name,url,logo});
-function drawSearch(){
-  const list=$('results'),rows=searchChannels(catalog,$('query').value);
-  list.replaceChildren(...rows.map(channel=>channelCard(channel)));
-  if(!rows.length)list.append(node('p','Nessun canale trovato.'));
+const packetChannel=({name,url,logo,live,catalog,catalogUntil})=>({name,url,logo,live,catalog:catalog||!!catalogUntil});
+const TV_PAGE_SIZE=48;
+let tvPage=0;
+function options(id,items){
+  const select=$(id),value=select.value,first=select.options[0];
+  select.replaceChildren(first,...items.map(([code,label])=>new Option(label,code)));
+  if(items.some(([code])=>code===value))select.value=value;
 }
+function updateTVFilters(){
+  const countries=new Set(['IT','MT','GB','US','FR','DE','ES','CH']);
+  const sources=new Set();
+  for(const row of catalog){
+    for(const code of row.countries)countries.add(code);
+    for(const source of row.sources)sources.add(source);
+  }
+  options('tv-country',[...countries].map(code=>[code,countryName(code)]).sort((a,b)=>a[1].localeCompare(b[1],'it')));
+  options('tv-source',[...sources].sort().map(source=>[source,source]));
+}
+options('tv-category',Object.entries(categories));
+function drawSearch(){
+  const list=$('results'),rows=searchChannels(catalog,$('query').value,{
+    country:$('tv-country').value,category:$('tv-category').value,source:$('tv-source').value
+  });
+  const pages=Math.ceil(rows.length/TV_PAGE_SIZE);
+  tvPage=Math.min(tvPage,Math.max(0,pages-1));
+  const start=tvPage*TV_PAGE_SIZE;
+  list.replaceChildren(...rows.slice(start,start+TV_PAGE_SIZE).map(channel=>channelCard(channel)));
+  if(!rows.length)list.append(node('p','Nessun canale trovato.'));
+  $('tv-pages').hidden=pages<=1;$('tv-prev').disabled=tvPage===0;$('tv-next').disabled=tvPage+1>=pages;
+  $('tv-page').textContent=(start+1)+'–'+Math.min(rows.length,start+TV_PAGE_SIZE)+' / '+rows.length.toLocaleString('it-IT');
+}
+function refreshTVPage(page=0){
+  tvPage=page;$('results').scrollTop=0;drawSearch();
+}
+$('tv-prev').onclick=()=>refreshTVPage(tvPage-1);
+$('tv-next').onclick=()=>refreshTVPage(tvPage+1);
+for(const field of ['country','category','source']){
+  $('tv-'+field).onchange=()=>{
+    if(field!=='source')catalogController?.scope(field,$('tv-'+field).value);
+    refreshTVPage();
+  };
+}
+$('tv-feed-form').onsubmit=async event=>{
+  event.preventDefault();
+  if(!catalogController)return;
+  const form=event.currentTarget,button=form.querySelector('button'),status=$('tv-feed-status');
+  button.disabled=true;status.textContent='Lettura playlist…';
+  try{
+    const count=await catalogController.importPlaylist($('tv-feed-url').value);
+    $('query').value='';$('tv-country').value='';$('tv-category').value='';
+    const select=$('tv-source');
+    if(![...select.options].some(option=>option.value==='Playlist importata'))select.add(new Option('Playlist importata','Playlist importata'));
+    select.value='Playlist importata';
+    status.textContent=count+' stream aggiunti alla ricerca.';
+    refreshTVPage();
+  }catch(error){status.textContent=error.message==='Failed to fetch'?'Playlist non raggiungibile dal browser. Verifica il link e l’accesso pubblico.':error.message;}
+  finally{button.disabled=false;}
+};
+let youtubeSearchId=0,youtubeResults=[],youtubeQueryResults=[],youtubeChannel=null;
+function selectSource(source){
+  const isTV=source==='tv';
+  $('source-tv').setAttribute('aria-pressed',String(isTV));
+  $('source-youtube').setAttribute('aria-pressed',String(!isTV));
+  $('tv-search').hidden=!isTV;$('youtube-search').hidden=isTV;
+}
+$('source-tv').onclick=()=>selectSource('tv');
+$('source-youtube').onclick=()=>{selectSource('youtube');$('youtube-query').focus();};
+function drawYouTube(){
+  $('youtube-channel').hidden=!youtubeChannel;
+  if(youtubeChannel){
+    const saved=favorites.some(item=>item.url===youtubeChannel.url);
+    $('youtube-channel-name').textContent=youtubeChannel.name;
+    $('youtube-save').disabled=saved;
+    $('youtube-save').textContent=saved?'★ Nei preferiti':'☆ Salva canale';
+  }
+  $('youtube-results').replaceChildren(...youtubeResults.map(item=>{
+    const entry=node('article','','youtube-result'),copy=node('div'),open=node('button',item.kind==='channel'?'Apri canale':'Guarda in sala');
+    copy.append(node('strong',item.name));
+    if(item.author||item.live)copy.append(node('small',item.live?'● Diretta · '+(item.author||'YouTube'):item.author));
+    open.onclick=()=>{
+      if(item.kind==='channel')openYouTubeChannel(item.id);
+      else{
+        action('channel',{channel:packetChannel({...item,catalog:!item.direct})});
+        if(mobile.matches){cinema.classList.remove('tools-open');updateTools();}
+      }
+    };
+    open.setAttribute('aria-label',open.textContent+' · '+item.name);
+    entry.append(copy,open);
+    return entry;
+  }));
+}
+function lookupYouTube(params){
+  youtubeChannel=null;youtubeResults=[];drawYouTube();
+  $('youtube-search-status').textContent='Caricamento da YouTube…';
+  send('youtube-search',{id:++youtubeSearchId,params});
+}
+function openYouTubeChannel(id){
+  selectSource('youtube');
+  if(mobile.matches&&!cinema.classList.contains('wide')){cinema.classList.add('tools-open');updateTools();}
+  lookupYouTube({mode:'channel',id});
+}
+$('youtube-back').onclick=()=>{
+  youtubeSearchId++;youtubeChannel=null;youtubeResults=youtubeQueryResults;
+  $('youtube-search-status').textContent=youtubeResults.length?'Risultati YouTube':'Cerca per nome o incolla un link YouTube.';
+  drawYouTube();
+};
+$('youtube-save').onclick=()=>{
+  if(youtubeChannel)action('favorite-add',{channel:packetChannel({...youtubeChannel,catalog:true})});
+};
+$('youtube-form').onsubmit=event=>{
+  event.preventDefault();
+  const q=$('youtube-query').value.trim(),id=youtubeId(q),channelId=youtubeChannelId(q);
+  let handle=q.startsWith('@')?q:null;
+  try{
+    const url=new URL(q);
+    if(url.protocol==='https:'&&['youtube.com','www.youtube.com','m.youtube.com'].includes(url.hostname))handle=decodeURIComponent(url.pathname.split('/')[1]);
+  }catch{}
+  if(id){
+    youtubeSearchId++;youtubeChannel=null;
+    youtubeResults=youtubeQueryResults=[{kind:'video',name:'Video YouTube · '+id,url:q,live:/youtube\.com\/live\//i.test(q),direct:true}];
+    $('youtube-search-status').textContent='Video da link';drawYouTube();
+  }else if(channelId)openYouTubeChannel(channelId);
+  else if(/^@[\p{L}\p{N}._·-]{2,40}$/u.test(handle??''))lookupYouTube({mode:'channel',handle});
+  else if(q.length>=2&&q.length<=80)lookupYouTube({mode:'search',q,type:$('youtube-filter').value});
+  else $('youtube-search-status').textContent='Inserisci da 2 a 80 caratteri o un link YouTube.';
+};
 function updateFavoriteButton(){
   const button=$('save-playing'),url=room?.channel?.url;
   const saved=favorites.some(item=>item.url===url);
@@ -276,7 +411,7 @@ function beginFavoriteDrag(event,handle,item,id){
 }
 $('exit').onclick=()=>send('exit');
 let queryTimer;
-$('query').oninput=()=>{clearTimeout(queryTimer);queryTimer=setTimeout(drawSearch,100);};
+$('query').oninput=()=>{clearTimeout(queryTimer);queryTimer=setTimeout(refreshTVPage,100);};
 function updateMonitor(){
   $('monitor').textContent=settings.monitor?'Monitor acceso':'Monitor spento';
   $('monitor').setAttribute('aria-pressed',String(settings.monitor));
@@ -290,6 +425,7 @@ function updateTools(){
   $('mode').setAttribute('aria-pressed',String(wide));
   $('tools').setAttribute('aria-expanded',String(!wide&&(!mobile.matches||cinema.classList.contains('tools-open'))));
   $('tools').textContent=wide?'Mostra canali':'Canali';
+  syncYouTube();
 }
 $('mode').onclick=()=>{cinema.classList.toggle('wide');updateTools();};
 $('tools').onclick=()=>{
@@ -298,7 +434,7 @@ $('tools').onclick=()=>{
   else cinema.classList.add('wide');
   updateTools();
 };
-mobile.addEventListener('change',updateTools);updateTools();
+mobile.addEventListener('change',updateTools);screen.parentElement.addEventListener('scroll',()=>syncYouTube(),{passive:true});document.addEventListener('visibilitychange',()=>syncYouTube());updateTools();
 $('screen-full').onclick=async()=>{
   if(document.fullscreenElement){await document.exitFullscreen();return;}
   if(document.body.classList.contains('video-full')){document.body.classList.remove('video-full');return;}
@@ -345,6 +481,14 @@ window.addEventListener('message',event=>{
     if(!connected)notice(data.message||'Riconnessione al cinema…');
     else $('notice').textContent='';
   }
+  if(data?.type==='cinema:youtube-result'){
+    if(data.id!==youtubeSearchId)return;
+    youtubeResults=data.result?.items??[];
+    youtubeChannel=data.result?.channel??null;
+    if(!youtubeChannel)youtubeQueryResults=youtubeResults;
+    $('youtube-search-status').textContent=data.error||(youtubeResults.length?(youtubeChannel?'Video recenti':'Risultati YouTube'):'Nessun video o canale trovato.');
+    drawYouTube();return;
+  }
   if(data?.type==='cinema:upload-result'){
     setUploading(false);
     if(data.error)$('watch-error').textContent=data.error;
@@ -354,7 +498,7 @@ window.addEventListener('message',event=>{
   if(data?.type!=='cinema:packet')return;
   const packet=data.packet;
   if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;drawRooms(packet.rooms,packet.active);}
-  else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();if(catalogStarted)drawSearch();}
+  else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();drawYouTube();if(catalogController)drawSearch();}
   else if(packet.type==='error')notice(packet.message);
 });
 const watchDialog=$('watch-dialog');
@@ -419,6 +563,7 @@ $('seek-shared').onsubmit=event=>{
 };
 setInterval(()=>{
   if(!room?.playback)return;
+  if(room.channel?.live){$('shared-time').textContent=room.playback.playing?'● Diretta':'In pausa';return;}
   const seconds=Math.floor(targetPosition());
   $('shared-time').textContent=(room.playback.playing?'In riproduzione':'In pausa')+' · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
 },1000);

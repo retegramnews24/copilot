@@ -14,3 +14,14 @@ export function positionAt(playback,now){
   if(!playback)return 0;
   return playback.position+(playback.playing?Math.max(0,now-playback.updated)/1000:0);
 }
+
+export const validYouTubeChannelId=value=>/^UC[\w-]{22}$/.test(value??'');
+export function youtubeChannelId(value){
+  if(validYouTubeChannelId(value))return value;
+  try{
+    const url=new URL(value);
+    if(url.protocol!=='https:'||url.username||url.password||!['youtube.com','www.youtube.com','m.youtube.com'].includes(url.hostname))return null;
+    const match=url.pathname.match(/^\/channel\/(UC[\w-]{22})(?:\/|$)/);
+    return match?.[1]??null;
+  }catch{return null;}
+}

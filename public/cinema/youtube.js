@@ -27,7 +27,7 @@ export function embedYouTube(container,id,events){
   api().then(YT=>{
     if(closed)return;
     const frame=document.createElement('iframe');
-    const query=new URLSearchParams({enablejsapi:'1',origin:location.origin,controls:'0',playsinline:'1',rel:'0',autoplay:'0'});
+    const query=new URLSearchParams({enablejsapi:'1',origin:location.origin,controls:'1',playsinline:'1',rel:'0',autoplay:'0'});
     frame.src='https://www.youtube.com/embed/'+id+'?'+query;
     frame.referrerPolicy='strict-origin-when-cross-origin';
     frame.allow='autoplay; encrypted-media; fullscreen';

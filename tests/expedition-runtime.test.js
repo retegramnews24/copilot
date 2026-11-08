@@ -269,6 +269,18 @@ try{
  assert.equal(late.active.playback.playing,false);
  cinemaSend(cinemaE,'playback',{url:youtube,command:'play'});
  await until(cinemaD,p=>p.active?.playback?.playing===true&&p.active.playback.position===122);
+ const youtubeLookup='/api/cinema/youtube?mode=search&type=video&q=motorsport';
+ assert.equal((await mf.dispatchFetch('https://unit.test'+youtubeLookup)).status,401);
+ assert.equal((await call(801,youtubeLookup)).status,503);
+ const publicChannel='https://www.youtube.com/channel/UC_x5XG1OV2P6uZZ5FSM9Ttw';
+ cinemaSend(cinemaA,'favorite-add',{channel:{name:'Canale prova',url:publicChannel,catalog:true}});
+ await until(cinemaD,p=>p.type==='favorites'&&p.items.some(item=>item.youtubeChannel&&item.url===publicChannel));
+ cinemaSend(cinemaD,'channel',{channel:{name:'Canale prova',url:publicChannel}});
+ await until(cinemaD,p=>p.type==='error'&&p.message==='Canale non valido.');
+ cinemaSend(cinemaA,'channel',{channel:{name:'YouTube live',url:'https://www.youtube.com/live/M7lc1UVf-VE',live:true,catalog:true}});
+ const liveYouTube=await until(cinemaD,p=>p.active?.channel?.live);
+ cinemaSend(cinemaD,'playback',{url:liveYouTube.active.channel.url,command:'seek',position:15});
+ await until(cinemaD,p=>p.type==='error'&&p.message==='Comando video non valido.');
  const videoBytes=Buffer.alloc(68000,42);
  videoBytes.writeUInt32BE(24);videoBytes.write('ftypisom',4);
  const upload=(id,body)=>mf.dispatchFetch('https://unit.test/api/cinema/upload?room='+cinemaRoomA+'&name=Clip',{

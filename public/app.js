@@ -13,7 +13,7 @@ let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
 let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
-let cinemaUpload=null;
+let cinemaUpload=null,cinemaLookup=null;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
@@ -1073,10 +1073,16 @@ function enterCinema(){
   if(cinemaSend(cinemaEntry))cinemaEntry=null;
  }else if(cinemaRoom&&!cinemaRooms.active)cinemaSend({type:'enter',room:cinemaRoom});
 }
+function retryCinema(){
+ cinemaRetry=setTimeout(connectCinema,cinemaDelay);
+ cinemaDelay=Math.min(10000,cinemaDelay*2);
+}
 function connectCinema(){
  if(cinemaSocket||!sessionToken)return;
  clearTimeout(cinemaRetry);
- const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/cinema/ws',['checkmate',sessionToken]);
+ let socket;
+ try{socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/cinema/ws',['checkmate',sessionToken]);}
+ catch{retryCinema();return;}
  cinemaSocket=socket;
  socket.onopen=()=>{
   if(cinemaSocket!==socket)return;
@@ -1106,13 +1112,13 @@ function connectCinema(){
   const expired=event.code===4001;
   if(expired)cinemaLobbyMessage='Riapri Binottoland da Telegram.';
   renderCinemaLobby();cinemaPost('connection',{connected:false,message:expired?cinemaLobbyMessage:undefined});
-  if(!expired){cinemaRetry=setTimeout(connectCinema,cinemaDelay);cinemaDelay=Math.min(10000,cinemaDelay*2);}
+  if(!expired)retryCinema();
  };
 }
 function closeCinema(message='',leave=true){
  if($('cinema-overlay').hidden)return;
  if(leave)cinemaSend({type:'leave'});
- cinemaUpload?.abort();cinemaUpload=null;
+ cinemaUpload?.abort();cinemaUpload=null;cinemaLookup?.abort();cinemaLookup=null;
  cinemaRoom=null;cinemaEntry=null;cinemaReady=false;cinemaRooms={...cinemaRooms,active:null};
  $('cinema-overlay').hidden=true;$('cinema-frame').src='about:blank';
  tg?.BackButton?.hide();
@@ -1125,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=3';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=4';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=$('cinema-lobby-create').onclick=()=>openCinema();
@@ -1146,6 +1152,22 @@ async function uploadCinemaFile(file,name){
  }catch(e){error=e.name==='AbortError'?'Caricamento annullato.':e.message||'Caricamento non riuscito.';}
  if(cinemaUpload===controller){cinemaUpload=null;cinemaPost('upload-result',{error});}
 }
+async function lookupCinemaYouTube(id,params){
+ if(!Number.isSafeInteger(id)||!params||typeof params!=='object')return;
+ cinemaLookup?.abort();
+ const controller=new AbortController();cinemaLookup=controller;
+ const query=new URLSearchParams();
+ for(const key of ['mode','q','type','id','handle'])if(typeof params[key]==='string')query.set(key,params[key].slice(0,200));
+ let result,error;
+ try{
+  const response=await fetch('/api/cinema/youtube?'+query,{
+   headers:{Authorization:'Bearer '+sessionToken},signal:controller.signal
+  });
+  result=await response.json();
+  if(!response.ok)error=result.error||'Ricerca YouTube non disponibile.';
+ }catch{error='Ricerca YouTube non disponibile.';}
+ if(cinemaLookup===controller){cinemaLookup=null;cinemaPost('youtube-result',{id,result,error});}
+}
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
  const data=event.data;
@@ -1159,6 +1181,7 @@ window.addEventListener('message',event=>{
  if(data?.type==='cinema:exit'){closeCinema();return;}
  if(data?.type==='cinema:action')cinemaSend(data.action);
  if(data?.type==='cinema:upload')uploadCinemaFile(data.file,data.name);
+ if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);
 });
 
 startSession();
