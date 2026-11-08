@@ -153,7 +153,8 @@ export class CinemaMosaic {
       }
       return;
     }
-    if(channel.image){
+    if(channel.inbox&&channel.kind==='text'){this.message(tile,channel.text||channel.name);return;}
+    if(channel.image||channel.kind==='image'){
       tile.image.hidden=false;tile.image.src=channel.url;
       tile.image.onload=()=>this.message(tile,'');
       tile.image.onerror=()=>this.message(tile,'Media riservato al gruppo Telegram');

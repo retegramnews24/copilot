@@ -4,6 +4,7 @@ const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
 const response=(message,status)=>Response.json({error:message},{status});
 const SCREEN_VIEWERS=3;
+const INBOX_TTL=30*60*1000, MAX_QUEUE=12, MEDIA_LOAD_TIMEOUT=30000;
 const send=(socket,packet)=>{try{socket.send(JSON.stringify(packet));}catch{}};
 const validScreenId=id=>typeof id==='string'&&/^[a-f0-9-]{36}$/.test(id);
 function screenSignal(signal,host){
@@ -28,7 +29,7 @@ function cleanURL(value,max){
 function cleanChannel(input,allowChannel=false){
   const name=typeof input?.name==='string'?input.name.trim().slice(0,96):'';
   const url=cleanURL(input?.url,1400),youtube=youtubeId(url);
-  if(!name||!url||/\/api\/cinema\/(?:group\/)?media\//.test(new URL(url).pathname))return null;
+  if(!name||!url||/\/api\/cinema\/(?:(?:group|inbox)\/)?media\//.test(new URL(url).pathname))return null;
   const channelId=youtubeChannelId(url),catalog=input.catalog===true?{catalogUntil:Date.now()+METADATA_TTL}:{};
   if(channelId)return allowChannel?{name,url:'https://www.youtube.com/channel/'+channelId,youtubeChannel:channelId,logo:'',...catalog}:null;
   if(youtube){
@@ -49,6 +50,39 @@ export class Cinema {
     const scheduled=await this.ctx.storage.getAlarm();
     if(scheduled===null||scheduled>expires)await this.ctx.storage.setAlarm(expires);
   }
+  queueDeadline(room){
+    return room.current?.duration&&room.playback?.playing
+      ?room.playback.updated+(room.current.loading?MEDIA_LOAD_TIMEOUT:Math.max(0,room.current.duration-room.playback.position)*1000):null;
+  }
+  nextSubmission(room,now=Date.now()){
+    delete room.inboxHold;
+    room.current=room.queue?.shift()??null;
+    room.updated=now;
+    if(!room.current){room.channel=null;room.playback=null;return;}
+    room.current.loading=!!room.current.file;
+    const {id,kind,name,text}=room.current;
+    room.channel={inbox:true,kind,name,text,url:'/api/cinema/inbox/media/'+room.id+'/'+id,
+      ...(['video','audio'].includes(kind)?{file:true}:{})};
+    room.playback={position:0,playing:true,updated:now,seek:0};
+  }
+  async syncQueueAudience(data,...ids){
+    let changed=false;
+    for(const room of data.rooms.filter(entry=>ids.includes(entry.id))){
+      const occupied=this.connections().some(client=>client.info.room===room.id);
+      if(occupied&&!room.channel&&room.queue?.length){
+        this.nextSubmission(room);changed=true;
+      }else if(occupied&&room.inboxHold){
+        room.playback={...room.playback,playing:true,updated:Date.now()};
+        delete room.inboxHold;changed=true;
+      }else if(!occupied&&room.current&&room.playback?.playing){
+        const now=Date.now();
+        room.playback={...room.playback,position:room.current.loading?0:positionAt(room.playback,now),playing:false,updated:now};
+        room.inboxHold=true;changed=true;
+      }else continue;
+      await this.scheduleMetadata(this.queueDeadline(room));
+    }
+    if(changed)await this.ctx.storage.put(ROOMS,data.rooms);
+  }
   alarm(){
     return this.ctx.blockConcurrencyWhile(async()=>{
       const data=await this.data(),now=Date.now();
@@ -58,6 +92,12 @@ export class Cinema {
         if(item.catalogUntil>now){next=Math.min(next,item.catalogUntil);continue;}
         item.name=item.youtubeChannel?'Canale YouTube · '+item.youtubeChannel.slice(-6):'Video YouTube · '+item.youtube;
         delete item.catalogUntil;delete item.live;changed=true;
+      }
+      for(const room of data.rooms){
+        const deadline=this.queueDeadline(room);
+        if(deadline===null)continue;
+        if(deadline<=now){this.nextSubmission(room,now);changed=true;}
+        next=Math.min(next,this.queueDeadline(room)??Infinity);
       }
       if(changed){
         await this.ctx.storage.put({[ROOMS]:data.rooms,[FAVORITES]:data.favorites});
@@ -132,7 +172,7 @@ export class Cinema {
     }
     const shares=new Map(clients.filter(({info})=>info.screen).map(entry=>[entry.info.room,entry]));
     const rooms=data.rooms.map(({id,number,channel})=>({
-      id,number,channel:shares.has(id)?'Finestra condivisa':channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
+      id,number,channel:shares.has(id)?'Finestra condivisa':channel?.inbox?'Coda Telegram':channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
     }));
     const viewScreen=(sharing,socket)=>sharing?{id:sharing.info.screen.id,peer:sharing.info.client,name:sharing.info.user.name,local:sharing.socket===socket}:null;
     const favorites=sendFavorites?JSON.stringify({type:'favorites',items:data.favorites}):null;
@@ -141,10 +181,10 @@ export class Cinema {
       const active=data.rooms.find(room=>room.id===info.room);
       const screen=viewScreen(shares.get(info.room),socket);
       const previews=info.mosaic&&active?data.rooms.map(entry=>({
-        id:entry.id,channel:entry.channel,playback:entry.playback??null,screen:viewScreen(shares.get(entry.id),socket)
+        id:entry.id,channel:entry.channel?.inbox&&entry!==active?null:entry.channel,playback:entry.playback??null,screen:viewScreen(shares.get(entry.id),socket)
       })):undefined;
       try{
-        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,screen,canClose:!active.owner||active.owner===info.user.player}:null,previews,me:info.user.player,now}));
+        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,queue:active.queue?.length??0,screen,canClose:!active.owner||active.owner===info.user.player}:null,previews,me:info.user.player,now}));
         if(favorites)socket.send(favorites);
       }catch{}
     }
@@ -171,22 +211,32 @@ export class Cinema {
     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
     if(!user?.player)return response('Accesso richiesto.',401);
     const input=await req.json(),key='forward:'+user.player;
+    const joined=room=>this.connections().some(c=>c.info.room===room&&c.info.user.player===user.player);
     if(op==='arm'){
-      if(!this.connections().some(c=>c.info.room===input.room&&c.info.user.player===user.player))return response('Entra in una sala Cinema.',403);
-      await this.ctx.storage.put(key,{room:input.room,group:input.group,chatId:input.chatId,nonce:crypto.randomUUID(),expires:Date.now()+300000});
+      if(!joined(input.room))return response('Entra in una sala Cinema.',403);
+      const previous=await this.ctx.storage.get(key);
+      await this.ctx.storage.put(key,{room:input.room,seen:previous?.seen??[],expires:Date.now()+INBOX_TTL});
+      return new Response(null,{status:204});
+    }
+    if(op==='asset'||op==='asset-ready'){
+      if(!joined(input.room))return response('Entra nella sala per vedere questo contenuto.',403);
+      const data=await this.data(),room=data.rooms.find(entry=>entry.id===input.room),item=room?.current;
+      if(!item?.file||item.id!==input.item)return response('Contenuto non più in riproduzione.',404);
+      if(op==='asset')return Response.json({file:item.file,type:item.type,loading:item.loading});
+      if(item.loading){
+        delete item.loading;room.playback.updated=Date.now();
+        await this.scheduleMetadata(this.queueDeadline(room));
+        await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);
+      }
       return new Response(null,{status:204});
     }
     const pending=await this.ctx.storage.get(key);
-    if(!pending||pending.expires<=Date.now()){
-      if(pending)await this.ctx.storage.delete(key);
-      return response('Nessun inoltro in attesa.',404);
+    if(!pending||pending.expires<=Date.now()||(op==='disarm'&&pending.room!==input.room)){
+      if(pending?.expires<=Date.now())await this.ctx.storage.delete(key);
+      return response('Nessuna sala collegata.',404);
     }
-    if(op==='pending')return Response.json(pending);
-    if(input.nonce!==pending.nonce)return response('Inoltro scaduto.',404);
-    if(op==='status'){
-      for(const client of this.connections())if(client.info.room===pending.room&&client.info.user.player===user.player){
-        send(client.socket,{type:'group-forward-status',error:input.error});
-      }
+    if(op==='disarm'){
+      await this.ctx.storage.delete(key);
       return new Response(null,{status:204});
     }
     const data=await this.data(),room=data.rooms.find(entry=>entry.id===pending.room);
@@ -194,16 +244,27 @@ export class Cinema {
       await this.ctx.storage.delete(key);
       return response('Questa sala è stata chiusa.',404);
     }
-    room.channel=input.channel;room.updated=Date.now();
-    room.playback={position:0,playing:true,updated:room.updated,seek:0};
-    await this.ctx.storage.transaction(async txn=>{
-      await txn.put(ROOMS,data.rooms);
-      await txn.delete(key);
-    });
-    this.publish(data);
-    for(const client of this.connections())if(client.info.room===pending.room&&client.info.user.player===user.player){
-      send(client.socket,{type:'group-forward-status',played:true});
+    const notify=packet=>{
+      for(const client of this.connections())if(client.info.room===room.id&&client.info.user.player===user.player){
+        send(client.socket,{type:'group-forward-status',...packet});
+      }
+    };
+    const seen=pending.seen??[];
+    if(seen.includes(input.message))return new Response(null,{status:204});
+    if(input.error){notify({error:input.error});return new Response(null,{status:204});}
+    room.queue??=[];
+    if(room.queue.length>=MAX_QUEUE){
+      notify({error:'Coda piena. Attendi che si liberi un posto.'});
+      return new Response(null,{status:204});
     }
+    room.queue.push({...input.item,id:crypto.randomUUID()});
+    const starts=!room.channel&&!this.screenHost(room.id)&&this.connections().some(client=>client.info.room===room.id);
+    if(starts)this.nextSubmission(room);
+    room.updated=Date.now();
+    await this.scheduleMetadata(this.queueDeadline(room));
+    await this.ctx.storage.put({[ROOMS]:data.rooms,[key]:{...pending,seen:[input.message,...seen].slice(0,64),expires:Date.now()+INBOX_TTL}});
+    this.publish(data);
+    notify({queued:true});
     return new Response(null,{status:204});
   }
   async cancelForward(info){
@@ -225,6 +286,7 @@ export class Cinema {
       room.upload={file,player:user.player,until:now+300000};
     }else{
       delete room.upload;
+      room.current=null;delete room.inboxHold;
       room.channel={name,url,file:true,logo:''};
       room.updated=now;
       room.playback={position:0,playing:true,updated:now,seek:0};
@@ -255,12 +317,14 @@ export class Cinema {
           const next=data.rooms.find(entry=>entry.id===input.room);
           if(next?.id!==info.room){this.dropScreenViewer(info);await this.cancelForward(info);}
           if(!next){socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});this.publish(data);throw Error('Questa sala è stata chiusa.');}
-          socket.serializeAttachment({...info,room:next.id,screen:next.id===info.room?info.screen:null,mosaic:next.id===info.room&&info.mosaic});this.publish(data);return;
+          socket.serializeAttachment({...info,room:next.id,screen:next.id===info.room?info.screen:null,mosaic:next.id===info.room&&info.mosaic});
+          await this.syncQueueAudience(data,info.room,next.id);this.publish(data);return;
         }
         if(input.type==='leave'){
           this.dropScreenViewer(info);
           await this.cancelForward(info);
-          socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});this.publish(data);return;
+          socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});
+          await this.syncQueueAudience(data,info.room);this.publish(data);return;
         }
         if(input.type==='create'){
           if(room)throw Error('Esci dalla sala prima di aprirne un’altra.');
@@ -296,20 +360,28 @@ export class Cinema {
           const channel=cleanChannel(input.channel);
           if(!channel)throw Error('Canale non valido.');
           if(room.channel?.url===channel.url&&!channel.catalogUntil&&!!room.channel.live===!!channel.live)return;
-          room.channel=channel;room.updated=Date.now();
+          room.current=null;delete room.inboxHold;room.channel=channel;room.updated=Date.now();
           room.playback=channel.youtube?{position:0,playing:true,updated:room.updated,seek:0}:null;
           await this.ctx.storage.put(ROOMS,data.rooms);await this.scheduleMetadata(channel.catalogUntil);this.publish(data);return;
         }
+        if(input.type==='queue-next'){
+          if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può cambiare il contenuto della coda.');
+          if(!room.current&&!room.queue?.length)return;
+          this.nextSubmission(room);
+          await this.scheduleMetadata(this.queueDeadline(room));
+          await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
+        }
         if(input.type==='playback'){
-          if(!(room.channel?.youtube||room.channel?.file)||input.url!==room.channel.url||!room.playback)return;
+          if(!(room.channel?.youtube||room.channel?.file||room.channel?.inbox)||input.url!==room.channel.url||!room.playback)return;
           const now=Date.now(),playback=room.playback;
-          let position=positionAt(playback,now),playing=playback.playing,seek=playback.seek??0;
+          let position=room.current?.loading?0:positionAt(playback,now),playing=playback.playing,seek=playback.seek??0;
           if(input.command==='play')playing=true;
           else if(input.command==='pause')playing=false;
           else if(input.command==='seek'&&!room.channel.live&&Number.isFinite(input.position)&&input.position>=0&&input.position<=86400){position=input.position;seek++;}
           else throw Error('Comando video non valido.');
           const playRevision=(playback.playRevision??0)+(input.command==='play'?1:0);
           room.updated=now;room.playback={position,playing,updated:now,seek,playRevision};
+          await this.scheduleMetadata(this.queueDeadline(room));
           await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
         }
         const favorites=data.favorites;
@@ -341,7 +413,8 @@ export class Cinema {
       if(!info||info.closed)return;
       this.dropScreenViewer(info);
       socket.serializeAttachment({...info,closed:true,screen:null});
-      this.publish(await this.data());
+      const data=await this.data();
+      await this.syncQueueAudience(data,info.room);this.publish(data);
       try{socket.close(1000,'Sala lasciata');}catch{}
     });
   }

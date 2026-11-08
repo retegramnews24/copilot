@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=11"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=12"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=12"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=13"></script></head>
 <body>
 <header>
  <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button><button id="close-room" hidden>Chiudi sala</button></div>
@@ -9,6 +9,7 @@
  <div class="auditorium">
   <section id="screen" aria-label="Schermo del cinema">
    <video id="video" playsinline webkit-playsinline preload="none"></video>
+   <img id="inbox-image" alt="Immagine condivisa via Telegram" hidden>
    <div id="youtube" hidden></div>
    <video id="share-video" playsinline webkit-playsinline hidden></video>
    <div id="share-placeholder" hidden><strong id="share-message" role="status"></strong><button id="share-retry" type="button" hidden>Riprova</button></div>
@@ -27,11 +28,12 @@
     <button id="mode" type="button" aria-pressed="false">Cinema Mode</button><label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
     <button id="share-audio" type="button" hidden>Attiva audio</button><span id="share-audio-state" role="status" hidden></span>
    </div>
-   <div id="cinema-sources"><button id="watch-together" type="button">Guarda insieme</button><button id="group-media" type="button">Video dal gruppo</button>
+   <div id="cinema-sources"><button id="watch-together" type="button">Guarda insieme</button><button id="group-media" type="button">Invia al Cinema</button>
     <button id="upload-video" type="button" title="Carica video" aria-label="Carica video">↑</button>
     <button id="share-window" type="button">Condividi finestra</button>
    </div>
-   <div id="group-forward-panel" hidden><button id="group-home" type="button" hidden>Apri Home su Telegram</button><span id="group-forward-help" role="status"></span></div>
+   <div id="group-forward-panel" hidden><a id="group-bot" target="_blank" rel="noopener noreferrer" hidden>Apri il bot</a><button id="group-stop" type="button" hidden>Scollega</button><span id="group-forward-help" role="status"></span></div>
+   <div id="inbox-queue" hidden><span id="inbox-count" role="status"></span><button id="inbox-next" type="button" hidden>Avvia coda</button></div>
   </div>
   <button class="split split-y" data-size="seats" aria-label="Ridimensiona schermo e divanetti"></button>
   <section id="audience"><div class="section-title"><strong id="room-name">Sala</strong><span id="audience-count"></span></div><div id="sofas"></div></section>

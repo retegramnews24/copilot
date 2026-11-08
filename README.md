@@ -184,4 +184,6 @@ Con **Condividi finestra**, un utente su PC può trasmettere una finestra o sche
 
 La barra sotto lo schermo distingue **Per tutti** da **Per te**. Il tasto quadrato ferma il video sul dispositivo. Se una finestra condivisa arriva senza traccia audio, compare **Solo video**.
 
-**Video dal gruppo** prepara per cinque minuti l’inoltro di un video alla sala attuale. Da **Apri Home su Telegram** apri Binotto Corsa Competizione, scegli un video MP4 o WebM fino a 16 MB e inoltralo in privato a **@checkmategame_bot**. Cinema lo riproduce nella sala. Il bot usa la Home rilevata dal webhook e verifica l’appartenenza al gruppo per chi inoltra e chi guarda. Se la Home non è ancora riconosciuta, basta un normale messaggio nella Home. Quando Telegram include la chat di origine nell’inoltro, Cinema controlla anche che corrisponda al gruppo.
+**Invia al Cinema** collega per 30 minuti la chat privata con **@checkmategame_bot** alla sala corrente. Gli invii diretti e gli inoltri da qualsiasi chat arrivano in coda, fino a 12 in attesa. Il collegamento si rinnova a ogni invio accettato e si può disattivare con **Scollega**.
+
+La coda riproduce video MP4/WebM, foto, GIF e audio nei formati supportati fino a 16 MB. Testi e allegati senza anteprima appaiono come schede. Gli spettatori vedono i contenuti Telegram solo nella sala collegata. Chi ha aperto la sala può avviare la coda mentre è attiva un’altra sorgente e passare al contenuto successivo.

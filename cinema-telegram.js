@@ -21,28 +21,33 @@ export async function telegramBotResult(token,method,payload){
   }catch{return null;}
 }
 
-export function groupUpdate(message){
-  const chat=message?.chat;
-  if(!chat||!homeTitle(chat.title)||!['group','supergroup'].includes(chat.type)||!Number.isSafeInteger(chat.id)||chat.id>=0)return null;
-  if(chat.is_forum&&message.is_topic_message&&message.message_thread_id!==1)return null;
-  const chatId=String(chat.id),post=message.message_id;
-  const name=/^[A-Za-z][A-Za-z0-9_]{3,31}$/.test(chat.username??'')?chat.username:null;
-  const slug=name??(chatId.startsWith('-100')?'c/'+chatId.slice(4):null);
-  const link=slug&&Number.isSafeInteger(post)&&post>0?'https://t.me/'+slug+'/'+post:null;
-  return {chatId,title:chat.title,link,protected:!!(chat.has_protected_content||message.has_protected_content)};
-}
-export function forwardedVideo(message){
-  if(message?.chat?.type!=='private'||!Number.isSafeInteger(message.from?.id)||message.from.id<=0||message.from.id!==message.chat.id||message.from.is_bot||!message.forward_origin)return null;
-  const origin=message.forward_origin;
-  const source=message.video??message.document;
-  const mime=String(source?.mime_type??'').toLowerCase();
-  const type=mime==='video/webm'?'video/webm':mime==='video/mp4'||(message.video&&!mime)?'video/mp4':null;
-  let error;
-  if(message.has_protected_content||message.has_media_spoiler)error='Questo video Telegram è protetto.';
-  else if(message.animation||!source||!type||typeof source.file_id!=='string'||!source.file_id||source.file_id.length>512)error='Inoltra un video MP4 o WebM dalla Home del gruppo.';
-  else if(Number(source.file_size)>MEDIA_LIMIT)error='Il video supera il limite di 16 MB.';
-  return {user:String(message.from.id),origin:origin.chat?.id??origin.sender_chat?.id??null,
-    ...(error?{error}:{file:source.file_id,type})};
+const playableTypes=new Map([
+  ['video/mp4','video'],['video/webm','video'],['image/jpeg','image'],
+  ['image/png','image'],['image/gif','image'],['image/webp','image'],
+  ['audio/mpeg','audio'],['audio/ogg','audio'],['audio/mp4','audio']
+]);
+export function cinemaSubmission(message){
+  if(message?.chat?.type!=='private'||!Number.isSafeInteger(message.from?.id)||message.from.id<=0||
+    message.from.id!==message.chat.id||message.from.is_bot||!Number.isSafeInteger(message.message_id))return null;
+  if(!message.forward_origin&&/^\/(?:start|gioca)(?:@\w+)?(?:\s|$)/i.test(message.text??''))return null;
+  const photo=message.photo?.at(-1),source=message.animation??message.video??message.video_note??
+    message.audio??message.voice??photo??message.sticker??message.document;
+  const fallbackType=photo?'image/jpeg':message.sticker&&!message.sticker.is_animated&&!message.sticker.is_video?'image/webp':
+    message.voice?'audio/ogg':message.video||message.video_note||message.animation?'video/mp4':'';
+  const type=(source?.mime_type||fallbackType).toLowerCase();
+  const kind=playableTypes.get(type);
+  const text=(message.text??message.caption??'').trim().slice(0,700);
+  const file=typeof source?.file_id==='string'&&source.file_id.length<=512?source.file_id:'';
+  const name=String(source?.file_name??source?.title??'').trim().slice(0,96);
+  const info={user:String(message.from.id),message:message.message_id};
+  if(message.has_protected_content||message.has_media_spoiler)return {...info,error:'Telegram protegge questo contenuto.'};
+  if(kind&&file&&!(Number(source.file_size)>MEDIA_LIMIT)){
+    const duration=kind==='image'||message.animation?12:Math.min(86400,Math.max(1,Number(source.duration)||120));
+    return {...info,item:{kind,type,file,name:name||{video:'Video Telegram',image:'Immagine Telegram',audio:'Audio Telegram'}[kind],text,duration}};
+  }
+  const details=kind&&file?'File oltre 16 MB':name||message.poll?.question||message.contact?.first_name||
+    (message.location?'Posizione condivisa':message.sticker?'Sticker Telegram':'Contenuto Telegram');
+  return {...info,item:{kind:'text',name:message.text?'Messaggio Telegram':'Allegato Telegram',text:text||String(details).slice(0,700),duration:12}};
 }
 
 export class TelegramCinema {
@@ -59,52 +64,14 @@ export class TelegramCinema {
     this.pending.set(key,lookup);
     return lookup;
   }
-  ingest(req){
-    return this.ctx.blockConcurrencyWhile(async()=>{
-      const input=await req.json(),groups=await this.ctx.storage.get(GROUPS)??[];
-      let group=groups.find(entry=>entry.chatId===input.chatId);
-      if(!group){group={id:crypto.randomUUID(),linked:false};groups.push(group);}
-      Object.assign(group,input,{link:input.link??group.link??null});
-      await this.ctx.storage.put(GROUPS,groups);
-      return reply({ok:true});
-    });
-  }
-  async home(groups,user){
-    const matches=await Promise.all(groups.filter(group=>homeTitle(group.title)).map(async group=>
-      isMember(await this.member(group.chatId,user.id))?group:null));
-    const available=matches.filter(Boolean),linked=available.filter(group=>group.linked);
-    const candidates=linked.length?linked:available;
-    if(!candidates.length)return reply({error:'Home di Binotto Corsa Competizione da rilevare. Manda un normale messaggio nella Home e riprova da Cinema.'},404);
-    if(candidates.length>1)return reply({error:'Cinema ha rilevato più gruppi omonimi. Serve identificare la Home corretta.'},409);
-    const group=candidates[0];
-    if(group.protected)return reply({error:'Il gruppo protegge i suoi contenuti. Telegram blocca l’inoltro.'},409);
-    if(!group.linked){
-      const bot=await telegramBotResult(this.token,'getMe',{});
-      if(!bot?.id||!isAdmin(await this.member(group.chatId,bot.id,true)))return reply({error:'Il bot Binottoland deve essere amministratore del gruppo.'},409);
-    }
-    return reply({id:group.id,chatId:group.chatId,link:group.link??null});
-  }
   async fetch(req){
     const url=new URL(req.url),op=url.searchParams.get('op');
-    if(op==='ingest')return this.ingest(req);
     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
     if(!user?.id)return denied();
     const groups=await this.ctx.storage.get(GROUPS)??[];
-    if(op==='home')return this.home(groups,user);
     const group=groups.find(entry=>entry.id===url.searchParams.get('group'));
     if(!group||!homeTitle(group.title))return reply({error:'Gruppo non trovato.'},404);
     if(!isMember(await this.member(group.chatId,user.id)))return denied();
-    if(op==='import'){
-      if(!homeTitle(group.title)||group.protected)return denied();
-      const {file,type}=await req.json();
-      if(!['video/mp4','video/webm'].includes(type)||typeof file!=='string'||!file||file.length>512)return reply({error:'Video non valido.'},400);
-      return this.ctx.blockConcurrencyWhile(async()=>{
-        const key='forwards:'+group.id,items=await this.ctx.storage.get(key)??[];
-        const media={id:crypto.randomUUID(),file,type};
-        await this.ctx.storage.put(key,[media,...items].slice(0,80));
-        return reply({id:media.id});
-      });
-    }
     if(op!=='asset')return reply({error:'Operazione non disponibile.'},404);
     const id=url.searchParams.get('item');
     if(!ID.test(id??''))return reply({error:'Media non disponibile.'},404);

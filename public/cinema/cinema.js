@@ -4,10 +4,10 @@ import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=5';
 import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
 import {WindowShare} from './screen-share.js?v=2';
-import {CinemaMosaic} from './mosaic.js?v=3';
+import {CinemaMosaic} from './mosaic.js?v=4';
 
 const $=id=>document.getElementById(id);
-const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar');
+const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar'),inboxImage=$('inbox-image');
 const mobile=matchMedia('(max-width:640px)');
 const defaults={monitor:true,volume:65,sizes:{}};
 let settings=defaults;
@@ -38,7 +38,7 @@ function stopVideo(){
   videoRevision++;
   hls?.destroy();hls=null;
   disposeYouTube?.();disposeYouTube=null;youtube=null;youtubeBlocked=false;youtubeAutoPause=false;fileBlocked=false;fileStarting=false;
-  video.hidden=false;$('youtube').hidden=true;$('youtube-message').hidden=true;
+  video.hidden=false;inboxImage.hidden=true;inboxImage.removeAttribute('src');$('youtube').hidden=true;$('youtube-message').hidden=true;
   video.pause();video.removeAttribute('src');video.load();
 }
 function message(text,retry=false){
@@ -148,7 +148,14 @@ function tune(channel,force=false,seek=false){
   $('on-air').textContent=url?((channel.youtube||channel.file)?'VIDEO':'LIVE'):'';
   if(!settings.monitor){message('Riproduzione fermata qui');return;}
   if(!url){message('In attesa di un canale');return;}
-  message('Collegamento al video…');
+  if(channel.inbox){
+    if(channel.kind==='text'){message(channel.text||channel.name);return;}
+    if(channel.kind==='image'){
+      message('Caricamento immagine…');
+      video.hidden=true;inboxImage.hidden=false;inboxImage.src=url;return;
+    }
+  }
+  message(channel.kind==='audio'?'Caricamento audio…':'Collegamento al video…');
   if(channel.youtube){showYouTube(channel.youtube);return;}
   if(channel.image){message('In attesa di un canale');return;}
   video.volume=settings.volume/100;video.muted=settings.volume===0;
@@ -165,9 +172,14 @@ function tune(channel,force=false,seek=false){
   }else{video.src=url;startPlayback();}
 }
 video.addEventListener('error',()=>{
-  if(playingURL&&settings.monitor)message(room?.channel?.group?'Media disponibile per i membri del gruppo Telegram.':'Canale non riproducibile su questo dispositivo',true);
+  if(playingURL&&settings.monitor)message(room?.channel?.group?'Media disponibile per i membri del gruppo Telegram.':room?.channel?.inbox?'Contenuto Telegram non riproducibile su questo dispositivo.':'Canale non riproducibile su questo dispositivo',true);
 });
-video.addEventListener('playing',()=>{$('screen-empty').hidden=true;});
+inboxImage.onload=()=>{if(!inboxImage.hidden)$('screen-empty').hidden=true;};
+inboxImage.onerror=()=>{if(!inboxImage.hidden)message('Immagine Telegram non disponibile',true);};
+video.addEventListener('playing',()=>{
+  if(room?.channel?.kind==='audio')message(room.channel.text||room.channel.name);
+  else $('screen-empty').hidden=true;
+});
 $('start-video').onclick=()=>{
   if(youtube){youtubeLocalPaused=false;youtubeBlocked=false;syncYouTube(true);}
   else if(room?.channel?.file){if(video.error)tune(room.channel,true);else{fileBlocked=false;syncFile(true);}}
@@ -273,7 +285,12 @@ function drawRooms(rooms,active){
   $('connecting').hidden=!!active;cinema.hidden=!active;$('cinema-actions').hidden=!active;
   $('close-room').hidden=!active?.canClose;
   $('shared-playback').hidden=!!active?.screen||!active?.playback;
-  $('seek-shared').hidden=!!active?.channel?.live;
+  $('seek-shared').hidden=!!active?.channel?.live||!!(active?.channel?.inbox&&!active.channel.file);
+  const waiting=active?.queue??0,playingInbox=!!active?.channel?.inbox;
+  $('inbox-queue').hidden=!waiting&&!playingInbox;
+  $('inbox-count').textContent=waiting+' in coda';
+  $('inbox-next').hidden=!active?.canClose||!!active.screen;
+  $('inbox-next').textContent=playingInbox?'Salta':'Avvia coda';
   const toggle=$('toggle-shared'),playing=active?.playback?.playing;
   toggle.textContent=playing?'Ⅱ':'▶';
   toggle.setAttribute('aria-label',playing?'Metti in pausa per tutti':'Riproduci per tutti');
@@ -596,30 +613,39 @@ window.addEventListener('message',event=>{
   else if(packet.type?.startsWith('screen-')){screenShare.receive(packet);if(multisala.open)mosaic.packet(packet);}
   else if(packet.type==='error')notice(packet.message);
 });
-const groupButton=$('group-media'),groupPanel=$('group-forward-panel'),groupHome=$('group-home'),groupHelp=$('group-forward-help');
-let groupHomeURL=null,groupForwardTimer;
+const groupButton=$('group-media'),groupPanel=$('group-forward-panel'),groupHelp=$('group-forward-help');
+const groupBot=$('group-bot'),groupStop=$('group-stop');
+$('inbox-next').onclick=()=>action('queue-next');
+let groupForwardTimer;
 function resetGroupForward(){
   clearTimeout(groupForwardTimer);
-  groupHomeURL=null;groupHome.hidden=true;groupPanel.hidden=true;groupButton.disabled=false;
+  groupBot.hidden=true;groupStop.hidden=true;groupPanel.hidden=true;groupButton.disabled=false;
 }
 groupButton.onclick=()=>{
-  resetGroupForward();groupPanel.hidden=false;groupButton.disabled=true;
-  groupHelp.textContent='Cerco la Home di Binotto Corsa Competizione…';
+  groupPanel.hidden=false;groupButton.disabled=true;
+  groupHelp.textContent='Collego il bot a questa sala…';
   send('group-arm');
 };
-groupHome.onclick=()=>{if(groupHomeURL)send('group-open',{url:groupHomeURL});};
-function groupArmed({result,error}){
+groupStop.onclick=()=>send('group-arm',{stop:true});
+function groupArmed({result,error,stopped}){
   groupButton.disabled=false;
   if(error){groupHelp.textContent=error;return;}
-  groupHomeURL=result.link;groupHome.hidden=!groupHomeURL;
-  groupHelp.textContent=(groupHomeURL?'Scegli un video nella Home. ':'Apri la Home di Binotto Corsa Competizione in Telegram. ')+
-    'Inoltralo a @'+result.bot+' entro 5 minuti e partirà in sala.';
-  groupForwardTimer=setTimeout(()=>{
-    groupHome.hidden=true;groupHelp.textContent='Tempo scaduto. Tocca di nuovo Video dal gruppo.';
-  },300000);
+  if(stopped){resetGroupForward();notice('Bot scollegato dalla sala.');return;}
+  if(!result?.bot)return;
+  groupBot.href='https://t.me/'+result.bot;
+  groupBot.hidden=false;groupStop.hidden=false;
+  groupHelp.textContent='Invia o inoltra in privato a @'+result.bot+'. I contenuti vanno in coda in questa sala.';
+  renewGroupTimer();
 }
-function groupForwardStatus({played,error}){
-  if(played){resetGroupForward();notice('Video del gruppo avviato.');}
+function renewGroupTimer(){
+  clearTimeout(groupForwardTimer);
+  groupForwardTimer=setTimeout(()=>{
+    resetGroupForward();
+    notice('Collegamento al bot scaduto. Premi Invia al Cinema per riattivarlo.');
+  },30*60*1000);
+}
+function groupForwardStatus({queued,error}){
+  if(queued){if(!groupStop.hidden)renewGroupTimer();notice('Contenuto aggiunto alla coda.');}
   else if(error){groupPanel.hidden=false;groupHelp.textContent=error;}
 }
 const watchDialog=$('watch-dialog');
