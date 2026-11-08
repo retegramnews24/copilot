@@ -1,3 +1,5 @@
+import {normalizeAppearance} from './public/appearance.js';
+import {youtubeId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120;
 const response=(message,status)=>Response.json({error:message},{status});
@@ -11,8 +13,9 @@ function cleanURL(value,max){
 }
 function cleanChannel(input){
   const name=typeof input?.name==='string'?input.name.trim().slice(0,96):'';
-  const url=cleanURL(input?.url,1400);
-  return name&&url ? {name,url,logo:cleanURL(input.logo,900)} : null;
+  const url=cleanURL(input?.url,1400),youtube=youtubeId(url);
+  if(!name||!url)return null;
+  return youtube ? {name,url:'https://www.youtube.com/watch?v='+youtube,youtube,logo:''} : {name,url,logo:cleanURL(input.logo,900)};
 }
 
 export class Cinema {
@@ -29,19 +32,20 @@ export class Cinema {
   }
   publish(data,sendFavorites=false){
     const clients=this.connections(), seats=new Map();
-    for(const {info:{room,user}} of clients){
+    for(const {info:{room,user,appearance}} of clients){
       if(!room)continue;
       if(!seats.has(room))seats.set(room,new Map());
-      seats.get(room).set(user.player,{id:user.player,name:user.name});
+      seats.get(room).set(user.player,{id:user.player,name:user.name,appearance:normalizeAppearance(appearance)});
     }
     const rooms=data.rooms.map(({id,number,channel})=>({
       id,number,channel:channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
     }));
     const favorites=sendFavorites?JSON.stringify({type:'favorites',items:data.favorites}):null;
+    const now=Date.now();
     for(const {socket,info} of clients){
       const active=data.rooms.find(room=>room.id===info.room);
       try{
-        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel}:null,me:info.user.player}));
+        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null}:null,me:info.user.player,now}));
         if(favorites)socket.send(favorites);
       }catch{}
     }
@@ -67,6 +71,11 @@ export class Cinema {
         if(typeof raw!=='string'||raw.length>4096)return;
         const input=JSON.parse(raw),info=socket.deserializeAttachment(),data=await this.data();
         const room=data.rooms.find(entry=>entry.id===info.room);
+        if(input.type==='appearance'){
+          socket.serializeAttachment({...info,appearance:normalizeAppearance(input.appearance)});
+          if(room)this.publish(data);
+          return;
+        }
         if(input.type==='enter'){
           const next=data.rooms.find(entry=>entry.id===input.room);
           if(!next){socket.serializeAttachment({...info,room:null});this.publish(data);throw Error('Questa sala è stata chiusa.');}
@@ -90,7 +99,20 @@ export class Cinema {
         if(input.type==='channel'){
           const channel=cleanChannel(input.channel);
           if(!channel)throw Error('Canale non valido.');
+          if(room.channel?.url===channel.url)return;
           room.channel=channel;room.updated=Date.now();
+          room.playback=channel.youtube?{position:0,playing:true,updated:room.updated,seek:0}:null;
+          await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
+        }
+        if(input.type==='playback'){
+          if(!room.channel?.youtube||input.url!==room.channel.url||!room.playback)return;
+          const now=Date.now(),playback=room.playback;
+          let position=positionAt(playback,now),playing=playback.playing,seek=playback.seek??0;
+          if(input.command==='play')playing=true;
+          else if(input.command==='pause')playing=false;
+          else if(input.command==='seek'&&Number.isFinite(input.position)&&input.position>=0&&input.position<=86400){position=input.position;seek++;}
+          else throw Error('Comando video non valido.');
+          room.updated=now;room.playback={position,playing,updated:now,seek};
           await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
         }
         const favorites=data.favorites;

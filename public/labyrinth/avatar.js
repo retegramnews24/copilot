@@ -1,4 +1,4 @@
-import {CLOTHES, OUTFIT_KEY, BALL_STYLE_KEY, BALL_KEY, readAppearance, readGolfStyle, golfColors} from '../appearance.js?v=8';
+import {CLOTHES, OUTFIT_KEY, BALL_STYLE_KEY, BALL_KEY, readAppearance,normalizeAppearance, readGolfStyle, golfColors} from '../appearance.js?v=9';
 export {readAppearance};
 
 const styles=`
@@ -48,6 +48,11 @@ function figure(label,preview){
 function save(key,value){
  try{localStorage.setItem(key,JSON.stringify(value));}catch{}
 }
+export function avatarSVG(appearance,backpack=false){
+ const outfit=normalizeAppearance(appearance);
+ return `<svg viewBox="0 0 90 150" role="img" aria-label="Personaggio Binottoland">${backpack?'<rect x="17" y="53" width="56" height="55" rx="13" fill="#586b44"/>':''}<ellipse cx="45" cy="145" rx="28" ry="4" fill="#0003"/><rect x="26" y="105" width="15" height="34" rx="7" fill="#e5ab99"/><rect x="49" y="105" width="15" height="34" rx="7" fill="#e5ab99"/><rect x="12" y="58" width="14" height="44" rx="7" fill="#e5ab99"/><rect x="64" y="58" width="14" height="44" rx="7" fill="#e5ab99"/><rect x="21" y="49" width="48" height="49" rx="16" fill="${outfit.shirt}"/><path d="M25 89H65V115H48V101H42V115H25Z" fill="${outfit.shorts}"/><rect x="35" y="36" width="20" height="21" rx="8" fill="#e5ab99"/><ellipse cx="24" cy="29" rx="4" ry="7" fill="#dfaa96"/><ellipse cx="66" cy="29" rx="4" ry="7" fill="#dfaa96"/><ellipse cx="45" cy="28" rx="21" ry="25" fill="#efb9a8"/><path d="M24 24Q21 1 43 1Q68 -1 66 25L61 18Q49 20 36 13L27 26Z" fill="#49382b"/><path d="M33 23Q38 20 42 23M48 23Q53 20 57 23" fill="none" stroke="#584032" stroke-width="2" stroke-linecap="round"/><ellipse cx="38" cy="29" rx="4" ry="3" fill="#f5eadd"/><ellipse cx="52" cy="29" rx="4" ry="3" fill="#f5eadd"/><circle cx="38" cy="29" r="1.8" fill="#392f29"/><circle cx="52" cy="29" r="1.8" fill="#392f29"/><path d="M45 30L43 36L47 36" fill="none" stroke="#c68d79" stroke-width="1.6" stroke-linecap="round"/><path d="M38 41Q45 46 52 41" fill="none" stroke="#8d6253" stroke-width="1.5" stroke-linecap="round"/><path d="M35 53Q45 63 55 53" fill="none" stroke="#eee8d6" stroke-width="2"/><rect x="25" y="135" width="18" height="7" rx="3" fill="#293c38"/><rect x="48" y="135" width="18" height="7" rx="3" fill="#293c38"/><path d="M26 142H42M49 142H65" stroke="#dfddce" stroke-width="2"/></svg>`;
+}
+
 export function mountAppearance(root){
  if(!root)return;
  const withGolf=root.hasAttribute('data-golf-appearance');
@@ -86,7 +91,7 @@ export function mountAppearance(root){
   ballBottom=swatches(separate,'Pallina · Sotto',color=>chooseBall(1,color));
  }
  function paint(){
-  avatar.innerHTML=`<svg viewBox="0 0 90 150" role="img" aria-label="Il tuo personaggio con pelle rosa, maglietta e pantaloncini">${backpack?'<rect x="17" y="53" width="56" height="55" rx="13" fill="#586b44"/>':''}<ellipse cx="45" cy="145" rx="28" ry="4" fill="#0003"/><rect x="26" y="105" width="15" height="34" rx="7" fill="#e5ab99"/><rect x="49" y="105" width="15" height="34" rx="7" fill="#e5ab99"/><rect x="12" y="58" width="14" height="44" rx="7" fill="#e5ab99"/><rect x="64" y="58" width="14" height="44" rx="7" fill="#e5ab99"/><rect x="21" y="49" width="48" height="49" rx="16" fill="${outfit.shirt}"/><path d="M25 89H65V115H48V101H42V115H25Z" fill="${outfit.shorts}"/><rect x="35" y="36" width="20" height="21" rx="8" fill="#e5ab99"/><ellipse cx="24" cy="29" rx="4" ry="7" fill="#dfaa96"/><ellipse cx="66" cy="29" rx="4" ry="7" fill="#dfaa96"/><ellipse cx="45" cy="28" rx="21" ry="25" fill="#efb9a8"/><path d="M24 24Q21 1 43 1Q68 -1 66 25L61 18Q49 20 36 13L27 26Z" fill="#49382b"/><path d="M33 23Q38 20 42 23M48 23Q53 20 57 23" fill="none" stroke="#584032" stroke-width="2" stroke-linecap="round"/><ellipse cx="38" cy="29" rx="4" ry="3" fill="#f5eadd"/><ellipse cx="52" cy="29" rx="4" ry="3" fill="#f5eadd"/><circle cx="38" cy="29" r="1.8" fill="#392f29"/><circle cx="52" cy="29" r="1.8" fill="#392f29"/><path d="M45 30L43 36L47 36" fill="none" stroke="#c68d79" stroke-width="1.6" stroke-linecap="round"/><path d="M38 41Q45 46 52 41" fill="none" stroke="#8d6253" stroke-width="1.5" stroke-linecap="round"/><path d="M35 53Q45 63 55 53" fill="none" stroke="#eee8d6" stroke-width="2"/><rect x="25" y="135" width="18" height="7" rx="3" fill="#293c38"/><rect x="48" y="135" width="18" height="7" rx="3" fill="#293c38"/><path d="M26 142H42M49 142H65" stroke="#dfddce" stroke-width="2"/></svg>`;
+  avatar.innerHTML=avatarSVG(outfit,backpack);
   shirt(outfit.shirt);shorts(outfit.shorts);
   if(withGolf){
    const [top,bottom]=golfColors(outfit,golf);

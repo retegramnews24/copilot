@@ -3,7 +3,7 @@ import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=12';
-import {golfColors} from './appearance.js?v=8';
+import {golfColors,readAppearance} from './appearance.js?v=9';
 import './labyrinth/avatar.js?v=8';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
@@ -1048,6 +1048,7 @@ function connectCinema(){
  socket.onopen=()=>{
   if(cinemaSocket!==socket)return;
   cinemaDelay=700;cinemaPost('connection',{connected:true});
+  socket.send(JSON.stringify({type:'appearance',appearance:readAppearance()}));
   if(rejoin)socket.send(JSON.stringify({type:'enter',room:rejoin}));
  };
  socket.onmessage=event=>{
@@ -1084,7 +1085,7 @@ $('open-cinema').onclick=()=>{
  if(!$('cinema-overlay').hidden)return;
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  cinemaDelay=700;$('cinema-overlay').hidden=false;
- $('cinema-frame').src='/cinema/index.html?v=1';
+ $('cinema-frame').src='/cinema/index.html?v=2';
  tg?.BackButton?.show();
 };
 window.addEventListener('message',event=>{

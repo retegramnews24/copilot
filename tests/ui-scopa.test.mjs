@@ -72,7 +72,7 @@ assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);
 get('open-cinema').click();
 const cinemaFrame=get('cinema-frame');
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=1');
+assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=2');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:exit'}}));
 assert.equal(get('cinema-overlay').hidden,true);
 

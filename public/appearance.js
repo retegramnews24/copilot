@@ -8,7 +8,10 @@ function read(key){
 }
 
 export function readAppearance(){
-  const outfit=read(OUTFIT_KEY);
+  return normalizeAppearance(read(OUTFIT_KEY));
+}
+
+export function normalizeAppearance(outfit){
   return {
     shirt:isCloth(outfit?.shirt)?outfit.shirt:CLOTHES[6][1],
     shorts:isCloth(outfit?.shorts)?outfit.shorts:CLOTHES[7][1]

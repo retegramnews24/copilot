@@ -170,8 +170,10 @@ Verifica aggiuntiva: `node tests/scopa-ai.test.js`, `npm run test:table-runtime`
 
 ## Cinema Streamer
 
-Apri **Giochi e Applicazioni → Cinema Streamer** per creare una sala o entrare in una sala esistente. L’elenco mostra il canale corrente e chi è collegato. Ogni spettatore può cambiare il canale per la propria sala. I preferiti e il loro ordine sono salvati sul server e condivisi in tempo reale fra tutte le sale. Trascina la maniglia di un preferito o usa le frecce su e giù quando la maniglia è a fuoco.
+Apri **Giochi e Applicazioni → Cinema Streamer** per creare una sala o entrare in una sala esistente. L’elenco mostra il canale corrente e chi è collegato. Ogni spettatore può cambiare il canale per la propria sala. I preferiti e il loro ordine sono salvati sul server e condivisi in tempo reale fra tutte le sale. Ricerca e preferiti mostrano tre canali per riga. Trascina la maniglia di un preferito o usa le frecce quando la maniglia è a fuoco. I divanetti mostrano il personaggio Binottoland con i colori del singolo spettatore.
 
 Il volume, il monitor e le dimensioni dei riquadri si salvano sul dispositivo. Trascina i separatori per regolare il layout. Su schermi stretti il pannello destro si apre con **Comandi**. **Cinema Mode** allarga lo schermo e lascia visibili i divanetti, mentre **⛶** isola lo schermo del video. Se il browser blocca la riproduzione automatica, premi **Riproduci qui**.
 
 La ricerca carica playlist M3U e il catalogo JSON IPTV-org, unisce le fonti disponibili ed elimina i duplicati per URL. I flussi HTTPS sono riprodotti direttamente dal dispositivo. La disponibilità dipende dalla fonte e dal dispositivo.
+
+Con **Guarda insieme** puoi aprire un link HTTPS diretto a uno stream o un video YouTube incorporabile. Il link cambia il contenuto della sala. Per YouTube, riproduzione, pausa e posizione sono condivise, anche per chi entra dopo. La scelta finisce nei preferiti globali solo se qualcuno la salva dalla ricerca o con **Salva nei preferiti** nel telecomando.
