@@ -51,7 +51,7 @@ export class YouTubeCatalog{
     })};
   }
   async feed(id){
-    const url='https://www.youtube.com/xml/feeds/videos.xml?channel_id='+id;
+    const url='https://www.youtube.com/feeds/videos.xml?channel_id='+id;
     const reply=await fetch(url,{signal:AbortSignal.timeout(8000),redirect:'error'});
     if(reply.status===404)throw failure('Canale YouTube non trovato.',404);
     if(!reply.ok)throw failure('Elenco dei video del canale non disponibile. Puoi usare un link diretto.',502);
@@ -70,6 +70,10 @@ export class YouTubeCatalog{
   }
   async uploads(id,handle){
     if(!this.key)return this.feed(id);
+    try{return await this.apiUploads(id,handle);}
+    catch(error){if(id&&error.status!==404)return this.feed(id);throw error;}
+  }
+  async apiUploads(id,handle){
     const [row]=await this.api('channels',{part:'snippet,contentDetails',...(id?{id}:{forHandle:handle})});
     if(!validYouTubeChannelId(row?.id))throw failure('Canale YouTube non trovato.',404);
     const source=channel(row.id,row.snippet?.title||'Canale YouTube');
