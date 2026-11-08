@@ -82,6 +82,8 @@ const a={player:'tg:1',name:'Uno'},b={player:'tg:2',name:'Due'},match=makeMatch(
 assert.deepEqual(match.players[0].position,courseFor(0,COURSE_VERSION).tee);
 assert.ok(courseFor(0,COURSE_VERSION).width>35);
 assert.deepEqual(ballColors(['red','#123456'],1),['#ff82b6','#455aa7']);
+assert.throws(()=>makeMatch('golf',1,a,0,undefined,'park'),/Percorso/);
+match.campaign='park'; // Stored matches keep the retired layout.
 const skin=['#abcdef','#012345'];
 joinMatch(match,a,skin);
 assert.deepEqual(match.players[0].appearance,skin);
@@ -105,7 +107,8 @@ for(let i=1;i<10;i++){
 assert.equal(match.phase,'finished');assert.equal(match.winners.length,2);
 assert.equal(match.players[0].total,1+9*11);
 function collisionMatch(collisions){
-  const match=makeMatch('collision',1,a,0,undefined,'park',collisions);
+  const match=makeMatch('collision',1,a,0,undefined,undefined,collisions);
+  match.campaign='park';
   joinMatch(match,b);startMatch(match,a.player,0);
   return match;
 }

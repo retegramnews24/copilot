@@ -98,9 +98,11 @@ w.fetch=beforeRaceFetch;
 assert.equal(get('golf-campaign').options.length,3);
 get('golf-campaign').value='coast';
 get('play-golf').click();
+assert.equal(get('golf-collision-choice').hidden,true);
+get('golf-setup-confirm').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=11&campaign=coast');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=12&campaign=coast');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -119,7 +121,7 @@ w.fetch=async(path,opts)=>{
 golfLobbyButton.click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=11&online=1');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=12&online=1');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 let golfCreate;
 w.fetch=async(path,opts)=>{
@@ -128,12 +130,16 @@ w.fetch=async(path,opts)=>{
  return Response.json({state:{...lobbyGolf,phase:'waiting',players:[{id:'tg:1',name:'Fausto'}]},now:Date.now()});
 };
 get('create-golf').click();
+assert.equal(get('golf-setup').hidden,false);
+assert.equal(get('golf-collision-choice').hidden,false);
+get('golf-setup-confirm').click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCreate,{game:'golf',appearance:['#cf514d','#529766'],campaign:'coast',collisions:false});
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 separateColors.click();
-get('golf-collisions').click();
 get('create-golf').click();
+get('golf-collisions').click();
+get('golf-setup-confirm').click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCreate,{game:'golf',appearance:['#e5be43','#8662b1'],campaign:'coast',collisions:true});
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
@@ -467,7 +473,7 @@ const golfHtml=await fs.readFile('public/golf/index.html','utf8');
 const golfBundle=await build({stdin:{contents:(await fs.readFile('public/golf/game.js','utf8'))+'\nwindow.__golf={state:()=>state,camera:()=>camera,draw};',
  resolveDir:process.cwd()+'/public/golf'},bundle:true,write:false,format:'iife',platform:'browser'});
 function golfFixture(search='',outfit=null){
- const instance=new JSDOM(golfHtml,{url:'https://unit.test/golf/'+(search||'?campaign=park'),runScripts:'outside-only',pretendToBeVisual:true});
+ const instance=new JSDOM(golfHtml,{url:'https://unit.test/golf/'+(search||'?campaign=coast'),runScripts:'outside-only',pretendToBeVisual:true});
  const win=instance.window,find=id=>win.document.getElementById(id),green=find('green');
  Object.defineProperties(green,{clientWidth:{value:680},clientHeight:{value:320}});
  const labels=[],arcs=[],rotations=[];
@@ -479,7 +485,7 @@ function golfFixture(search='',outfit=null){
  return {instance,win,find,green,labels,arcs,rotations};
 }
 const golf=golfFixture('',{shirt:'#cf514d',shorts:'#529766'});
-assert.equal(golf.find('course').textContent,'Viale del Sole');
+assert.equal(golf.find('course').textContent,'Porto di Corallo');
 assert.ok(golf.arcs.includes('#cf514d'));
 assert.deepEqual(Array.from(golf.win.__golf.state().players[0].appearance),['#cf514d','#529766']);
 const pointer=(event,button,buttons,x,y)=>golf.green.dispatchEvent(Object.assign(
@@ -508,18 +514,18 @@ const wheel=new golf.win.WheelEvent('wheel',{deltaY:180,cancelable:true});
 golf.green.dispatchEvent(wheel);
 paintGolf();
 assert.ok(wheel.defaultPrevented&&golf.win.__golf.camera().zoom>1);
-assert.equal(Number(golf.find('aim').value),0,'Zoom keeps the shot direction');
+assert.equal(Number(golf.find('aim').value),Math.round(yaw*1800/Math.PI)/10,'Zoom keeps the shot direction');
 pointer('pointerdown',0,1,340,220);
 pointer('pointermove',-1,1,470,219);
 assert.equal(golf.find('power-value').textContent,'0,5%');
-assert.equal(Number(golf.find('aim').value),0);
+assert.equal(Number(golf.find('aim').value),Math.round(yaw*1800/Math.PI)/10);
 pointer('pointermove',-1,1,480,140);
 paintGolf();
 assert.equal(golf.find('power-value').textContent,'53,5%');
-assert.equal(golf.win.__golf.camera().yaw,0);
+assert.equal(Math.abs(golf.win.__golf.camera().yaw-yaw)<1e-10,true);
 pointer('pointerup',0,0,480,140);
 const putt=golf.win.__golf.state().players[0].shot;
-assert.equal(putt.sunk,true,'Drag forward to reach the cup');
+assert.ok(putt.samples.length>1,'Drag forward to play a shot');
 const teeX=golf.win.__golf.camera().x;
 golf.win.Date.now=()=>putt.at+1000;
 paintGolf();

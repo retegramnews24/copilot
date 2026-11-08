@@ -1,4 +1,4 @@
-import {CAMPAIGNS} from './campaigns.js?v=9';
+import {CAMPAIGNS,LEGACY_CAMPAIGN} from './campaigns.js?v=12';
 export {CAMPAIGNS};
 import {validBallColors} from '../appearance.js?v=8';
 export {BALL_KEY,validBallColors} from '../appearance.js?v=8';
@@ -78,7 +78,7 @@ const renovatedCourses=COURSES.map((course,index)=>{
 });
 
 export const DEFAULT_CAMPAIGN=CAMPAIGNS[0].id;
-export const campaignInfo=id=>CAMPAIGNS.find(c=>c.id===id);
+export const campaignInfo=id=>[...CAMPAIGNS,LEGACY_CAMPAIGN].find(c=>c.id===id);
 
 function buildHole(spec,scale,seed){
   const [name,par,w,d,teeZ,cupZ,theme,gates]=spec;
@@ -114,7 +114,7 @@ function buildHole(spec,scale,seed){
   return course;
 }
 
-const campaignCourses=new Map(CAMPAIGNS.map((set,i)=>[set.id,
+const campaignCourses=new Map([LEGACY_CAMPAIGN,...CAMPAIGNS].map((set,i)=>[set.id,
   set.holes.map((spec,hole)=>buildHole(spec,set.scale,100*(i+1)+hole))]));
 
 export function coursesFor(version,setId) {

@@ -1,5 +1,5 @@
-import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=9';
-import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=11';
+import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=12';
+import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=12';
 import { drawCourse } from './render.js?v=10';
 import { upright, rollBy } from './roll.js';
 import {golfColors,validBallColors} from '../appearance.js?v=8';
@@ -75,7 +75,7 @@ function updatePanel(){
   if(canChoose){
     if(waitingCampaign!==state.campaign){
       waitingCampaign=state.campaign;
-      campaignSelect.value=waitingCampaign??DEFAULT_CAMPAIGN;
+      campaignSelect.value=CAMPAIGNS.some(set=>set.id===waitingCampaign)?waitingCampaign:DEFAULT_CAMPAIGN;
     }
     putText('route-note',campaignInfo(campaignSelect.value)?.description??'');
   }
@@ -363,7 +363,7 @@ $('scores').onclick=()=>{
 };
 $('start').onclick=()=>{
   if(!$('close-confirm').hidden)return;
-  if(state?.phase==='finished'){if(online)leave();else solo(state.campaign);}
+  if(state?.phase==='finished'){if(online)leave();else solo(CAMPAIGNS.find(set=>set.id===state.campaign)?.id);}
   else if(state?.phase==='waiting'){
     const campaign=state.courseVersion===COURSE_VERSION?campaignSelect.value:undefined;
     if(online)action('start',{campaign});
@@ -385,7 +385,7 @@ window.addEventListener('message',e=>{
   if(data?.type==='golf:error'){busy=false;say(data.message);}
 });
 if(!online){
-  const campaign=campaignInfo(query.get('campaign'));
+  const campaign=CAMPAIGNS.find(set=>set.id===query.get('campaign'));
   solo(campaign?.id,!!campaign);
 }
 window.addEventListener('pagehide',()=>cancelAnimationFrame(frame));

@@ -2,7 +2,7 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=9';
+import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=12';
 import {golfColors} from './appearance.js?v=8';
 import './labyrinth/avatar.js?v=8';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
@@ -885,13 +885,13 @@ function publishGolf(ack=false){
 const golfCampaign=$('golf-campaign');
 golfCampaign.replaceChildren(...CAMPAIGNS.map(set=>new Option(set.difficulty+' · '+set.name,set.id)));
 const lastGolfCampaign=read('binotto-golf-campaign',DEFAULT_CAMPAIGN);
-golfCampaign.value=campaignInfo(lastGolfCampaign)?lastGolfCampaign:DEFAULT_CAMPAIGN;
+golfCampaign.value=CAMPAIGNS.some(set=>set.id===lastGolfCampaign)?lastGolfCampaign:DEFAULT_CAMPAIGN;
 golfCampaign.onchange=()=>{try{save('binotto-golf-campaign',golfCampaign.value)}catch(error){err(error.message)}};
 
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=11'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
+ $('golf-frame').src='/golf/index.html?v=12'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
  tg?.BackButton?.show();
 }
 async function syncGolf(){
@@ -924,9 +924,12 @@ async function openGolf(selected){
     golfSnapshot=result;
    }
   }
-  golfRoom=golfSnapshot.state.room;showGolf(true);sendPresence();
+  golfRoom=golfSnapshot.state.room;$('golf-setup').hidden=true;showGolf(true);sendPresence();
   golfSync=setInterval(syncGolf,850);
- }catch(error){err(error.message)}finally{golfPending=false;$('create-golf').disabled=!identity}
+ }catch(error){
+  if(!selected&&!$('golf-setup').hidden)$('golf-setup-error').textContent=error.message;
+  else err(error.message);
+ }finally{golfPending=false;$('create-golf').disabled=!identity}
 }
 function closeGolf(){
  if($('golf-overlay').hidden)return;
@@ -939,8 +942,38 @@ function returnFromClosedGolf(selected){
  games=games.filter(game=>game.room!==selected);
  renderLobby();selectPage('lobby');
 }
-$('play-golf').onclick=()=>{if(!golfPending)showGolf(false)};
-$('create-golf').onclick=()=>openGolf();
+const golfSetup=$('golf-setup'),golfConfirm=$('golf-setup-confirm'),golfCancel=$('golf-setup-cancel');
+let golfSetupOnline=false;
+function setupGolf(online){
+ if(golfPending||!$('golf-overlay').hidden||(online&&!identity))return;
+ golfSetupOnline=online;
+ $('golf-collision-choice').hidden=!online;
+ $('golf-collisions').checked=false;
+ $('golf-setup-error').textContent='';
+ golfConfirm.textContent=online?'Crea stanza':'Gioca';
+ golfSetup.hidden=false;golfCampaign.focus();
+}
+$('play-golf').onclick=()=>setupGolf(false);
+$('create-golf').onclick=()=>setupGolf(true);
+golfCancel.onclick=()=>{
+ if(golfPending)return;
+ golfSetup.hidden=true;$(golfSetupOnline?'create-golf':'play-golf').focus();
+};
+golfConfirm.onclick=async()=>{
+ if(golfSetup.hidden||golfPending)return;
+ $('golf-setup-error').textContent='';
+ if(!golfSetupOnline){golfSetup.hidden=true;showGolf(false);return;}
+ golfConfirm.disabled=golfCancel.disabled=true;
+ try{await openGolf();}finally{golfConfirm.disabled=golfCancel.disabled=false;}
+};
+window.addEventListener('keydown',event=>{
+ if(golfSetup.hidden)return;
+ if(event.key==='Escape'){event.preventDefault();golfCancel.click();}
+ if(event.key!=='Tab')return;
+ const items=[golfCampaign,...(golfSetupOnline?[$('golf-collisions')]:[]),golfConfirm,golfCancel].filter(item=>!item.disabled);
+ const edge=event.shiftKey?items[0]:items.at(-1);
+ if(document.activeElement===edge){event.preventDefault();(event.shiftKey?items.at(-1):items[0]).focus();}
+});
 window.addEventListener('message',async event=>{
  if(event.origin!==location.origin||event.source!==$('golf-frame').contentWindow||$('golf-overlay').hidden)return;
  const data=event.data;

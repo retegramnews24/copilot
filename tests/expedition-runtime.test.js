@@ -182,9 +182,10 @@ try{
  assert.deepEqual(golfJoin.data.state.players[1].appearance,['#ffffff','#111111']);
  assert.equal((await call(302,golfPath+'/start',{campaign:'neon'})).status,409);
  assert.equal((await call(301,golfPath+'/start',{campaign:'unknown'})).status,409);
- const startedGolf=(await call(301,golfPath+'/start',{campaign:'park'})).data.state;
+ assert.equal((await call(301,golfPath+'/start',{campaign:'park'})).status,409);
+ const startedGolf=(await call(301,golfPath+'/start',{campaign:'neon'})).data.state;
  assert.equal(startedGolf.phase,'playing');
- assert.equal(startedGolf.campaign,'park');
+ assert.equal(startedGolf.campaign,'neon');
  assert.equal((await call(303,golfPath+'/join',{})).status,409);
  assert.equal((await call(303,golfPath+'/state')).data.state.players.length,2);
  assert.equal((await call(303,golfPath+'/close',{})).status,403);
@@ -194,12 +195,12 @@ try{
  assert.ok(scores.every(result=>result.status===200));
  assert.equal((await call(302,golfPath+'/shot',putt)).status,409);
  const golfState=(await call(301,golfPath+'/state')).data.state;
- assert.ok(golfState.players.every(player=>player.strokes===1&&player.shot.sunk));
+ assert.ok(golfState.players.every(player=>player.strokes===1&&player.shot.samples.length>1));
  assert.equal((await call(302,golfPath+'/state?after='+golfState.revision)).data.state,undefined);
  const golfListing=(await call(302,'/api/lobby')).data.games.find(entry=>entry.room===golfState.room);
  assert.equal(golfListing.capacity,8);
  assert.equal(golfListing.holes,10);
- assert.equal(golfListing.campaign,'park');
+ assert.equal(golfListing.campaign,'neon');
  assert.equal(golfListing.players.length,2);
  assert.equal((await call(302,golfPath+'/close',{})).status,200);
  assert.equal((await call(303,golfPath+'/state')).status,404);

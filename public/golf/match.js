@@ -1,11 +1,11 @@
-import { COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, courseFor, validBallColors } from './courses.js?v=9';
+import { COURSE_VERSION, DEFAULT_CAMPAIGN, CAMPAIGNS, coursesFor, courseFor, validBallColors } from './courses.js?v=12';
 import { motionAt, shotVelocity, simulateBalls, simulateShot } from './physics.js?v=11';
 
 export const CAPACITY=8, LIMIT=10, HOLE_TIME=105000, BREAK=3500;
 const fail=message=>{throw Error(message)};
 const resetBall=(player,course)=>Object.assign(player,{position:[...course.tee],strokes:0,done:false,shot:null});
 export function makeMatch(room,number,user,now=Date.now(),appearance,campaign=DEFAULT_CAMPAIGN,collisions=false){
-  if(!campaignInfo(campaign))fail('Percorso non disponibile.');
+  if(!CAMPAIGNS.some(set=>set.id===campaign))fail('Percorso non disponibile.');
   const match={room,number,game:'golf',host:user.player,phase:'waiting',courseVersion:COURSE_VERSION,campaign,collisions:collisions===true,created:now,revision:1,hole:0,players:[]};
   joinMatch(match,user,appearance);
   return match;
@@ -36,7 +36,7 @@ export function startMatch(match,id,now,minimum=2,campaign){
   if(match.host!==id || match.phase!=='waiting')fail('Solo chi ha creato la stanza può avviare la gara.');
   if(match.players.length<minimum)fail('Aspetta almeno un altro giocatore.');
   if(campaign!==undefined){
-    if(match.courseVersion!==COURSE_VERSION||!campaignInfo(campaign))fail('Percorso non disponibile.');
+    if(match.courseVersion!==COURSE_VERSION||!CAMPAIGNS.some(set=>set.id===campaign))fail('Percorso non disponibile.');
     match.campaign=campaign;
   }
   openHole(match,now);
