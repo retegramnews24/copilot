@@ -91,11 +91,12 @@ w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:ge
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);
+assert.equal(get('cinema-lobby-create'),null);
 assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
 get('cinema-rooms').querySelector('button').click();
 const cinemaFrame=get('cinema-frame');
 const cinemaEvent=(type,data={})=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type,...data}}));
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=5');
+assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=6');
 cinemaEvent('ready');
 assert.deepEqual(cinemaMessages.at(-1),{type:'enter',room:cinemaId});
 cinemaSocket.onmessage({data:JSON.stringify({type:'rooms',rooms:cinemaRooms,active:{id:cinemaId}})});
@@ -638,7 +639,7 @@ golfOnline.instance.window.close();
 console.log('PASS Golf UI: hub launch, locked left-button aim, granular charge, expanded zoom, rolling ball, spectators and room controls.');
 
 const cinemaBundle=await build({entryPoints:['public/cinema/cinema.js'],bundle:true,write:false,format:'iife',platform:'browser'});
-const cinemaDOM=new JSDOM(await fs.readFile('public/cinema/index.html','utf8'),{url:'https://unit.test/cinema/',runScripts:'outside-only',virtualConsole:vc});
+const cinemaDOM=new JSDOM(await fs.readFile('public/cinema/index.html','utf8'),{url:'https://unit.test/cinema/',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc});
 const cw=cinemaDOM.window,cinemaElement=id=>cw.document.getElementById(id),frameCommands=[];
 cw.matchMedia=()=>({matches:true,addEventListener(){}});
 cw.fetch=async()=>{throw Error('Offline in UI test');};
@@ -701,9 +702,87 @@ assert.equal(cinemaElement('close-dialog').open,true);
 cinemaElement('close-dialog').close('close');
 await new Promise(resolve=>setTimeout(resolve,15));
 assert.equal(frameCommands.at(-1).action.type,'close-room');
+let player,playCalls=0,pauseCalls=0;
+cw.YT={Player:class{
+ constructor(_frame,{events}){this.events=events;this.state=-1;player=this;cw.queueMicrotask(()=>events.onReady({target:this}));}
+ getPlayerState(){return this.state;}
+ getCurrentTime(){return 12;}
+ getDuration(){return 100;}
+ seekTo(){}
+ setVolume(){}
+ destroy(){}
+ playVideo(){playCalls++;this.change(1);}
+ pauseVideo(){pauseCalls++;this.change(2);}
+ change(state){this.state=state;this.events.onStateChange({data:state});}
+}};
+const youtubeChannel={youtube:'M7lc1UVf-VE',url:'https://www.youtube.com/watch?v=M7lc1UVf-VE',name:'Video prova'};
+const youtubeState=(playing,playRevision=0)=>frameMessage('packet',{packet:{type:'rooms',rooms:cinemaRooms,
+ active:{...activeCinema,channel:youtubeChannel,playback:{position:12,playing,updated:Date.now(),playRevision}}}});
+youtubeState(true);
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(playCalls,1);
+player.change(2);
+assert.match(cinemaElement('youtube-status').textContent,/In pausa qui/);
+cw.document.dispatchEvent(new cw.Event('visibilitychange'));
+youtubeState(true);
+assert.equal(playCalls,1,'A refresh or visibility update must not undo native pause');
+youtubeState(true,1);
+assert.equal(playCalls,2,'An explicit shared play resumes the video');
+youtubeState(false,1);
+assert.equal(pauseCalls,1);
+youtubeState(false,1);
+assert.equal(playCalls,2,'Room pause remains active across room updates');
+
+let stopped=false,selected=false;
+const captureTrack=new cw.EventTarget();
+captureTrack.readyState='live';captureTrack.stop=()=>{stopped=true;};
+const captured={getTracks:()=>[captureTrack],getVideoTracks:()=>[captureTrack]};
+Object.defineProperty(cw.navigator,'mediaDevices',{value:{getDisplayMedia:async()=>{selected=true;return captured;}}});
+cw.HTMLMediaElement.prototype.play=async function(){};
+let rtc,iceCount=0;
+cw.RTCPeerConnection=class{
+ constructor(){rtc=this;}
+ addTrack(){}
+ async createOffer(){return {type:'offer',sdp:'offer sample'};}
+ async createAnswer(){return {type:'answer',sdp:'answer sample'};}
+ async setLocalDescription(description){this.localDescription=description;}
+ async setRemoteDescription(description){this.remoteDescription=description;}
+ async addIceCandidate(){iceCount++;}
+ close(){this.closed=true;}
+};
+cinemaElement('share-window').click();
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(selected,true);
+const {share}=frameCommands.at(-1).action;
+assert.equal(frameCommands.at(-1).action.type,'screen-start');
+frameMessage('packet',{packet:{type:'rooms',rooms:cinemaRooms,active:{...activeCinema,screen:{id:share,peer:'host',local:true,name:'Fausto'}}}});
+assert.equal(cinemaElement('share-video').srcObject,captured);
+assert.equal(cinemaElement('share-video').muted,true);
+frameMessage('packet',{packet:{type:'screen-peer',share,peer:'guest'}});
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(frameCommands.at(-1).action.signal.type,'offer');
+cinemaElement('share-window').click();
+assert.equal(stopped,true);
+assert.equal(frameCommands.at(-1).action.type,'screen-stop');
+const remote={id:'remote-share',local:false,peer:'host',name:'Ospite'};
+frameMessage('packet',{packet:{type:'rooms',rooms:cinemaRooms,active:{...activeCinema,screen:remote}}});
+assert.equal(frameCommands.at(-1).action.type,'screen-watch');
+frameMessage('packet',{packet:{type:'screen-signal',share:remote.id,peer:remote.peer,signal:{type:'ice',candidate:'candidate',mid:'0',index:0}}});
+frameMessage('packet',{packet:{type:'screen-signal',share:remote.id,peer:remote.peer,signal:{type:'offer',sdp:'offer'}}});
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(iceCount,1,'A candidate that arrives before the offer is applied after remote SDP');
+assert.equal(frameCommands.at(-1).action.signal.type,'answer');
+rtc.connectionState='connected';rtc.onconnectionstatechange();
+rtc.ontrack({streams:[captured]});
+assert.equal(cinemaElement('share-video').srcObject,captured);
+assert.equal(cinemaElement('share-video').muted,false);
+frameMessage('packet',{packet:{type:'rooms',rooms:cinemaRooms,active:activeCinema}});
+assert.equal(cinemaElement('share-video').srcObject,null);
+assert.equal(rtc.closed,true);
+
 await new Promise(resolve=>setTimeout(resolve,0));
 cinemaDOM.window.close();
-console.log('PASS Cinema UI: general Lobby, live Multisala, direct file picker and close confirmation.');
+console.log('PASS Cinema UI: Lobby, Multisala, local and shared YouTube pause, window capture and viewer signaling.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){

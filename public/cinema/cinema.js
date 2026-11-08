@@ -3,6 +3,7 @@ import {avatarSVG} from '../labyrinth/avatar.js?v=9';
 import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=3';
 import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
+import {WindowShare} from './screen-share.js?v=1';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar');
@@ -15,6 +16,7 @@ try{
 }catch{}
 let connected=false,room=null,me=null,favorites=[],catalog=[],catalogController=null,playingURL=null,hls=null,drag=null;
 let videoRevision=0,noticeTimer,clockOffset=0,youtube=null,disposeYouTube=null,youtubeBlocked=false,fileBlocked=false,fileStarting=false;
+let youtubeLocalPaused=false,youtubeAutoPause=false;
 const send=(type,payload={})=>parent.postMessage({type:'cinema:'+type,...payload},location.origin);
 const action=(type,data={})=>connected?send('action',{action:{type,...data}}):notice('Collegamento alla sala in corso.');
 const node=(tag,text='',className='')=>{
@@ -34,7 +36,7 @@ function notice(text){
 function stopVideo(){
   videoRevision++;
   hls?.destroy();hls=null;
-  disposeYouTube?.();disposeYouTube=null;youtube=null;youtubeBlocked=false;fileBlocked=false;fileStarting=false;
+  disposeYouTube?.();disposeYouTube=null;youtube=null;youtubeBlocked=false;youtubeAutoPause=false;fileBlocked=false;fileStarting=false;
   video.hidden=false;$('youtube').hidden=true;$('youtube-message').hidden=true;
   video.pause();video.removeAttribute('src');video.load();
 }
@@ -53,32 +55,32 @@ function targetPosition(){
   const duration=youtube?.getDuration()||video.duration;
   return Number.isFinite(duration)&&duration>0?Math.min(position,duration):position;
 }
-function syncYouTube(force=false){
-  if(!youtube||!room?.playback)return;
-  if(document.hidden||(mobile.matches&&cinema.classList.contains('tools-open')&&!cinema.classList.contains('wide'))){
-    if(youtube.getPlayerState()===1)youtube.pauseVideo();
-    return;
-  }
+function youtubeVisible(){
+  if(document.hidden||(mobile.matches&&cinema.classList.contains('tools-open')&&!cinema.classList.contains('wide')))return false;
   const bounds=screen.getBoundingClientRect(),auditorium=screen.parentElement.getBoundingClientRect();
   const visible=Math.min(bounds.bottom,auditorium.bottom)-Math.max(bounds.top,auditorium.top);
-  if(bounds.height&&visible<bounds.height/2){if(youtube.getPlayerState()===1)youtube.pauseVideo();return;}
-  const position=targetPosition(),state=youtube.getPlayerState();
-  const duration=youtube.getDuration();
+  return !bounds.height||visible>=bounds.height/2;
+}
+function pauseYouTube(state){
+  if(state===1||state===3){youtubeAutoPause=true;youtube.pauseVideo();}
+}
+function syncYouTube(force=false){
+  if(!youtube||!room?.playback)return;
+  const state=youtube.getPlayerState();
+  if(!youtubeVisible()){pauseYouTube(state);return;}
+  if(youtubeLocalPaused&&room.playback.playing)return;
+  const position=targetPosition(),duration=youtube.getDuration();
   if(state===0&&duration>0&&position>=duration-.5)return;
+  if(!room.playback.playing)pauseYouTube(state);
   if(!room.channel.live&&(force||Math.abs(youtube.getCurrentTime()-position)>2))youtube.seekTo(position,true);
-  if(room.playback.playing){
-    if(!youtubeBlocked&&state!==1&&state!==3)youtube.playVideo();
-  }else{
-    if(state===1||state===3)youtube.pauseVideo();
-    $('screen-empty').hidden=true;
-  }
+  if(room.playback.playing&&!youtubeBlocked&&state!==1&&state!==3)youtube.playVideo();
 }
 function youtubeMessage(text,retry=false){
   $('youtube-message').hidden=!text;
   $('youtube-status').textContent=text;
   $('youtube-start').hidden=!retry;
 }
-$('youtube-start').onclick=()=>{youtubeBlocked=false;syncYouTube(true);};
+$('youtube-start').onclick=()=>{youtubeLocalPaused=false;youtubeBlocked=false;syncYouTube(true);};
 function showYouTube(id){
   youtubeMessage('Collegamento a YouTube…');
   video.hidden=true;$('youtube').hidden=false;
@@ -86,12 +88,22 @@ function showYouTube(id){
     ready:player=>{
       youtube=player;youtube.setVolume(settings.volume);
       if(settings.volume===0)youtube.mute();
-      if(!room?.playback?.playing)youtubeMessage('');
+      if(youtubeLocalPaused&&room?.playback?.playing)youtubeMessage('In pausa qui',true);
+      else if(!room?.playback?.playing)youtubeMessage('');
       syncYouTube(true);
     },
     state:state=>{
-      if(state===1&&youtube&&!room?.playback?.playing)youtube.pauseVideo();
-      if(state===1||state===0||(state===2&&!room?.playback?.playing))youtubeMessage('');
+      if(state===1&&youtube){
+        youtubeAutoPause=false;
+        if(!room?.playback?.playing||!youtubeVisible())pauseYouTube(state);
+        else{youtubeLocalPaused=false;youtubeBlocked=false;youtubeMessage('');}
+      }else if(state===2){
+        const automatic=youtubeAutoPause;
+        youtubeAutoPause=false;
+        if(room?.playback?.playing&&!automatic&&youtubeVisible()){
+          youtubeLocalPaused=true;youtubeMessage('In pausa qui',true);
+        }else if(!room?.playback?.playing)youtubeMessage('');
+      }else if(state===0)youtubeMessage('');
     },
     blocked:()=>{youtubeBlocked=true;youtubeMessage('Tocca per avviare YouTube',true);},
     error:code=>{
@@ -120,7 +132,15 @@ video.addEventListener('loadedmetadata',()=>syncFile(true));
 
 function tune(channel,force=false,seek=false){
   const url=channel?.url??null;
-  $('channel-name').textContent=channel?.name??'';
+  $('channel-name').textContent=room?.screen?'Finestra di '+room.screen.name:channel?.name??'';
+  if(room?.screen){
+    if(playingURL!==null||force)stopVideo();
+    playingURL=null;video.hidden=true;
+    $('on-air').textContent='LIVE';
+    if(settings.monitor)$('screen-empty').hidden=true;
+    else message('Monitor spento');
+    return;
+  }
   if(!force&&url===playingURL){syncYouTube(seek);syncFile(seek);return;}
   playingURL=url;stopVideo();
   $('on-air').textContent=url?((channel.youtube||channel.file)?'VIDEO':'LIVE'):'';
@@ -146,11 +166,38 @@ video.addEventListener('error',()=>{
 });
 video.addEventListener('playing',()=>{$('screen-empty').hidden=true;});
 $('start-video').onclick=()=>{
-  if(youtube){youtubeBlocked=false;syncYouTube(true);}
+  if(youtube){youtubeLocalPaused=false;youtubeBlocked=false;syncYouTube(true);}
   else if(room?.channel?.file){if(video.error)tune(room.channel,true);else{fileBlocked=false;syncFile(true);}}
   else if(video.src||hls)startPlayback();
   else tune(room?.channel,true);
 };
+
+const screenShare=new WindowShare($('share-video'),action,(text,button)=>{
+  if(!room?.screen){if(text)notice(text);return;}
+  $('share-message').textContent=text;
+  $('share-placeholder').hidden=!text||!settings.monitor;
+  $('share-retry').hidden=!button;
+  $('share-retry').textContent=button==='retry'?'Riprova collegamento':'Riproduci qui';
+});
+function drawScreenShare(){
+  const active=room?.screen,button=$('share-window');
+  button.textContent=active?.local?'Interrompi condivisione':'Condividi finestra';
+  button.dataset.live=String(!!active?.local);
+  button.disabled=!connected||!!active&&!active.local;
+  $('share-video').hidden=!active||!settings.monitor;
+  if(!active||!settings.monitor)$('share-placeholder').hidden=true;
+  screenShare.update(room,settings.monitor,settings.volume);
+}
+$('share-window').onclick=async()=>{
+  if(room?.screen?.local){screenShare.stop();return;}
+  if(!connected||!room)return;
+  if(!screenShare.supported){await screenShare.start();return;}
+  $('share-window').disabled=true;
+  await screenShare.start();
+  drawScreenShare();
+};
+$('share-retry').onclick=()=>screenShare.retry();
+window.addEventListener('pagehide',()=>screenShare.disconnect());
 
 const multisala=$('multisala-dialog');
 let listedRooms=[];
@@ -176,12 +223,15 @@ $('close-room').onclick=()=>{closeDialog.returnValue='';closeDialog.showModal();
 closeDialog.onclose=()=>{if(closeDialog.returnValue==='close')action('close-room');};
 function drawRooms(rooms,active){
   const previous=room;
+  const changedVideo=previous?.id!==active?.id||previous?.channel?.url!==active?.channel?.url;
+  if(changedVideo||(active?.playback?.playRevision??0)>(previous?.playback?.playRevision??0))youtubeLocalPaused=false;
   room=active;listedRooms=rooms;
+  drawScreenShare();
   if(multisala.open)drawMultisala();
   $('multisala').disabled=!active;
   $('connecting').hidden=!!active;cinema.hidden=!active;$('cinema-actions').hidden=!active;
   $('close-room').hidden=!active?.canClose;
-  $('shared-playback').hidden=!active?.playback;
+  $('shared-playback').hidden=!!active?.screen||!active?.playback;
   $('seek-shared').hidden=!!active?.channel?.live;
   updateFavoriteButton();
   if(!active){if(previous)tune(null);return;}
@@ -206,7 +256,8 @@ function drawRooms(rooms,active){
       updateTVFilters();drawSearch();
     });
   }
-  tune(active.channel,previous?.id!==active.id,previous?.playback?.seek!==active.playback?.seek);
+  if(!youtubeLocalPaused&&$('youtube-status').textContent==='In pausa qui')youtubeMessage('');
+  tune(active.channel,previous?.id!==active.id||previous?.screen?.id!==active.screen?.id,previous?.playback?.seek!==active.playback?.seek);
 }
 function channelCard(channel,favorite=false){
   const item=node('div','','channel-card'),pick=node('button','','channel-pick'),logo=node('span','','logo');
@@ -372,7 +423,7 @@ $('youtube-form').onsubmit=event=>{
 function updateFavoriteButton(){
   const button=$('save-playing'),url=room?.channel?.url;
   const saved=favorites.some(item=>item.url===url);
-  button.hidden=!url||room?.channel?.file===true;button.disabled=saved;button.textContent=saved?'★ Nei preferiti':'☆ Salva nei preferiti';
+  button.hidden=!!room?.screen||!url||room?.channel?.file===true;button.disabled=saved;button.textContent=saved?'★ Nei preferiti':'☆ Salva nei preferiti';
 }
 $('save-playing').onclick=()=>{if(room?.channel)action('favorite-add',{channel:packetChannel(room.channel)});};
 function drawFavorites(){
@@ -416,9 +467,9 @@ function updateMonitor(){
   $('monitor').textContent=settings.monitor?'Monitor acceso':'Monitor spento';
   $('monitor').setAttribute('aria-pressed',String(settings.monitor));
 }
-$('monitor').onclick=()=>{settings.monitor=!settings.monitor;save();updateMonitor();tune(room?.channel,true);};
+$('monitor').onclick=()=>{settings.monitor=!settings.monitor;save();updateMonitor();drawScreenShare();tune(room?.channel,true);};
 $('volume').value=settings.volume;
-$('volume').oninput=()=>{settings.volume=Number($('volume').value);video.volume=settings.volume/100;video.muted=settings.volume===0;if(youtube){youtube.setVolume(settings.volume);if(settings.volume===0)youtube.mute();else youtube.unMute();}save();};
+$('volume').oninput=()=>{settings.volume=Number($('volume').value);video.volume=settings.volume/100;video.muted=settings.volume===0;screenShare.volume(settings.volume);if(youtube){youtube.setVolume(settings.volume);if(settings.volume===0)youtube.mute();else youtube.unMute();}save();};
 updateMonitor();
 function updateTools(){
   const wide=cinema.classList.contains('wide');
@@ -439,7 +490,8 @@ $('screen-full').onclick=async()=>{
   if(document.fullscreenElement){await document.exitFullscreen();return;}
   if(document.body.classList.contains('video-full')){document.body.classList.remove('video-full');return;}
   try{if(screen.requestFullscreen){await screen.requestFullscreen();return;}}catch{}
-  if(video.webkitEnterFullscreen&&video.readyState>0){try{video.webkitEnterFullscreen();return;}catch{}}
+  const fullscreenVideo=room?.screen?$('share-video'):video;
+  if(fullscreenVideo.webkitEnterFullscreen&&fullscreenVideo.readyState>0){try{fullscreenVideo.webkitEnterFullscreen();return;}catch{}}
   document.body.classList.add('video-full');
 };
 window.addEventListener('keydown',event=>{if(event.key==='Escape')document.body.classList.remove('video-full');});
@@ -478,7 +530,7 @@ window.addEventListener('message',event=>{
   if(data?.type==='cinema:insets')applyInsets(document.documentElement,data.insets);
   if(data?.type==='cinema:connection'){
     connected=data.connected;if(multisala.open)drawMultisala();
-    if(!connected)notice(data.message||'Riconnessione al cinema…');
+    if(!connected){screenShare.disconnect();$('share-window').disabled=true;notice(data.message||'Riconnessione al cinema…');}
     else $('notice').textContent='';
   }
   if(data?.type==='cinema:youtube-result'){
@@ -501,6 +553,7 @@ window.addEventListener('message',event=>{
   const packet=data.packet;
   if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;drawRooms(packet.rooms,packet.active);}
   else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();drawYouTube();if(catalogController)drawSearch();}
+  else if(packet.type?.startsWith('screen-'))screenShare.receive(packet);
   else if(packet.type==='error')notice(packet.message);
 });
 const watchDialog=$('watch-dialog');
@@ -564,7 +617,8 @@ $('seek-shared').onsubmit=event=>{
   playback('seek',position);
 };
 setInterval(()=>{
-  if(!room?.playback)return;
+  if(!room?.playback||room.screen)return;
+  if(youtubeLocalPaused&&room.playback.playing){$('shared-time').textContent='In pausa qui';return;}
   if(room.channel?.live){$('shared-time').textContent=room.playback.playing?'● Diretta':'In pausa';return;}
   const seconds=Math.floor(targetPosition());
   $('shared-time').textContent=(room.playback.playing?'In riproduzione':'In pausa')+' · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');

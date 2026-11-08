@@ -71,3 +71,6 @@ dialog{width:min(430px,92vw);max-height:85dvh;overflow:auto;border:1px solid var
   #sidebar{grid-template-rows:minmax(44px,min(var(--favorites),28%)) 8px minmax(150px,1fr);overflow:auto}
   #catalog-status:empty,#youtube-search-status:empty{display:none}
 }
+
+#share-placeholder{position:absolute;inset:0;display:grid;align-content:center;justify-items:center;gap:9px;padding:14px;text-align:center;background:radial-gradient(ellipse,#35223c,#07060d 72%);color:#e5cfdf}
+#share-window[data-live=true]{color:#ffdfb6;border-color:#b9778f}

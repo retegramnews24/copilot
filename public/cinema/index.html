@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=4"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=5"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=5"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=6"></script></head>
 <body>
 <header>
  <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button></div>
  <div id="cinema-actions" class="screen-actions" hidden>
-  <button id="watch-together">Guarda insieme</button><button id="upload-video">Carica video</button><button id="save-playing" hidden>☆ Preferiti</button>
+  <button id="watch-together">Guarda insieme</button><button id="upload-video">Carica video</button><button id="share-window" type="button">Condividi finestra</button><button id="save-playing" hidden>☆ Preferiti</button>
   <button id="monitor" aria-pressed="true">Monitor acceso</button><button id="mode" aria-pressed="false">Cinema Mode</button>
   <label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
   <button id="close-room" hidden>Chiudi sala</button>
@@ -16,6 +16,8 @@
   <section id="screen" aria-label="Schermo del cinema">
    <video id="video" playsinline webkit-playsinline preload="none"></video>
    <div id="youtube" hidden></div>
+   <video id="share-video" playsinline webkit-playsinline hidden></video>
+   <div id="share-placeholder" hidden><strong id="share-message" role="status"></strong><button id="share-retry" type="button" hidden>Riprova</button></div>
    <div id="screen-empty"><span>◈</span><strong id="screen-message">In attesa di un canale</strong><button id="start-video" hidden>Riproduci qui</button></div>
    <div class="screen-label"><span id="on-air"></span><strong id="channel-name"></strong></div>
    <button id="screen-full" title="Video a schermo intero" aria-label="Video a schermo intero">⛶</button>

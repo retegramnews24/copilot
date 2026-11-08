@@ -1042,7 +1042,7 @@ function cinemaPost(type,payload={}){
 }
 function renderCinemaLobby(){
  const connected=cinemaSocket?.readyState===1,list=$('cinema-rooms');
- $('cinema-lobby-create').disabled=$('open-cinema').disabled=!connected;
+ $('open-cinema').disabled=!connected;
  const status=$('cinema-lobby-status');
  status.textContent=cinemaLobbyMessage||(connected?'Nessuna sala aperta.':'Collegamento al cinema…');
  status.hidden=connected&&cinemaRooms.rooms.length>0&&!cinemaLobbyMessage;
@@ -1060,7 +1060,7 @@ function renderCinemaLobby(){
 }
 function cinemaSend(action){
  const raw=JSON.stringify(action);
- if(raw&&raw.length<=4096&&cinemaSocket?.readyState===1&&cinemaSocket.bufferedAmount<64000){
+ if(raw&&raw.length<=(action?.type==='screen-signal'?24576:4096)&&cinemaSocket?.readyState===1&&cinemaSocket.bufferedAmount<64000){
   cinemaSocket.send(raw);return true;
  }
  cinemaPost('packet',{packet:{type:'error',message:'Comando non inviato. Riprova tra poco.'}});
@@ -1124,17 +1124,17 @@ function closeCinema(message='',leave=true){
  tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}
  leaveRoom();selectPage('game');cinemaLobbyMessage=message;renderCinemaLobby();
- $('cinema-lobby-create').focus();
+ ($('cinema-rooms').querySelector('button:not(:disabled)')||$('tab-game')).focus();
 }
 function openCinema(id){
  if(!$('cinema-overlay').hidden||cinemaSocket?.readyState!==1)return;
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=5';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=6';
  tg?.BackButton?.show();
 }
-$('open-cinema').onclick=$('cinema-lobby-create').onclick=()=>openCinema();
+$('open-cinema').onclick=()=>openCinema();
 async function uploadCinemaFile(file,name){
  if(!cinemaRoom||cinemaUpload||!(file instanceof File))return;
  if(!file.size||file.size>16*1024*1024){

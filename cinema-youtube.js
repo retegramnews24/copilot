@@ -1,7 +1,7 @@
 import {validYouTubeChannelId} from './public/cinema/media.js';
 
 const API='https://www.googleapis.com/youtube/v3/';
-const LIMIT=12;
+const LIMIT=12, SEARCH_LIMIT=30;
 const decode=value=>String(value??'').replace(/&(amp|quot|apos|lt|gt|#\d{1,7}|#x[\da-f]{1,6});/gi,(entity,key)=>{
   const named={amp:'&',quot:'"',apos:"'",lt:'<',gt:'>'};
   key=key.toLowerCase();
@@ -58,7 +58,7 @@ export class YouTubeCatalog{
     return data.items;
   }
   async search(q,type){
-    const params={part:'snippet',maxResults:String(LIMIT),q,type:type==='channel'?'channel':'video',relevanceLanguage:'it'};
+    const params={part:'snippet',maxResults:String(SEARCH_LIMIT),q,type:type==='channel'?'channel':'video',relevanceLanguage:'it'};
     if(type!=='channel')params.videoEmbeddable='true';
     if(type==='live')params.eventType='live';
     const results=await this.api('search',params);
