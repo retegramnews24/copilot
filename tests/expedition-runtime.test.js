@@ -173,6 +173,7 @@ try{
  assert.equal(golf.data.state.courseVersion,4);
  assert.deepEqual(golf.data.state.players[0].appearance,appearance);
  assert.equal(golf.data.state.campaign,'coast');
+ assert.equal(golf.data.state.collisions,false);
  const golfPath='/api/golf/'+golf.data.state.room;
  assert.equal((await mf.dispatchFetch('https://unit.test'+golfPath+'/state')).status,401);
  assert.equal((await call(301,golfPath+'/start',{})).status,409);
@@ -204,6 +205,14 @@ try{
  assert.equal((await call(303,golfPath+'/state')).status,404);
  assert.ok(!(await call(301,'/api/lobby')).data.games.some(entry=>entry.room===golfState.room));
  assert.deepEqual((await call(301,'/api/leaderboard?game=golf')).data.leaders,[]);
+ const collisionRoom=(await call(301,'/api/create',{game:'golf',collisions:true})).data;
+ const collisionPath='/api/golf/'+collisionRoom.state.room;
+ assert.equal(collisionRoom.state.collisions,true);
+ assert.equal((await call(302,collisionPath+'/join',{collisions:false})).data.state.collisions,true);
+ assert.equal((await call(301,collisionPath+'/start',{collisions:false})).data.state.collisions,true);
+ assert.equal((await call(303,collisionPath+'/state')).data.state.collisions,true);
+ assert.equal((await call(302,'/api/lobby')).data.games.find(g=>g.room===collisionRoom.state.room).collisions,true);
+ assert.equal((await call(301,collisionPath+'/close',{})).status,200);
  console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

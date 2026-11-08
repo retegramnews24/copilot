@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { COURSES, COURSE_VERSION, CAMPAIGNS, coursesFor, courseFor, ballColors } from '../public/golf/courses.js';
 import { upright, rollBy, rotateVector } from '../public/golf/roll.js';
 import { simulateShot, estimateRoll } from '../public/golf/physics.js';
-import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, HOLE_TIME, BREAK } from '../public/golf/match.js';
+import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, ballRolling, HOLE_TIME, BREAK } from '../public/golf/match.js';
 
 const quarter=Math.PI*.24/2;
 const rolled=rollBy(upright,quarter,0,.24);
@@ -104,4 +104,42 @@ for(let i=1;i<10;i++){
 }
 assert.equal(match.phase,'finished');assert.equal(match.winners.length,2);
 assert.equal(match.players[0].total,1+9*11);
+function collisionMatch(collisions){
+  const match=makeMatch('collision',1,a,0,undefined,'park',collisions);
+  joinMatch(match,b);startMatch(match,a.player,0);
+  return match;
+}
+const hit={hole:0,strokes:0,angle:0,power:.45};
+for(const collisions of [false,true]){
+  const round=collisionMatch(collisions),[first,second]=round.players;
+  const [x,z]=first.position;
+  second.position=[x+8,z];
+  takeShot(round,a.player,hit,10);
+  assert.equal(second.strokes,0,'A collision is not a stroke for the other player');
+  if(collisions){
+    assert.ok(second.position[0]>x+8);
+    assert.ok(second.shot.moveAt>10);
+    assert.equal(ballRolling(second,10),false,'A predicted impact does not block a shot');
+    assert.equal(ballRolling(second,second.shot.moveAt),true);
+    assert.ok(first.position[0]<x+8);
+    takeShot(round,b.player,{...hit,angle:Math.PI/2,power:.22},30);
+    assert.equal(second.strokes,1);
+    assert.ok(first.position[0]>x+8,'A second shot can clear the path before impact');
+    assert.ok(second.position[1]>z);
+  }else{
+    assert.deepEqual(second.position,[x+8,z]);
+    assert.equal(second.shot,null);
+    assert.ok(first.position[0]>x+8);
+  }
+}
+const tee=collisionMatch(true);
+takeShot(tee,a.player,hit,10);
+assert.equal(tee.players[1].shot,null,'Players can leave the shared tee freely');
+takeShot(tee,b.player,{...hit,angle:Math.PI/2,power:.3},10);
+assert.equal(tee.players.every(p=>p.strokes===1),true);
+const moving=collisionMatch(true),[left,right]=moving.players;
+right.position=[left.position[0]+15,left.position[1]];
+takeShot(moving,a.player,{...hit,power:.4},10);
+takeShot(moving,b.player,{...hit,angle:Math.PI,power:.4},10);
+assert.ok(left.position[0]<right.position[0],'Head-on balls rebound instead of passing through each other');
 console.log('PASS Golf: all 30 campaign holes and nine legacy courses, bank shots, water reset, simultaneous shots, scoring and automatic transitions.');

@@ -28,35 +28,114 @@ function rebound(ball, wall, radius, energy) {
   if(inward<0){ball.vx-=nx*inward*(1+energy);ball.vz-=nz*inward*(1+energy)}
 }
 
-export function simulateShot(course, x, z, angle, power, startSeconds=0) {
-  const scale=course.scale ?? 1, borders=courseBorders(course.width ?? WIDTH,course.depth ?? DEPTH);
-  const initialSpeed=launchSpeed(power)*scale, ball={x,z,vx:Math.cos(angle)*initialSpeed,vz:Math.sin(angle)*initialSpeed};
-  const samples=[[x,z]], walls=[...borders,...course.walls], from=[x,z];
-  let sunk=false, penalty=false, step=0;
-  for(;step<MAX_STEP;){
-    step++;
-    const previousX=ball.x, previousZ=ball.z;
-    ball.x+=ball.vx*STEP;ball.z+=ball.vz*STEP;
-    for(const rail of walls)rebound(ball,rail,(RADIUS+(borders.includes(rail)?0:.12))*scale,.77);
-    for(const [bx,bz,r] of course.bumpers||[])rebound(ball,{x:bx,z:bz,toX:bx,toZ:bz},r+RADIUS*scale,.94);
-    if(course.rotor||course.rotors?.length){
-      for(const rotor of rotorWalls(course,startSeconds+step*STEP))rebound(ball,rotor,(RADIUS+.19)*scale,.86);
-    }
-    const speed=Math.hypot(ball.vx,ball.vz), dx=ball.x-previousX, dz=ball.z-previousZ;
-    const [cupX,cupZ]=course.cup, travel=dx*dx+dz*dz;
-    const across=travel?clamp(((cupX-previousX)*dx+(cupZ-previousZ)*dz)/travel,0,1):0;
-    const distance=Math.hypot(previousX+dx*across-cupX,previousZ+dz*across-cupZ);
-    // A fast putt must cross closer to the centre, while a slow one can catch the lip.
-    const capture=CUP*scale*(1-.62*clamp((speed/scale-4)/14,0,1));
-    if(distance<=capture){[ball.x,ball.z]=course.cup;sunk=true;break}
-    if(course.water?.some(r=>inside(r,ball.x,ball.z))){penalty=true;break}
-    if(step%5===0)samples.push([ball.x,ball.z]);
-    const drag=surfaceDrag(course,ball.x,ball.z);
-    const factor=speed ? Math.max(0,1-drag*scale*STEP/speed) : 0;
-    ball.vx*=factor;ball.vz*=factor;
-    if(speed<.075*scale)break;
+export function shotVelocity(course,angle,power){
+  const speed=launchSpeed(power)*(course.scale??1);
+  return [Math.cos(angle)*speed,Math.sin(angle)*speed];
+}
+
+export function motionAt(shot,now){
+  const elapsed=Math.max(0,now-shot.at);
+  const index=Math.min(shot.samples.length-2,Math.floor(elapsed/50));
+  const [x,z]=shot.samples[index], [nx,nz]=shot.samples[index+1];
+  const start=index*50, end=Math.min(start+50,shot.duration);
+  const seconds=(end-start)/1000;
+  const fraction=seconds>0?clamp((elapsed-start)/(end-start),0,1):1;
+  return {position:[x+(nx-x)*fraction,z+(nz-z)*fraction],
+    velocity:seconds>0?[(nx-x)/seconds,(nz-z)/seconds]:[0,0]};
+}
+
+function collideBalls(a,b,diameter){
+  const dx=b.x-a.x,dz=b.z-a.z,distance=Math.hypot(dx,dz);
+  if(distance>=diameter||distance===0)return false;
+  const nx=dx/distance,nz=dz/distance;
+  const closing=(a.vx-b.vx)*nx+(a.vz-b.vz)*nz;
+  if(closing<=0)return false;
+  const impulse=.9*closing, separation=(diameter-distance)/2;
+  a.vx-=nx*impulse;a.vz-=nz*impulse;
+  b.vx+=nx*impulse;b.vz+=nz*impulse;
+  a.x-=nx*separation;a.z-=nz*separation;
+  b.x+=nx*separation;b.z+=nz*separation;
+  return true;
+}
+
+// Forecast the whole table together. A new shot can replace the remaining
+// paths, including the path of a ball that has not yet been hit.
+export function simulateBalls(course,inputs,startSeconds=0){
+  const scale=course.scale??1, radius=RADIUS*scale, diameter=2*radius;
+  const borders=courseBorders(course.width??WIDTH,course.depth??DEPTH);
+  const rails=[
+    ...borders.map(wall=>[wall,radius,.77]),
+    ...course.walls.map(wall=>[wall,radius+.12*scale,.77]),
+    ...(course.bumpers??[]).map(([x,z,r])=>[{x,z,toX:x,toZ:z},r+radius,.94])
+  ];
+  const balls=inputs.map(({position:[x,z],velocity:[vx,vz],returnTo})=>({
+    x,z,vx,vz,returnTo,samples:[[x,z]],first:vx||vz?0:null,last:0,sunk:false,penalty:false
+  }));
+  const pairs=[];
+  for(const [index,a] of balls.entries())for(const b of balls.slice(index+1)){
+    // At the tee all balls start on the same spot and separate freely.
+    pairs.push({a,b,clear:Math.hypot(b.x-a.x,b.z-a.z)>=diameter});
   }
-  samples.push([ball.x,ball.z]);
-  const end=penalty ? from : [ball.x,ball.z];
-  return {end,samples,duration:step*10,sunk,penalty};
+  const moving=ball=>!ball.sunk&&!ball.penalty&&(ball.vx!==0||ball.vz!==0);
+  const [cupX,cupZ]=course.cup;
+  for(let step=1;step<=MAX_STEP&&balls.some(moving);step++){
+    const rotors=course.rotor||course.rotors?.length ? rotorWalls(course,startSeconds+step*STEP) : [];
+    const bounce=ball=>{
+      for(const rail of rails)rebound(ball,...rail);
+      for(const rotor of rotors)rebound(ball,rotor,radius+.19*scale,.86);
+    };
+    for(const ball of balls){
+      ball.previousX=ball.x;ball.previousZ=ball.z;ball.hit=false;
+      if(!moving(ball))continue;
+      ball.x+=ball.vx*STEP;ball.z+=ball.vz*STEP;
+      bounce(ball);
+    }
+    for(const pair of pairs){
+      const {a,b}=pair;
+      if(a.sunk||a.penalty||b.sunk||b.penalty||(!moving(a)&&!moving(b)))continue;
+      if(!pair.clear){
+        pair.clear=Math.hypot(b.x-a.x,b.z-a.z)>=diameter;
+      }else if(collideBalls(a,b,diameter)){
+        a.hit=b.hit=true;
+      }
+    }
+    for(const ball of balls){
+      if(moving(ball)||ball.hit){
+        if(ball.hit)bounce(ball);
+        ball.first??=step;
+        ball.last=step;
+        const speed=Math.hypot(ball.vx,ball.vz),dx=ball.x-ball.previousX,dz=ball.z-ball.previousZ;
+        const travel=dx*dx+dz*dz;
+        const across=travel?clamp(((cupX-ball.previousX)*dx+(cupZ-ball.previousZ)*dz)/travel,0,1):0;
+        const distance=Math.hypot(ball.previousX+dx*across-cupX,ball.previousZ+dz*across-cupZ);
+        // Slow putts can catch the lip. Fast ones need to cross closer to the centre.
+        const capture=CUP*scale*(1-.62*clamp((speed/scale-4)/14,0,1));
+        if(distance<=capture){
+          [ball.x,ball.z]=course.cup;ball.sunk=true;
+        }else if(course.water?.some(r=>inside(r,ball.x,ball.z))){
+          ball.penalty=true;
+        }else{
+          const drag=surfaceDrag(course,ball.x,ball.z);
+          const factor=speed>=.075*scale ? Math.max(0,1-drag*scale*STEP/speed) : 0;
+          ball.vx*=factor;ball.vz*=factor;
+        }
+      }
+      if(step%5===0&&!ball.sunk&&!ball.penalty)ball.samples.push([ball.x,ball.z]);
+    }
+  }
+  return balls.map(ball=>{
+    if(!ball.last)return null;
+    const final=[ball.x,ball.z],samples=ball.samples.slice(0,Math.ceil(ball.last/5));
+    samples.push(final);
+    return {end:ball.penalty?ball.returnTo:final,samples,duration:ball.last*10,
+      sunk:ball.sunk,penalty:ball.penalty,first:ball.first*10};
+  });
+}
+
+export function simulateShot(course,x,z,angle,power,startSeconds=0){
+  const position=[x,z],velocity=shotVelocity(course,angle,power);
+  const [shot]=simulateBalls(course,[{position,velocity,returnTo:position}],startSeconds);
+  if(!shot)return {end:position,samples:[position,position],duration:10,sunk:false,penalty:false};
+  const {end,samples,duration,sunk,penalty}=shot;
+  return {end,samples,duration,sunk,penalty};
 }

@@ -1,12 +1,12 @@
 import { COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, courseFor, validBallColors } from './courses.js?v=9';
-import { simulateShot } from './physics.js?v=9';
+import { motionAt, shotVelocity, simulateBalls, simulateShot } from './physics.js?v=11';
 
 export const CAPACITY=8, LIMIT=10, HOLE_TIME=105000, BREAK=3500;
 const fail=message=>{throw Error(message)};
 const resetBall=(player,course)=>Object.assign(player,{position:[...course.tee],strokes:0,done:false,shot:null});
-export function makeMatch(room,number,user,now=Date.now(),appearance,campaign=DEFAULT_CAMPAIGN){
+export function makeMatch(room,number,user,now=Date.now(),appearance,campaign=DEFAULT_CAMPAIGN,collisions=false){
   if(!campaignInfo(campaign))fail('Percorso non disponibile.');
-  const match={room,number,game:'golf',host:user.player,phase:'waiting',courseVersion:COURSE_VERSION,campaign,created:now,revision:1,hole:0,players:[]};
+  const match={room,number,game:'golf',host:user.player,phase:'waiting',courseVersion:COURSE_VERSION,campaign,collisions:collisions===true,created:now,revision:1,hole:0,players:[]};
   joinMatch(match,user,appearance);
   return match;
 }
@@ -71,14 +71,54 @@ export function advanceMatch(match,now){
   return changed;
 }
 
+export function ballRolling(player,now){
+  const shot=player.shot;
+  return !!shot&&now>=(shot.moveAt??shot.at)&&now<shot.until;
+}
+
+function setShot(player,shot,now){
+  player.position=shot.end;
+  player.shot={...shot,at:now,until:now+shot.duration+(shot.penalty?480:shot.sunk?210:0)};
+}
+
+function playWithCollisions(match,player,course,input,now){
+  const balls=match.players.filter(p=>!p.done&&!(
+    p.shot&&(p.shot.sunk||p.shot.penalty)&&now>=p.shot.at+p.shot.duration&&now<p.shot.until
+  ));
+  const inputs=balls.map(p=>{
+    const future=p.shot&&now<p.shot.at+p.shot.duration;
+    const rolling=future&&ballRolling(p,now);
+    const motion=rolling ? motionAt(p.shot,now) :
+      {position:future?p.shot.samples[0]:p.position,velocity:[0,0]};
+    const returnTo=rolling ? p.shot.returnTo??p.shot.samples[0] : motion.position;
+    if(p===player)motion.velocity=shotVelocity(course,input.angle,input.power);
+    return {...motion,returnTo};
+  });
+  const paths=simulateBalls(course,inputs,(now-match.started)/1000);
+  for(const [i,ball] of balls.entries()){
+    const path=paths[i];
+    if(path){
+      const {first,...shot}=path;
+      setShot(ball,{...shot,moveAt:now+first,returnTo:inputs[i].returnTo},now);
+    }else if(ball.shot?.until>now){
+      // A new shot may prevent a collision that was still in the future.
+      ball.position=inputs[i].position;ball.shot=null;
+    }
+  }
+}
+
 export function takeShot(match,id,input,now){
   const player=match.players.find(p=>p.id===id);
   if(!player || match.phase!=='playing' || input.hole!==match.hole || player.done || input.strokes!==player.strokes ||
-     now>=match.deadline || player.shot?.until>now)fail('Attendi che la palla sia ferma o che inizi la prossima buca.');
+     now>=match.deadline || ballRolling(player,now))fail('Attendi che la palla sia ferma o che inizi la prossima buca.');
   if(!Number.isFinite(input.angle)||Math.abs(input.angle)>Math.PI*2||
      !Number.isFinite(input.power)||input.power<=0||input.power>1)fail('Colpo non valido.');
-  const shot=simulateShot(courseFor(match.hole,match.courseVersion,match.campaign),...player.position,input.angle,input.power,(now-match.started)/1000);
-  player.position=shot.end;player.strokes++;
-  player.shot={...shot,at:now,until:now+shot.duration+(shot.penalty?480:shot.sunk?210:0)};
+  const course=courseFor(match.hole,match.courseVersion,match.campaign);
+  if(match.collisions){
+    playWithCollisions(match,player,course,input,now);
+  }else{
+    setShot(player,simulateShot(course,...player.position,input.angle,input.power,(now-match.started)/1000),now);
+  }
+  player.strokes++;
   match.revision++;
 }

@@ -83,6 +83,7 @@ function renderLobby(){
    info.textContent=game.players.length+'/'+game.capacity+' giocatori'+(game.phase==='playing'?' · Buca '+(game.hole+1):' · In attesa');
    const route=campaignInfo(game.campaign);
    if(route)info.textContent+=' · '+route.name+' · '+route.difficulty;
+   if(game.collisions)info.textContent+=' · Collisioni attive';
    const mine=game.players.some(p=>p.id===identity?.player);
    enter.disabled=!identity;
    enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';
@@ -890,7 +891,7 @@ golfCampaign.onchange=()=>{try{save('binotto-golf-campaign',golfCampaign.value)}
 function showGolf(online){
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
  $('golf-overlay').hidden=false;
- $('golf-frame').src='/golf/index.html?v=10'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
+ $('golf-frame').src='/golf/index.html?v=11'+(online?'&online=1':'&campaign='+encodeURIComponent(golfCampaign.value));
  tg?.BackButton?.show();
 }
 async function syncGolf(){
@@ -911,7 +912,7 @@ async function openGolf(selected){
  try{
   const appearance=golfColors();
   if(!selected){
-   golfSnapshot=await request('/api/create',{game:'golf',appearance,campaign:golfCampaign.value});
+   golfSnapshot=await request('/api/create',{game:'golf',appearance,campaign:golfCampaign.value,collisions:$('golf-collisions').checked});
   }else{
    const path='/api/golf/'+selected, game=games.find(g=>g.room===selected);
    const watching=game&&!game.players.some(p=>p.id===identity.player)&&(game.phase!=='waiting'||game.players.length>=game.capacity);

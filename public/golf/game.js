@@ -1,5 +1,5 @@
 import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=9';
-import { makeMatch, startMatch, takeShot, advanceMatch, LIMIT } from './match.js?v=9';
+import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=11';
 import { drawCourse } from './render.js?v=10';
 import { upright, rollBy } from './roll.js';
 import {golfColors,validBallColors} from '../appearance.js?v=8';
@@ -19,7 +19,7 @@ const post=(type,data={})=>parent.postMessage({type:'golf:'+type,...data},locati
 const time=()=>Date.now()+offset;
 const value=id=>Number($(id).value);
 const player=()=>state?.players.find(p=>p.id===me);
-const canShoot=()=>!!($('close-confirm').hidden&&player()&&state.phase==='playing'&&!player().done&&!busy&&time()<state.deadline&&!(player().shot?.until>time()));
+const canShoot=()=>!!($('close-confirm').hidden&&player()&&state.phase==='playing'&&!player().done&&!busy&&time()<state.deadline&&!ballRolling(player(),time()));
 const angle=()=>value('aim')*Math.PI/180;
 const MIN_POWER=.5;
 function setAim(yaw){
@@ -88,6 +88,7 @@ function updatePanel(){
     text.textContent=online ? state.players.map(p=>p.name).join(' · ')+' — '+state.players.length+'/8 giocatori. '+
       (player()?'Gli amici possono entrare dalla lobby.':'Stai assistendo. La gara deve ancora iniziare.') : 'Tre percorsi da dieci buche.';
     if(online&&!canChoose&&campaignInfo(state.campaign))text.textContent+=' '+campaignInfo(state.campaign).name+'.';
+    if(online)text.textContent+=state.collisions?' Collisioni attive.':' Collisioni disattivate.';
     btn.hidden=state.host!==me;btn.disabled=(online&&state.players.length<2)||busy;btn.textContent=online?'Inizia la gara':'Inizia il giro';
   }else if(state.phase==='finished'){
     title.textContent=online?'Risultato finale':'Giro completato';
@@ -122,6 +123,7 @@ function table(){
 function positionAt(p,now){
   const shot=p.shot;
   if(!shot||now>=shot.until)return shot?.sunk?null:p.position;
+  if(shot.moveAt>now)return shot.samples[0];
   const elapsed=Math.max(0,now-shot.at);
   if(elapsed>=shot.duration){
     if(shot.penalty)return null;
@@ -194,7 +196,8 @@ function draw(stamp=performance.now()){
   }
   putText('counter','BUCA '+(hole+1)+' / '+courses.length+'  ·  PAR '+course.par);
   putText('course',course.name);
-  putText('route-title',campaignInfo(state?.campaign)?.name??'');
+  const route=campaignInfo(state?.campaign)?.name??'';
+  putText('route-title',route+(state?.collisions?' · Collisioni attive':''));
   putText('score-tip',course.tip);
   const left=Math.max(0,Math.ceil(((state?.deadline??now)-now)/1000));
   putText('clock',state?.phase==='playing'?Math.floor(left/60)+':'+String(left%60).padStart(2,'0'):'');

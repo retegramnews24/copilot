@@ -100,7 +100,7 @@ get('golf-campaign').value='coast';
 get('play-golf').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=10&campaign=coast');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=11&campaign=coast');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -119,7 +119,7 @@ w.fetch=async(path,opts)=>{
 golfLobbyButton.click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=10&online=1');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=11&online=1');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 let golfCreate;
 w.fetch=async(path,opts)=>{
@@ -129,12 +129,13 @@ w.fetch=async(path,opts)=>{
 };
 get('create-golf').click();
 await new Promise(resolve=>setTimeout(resolve,30));
-assert.deepEqual(golfCreate,{game:'golf',appearance:['#cf514d','#529766'],campaign:'coast'});
+assert.deepEqual(golfCreate,{game:'golf',appearance:['#cf514d','#529766'],campaign:'coast',collisions:false});
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 separateColors.click();
+get('golf-collisions').click();
 get('create-golf').click();
 await new Promise(resolve=>setTimeout(resolve,30));
-assert.deepEqual(golfCreate,{game:'golf',appearance:['#e5be43','#8662b1'],campaign:'coast'});
+assert.deepEqual(golfCreate,{game:'golf',appearance:['#e5be43','#8662b1'],campaign:'coast',collisions:true});
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 w.fetch=previousFetch;
 

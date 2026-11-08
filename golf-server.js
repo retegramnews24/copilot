@@ -7,7 +7,7 @@ export class GolfRoom {
   constructor(ctx,env){this.ctx=ctx;this.env=env;}
   summary(match){
     const {room,number,game,phase,created,revision}=match;
-    return {room,number,game,phase,created,revision,capacity:CAPACITY,hole:match.hole,campaign:match.campaign,holes:coursesFor(match.courseVersion,match.campaign).length,
+    return {room,number,game,phase,created,revision,capacity:CAPACITY,hole:match.hole,campaign:match.campaign,collisions:match.collisions===true,holes:coursesFor(match.courseVersion,match.campaign).length,
       players:match.players.map(({id,name})=>({id,name})),expires:null};
   }
   async lobby(path,body){
@@ -42,8 +42,8 @@ export class GolfRoom {
       let match=await this.ctx.storage.get('golf');
       try {
         if(action==='init' && !match && req.method==='POST'){
-          const {room,number,appearance,campaign}=await req.json();
-          match=makeMatch(room,number,user,now,appearance,campaign);
+          const {room,number,appearance,campaign,collisions}=await req.json();
+          match=makeMatch(room,number,user,now,appearance,campaign,collisions);
           await this.save(match);
           return json({state:match,summary:this.summary(match),now});
         }
