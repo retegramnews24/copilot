@@ -1131,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=11';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=12';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=()=>openCinema();
@@ -1172,31 +1172,27 @@ async function lookupCinemaYouTube(id,params){
  finally{clearTimeout(timeout);}
  if(cinemaLookup===controller){cinemaLookup=null;cinemaPost('youtube-result',{id,result,error});}
 }
-async function cinemaGroupRequest(source,data){
- const {id,op,group,item,filter,before}=data;
- if(!Number.isSafeInteger(id)||!['groups','link','items','play'].includes(op))return;
- const uuid=/^[a-f0-9-]{36}$/;
- if(op!=='groups'&&!uuid.test(group??''))return;
- const message=/^[1-9]\d{0,15}$/;
- if(op==='play'&&(!uuid.test(item??'')||!cinemaRoom))return;
- const query=new URLSearchParams();
- if(op!=='groups')query.set('group',group);
- if(op==='play'){query.set('item',item);query.set('room',cinemaRoom);}
- if(op==='items'){
-  if(filter==='video'||filter==='gif')query.set('filter',filter);
-  if(message.test(before??''))query.set('before',before);
- }
- let result,error,status;
+async function armCinemaGroup(source){
+ const room=cinemaRoom;
+ if(!room){cinemaPost('group-armed',{error:'Entra prima in una sala Cinema.'});return;}
+ let result,error;
  try{
-  const response=await fetch('/api/cinema/group/'+op+'?'+query,{
-   method:op==='play'||op==='link'?'POST':'GET',
-   headers:{Authorization:'Bearer '+sessionToken},signal:AbortSignal.timeout(15000)
+  const query=new URLSearchParams({room});
+  const response=await fetch('/api/cinema/group/arm?'+query,{
+   method:'POST',headers:{Authorization:'Bearer '+sessionToken},signal:AbortSignal.timeout(15000)
   });
-  status=response.status;
-  if(response.status!==204)result=await response.json();
-  if(!response.ok)error=result?.error||'Operazione non riuscita.';
- }catch{error='Catalogo Telegram non raggiungibile. Riprova.';}
- if(source===$('cinema-frame').contentWindow)cinemaPost('group-result',{id,op,result,error,status});
+  result=await response.json();
+  if(!response.ok)error=result.error||'Collegamento Telegram non riuscito.';
+ }catch{error='Telegram non raggiungibile. Riprova.';}
+ if(room===cinemaRoom&&source===$('cinema-frame').contentWindow)cinemaPost('group-armed',{result,error});
+}
+function openCinemaGroup(url){
+ try{
+  const link=new URL(url);
+  if(link.origin!=='https://t.me'||link.username||link.password||!/^\/(?:c\/\d+|[a-z][a-z0-9_]{3,31})\/\d+$/i.test(link.pathname))return;
+  if(tg?.openTelegramLink)tg.openTelegramLink(link.href);
+  else window.open(link.href,'_blank','noopener,noreferrer');
+ }catch{}
 }
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
@@ -1212,7 +1208,8 @@ window.addEventListener('message',event=>{
  if(data?.type==='cinema:action')cinemaSend(data.action);
  if(data?.type==='cinema:upload')uploadCinemaFile(data.file,data.name);
  if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);
- if(data?.type==='cinema:group-request')cinemaGroupRequest(event.source,data);
+ if(data?.type==='cinema:group-arm')armCinemaGroup(event.source);
+ if(data?.type==='cinema:group-open')openCinemaGroup(data.url);
 });
 
 startSession();

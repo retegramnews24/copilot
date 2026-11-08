@@ -432,76 +432,63 @@ try{
  assert.equal((await feed.json()).items[0].id,'M7lc1UVf-VE');
  const base='https://unit.test/api/cinema/group/';
  const tgRequest=(user,path,method='GET')=>searchWorker.dispatchFetch(base+path,{method,headers:{Authorization:'Bearer '+token(user)}});
+ const webhookHash=createHash('sha256').update(bot).digest('hex');
+ const home={id:-100123,type:'supergroup',title:'🏁 Binotto Corsa Competizione',is_forum:true};
  const webhook=(message,valid=true)=>searchWorker.dispatchFetch('https://unit.test/api/telegram/webhook',{
   method:'POST',headers:{'Content-Type':'application/json','X-Telegram-Bot-Api-Secret-Token':valid?webhookHash:'bad'},
-  body:JSON.stringify({message:{chat:{id:-100123,type:'supergroup',title:'Gruppo privato test'},...message}})
+  body:JSON.stringify({message:{chat:home,...message}})
  });
- const webhookHash=createHash('sha256').update(bot).digest('hex');
- assert.equal((await webhook({text:'ciao'},false)).status,403);
- assert.equal((await webhook({text:'ciao'})).status,200);
- const candidate=(await (await tgRequest(801,'groups')).json()).groups[0];
- assert.equal(candidate.linked,false);
- assert.equal((await (await tgRequest(802,'groups')).json()).groups.length,0);
- assert.equal((await tgRequest(802,'link?group='+candidate.id,'POST')).status,403);
- assert.equal((await tgRequest(801,'link?group='+candidate.id,'POST')).status,200);
- const animation={file_id:'telegram-gif-file',mime_type:'image/gif',file_size:42};
- await webhook({message_id:21,animation,has_protected_content:true});
- await webhook({message_id:22,animation,caption:'GIF privata'});
- await webhook({message_id:22,animation,caption:'GIF privata'});
- const catalog=await (await tgRequest(802,'items?group='+candidate.id)).json();
- assert.equal(catalog.items.length,1);
- const item=catalog.items[0];
- assert.equal(item.loop,true);
- assert.equal(item.file,undefined);
- assert.equal((await tgRequest(803,'items?group='+candidate.id)).status,403);
- const path='media/'+candidate.id+'/'+item.id;
- assert.equal((await searchWorker.dispatchFetch(base+path)).status,401);
- assert.equal((await tgRequest(803,path)).status,403);
+ const cinemaClient=async id=>{
+  const websocket=await searchWorker.dispatchFetch('https://unit.test/api/cinema/ws',{
+   headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}
+  });
+  const client={ws:websocket.webSocket,packets:[],waiters:[]};
+  client.ws.addEventListener('message',event=>{const packet=JSON.parse(event.data);client.packets.push(packet);for(const fn of [...client.waiters])fn(packet);});
+  client.ws.accept();
+  return client;
+ };
+ const sender=await cinemaClient(801),viewer=await cinemaClient(802);
+ sender.ws.send(JSON.stringify({type:'create'}));
+ const {active}=await until(sender,p=>p.active);
+ const arm='arm?room='+active.id;
+ assert.equal((await webhook({message_id:4,text:'ciao'},false)).status,403);
+ await webhook({message_id:2,text:'altro gruppo',chat:{...home,title:'Gruppo diverso'}});
+ await webhook({message_id:3,text:'altro topic',is_topic_message:true,message_thread_id:9});
+ assert.equal((await tgRequest(801,arm,'POST')).status,404);
+ assert.equal((await webhook({message_id:4,text:'Home',is_topic_message:true,message_thread_id:1})).status,200);
+ assert.equal((await tgRequest(803,arm,'POST')).status,404);
+ assert.equal((await tgRequest(802,arm,'POST')).status,403);
+ viewer.ws.send(JSON.stringify({type:'enter',room:active.id}));
+ await until(viewer,p=>p.active?.id===active.id);
+ const armed=await tgRequest(801,arm,'POST');
+ assert.equal(armed.status,200);
+ assert.equal((await armed.json()).link,'https://t.me/c/123/4');
+ const video={file_id:'telegram-video',mime_type:'video/mp4',file_size:24};
+ const forward=(message)=>webhook({
+  message_id:20,chat:{type:'private',id:801},from:{id:801},forward_origin:{type:'user',sender_user:{id:123},date:1},video,...message
+ });
+ await forward({animation:{file_id:'gif-ignored'}});
+ await until(sender,p=>p.type==='group-forward-status'&&p.error?.includes('MP4'));
+ await forward({forward_origin:{type:'channel',chat:{id:-100222},date:1}});
+ await until(sender,p=>p.type==='group-forward-status'&&p.error?.includes('Binotto Corsa'));
+ await forward({forward_origin:undefined});
+ assert.ok(!viewer.packets.some(p=>p.active?.channel?.group));
+ sender.ws.close();
+ assert.equal((await forward()).status,200);
+ const published=await until(viewer,p=>p.active?.channel?.group&&p.active.channel.file&&p.active.playback?.playing);
+ const url='https://unit.test'+published.active.channel.url;
+ assert.equal((await searchWorker.dispatchFetch(url)).status,401);
+ assert.equal((await searchWorker.dispatchFetch(url,{headers:{Authorization:'Bearer '+token(803)}})).status,403);
  const cookie={Cookie:'binottoland_cinema='+token(802)};
- const media=await searchWorker.dispatchFetch(base+path,{headers:cookie});
+ const media=await searchWorker.dispatchFetch(url,{headers:cookie});
  assert.equal(media.status,200);
- assert.equal(media.headers.get('Content-Type'),'image/gif');
- const gif=Buffer.from(await media.arrayBuffer());
- assert.ok(gif.includes(Buffer.from('NETSCAPE2.0')));
- const range=await searchWorker.dispatchFetch(base+path,{headers:{...cookie,Range:'bytes=0-5'}});
+ assert.equal(media.headers.get('Content-Type'),'video/mp4');
+ const range=await searchWorker.dispatchFetch(url,{headers:{...cookie,Range:'bytes=4-7'}});
  assert.equal(range.status,206);
- assert.equal(await range.text(),'GIF89a');
- const websocket=await searchWorker.dispatchFetch('https://unit.test/api/cinema/ws',{
-  headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(801)}
- });
- const groupClient={ws:websocket.webSocket,packets:[],waiters:[]};
- groupClient.ws.addEventListener('message',event=>{const packet=JSON.parse(event.data);groupClient.packets.push(packet);for(const fn of [...groupClient.waiters])fn(packet);});
- groupClient.ws.accept();
- groupClient.ws.send(JSON.stringify({type:'create'}));
- const {active}=await until(groupClient,p=>p.active);
- const play='play?group='+candidate.id+'&item='+item.id+'&room='+active.id;
- assert.equal((await tgRequest(802,play,'POST')).status,403);
- assert.equal((await tgRequest(801,play,'POST')).status,204);
- await until(groupClient,p=>p.active?.channel?.group&&p.active.channel.image);
- await webhook({message_id:23,video:{file_id:'telegram-video',mime_type:'video/mp4',file_size:24,thumbnail:{file_id:'telegram-thumb'}}});
- const latest=(await (await tgRequest(802,'items?group='+candidate.id)).json()).items[0];
- assert.equal(latest.type,'video/mp4');
- assert.equal(latest.thumb,true);
- const thumbnail=await searchWorker.dispatchFetch(base+'thumb/'+candidate.id+'/'+latest.id,{headers:cookie});
- assert.equal(thumbnail.headers.get('Content-Type'),'image/jpeg');
- assert.equal((await searchWorker.dispatchFetch(base+'media/'+candidate.id+'/'+latest.id,{headers:cookie})).headers.get('Content-Type'),'video/mp4');
- assert.equal((await tgRequest(801,'play?group='+candidate.id+'&item='+latest.id+'&room='+active.id,'POST')).status,204);
- await until(groupClient,p=>p.active?.channel?.group&&p.active.channel.file&&p.active.playback?.playing);
- for(let first=24;first<106;first+=10){
-  const delivered=await Promise.all(Array.from({length:Math.min(10,106-first)},(_,index)=>webhook({message_id:first+index,animation,caption:String(first+index)})));
-  assert.ok(delivered.every(entry=>entry.ok));
- }
- const history=[];
- let before;
- do{
-  const {items,next}=await (await tgRequest(802,'items?group='+candidate.id+(before?'&before='+before:''))).json();
-  history.push(...items.map(entry=>entry.title));before=next;
- }while(before);
- assert.deepEqual(history,[...Array.from({length:82},(_,index)=>String(105-index)),'Video','GIF privata']);
- const onlyVideos=await (await tgRequest(802,'items?group='+candidate.id+'&filter=video')).json();
- assert.deepEqual(onlyVideos.items.map(entry=>entry.id),[latest.id]);
- assert.equal(onlyVideos.next,null);
- groupClient.ws.close();
- console.log('PASS Telegram Cinema: admin linking, private catalog, protected media exclusion, group access, GIF loop, ranges, room publishing and pagination beyond 80.');
+ assert.equal(await range.text(),'ftyp');
+ await forward();
+ assert.equal(viewer.packets.filter(p=>p.active?.channel?.group&&p.active.channel.url!==published.active.channel.url).length,0);
+ viewer.ws.close();
+ console.log('PASS Telegram Cinema: Home discovery, private forwarding, active room and membership checks, disconnection, old video, ranges and single-use arming.');
  console.log('PASS YouTube runtime: Telegram auth, configured key, live DO route, Google request parameters and safe error forwarding.');
 }finally{await searchWorker.dispose();}

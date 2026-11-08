@@ -153,17 +153,7 @@ export class Cinema {
     return this.ctx.blockConcurrencyWhile(async()=>{
       const path=new URL(req.url).pathname;
       if(path==='/cinema/upload')return this.upload(req);
-      if(path==='/cinema/group-play'){
-        const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
-        const {room:id,channel}=await req.json(),data=await this.data();
-        const room=data.rooms.find(entry=>entry.id===id);
-        if(!room)return response('Questa sala è stata chiusa.',404);
-        if(!user||!this.connections().some(c=>c.info.room===id&&c.info.user.player===user.player))return response('Entra nella sala per condividere un media.',403);
-        room.channel=channel;room.updated=Date.now();
-        room.playback=channel.file?{position:0,playing:true,updated:room.updated,seek:0}:null;
-        await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);
-        return new Response(null,{status:204});
-      }
+      if(path.startsWith('/cinema/group-'))return this.groupForward(req,path.slice('/cinema/group-'.length));
       if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
       if(!user)return response('Accesso richiesto.',401);
@@ -176,6 +166,50 @@ export class Cinema {
       socket.send(JSON.stringify({type:'favorites',items:data.favorites}));
       return new Response(null,{status:101,webSocket:client,headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     });
+  }
+  async groupForward(req,op){
+    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+    if(!user?.player)return response('Accesso richiesto.',401);
+    const input=await req.json(),key='forward:'+user.player;
+    if(op==='arm'){
+      if(!this.connections().some(c=>c.info.room===input.room&&c.info.user.player===user.player))return response('Entra in una sala Cinema.',403);
+      await this.ctx.storage.put(key,{room:input.room,group:input.group,chatId:input.chatId,nonce:crypto.randomUUID(),expires:Date.now()+300000});
+      return new Response(null,{status:204});
+    }
+    const pending=await this.ctx.storage.get(key);
+    if(!pending||pending.expires<=Date.now()){
+      if(pending)await this.ctx.storage.delete(key);
+      return response('Nessun inoltro in attesa.',404);
+    }
+    if(op==='pending')return Response.json(pending);
+    if(input.nonce!==pending.nonce)return response('Inoltro scaduto.',404);
+    if(op==='status'){
+      for(const client of this.connections())if(client.info.room===pending.room&&client.info.user.player===user.player){
+        send(client.socket,{type:'group-forward-status',error:input.error});
+      }
+      return new Response(null,{status:204});
+    }
+    const data=await this.data(),room=data.rooms.find(entry=>entry.id===pending.room);
+    if(!room){
+      await this.ctx.storage.delete(key);
+      return response('Questa sala è stata chiusa.',404);
+    }
+    room.channel=input.channel;room.updated=Date.now();
+    room.playback={position:0,playing:true,updated:room.updated,seek:0};
+    await this.ctx.storage.transaction(async txn=>{
+      await txn.put(ROOMS,data.rooms);
+      await txn.delete(key);
+    });
+    this.publish(data);
+    for(const client of this.connections())if(client.info.room===pending.room&&client.info.user.player===user.player){
+      send(client.socket,{type:'group-forward-status',played:true});
+    }
+    return new Response(null,{status:204});
+  }
+  async cancelForward(info){
+    if(!info.room)return;
+    const key='forward:'+info.user.player,pending=await this.ctx.storage.get(key);
+    if(pending?.room===info.room)await this.ctx.storage.delete(key);
   }
   async upload(req){
     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
@@ -219,12 +253,13 @@ export class Cinema {
         }
         if(input.type==='enter'){
           const next=data.rooms.find(entry=>entry.id===input.room);
-          if(next?.id!==info.room)this.dropScreenViewer(info);
+          if(next?.id!==info.room){this.dropScreenViewer(info);await this.cancelForward(info);}
           if(!next){socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});this.publish(data);throw Error('Questa sala è stata chiusa.');}
           socket.serializeAttachment({...info,room:next.id,screen:next.id===info.room?info.screen:null,mosaic:next.id===info.room&&info.mosaic});this.publish(data);return;
         }
         if(input.type==='leave'){
           this.dropScreenViewer(info);
+          await this.cancelForward(info);
           socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});this.publish(data);return;
         }
         if(input.type==='create'){

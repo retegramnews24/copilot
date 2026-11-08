@@ -38,7 +38,7 @@ function stopVideo(){
   videoRevision++;
   hls?.destroy();hls=null;
   disposeYouTube?.();disposeYouTube=null;youtube=null;youtubeBlocked=false;youtubeAutoPause=false;fileBlocked=false;fileStarting=false;
-  video.hidden=false;video.loop=false;$('group-animation').hidden=true;$('group-animation').removeAttribute('src');$('youtube').hidden=true;$('youtube-message').hidden=true;
+  video.hidden=false;$('youtube').hidden=true;$('youtube-message').hidden=true;
   video.pause();video.removeAttribute('src');video.load();
 }
 function message(text,retry=false){
@@ -54,7 +54,7 @@ async function startPlayback(){
 function targetPosition(){
   const position=positionAt(room?.playback,Date.now()+clockOffset);
   const duration=youtube?.getDuration()||video.duration;
-  return Number.isFinite(duration)&&duration>0?(room?.channel?.loop?position%duration:Math.min(position,duration)):position;
+  return Number.isFinite(duration)&&duration>0?Math.min(position,duration):position;
 }
 function youtubeVisible(){
   if(document.hidden||(mobile.matches&&cinema.classList.contains('tools-open')&&!cinema.classList.contains('wide')))return false;
@@ -145,16 +145,14 @@ function tune(channel,force=false,seek=false){
   }
   if(!force&&url===playingURL){syncYouTube(seek);syncFile(seek);return;}
   playingURL=url;stopVideo();
-  $('on-air').textContent=url?((channel.youtube||channel.file||channel.image)?'VIDEO':'LIVE'):'';
+  $('on-air').textContent=url?((channel.youtube||channel.file)?'VIDEO':'LIVE'):'';
   if(!settings.monitor){message('Riproduzione fermata qui');return;}
   if(!url){message('In attesa di un canale');return;}
   message('Collegamento al video…');
   if(channel.youtube){showYouTube(channel.youtube);return;}
-  if(channel.image){
-    const image=$('group-animation');video.hidden=true;image.hidden=false;image.src=url;return;
-  }
+  if(channel.image){message('In attesa di un canale');return;}
   video.volume=settings.volume/100;video.muted=settings.volume===0;
-  if(channel.file){video.loop=!!channel.loop;video.preload='auto';video.src=url;return;}
+  if(channel.file){video.preload='auto';video.src=url;return;}
   video.preload='none';
   const hlsURL=/\.m3u8?(?:[?#]|$)/i.test(url);
   if(hlsURL&&!video.canPlayType('application/vnd.apple.mpegurl')&&window.Hls?.isSupported()){
@@ -169,8 +167,6 @@ function tune(channel,force=false,seek=false){
 video.addEventListener('error',()=>{
   if(playingURL&&settings.monitor)message(room?.channel?.group?'Media disponibile per i membri del gruppo Telegram.':'Canale non riproducibile su questo dispositivo',true);
 });
-$('group-animation').onload=()=>{if(room?.channel?.image&&settings.monitor)$('screen-empty').hidden=true;};
-$('group-animation').onerror=()=>{if(room?.channel?.image&&settings.monitor)message('Media disponibile per i membri del gruppo Telegram.',true);};
 video.addEventListener('playing',()=>{$('screen-empty').hidden=true;});
 $('start-video').onclick=()=>{
   if(youtube){youtubeLocalPaused=false;youtubeBlocked=false;syncYouTube(true);}
@@ -270,7 +266,7 @@ function drawRooms(rooms,active){
   const previous=room;
   const changedVideo=previous?.id!==active?.id||previous?.channel?.url!==active?.channel?.url;
   if(changedVideo||(active?.playback?.playRevision??0)>(previous?.playback?.playRevision??0))youtubeLocalPaused=false;
-  if(previous?.id!==active?.id){settings.monitor=true;updateMonitor();drawAudience([]);}
+  if(previous?.id!==active?.id){settings.monitor=true;updateMonitor();drawAudience([]);resetGroupForward();}
   room=active;listedRooms=rooms;
   drawScreenShare();drawMultisala();
   $('multisala').disabled=!active;
@@ -585,7 +581,7 @@ window.addEventListener('message',event=>{
     $('youtube-search-status').textContent=data.error||(youtubeResults.length?(youtubeChannel?'Video recenti':'Risultati YouTube'):empty);
     drawYouTube();return;
   }
-  if(data?.type==='cinema:group-result'){groupResult(data);return;}
+  if(data?.type==='cinema:group-armed'){groupArmed(data);return;}
   if(data?.type==='cinema:upload-result'){
     setUploading(false);
     if(data.error)$('watch-error').textContent=data.error;
@@ -595,107 +591,36 @@ window.addEventListener('message',event=>{
   if(data?.type!=='cinema:packet')return;
   const packet=data.packet;
   if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;mosaic.clock=clockOffset;mosaicPreviews=packet.previews??[];drawRooms(packet.rooms,packet.active);}
+  else if(packet.type==='group-forward-status')groupForwardStatus(packet);
   else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();drawYouTube();if(catalogController)drawSearch();}
   else if(packet.type?.startsWith('screen-')){screenShare.receive(packet);if(multisala.open)mosaic.packet(packet);}
   else if(packet.type==='error')notice(packet.message);
 });
-const groupDialog=$('group-dialog'),groupSelect=$('group-select'),groupStatus=$('group-status');
-const groupFilter=$('group-filter'),groupMore=$('group-more'),groupLink=$('group-link'),groupList=$('group-items');
-let groupRequestId=0,groupPending=null,groupTimer=0;
-let groups=[],groupItems=[],groupSelection=null,groupNext=null,groupHasOlder=false,groupRendered='';
-function requestGroup(op,params={},quiet=false){
-  if(!quiet)groupStatus.textContent=op==='play'?'Avvio in sala…':'Caricamento…';
-  groupPending={id:++groupRequestId,op,quiet,append:!!params.before};
-  groupLink.disabled=groupMore.disabled=true;
-  send('group-request',{id:groupPending.id,op,...params});
+const groupButton=$('group-media'),groupPanel=$('group-forward-panel'),groupHome=$('group-home'),groupHelp=$('group-forward-help');
+let groupHomeURL=null,groupForwardTimer;
+function resetGroupForward(){
+  clearTimeout(groupForwardTimer);
+  groupHomeURL=null;groupHome.hidden=true;groupPanel.hidden=true;groupButton.disabled=false;
 }
-function groupPage(before=null,quiet=false){
-  if(!groupSelection?.linked)return;
-  requestGroup('items',{group:groupSelection.id,filter:groupFilter.value,...(before?{before}:{})},quiet);
-}
-function resetGroupItems(){
-  groupItems=[];groupNext=null;groupHasOlder=false;groupRendered='';
-  groupList.replaceChildren();groupMore.hidden=true;
-}
-function drawGroupItems(){
-  const key=groupItems.map(item=>item.id).join(',');
-  if(key!==groupRendered){
-    groupRendered=key;
-    const focused=document.activeElement?.dataset.groupItem;
-    groupList.replaceChildren(...groupItems.map(item=>{
-      const card=node('button','','group-card');card.type='button';card.dataset.groupItem=item.id;
-      const badge=node('i',item.loop?'GIF':'▶');
-      if(item.thumb){
-        const thumb=node('img');thumb.alt='';thumb.loading='lazy';
-        thumb.src='/api/cinema/group/thumb/'+groupSelection.id+'/'+item.id;
-        thumb.onerror=()=>thumb.replaceWith(badge);card.append(thumb);
-      }else card.append(badge);
-      card.append(node('span',item.title),node('small',item.loop?'GIF':'Video'));
-      card.setAttribute('aria-label','Riproduci in sala · '+item.title);
-      card.onclick=()=>{
-        if(groupPending?.op==='play')return;
-        requestGroup('play',{group:groupSelection.id,item:item.id});
-      };
-      return card;
-    }));
-    if(focused)Array.from(groupList.children).find(card=>card.dataset.groupItem===focused)?.focus();
-  }
-  groupMore.hidden=!groupNext;
-  groupStatus.textContent=groupItems.length?'':groupFilter.value==='all'
-    ?'Nessun media indicizzato. Pubblica un nuovo video o GIF nel gruppo.':'Nessun media per questo filtro.';
-}
-function selectGroup(id){
-  groupSelection=groups.find(group=>group.id===id)??null;
-  resetGroupItems();
-  groupLink.hidden=!groupSelection||groupSelection.linked;
-  if(groupSelection?.linked)groupPage();
-  else groupStatus.textContent=groupSelection?'Collega il gruppo per indicizzare i prossimi video e GIF.':'Gruppo ancora da rilevare. Manda un messaggio nel gruppo Telegram: apparirà qui appena il bot lo riceve.';
-}
-function refreshGroup(){
-  if(!groupDialog.open||document.hidden||groupPending)return;
-  if(groupSelection?.linked)groupPage(null,true);
-  else requestGroup('groups',{},true);
-}
-$('group-media').onclick=()=>{
-  if(groupDialog.open)return;
-  resetGroupItems();groupDialog.showModal();requestGroup('groups');
-  groupTimer=setInterval(refreshGroup,4000);
+groupButton.onclick=()=>{
+  resetGroupForward();groupPanel.hidden=false;groupButton.disabled=true;
+  groupHelp.textContent='Cerco la Home di Binotto Corsa Competizione…';
+  send('group-arm');
 };
-$('group-close').onclick=()=>groupDialog.close();
-groupDialog.onclose=()=>{clearInterval(groupTimer);groupPending=null;resetGroupItems();};
-document.addEventListener('visibilitychange',refreshGroup);
-groupSelect.onchange=()=>selectGroup(groupSelect.value);
-groupFilter.onchange=()=>{resetGroupItems();groupPage();};
-groupLink.onclick=()=>{if(groupSelection)requestGroup('link',{group:groupSelection.id});};
-groupMore.onclick=()=>{if(groupNext)groupPage(groupNext);};
-function groupResult({id,op,result,error,status}){
-  const pending=groupPending;
-  if(!pending||id!==pending.id||!groupDialog.open)return;
-  groupPending=null;groupLink.disabled=groupMore.disabled=false;
-  if(error){
-    if(op==='items'&&status===403)resetGroupItems();
-    groupStatus.textContent=error;return;
-  }
-  if(op==='groups'){
-    groups=result.groups;
-    const selected=groups.find(group=>group.id===groupSelection?.id)??groups.find(group=>group.linked)??groups[0];
-    groupSelect.replaceChildren(...groups.map(group=>new Option(group.title,group.id)));
-    groupSelect.hidden=!groups.length;
-    if(selected)groupSelect.value=selected.id;
-    selectGroup(selected?.id);
-  }else if(op==='link')requestGroup('groups');
-  else if(op==='items'){
-    const page=result.items;
-    if(pending.append){
-      groupItems=[...new Map([...groupItems,...page].map(item=>[item.id,item])).values()];
-      groupHasOlder=true;groupNext=result.next;
-    }else if(pending.quiet&&groupHasOlder&&page.some(item=>groupItems.some(previous=>previous.id===item.id))){
-      groupItems=[...new Map([...page,...groupItems].map(item=>[item.id,item])).values()];
-    }else{
-      groupItems=page;groupNext=result.next;groupHasOlder=false;
-    }
-    drawGroupItems();
-  }else if(op==='play')groupDialog.close();
+groupHome.onclick=()=>{if(groupHomeURL)send('group-open',{url:groupHomeURL});};
+function groupArmed({result,error}){
+  groupButton.disabled=false;
+  if(error){groupHelp.textContent=error;return;}
+  groupHomeURL=result.link;groupHome.hidden=!groupHomeURL;
+  groupHelp.textContent=(groupHomeURL?'Scegli un video nella Home. ':'Apri la Home di Binotto Corsa Competizione in Telegram. ')+
+    'Inoltralo a @'+result.bot+' entro 5 minuti e partirà in sala.';
+  groupForwardTimer=setTimeout(()=>{
+    groupHome.hidden=true;groupHelp.textContent='Tempo scaduto. Tocca di nuovo Video dal gruppo.';
+  },300000);
+}
+function groupForwardStatus({played,error}){
+  if(played){resetGroupForward();notice('Video del gruppo avviato.');}
+  else if(error){groupPanel.hidden=false;groupHelp.textContent=error;}
 }
 const watchDialog=$('watch-dialog');
 let uploading=false;
