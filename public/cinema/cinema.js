@@ -1,10 +1,11 @@
 import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=2';
 import {avatarSVG} from '../labyrinth/avatar.js?v=9';
-import {youtubeId,youtubeChannelId,positionAt,telegramCallLink} from './media.js?v=4';
+import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=5';
 import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
 import {WindowShare} from './screen-share.js?v=2';
-import {CinemaMosaic} from './mosaic.js?v=1';
+import {CinemaMosaic} from './mosaic.js?v=2';
+import {audienceAudio,showPopcorn} from './audience-effects.js?v=1';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar');
@@ -236,25 +237,46 @@ multisala.onclose=()=>{
   if(target&&target!==room?.id&&connected){action('enter',{room:target});return;}
   drawScreenShare();tune(room?.channel,true);
 };
-const callDialog=$('telegram-dialog');
-function drawCall(){
-  const join=$('telegram-join');
-  join.hidden=!room?.call;
-  $('telegram-call').classList.toggle('has-call',!!room?.call);
+const audience=audienceAudio(),seats=new Map();
+document.addEventListener('pointerdown',audience.unlock,{passive:true});
+document.addEventListener('keydown',audience.unlock);
+$('audience-shush').onclick=()=>{
+  audience.unlock();action('audience-effect',{effect:'shush'});
+};
+function drawAudience(people){
+  const present=new Set(people.map(person=>person.id));
+  for(const [id,seat] of seats)if(!present.has(id)){
+    seat.sofa.remove();seats.delete(id);
+  }
+  people.forEach(({id,name,appearance},index)=>{
+    let seat=seats.get(id);
+    if(!seat){
+      const sofa=node(id===me?'button':'div','','sofa');
+      if(id===me){
+        sofa.type='button';
+        sofa.setAttribute('aria-label','Mangia popcorn');
+        sofa.onclick=()=>{audience.unlock();action('audience-effect',{effect:'popcorn'});};
+      }
+      const figure=node('span'),label=node('small');
+      sofa.append(figure,label);
+      seat={sofa,figure,label,appearance:null};
+      seats.set(id,seat);$('sofas').append(sofa);
+    }
+    seat.sofa.style.setProperty('--seat-color',['#926283','#58728f','#777347','#9a5f55'][index%4]);
+    seat.sofa.title=id===me?'Mangia popcorn':name;
+    seat.label.textContent=id===me?'Tu · '+name:name;
+    const avatar=avatarSVG(appearance);
+    if(seat.appearance!==avatar){seat.figure.innerHTML=avatar;seat.appearance=avatar;}
+  });
 }
-$('telegram-call').onclick=()=>{
-  $('telegram-url').value=room?.call??'';
-  $('telegram-error').textContent='';drawCall();callDialog.showModal();
-};
-$('telegram-join').onclick=()=>{if(room?.call)send('telegram-call',{url:room.call});};
-$('telegram-cancel').onclick=()=>callDialog.close();
-$('telegram-form').onsubmit=event=>{
-  event.preventDefault();
-  const raw=$('telegram-url').value.trim(),url=telegramCallLink(raw);
-  if(raw&&!url){$('telegram-error').textContent='Usa un link Telegram a una chiamata o diretta.';return;}
-  if(!connected){$('telegram-error').textContent='Collegamento alla sala in corso.';return;}
-  action('call-link',{url:url??''});callDialog.close();
-};
+function audienceEffect({room:id,player,effect}){
+  if(room?.id!==id||!['popcorn','shush'].includes(effect))return;
+  audience.play(effect,settings.volume);
+  if(effect==='popcorn'){
+    const seat=seats.get(player);
+    if(seat)showPopcorn(seat.sofa);
+  }
+}
 const closeDialog=$('close-dialog');
 $('close-room').onclick=()=>{closeDialog.returnValue='';closeDialog.showModal();};
 closeDialog.onclose=()=>{if(closeDialog.returnValue==='close')action('close-room');};
@@ -262,9 +284,9 @@ function drawRooms(rooms,active){
   const previous=room;
   const changedVideo=previous?.id!==active?.id||previous?.channel?.url!==active?.channel?.url;
   if(changedVideo||(active?.playback?.playRevision??0)>(previous?.playback?.playRevision??0))youtubeLocalPaused=false;
-  if(previous?.id!==active?.id){settings.monitor=true;updateMonitor();}
+  if(previous?.id!==active?.id){settings.monitor=true;updateMonitor();drawAudience([]);}
   room=active;listedRooms=rooms;
-  drawScreenShare();drawCall();drawMultisala();
+  drawScreenShare();drawMultisala();
   $('multisala').disabled=!active;
   $('connecting').hidden=!!active;cinema.hidden=!active;$('cinema-actions').hidden=!active;
   $('close-room').hidden=!active?.canClose;
@@ -279,14 +301,7 @@ function drawRooms(rooms,active){
   $('room-name').textContent='Sala '+(current?.number??'');
   const people=current?.viewers??[];
   $('audience-count').textContent=people.length+' '+(people.length===1?'spettatore':'spettatori');
-  $('sofas').replaceChildren(...people.map(({id,name,appearance},i)=>{
-    const sofa=node('div','','sofa');
-    sofa.style.setProperty('--seat-color',['#926283','#58728f','#777347','#9a5f55'][i%4]);
-    sofa.title=name;
-    const figure=node('span');figure.innerHTML=avatarSVG(appearance);
-    sofa.append(figure,node('small',id===me?'Tu · '+name:name));
-    return sofa;
-  }));
+  drawAudience(people);
   if(!catalogController){
     catalogController=loadCatalog((rows,sourceCount,done)=>{
       catalog=rows;
@@ -594,6 +609,7 @@ window.addEventListener('message',event=>{
   const packet=data.packet;
   if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;mosaic.clock=clockOffset;mosaicPreviews=packet.previews??[];drawRooms(packet.rooms,packet.active);}
   else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();drawYouTube();if(catalogController)drawSearch();}
+  else if(packet.type==='audience-effect')audienceEffect(packet);
   else if(packet.type?.startsWith('screen-')){screenShare.receive(packet);if(multisala.open)mosaic.packet(packet);}
   else if(packet.type==='error')notice(packet.message);
 });

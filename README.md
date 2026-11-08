@@ -182,4 +182,4 @@ Nella sezione **Ricerca → YouTube**, incolla un link video per riprodurlo in s
 
 Con **Condividi finestra**, un utente su PC può trasmettere una finestra o scheda a un massimo di tre spettatori della sala. La funzione usa una connessione WebRTC diretta e l’audio dipende dalla sorgente scelta nel selettore del browser. La pausa del lettore YouTube vale per chi la preme. I comandi **Per tutti** sincronizzano l’intera sala.
 
-La barra sotto lo schermo distingue **Per tutti** da **Per te**. Il tasto quadrato ferma il video sul dispositivo. **Chiamata Telegram** condivide nella sala un link a una chiamata o diretta da aprire in Telegram. Se una finestra condivisa arriva senza traccia audio, compare **Solo video**.
+La barra sotto lo schermo distingue **Per tutti** da **Per te**. Il tasto quadrato ferma il video sul dispositivo. Tocca il tuo personaggio per mangiare popcorn o premi **Silenzio** per fare shhh nella sala. Se una finestra condivisa arriva senza traccia audio, compare **Solo video**.

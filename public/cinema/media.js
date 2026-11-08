@@ -25,17 +25,3 @@ export function youtubeChannelId(value){
     return match?.[1]??null;
   }catch{return null;}
 }
-
-export function telegramCallLink(value){
-  if(typeof value!=='string'||value.length>300)return null;
-  try{
-    const url=new URL(value.trim());
-    if(url.protocol!=='https:'||url.hostname!=='t.me'||url.port||url.username||url.password)return null;
-    if(/^\/call\/[A-Za-z0-9_-]+\/?$/.test(url.pathname))return 'https://t.me'+url.pathname.replace(/\/$/,'');
-    if(!/^\/[A-Za-z0-9_]+\/?$/.test(url.pathname))return null;
-    const type=['videochat','livestream'].find(name=>url.searchParams.has(name));
-    const token=type&&url.searchParams.get(type);
-    if(!type||!/^[A-Za-z0-9_-]*$/.test(token))return null;
-    return 'https://t.me'+url.pathname.replace(/\/$/,'')+'?'+type+(token?'='+token:'');
-  }catch{return null;}
-}

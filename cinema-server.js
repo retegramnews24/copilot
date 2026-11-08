@@ -1,5 +1,5 @@
 import {normalizeAppearance} from './public/appearance.js';
-import {youtubeId,youtubeChannelId,positionAt,telegramCallLink} from './public/cinema/media.js';
+import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
 const response=(message,status)=>Response.json({error:message},{status});
@@ -144,7 +144,7 @@ export class Cinema {
         id:entry.id,channel:entry.channel,playback:entry.playback??null,screen:viewScreen(shares.get(entry.id),socket)
       })):undefined;
       try{
-        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,screen,call:active.call??null,canClose:!active.owner||active.owner===info.user.player}:null,previews,me:info.user.player,now}));
+        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,screen,canClose:!active.owner||active.owner===info.user.player}:null,previews,me:info.user.player,now}));
         if(favorites)socket.send(favorites);
       }catch{}
     }
@@ -235,11 +235,15 @@ export class Cinema {
           socket.serializeAttachment({...info,mosaic});
           this.publish(data);return;
         }
-        if(input.type==='call-link'){
-          const call=input.url===''?null:telegramCallLink(input.url);
-          if(input.url!==''&&!call)throw Error('Incolla un link Telegram a una chiamata o diretta.');
-          room.call=call;
-          await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
+        if(input.type==='audience-effect'){
+          const effect=input.effect;
+          if(effect!=='popcorn'&&effect!=='shush')return;
+          const now=Date.now(),last=info.effects?.[effect]??0;
+          if(now-last<(effect==='popcorn'?1050:1400))return;
+          socket.serializeAttachment({...info,effects:{...info.effects,[effect]:now}});
+          const packet={type:'audience-effect',room:room.id,player:info.user.player,effect};
+          for(const client of this.connections())if(client.info.room===room.id)send(client.socket,packet);
+          return;
         }
         if(input.type==='close-room'){
           if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può chiuderla.');

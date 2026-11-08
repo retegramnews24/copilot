@@ -27,7 +27,7 @@ const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.mess
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
 const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Fausto'},{id:'bot:1',name:'AI 1',bot:true}],user={id:'1',player:'tg:1',name:'Fausto'},scopa=initialScopa(2),view=scopaView(scopa,0);let state={room,number:1,phase:'playing',game:'scopa',players,turn:0,revision:0,moves:[],scopa:view,mode:'tutorial',tutorial:tutorial('scopa',view,0,0),expires:Date.now()+86400000};const payload=()=>({games:[state],users:[],messages:[],leaderboard:[{id:'tg:9',name:'Anna <b>',wins:5,games:{scopa:3,chess:2}}],aiLeaderboard:[{id:'tg:1',name:'Fausto',wins:2,games:{scopa:2}}]});
 let lobbySocket,cinemaSocket;
-const cinemaMessages=[],cinemaId="cinema-fixture",cinemaRooms=[{id:cinemaId,number:1,channel:"Canale Uno",viewers:[{name:"Fausto"}]}];
+const cinemaMessages=[],cinemaId="cinema-fixture",cinemaRooms=[{id:cinemaId,number:1,channel:"Canale Uno",viewers:[{id:"tg:1",name:"Fausto"}]}];
 w.WebSocket=class{
  constructor(url){
   this.url=url;this.readyState=1;this.bufferedAmount=0;
@@ -96,7 +96,7 @@ assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
 get('cinema-rooms').querySelector('button').click();
 const cinemaFrame=get('cinema-frame');
 const cinemaEvent=(type,data={})=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type,...data}}));
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=7');
+assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=8');
 cinemaEvent('ready');
 assert.deepEqual(cinemaMessages.at(-1),{type:'enter',room:cinemaId});
 cinemaSocket.onmessage({data:JSON.stringify({type:'rooms',rooms:cinemaRooms,active:{id:cinemaId}})});
@@ -653,9 +653,40 @@ cw.postMessage=packet=>frameCommands.push(packet);
 cw.eval(cinemaBundle.outputFiles[0].text);
 const frameMessage=(type,data)=>cw.dispatchEvent(new cw.MessageEvent('message',{origin:cw.location.origin,source:cw,data:{type:'cinema:'+type,...data}}));
 frameMessage('connection',{connected:true});
-const otherRoom={id:'other',number:2,channel:'Canale Due',viewers:[{name:'Ospite'}]};
+const otherRoom={id:'other',number:2,channel:'Canale Due',viewers:[{id:'tg:2',name:'Ospite'}]};
 const activeCinema={id:cinemaId,canClose:true,channel:null};
-frameMessage('packet',{packet:{type:'rooms',rooms:[...cinemaRooms,otherRoom],active:activeCinema}});
+const currentAudience={...cinemaRooms[0],viewers:[...cinemaRooms[0].viewers,{id:'tg:2',name:'Ospite'}]};
+const roomPacket={type:'rooms',rooms:[currentAudience,otherRoom],active:activeCinema,me:'tg:1'};
+frameMessage('packet',{packet:roomPacket});
+const starts=[];
+const connectable=()=>({connect(){},disconnect(){}});
+cw.AudioContext=class{
+ sampleRate=8000;state='running';currentTime=10;destination={};
+ createBuffer(_channels,size){const samples=new Float32Array(size);return {getChannelData:()=>samples};}
+ createBiquadFilter(){return {...connectable(),frequency:{setValueAtTime(){},exponentialRampToValueAtTime(){}},Q:{}};}
+ createGain(){return {...connectable(),gain:{}};}
+ createDynamicsCompressor(){return {...connectable(),threshold:{},ratio:{}};}
+ createBufferSource(){return {...connectable(),playbackRate:{},start:time=>starts.push(time)};}
+};
+const ownSeat=cinemaElement('sofas').querySelector('button.sofa');
+assert.equal(ownSeat.getAttribute('aria-label'),'Mangia popcorn');
+assert.equal(cinemaElement('sofas').querySelectorAll('button.sofa').length,1);
+ownSeat.click();
+assert.equal(frameCommands.at(-1).action.effect,'popcorn');
+frameMessage('packet',{packet:{type:'audience-effect',room:cinemaId,player:'tg:1',effect:'popcorn'}});
+assert.equal(starts.length,3);
+assert.deepEqual(starts.map(time=>Math.round((time-starts[0])*100)),[0,32,65]);
+const kernels=ownSeat.querySelectorAll('.popcorn-effect span');
+assert.equal(kernels.length,3);
+frameMessage('packet',{packet:roomPacket});
+assert.equal(cinemaElement('sofas').querySelector('button.sofa'),ownSeat);
+assert.equal(ownSeat.querySelectorAll('.popcorn-effect span').length,3);
+cinemaElement('audience-shush').click();
+assert.equal(frameCommands.at(-1).action.effect,'shush');
+frameMessage('packet',{packet:{type:'audience-effect',room:cinemaId,player:'tg:2',effect:'shush'}});
+assert.equal(starts.length,4);
+frameMessage('packet',{packet:{type:'audience-effect',room:'other',player:'tg:1',effect:'popcorn'}});
+assert.equal(starts.length,4);
 assert.equal(cinemaElement('remote'),null);
 assert.deepEqual([...cinemaElement('sidebar').querySelectorAll('section')].map(el=>el.id),['favorites-panel','search-panel']);
 cinemaElement('source-youtube').click();
@@ -695,16 +726,19 @@ tileAudio.click();
 assert.equal(tileVideo.muted,false);
 tileAudio.click();
 assert.equal(tileVideo.muted,true);
+const thirdRoom={id:'third',number:3,viewers:[]};
+frameMessage('packet',{packet:{...roomPacket,rooms:[...roomPacket.rooms,thirdRoom],previews:[preview]}});
+const grid=cinemaElement('multisala-rooms');
+assert.equal(grid.style.gridTemplateRows,'repeat(2, minmax(0px, 1fr))');
+assert.match(grid.querySelector('article[data-room="third"]').style.gridArea,/span 2$/);
+assert.equal(grid.querySelector('article[data-room="other"] video'),tileVideo);
 frameMessage('packet',{packet:{type:'rooms',rooms:[...cinemaRooms,{...otherRoom,channel:'Nuovo canale'}],active:activeCinema}});
 assert.match(cinemaElement('multisala-rooms').textContent,/Nuovo canale/);
 cinemaElement('multisala-rooms').querySelector('button[data-room="other"]').click();
 assert.equal(frameCommands.at(-1).action.room,'other');
 assert.equal(cinemaElement('multisala-dialog').open,false);
 assert.equal(tileVideo.getAttribute('src'),null);
-cinemaElement('telegram-call').click();
-cinemaElement('telegram-url').value='https://t.me/call/sala-cinema';
-cinemaElement('telegram-form').dispatchEvent(new cw.Event('submit',{cancelable:true}));
-assert.equal(frameCommands.at(-1).action.url,'https://t.me/call/sala-cinema');
+assert.equal(cinemaElement('telegram-call'),null);
 assert.equal(cinemaElement('cinema-personal').contains(cinemaElement('local-stop')),true);
 let pickerOpened=false;
 cinemaElement('watch-file').click=()=>{pickerOpened=true;};
@@ -822,7 +856,7 @@ assert.equal(rtc.closed,true);
 
 await new Promise(resolve=>setTimeout(resolve,0));
 cinemaDOM.window.close();
-console.log('PASS Cinema UI: shared controls, local stop, Telegram call link, live mosaic, window capture and viewer audio activation.');
+console.log('PASS Cinema UI: shared controls, live mosaic layout, room popcorn and silence effects, window capture and viewer audio activation.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){

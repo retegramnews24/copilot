@@ -1,4 +1,4 @@
-import {positionAt} from './media.js?v=4';
+import {positionAt} from './media.js?v=5';
 import {WindowShare} from './screen-share.js?v=2';
 import {embedYouTube} from './youtube.js?v=3';
 
@@ -15,6 +15,27 @@ export class CinemaMosaic {
         this.sync();
       },{root:list,threshold:[0,.5,.51,1]});
     }
+    if(typeof ResizeObserver==='function')new ResizeObserver(()=>this.layout()).observe(list);
+  }
+  layout(){
+    const count=this.tiles.size;
+    if(!count)return;
+    const width=this.list.clientWidth||window.innerWidth;
+    const height=this.list.clientHeight||window.innerHeight;
+    const youtube=[...this.tiles.values()].some(tile=>!tile.preview?.screen&&tile.preview?.channel?.youtube);
+    const idealRows=Math.round(Math.sqrt(count*16/9*height/Math.max(1,width)));
+    const maxColumns=youtube?Math.max(1,Math.floor(width/216)):count;
+    const rows=Math.max(Math.ceil(count/maxColumns),Math.min(count,idealRows),1);
+    const base=Math.floor(count/rows),extra=count%rows;
+    const columns=extra?base*(base+1):base;
+    this.list.style.gridTemplateColumns='repeat('+columns+', minmax(0, 1fr))';
+    this.list.style.gridTemplateRows='repeat('+rows+', minmax('+(youtube?'270px':'0px')+', 1fr))';
+    let row=0,column=0;
+    for(const {el} of this.tiles.values()){
+      const cells=base+(row<extra?1:0),span=columns/cells;
+      el.style.gridArea=(row+1)+' / '+(column*span+1)+' / span 1 / span '+span;
+      if(++column===cells){row++;column=0;}
+    }
   }
   update(rooms,previews,now,current){
     if(Number.isFinite(now))this.clock=now-Date.now();
@@ -28,10 +49,10 @@ export class CinemaMosaic {
       if(!tile){
         const el=document.createElement('article');
         el.className='mosaic-tile';el.dataset.room=room.id;
-        el.innerHTML='<div class="mosaic-media"><video playsinline muted hidden></video><div class="mosaic-youtube" hidden></div><span></span></div><div class="mosaic-caption"><div><strong></strong><small></small></div><button type="button" class="mosaic-audio" aria-label="Attiva audio dell’anteprima" aria-pressed="false" hidden>♬</button><button type="button"></button></div>';
+        el.innerHTML='<div class="mosaic-media"><video playsinline muted hidden></video><div class="mosaic-youtube" hidden></div><span></span></div><div class="mosaic-caption"><div><strong></strong><small></small><small class="mosaic-note" hidden></small></div><button type="button" class="mosaic-audio" aria-label="Attiva audio dell’anteprima" aria-pressed="false" hidden>♬</button><button type="button"></button></div>';
         const [video,youtube,status]=el.querySelector('.mosaic-media').children;
-        const [title,meta,audio,button]=el.querySelectorAll('strong,small,button');
-        tile={el,video,youtube,status,title,meta,audio,button,visible:!this.observer,key:null};
+        const [title,meta,note,audio,button]=el.querySelectorAll('strong,small,button');
+        tile={el,video,youtube,status,title,meta,note,audio,button,visible:!this.observer,key:null};
         audio.onclick=()=>this.toggleAudio(tile);
         button.dataset.room=room.id;button.onclick=()=>this.enter(room.id);
         this.tiles.set(room.id,tile);this.list.append(el);this.observer?.observe(el);
@@ -41,12 +62,14 @@ export class CinemaMosaic {
       tile.meta.textContent=(room.channel??'In attesa di un canale')+' · '+room.viewers.length+' spett.';
       tile.button.textContent=room.id===current?'Torna in sala':'Entra';
     }
-    this.sync();
+    this.layout();this.sync();
   }
   message(tile,text){
-    tile.status.textContent=text;
-    tile.status.hidden=!text;
-    tile.status.classList.toggle('mosaic-youtube-note',!tile.youtube.hidden);
+    const youtube=!tile.youtube.hidden;
+    tile.status.textContent=youtube?'':text;
+    tile.status.hidden=youtube||!text;
+    tile.note.textContent=youtube?text:'';
+    tile.note.hidden=!youtube||!text;
   }
   sync(){
     for(const tile of this.tiles.values()){
