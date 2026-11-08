@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="no-referrer"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=1"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=1"></script></head>
+<body>
+<header><button id="exit">← Giochi</button><div class="wordmark"><small>BINOTTOLAND · LIVE</small><strong>Cinema Streamer</strong></div><button id="back-rooms" hidden>Sale</button><button id="tools" hidden aria-expanded="false">Comandi</button></header>
+<section id="lobby"><div class="lobby-card"><p class="kicker">IL CINEMA DI BINOTTOLAND</p><h1>Entra in sala</h1><p>Ogni sala ha il suo canale. I preferiti sono condivisi.</p><button id="create" disabled>+ Apri una sala</button><div id="rooms"></div></div></section>
+<main id="cinema" hidden>
+ <div class="auditorium">
+  <section id="screen" aria-label="Schermo del cinema">
+   <video id="video" playsinline webkit-playsinline preload="none"></video>
+   <div id="screen-empty"><span>◈</span><strong id="screen-message">In attesa di un canale</strong><button id="start-video" hidden>Riproduci qui</button></div>
+   <div class="screen-label"><span id="on-air"></span><strong id="channel-name"></strong></div>
+   <button id="screen-full" title="Video a schermo intero" aria-label="Video a schermo intero">⛶</button>
+  </section>
+  <button class="split split-y" data-size="seats" aria-label="Ridimensiona schermo e divanetti"></button>
+  <section id="audience"><div class="section-title"><strong id="room-name">Sala</strong><span id="audience-count"></span></div><div id="sofas"></div></section>
+ </div>
+ <button class="split split-x" data-size="sidebar" aria-label="Ridimensiona il pannello destro"></button>
+ <aside id="sidebar" aria-label="Comandi cinema">
+  <section id="search-panel"><h2>Ricerca</h2><input id="query" type="search" placeholder="Nome, paese, categoria o URL" aria-label="Cerca canali"><p id="catalog-status"></p><div id="results" class="channel-list"></div></section>
+  <button class="split split-y" data-size="search" aria-label="Ridimensiona ricerca e preferiti"></button>
+  <section id="favorites-panel"><h2>Preferiti <small>Condivisi</small></h2><div id="favorites" class="channel-list"></div></section>
+  <button class="split split-y" data-size="remote" aria-label="Ridimensiona preferiti e telecomando"></button>
+  <section id="remote"><h2>Telecomando</h2><div class="remote-row"><button id="prev" aria-label="Canale preferito precedente">CH −</button><button id="next" aria-label="Canale preferito successivo">CH +</button></div>
+   <div class="remote-row"><button id="monitor" aria-pressed="true">Monitor acceso</button><button id="mode" aria-pressed="false">Cinema Mode</button></div>
+   <label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
+  </section>
+ </aside>
+</main>
+<p id="notice" role="status" aria-live="polite"></p>
+</body></html>

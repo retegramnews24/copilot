@@ -1,3 +1,4 @@
+import { Cinema } from './cinema-server.js';
 import {chessSnapshot,claimChessDraw} from './chess-rules.js';
 import {initialNaval,playNaval,navalView} from './naval.js';
 import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
@@ -129,6 +130,7 @@ export default {
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
+  if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1')).fetch(new Request(u.origin+'/cinema/ws',req));
   const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
   if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
   const moto=u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
@@ -166,7 +168,7 @@ const isArcade=game=>game==='labyrinth'||game==='moto-trial'||game==='golf';
 const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived;
 
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.golf=new GolfRoom(ctx,env);}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.golf=new GolfRoom(ctx,env);this.cinema=new Cinema(ctx);}
  public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
  newTable(room,b,token){
   const game=b.game??'chess';
@@ -286,6 +288,7 @@ export class Room extends DurableObject {
  async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
+  if(new URL(req.url).pathname==='/cinema/ws')return this.cinema.fetch(req);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
@@ -554,7 +557,7 @@ export class Room extends DurableObject {
  }
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;
@@ -564,6 +567,7 @@ export class Room extends DurableObject {
  }
  async webSocketClose(ws,code){
   const attachment=ws.deserializeAttachment();
+  if(attachment?.kind==='cinema')return this.cinema.close(ws);
   if(attachment?.kind==='lab'){
    await this.lab.close(ws);
   }else if(attachment?.kind==='moto-trial'){
@@ -581,7 +585,7 @@ export class Room extends DurableObject {
   }
   try{ws.close(code===1006?1000:code);}catch{}
  }
- webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);ws.close(1011,'Riconnettersi.');}
+ webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
  if(await this.ctx.storage.get('golf'))return this.golf.alarm();

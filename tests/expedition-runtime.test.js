@@ -214,6 +214,42 @@ try{
  assert.equal((await call(303,collisionPath+'/state')).data.state.collisions,true);
  assert.equal((await call(302,'/api/lobby')).data.games.find(g=>g.room===collisionRoom.state.room).collisions,true);
  assert.equal((await call(301,collisionPath+'/close',{})).status,200);
+ assert.equal((await mf.dispatchFetch('https://unit.test/api/cinema/ws',{headers:{Upgrade:'websocket'}})).status,401);
+ async function cinemaClient(id){
+  const res=await mf.dispatchFetch('https://unit.test/api/cinema/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});
+  assert.equal(res.status,101);
+  const client={ws:res.webSocket,packets:[],waiters:[]};
+  client.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);client.packets.push(p);for(const fn of [...client.waiters])fn(p)});
+  client.ws.accept();sockets.push(client.ws);await until(client,p=>p.type==='favorites');return client;
+ }
+ const cinemaA=await cinemaClient(801),cinemaB=await cinemaClient(802),cinemaC=await cinemaClient(803);
+ const cinemaSend=(client,type,fields={})=>client.ws.send(JSON.stringify({type,...fields}));
+ const one={name:'Primo canale',url:'https://tv.example/first.m3u8'},two={name:'Secondo canale',url:'https://tv.example/second.m3u8'};
+ cinemaSend(cinemaC,'channel',{channel:one});
+ await until(cinemaC,p=>p.type==='error'&&p.message==='Entra in una sala.');
+ cinemaSend(cinemaA,'create');cinemaSend(cinemaB,'create');
+ const cinemaRoomA=(await until(cinemaA,p=>p.active?.id)).active.id;
+ const cinemaRoomB=(await until(cinemaB,p=>p.active?.id)).active.id;
+ assert.notEqual(cinemaRoomA,cinemaRoomB);
+ cinemaSend(cinemaC,'enter',{room:cinemaRoomA});
+ await until(cinemaA,p=>p.rooms?.find(r=>r.id===cinemaRoomA)?.viewers.length===2);
+ cinemaSend(cinemaC,'channel',{channel:one});
+ await until(cinemaA,p=>p.active?.channel?.url===one.url);
+ cinemaSend(cinemaB,'channel',{channel:two});
+ const independent=await until(cinemaA,p=>p.rooms?.find(r=>r.id===cinemaRoomB)?.channel===two.name);
+ assert.equal(independent.active.channel.url,one.url);
+ cinemaSend(cinemaA,'favorite-add',{channel:one});cinemaSend(cinemaB,'favorite-add',{channel:two});
+ const shared=(await until(cinemaB,p=>p.type==='favorites'&&p.items.length===2)).items;
+ const [front,back]=shared;
+ cinemaSend(cinemaC,'favorite-move',{id:back.id,before:front.id});
+ await until(cinemaA,p=>p.type==='favorites'&&p.items[0]?.id===back.id);
+ cinemaSend(cinemaB,'favorite-remove',{id:front.id});
+ await until(cinemaA,p=>p.type==='favorites'&&p.items.length===1&&p.items[0].id===back.id);
+ cinemaC.ws.close();
+ await until(cinemaA,p=>p.active?.id===cinemaRoomA&&p.rooms?.find(r=>r.id===cinemaRoomA)?.viewers.length===1&&p.active.channel?.url===one.url);
+ const cinemaD=await cinemaClient(804);
+ assert.deepEqual((await until(cinemaD,p=>p.type==='favorites')).items,[back]);
+ console.log('PASS Cinema runtime: authenticated access, room-scoped channel and presence, global live favorites and persistence.');
  console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}

@@ -166,3 +166,12 @@ Scarabeo in singolo usa il piccolo lessico incorporato in `table-ai.js`, dichiar
 La pagina Giochi mostra due classifiche Top 5, una per il singolo e una per il multiplayer, con il totale e il dettaglio per gioco. Una vittoria corrisponde a una manche completata (una partita di Scopa completa a 11, non ogni smazzata); ogni compagno vincitore riceve il credito. Patte, tutorial, partite interrotte e bot sono esclusi. Pareggi nel totale ordinati per nome e identificatore stabile. I risultati sono registrati nella Lobby con chiave stanza/manche e sopravvivono alla cancellazione e alla scadenza dei tavoli. La classifica recupera in blocchi i risultati precedenti ancora disponibili, compresi gli archivi e gli storici dei tornei; quelli già cancellati o scaduti prima dell’introduzione della classifica non sono ricostruibili.
 
 Verifica aggiuntiva: `node tests/scopa-ai.test.js`, `npm run test:table-runtime` e `npm run test:multiplayer-runtime`. La prova UI locale usa `npm run test:ui`. Nessuna fixture o identità sintetica fa parte degli asset pubblicati.
+
+
+## Cinema Streamer
+
+Apri **Giochi e Applicazioni → Cinema Streamer** per creare una sala o entrare in una sala esistente. L’elenco mostra il canale corrente e chi è collegato. Ogni spettatore può cambiare il canale per la propria sala. I preferiti e il loro ordine sono salvati sul server e condivisi in tempo reale fra tutte le sale. Trascina la maniglia di un preferito o usa le frecce su e giù quando la maniglia è a fuoco.
+
+Il volume, il monitor e le dimensioni dei riquadri si salvano sul dispositivo. Trascina i separatori per regolare il layout. Su schermi stretti il pannello destro si apre con **Comandi**. **Cinema Mode** allarga lo schermo e lascia visibili i divanetti, mentre **⛶** isola lo schermo del video. Se il browser blocca la riproduzione automatica, premi **Riproduci qui**.
+
+La ricerca carica playlist M3U e il catalogo JSON IPTV-org, unisce le fonti disponibili ed elimina i duplicati per URL. I flussi HTTPS sono riprodotti direttamente dal dispositivo. La disponibilità dipende dalla fonte e dal dispositivo.

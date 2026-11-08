@@ -383,6 +383,7 @@ function fitViewport(){
  if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets},location.origin);
  sendMotoInsets(insets);
  golfPost('insets',{insets});
+ cinemaPost('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
 for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
@@ -874,7 +875,7 @@ window.addEventListener('message',event=>{
   if(packet?.length<=420)motoSocket.send(packet);
  }
 });
-tg?.onEvent('backButtonClicked',()=>{if(!$('golf-overlay').hidden)closeGolf();else if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
+tg?.onEvent('backButtonClicked',()=>{if(!$('cinema-overlay').hidden)closeCinema();else if(!$('golf-overlay').hidden)closeGolf();else if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
 
 function golfPost(type,payload={}){
  if(!$('golf-overlay').hidden)$('golf-frame').contentWindow?.postMessage({type:'golf:'+type,...payload},location.origin);
@@ -1033,3 +1034,67 @@ $('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false
 
 $('access-retry').onclick=startSession;
 startSession();
+
+let cinemaSocket=null,cinemaReconnect=0,cinemaRoom=null,cinemaDelay=700;
+function cinemaPost(type,payload={}){
+ if(!$('cinema-overlay').hidden)$('cinema-frame').contentWindow?.postMessage({type:'cinema:'+type,...payload},location.origin);
+}
+function connectCinema(){
+ if($('cinema-overlay').hidden||cinemaSocket)return;
+ const url=location.origin.replace(/^http/,'ws')+'/api/cinema/ws';
+ const socket=new WebSocket(url,['checkmate',sessionToken]);
+ cinemaSocket=socket;
+ const rejoin=cinemaRoom;
+ socket.onopen=()=>{
+  if(cinemaSocket!==socket)return;
+  cinemaDelay=700;cinemaPost('connection',{connected:true});
+  if(rejoin)socket.send(JSON.stringify({type:'enter',room:rejoin}));
+ };
+ socket.onmessage=event=>{
+  if(cinemaSocket!==socket)return;
+  try{
+   const packet=JSON.parse(event.data);
+   if(packet.type==='rooms')cinemaRoom=packet.active?.id??null;
+   cinemaPost('packet',{packet});
+  }catch{}
+ };
+ socket.onclose=event=>{
+  if(cinemaSocket!==socket)return;
+  cinemaSocket=null;
+  const expired=event.code===4001;
+  cinemaPost('connection',{connected:false,message:expired?'Riapri Binottoland da Telegram.':undefined});
+  if(!expired&&!$('cinema-overlay').hidden){
+   cinemaReconnect=setTimeout(connectCinema,cinemaDelay);
+   cinemaDelay=Math.min(10000,cinemaDelay*2);
+  }
+ };
+}
+function closeCinema(){
+ if($('cinema-overlay').hidden)return;
+ clearTimeout(cinemaReconnect);
+ const socket=cinemaSocket;cinemaSocket=null;socket?.close();
+ cinemaRoom=null;
+ $('cinema-overlay').hidden=true;$('cinema-frame').src='about:blank';
+ tg?.BackButton?.hide();
+ try{tg?.enableVerticalSwipes?.()}catch{}
+ $('open-cinema').focus();
+}
+$('open-cinema').onclick=()=>{
+ if(!identity){err('Apri Binottoland da Telegram per accedere.');return;}
+ if(!$('cinema-overlay').hidden)return;
+ enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
+ cinemaDelay=700;$('cinema-overlay').hidden=false;
+ $('cinema-frame').src='/cinema/index.html?v=1';
+ tg?.BackButton?.show();
+};
+window.addEventListener('message',event=>{
+ if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
+ const data=event.data;
+ if(data?.type==='cinema:ready'){cinemaPost('insets',{insets:safeInsets(tg)});connectCinema();return;}
+ if(data?.type==='cinema:exit'){closeCinema();return;}
+ if(data?.type==='cinema:action'){
+  const raw=JSON.stringify(data.action);
+  if(raw&&raw.length<=4096&&cinemaSocket?.readyState===1&&cinemaSocket.bufferedAmount<64000)cinemaSocket.send(raw);
+  else cinemaPost('packet',{packet:{type:'error',message:'Comando non inviato. Riprova tra poco.'}});
+ }
+});
