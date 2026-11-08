@@ -236,6 +236,7 @@ function connect(){
 }
 function connectLobby(){
  if(!sessionToken)return;
+ connectCinema();
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
@@ -1033,69 +1034,131 @@ async function loadLeaders(){
 $('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?dev=1&v=dev3';tg?.BackButton?.show()};
 
 $('access-retry').onclick=startSession;
-startSession();
-
-let cinemaSocket=null,cinemaReconnect=0,cinemaRoom=null,cinemaDelay=700;
+let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
+let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
+let cinemaUpload=null;
 function cinemaPost(type,payload={}){
- if(!$('cinema-overlay').hidden)$('cinema-frame').contentWindow?.postMessage({type:'cinema:'+type,...payload},location.origin);
+ if(cinemaReady)$('cinema-frame').contentWindow?.postMessage({type:'cinema:'+type,...payload},location.origin);
+}
+function renderCinemaLobby(){
+ const connected=cinemaSocket?.readyState===1,list=$('cinema-rooms');
+ $('cinema-lobby-create').disabled=$('open-cinema').disabled=!connected;
+ const status=$('cinema-lobby-status');
+ status.textContent=cinemaLobbyMessage||(connected?'Nessuna sala aperta.':'Collegamento al cinema…');
+ status.hidden=connected&&cinemaRooms.rooms.length>0&&!cinemaLobbyMessage;
+ const focused=document.activeElement?.dataset.cinemaRoom;
+ list.replaceChildren(...cinemaRooms.rooms.map(entry=>{
+  const button=document.createElement('button');
+  button.type='button';button.className='alt cinema-room-card';button.disabled=!connected;button.dataset.cinemaRoom=entry.id;
+  const title=document.createElement('strong'),channel=document.createElement('span'),people=document.createElement('small');
+  title.textContent='Sala '+entry.number;channel.textContent=entry.channel??'In attesa di un canale';
+  people.textContent=entry.viewers.length?entry.viewers.length+(entry.viewers.length===1?' spettatore · ':' spettatori · ')+entry.viewers.map(p=>p.name).join(', '):'Nessuno in sala';
+  button.append(title,channel,people);button.onclick=()=>openCinema(entry.id);
+  return button;
+ }));
+ if(focused)Array.from(list.children).find(el=>el.dataset.cinemaRoom===focused)?.focus();
+}
+function cinemaSend(action){
+ const raw=JSON.stringify(action);
+ if(raw&&raw.length<=4096&&cinemaSocket?.readyState===1&&cinemaSocket.bufferedAmount<64000){
+  cinemaSocket.send(raw);return true;
+ }
+ cinemaPost('packet',{packet:{type:'error',message:'Comando non inviato. Riprova tra poco.'}});
+ return false;
+}
+function enterCinema(){
+ if(!cinemaReady||cinemaSocket?.readyState!==1)return;
+ if(cinemaEntry){
+  cinemaSend({type:'appearance',appearance:readAppearance()});
+  if(cinemaSend(cinemaEntry))cinemaEntry=null;
+ }else if(cinemaRoom&&!cinemaRooms.active)cinemaSend({type:'enter',room:cinemaRoom});
 }
 function connectCinema(){
- if($('cinema-overlay').hidden||cinemaSocket)return;
- const url=location.origin.replace(/^http/,'ws')+'/api/cinema/ws';
- const socket=new WebSocket(url,['checkmate',sessionToken]);
+ if(cinemaSocket||!sessionToken)return;
+ clearTimeout(cinemaRetry);
+ const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/cinema/ws',['checkmate',sessionToken]);
  cinemaSocket=socket;
- const rejoin=cinemaRoom;
  socket.onopen=()=>{
   if(cinemaSocket!==socket)return;
-  cinemaDelay=700;cinemaPost('connection',{connected:true});
-  socket.send(JSON.stringify({type:'appearance',appearance:readAppearance()}));
-  if(rejoin)socket.send(JSON.stringify({type:'enter',room:rejoin}));
+  cinemaDelay=700;renderCinemaLobby();cinemaPost('connection',{connected:true});
+  cinemaSend({type:'appearance',appearance:readAppearance()});
+  enterCinema();
  };
  socket.onmessage=event=>{
   if(cinemaSocket!==socket)return;
   try{
    const packet=JSON.parse(event.data);
-   if(packet.type==='rooms')cinemaRoom=packet.active?.id??null;
+   if(packet.type==='rooms'){
+    cinemaRooms=packet;
+    if(packet.active&&$('cinema-overlay').hidden){cinemaSend({type:'leave'});return;}
+    if(packet.active)cinemaRoom=packet.active.id;
+    renderCinemaLobby();
+   }
+   if(packet.type==='favorites')cinemaFavorites=packet;
+   if(packet.type==='room-closed'&&packet.id===cinemaRoom){closeCinema('La sala è stata chiusa.',false);return;}
+   if(packet.type==='error'&&!$('cinema-overlay').hidden&&!cinemaRooms.active){closeCinema(packet.message);return;}
    cinemaPost('packet',{packet});
   }catch{}
  };
  socket.onclose=event=>{
   if(cinemaSocket!==socket)return;
-  cinemaSocket=null;
+  cinemaSocket=null;cinemaRooms={...cinemaRooms,active:null};
   const expired=event.code===4001;
-  cinemaPost('connection',{connected:false,message:expired?'Riapri Binottoland da Telegram.':undefined});
-  if(!expired&&!$('cinema-overlay').hidden){
-   cinemaReconnect=setTimeout(connectCinema,cinemaDelay);
-   cinemaDelay=Math.min(10000,cinemaDelay*2);
-  }
+  if(expired)cinemaLobbyMessage='Riapri Binottoland da Telegram.';
+  renderCinemaLobby();cinemaPost('connection',{connected:false,message:expired?cinemaLobbyMessage:undefined});
+  if(!expired){cinemaRetry=setTimeout(connectCinema,cinemaDelay);cinemaDelay=Math.min(10000,cinemaDelay*2);}
  };
 }
-function closeCinema(){
+function closeCinema(message='',leave=true){
  if($('cinema-overlay').hidden)return;
- clearTimeout(cinemaReconnect);
- const socket=cinemaSocket;cinemaSocket=null;socket?.close();
- cinemaRoom=null;
+ if(leave)cinemaSend({type:'leave'});
+ cinemaUpload?.abort();cinemaUpload=null;
+ cinemaRoom=null;cinemaEntry=null;cinemaReady=false;cinemaRooms={...cinemaRooms,active:null};
  $('cinema-overlay').hidden=true;$('cinema-frame').src='about:blank';
  tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}
- $('open-cinema').focus();
+ leaveRoom();selectPage('game');cinemaLobbyMessage=message;renderCinemaLobby();
+ $('cinema-lobby-create').focus();
 }
-$('open-cinema').onclick=()=>{
- if(!identity){err('Apri Binottoland da Telegram per accedere.');return;}
- if(!$('cinema-overlay').hidden)return;
+function openCinema(id){
+ if(!$('cinema-overlay').hidden||cinemaSocket?.readyState!==1)return;
+ cinemaLobbyMessage='';
+ cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- cinemaDelay=700;$('cinema-overlay').hidden=false;
- $('cinema-frame').src='/cinema/index.html?v=2';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=3';
  tg?.BackButton?.show();
-};
+}
+$('open-cinema').onclick=$('cinema-lobby-create').onclick=()=>openCinema();
+async function uploadCinemaFile(file,name){
+ if(!cinemaRoom||cinemaUpload||!(file instanceof File))return;
+ if(!file.size||file.size>16*1024*1024){
+  cinemaPost('upload-result',{error:'Scegli un video fino a 16 MB.'});return;
+ }
+ const type=file.type||(/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':'');
+ const query=new URLSearchParams({room:cinemaRoom,name:String(name||file.name).slice(0,96)});
+ const controller=new AbortController();cinemaUpload=controller;
+ let error;
+ try{
+  const response=await fetch('/api/cinema/upload?'+query,{
+   method:'POST',headers:{Authorization:'Bearer '+sessionToken,'Content-Type':type},body:file,signal:controller.signal
+  });
+  if(!response.ok)throw Error((await response.json()).error||'Caricamento non riuscito.');
+ }catch(e){error=e.name==='AbortError'?'Caricamento annullato.':e.message||'Caricamento non riuscito.';}
+ if(cinemaUpload===controller){cinemaUpload=null;cinemaPost('upload-result',{error});}
+}
 window.addEventListener('message',event=>{
  if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
  const data=event.data;
- if(data?.type==='cinema:ready'){cinemaPost('insets',{insets:safeInsets(tg)});connectCinema();return;}
- if(data?.type==='cinema:exit'){closeCinema();return;}
- if(data?.type==='cinema:action'){
-  const raw=JSON.stringify(data.action);
-  if(raw&&raw.length<=4096&&cinemaSocket?.readyState===1&&cinemaSocket.bufferedAmount<64000)cinemaSocket.send(raw);
-  else cinemaPost('packet',{packet:{type:'error',message:'Comando non inviato. Riprova tra poco.'}});
+ if(data?.type==='cinema:ready'){
+  cinemaReady=true;
+  cinemaPost('insets',{insets:safeInsets(tg)});
+  cinemaPost('connection',{connected:cinemaSocket?.readyState===1});
+  if(cinemaFavorites)cinemaPost('packet',{packet:cinemaFavorites});
+  enterCinema();return;
  }
+ if(data?.type==='cinema:exit'){closeCinema();return;}
+ if(data?.type==='cinema:action')cinemaSend(data.action);
+ if(data?.type==='cinema:upload')uploadCinemaFile(data.file,data.name);
 });
+
+startSession();

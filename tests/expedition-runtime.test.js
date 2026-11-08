@@ -269,6 +269,46 @@ try{
  assert.equal(late.active.playback.playing,false);
  cinemaSend(cinemaE,'playback',{url:youtube,command:'play'});
  await until(cinemaD,p=>p.active?.playback?.playing===true&&p.active.playback.position===122);
+ const videoBytes=Buffer.alloc(68000,42);
+ videoBytes.writeUInt32BE(24);videoBytes.write('ftypisom',4);
+ const upload=(id,body)=>mf.dispatchFetch('https://unit.test/api/cinema/upload?room='+cinemaRoomA+'&name=Clip',{
+  method:'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'video/mp4'},body
+ });
+ assert.equal((await upload(802,videoBytes)).status,403);
+ assert.equal((await upload(804,Buffer.from('broken'))).status,415);
+ const uploaded=await upload(804,videoBytes);
+ assert.equal(uploaded.status,204,await uploaded.text());
+ const file=await until(cinemaA,p=>p.active?.channel?.file);
+ const fileURL=file.active.channel.url;
+ assert.equal(file.active.channel.name,'Clip');
+ assert.equal(file.active.playback.playing,true);
+ const fileInLobby=await until(cinemaB,p=>p.rooms?.some(r=>r.channel==='Clip'));
+ assert.equal(fileInLobby.active.channel.url,two.url);
+ assert.ok(!JSON.stringify(fileInLobby).includes(fileURL));
+ const part=await mf.dispatchFetch(fileURL,{headers:{Range:'bytes=65534-65538'}});
+ assert.equal(part.status,206);
+ assert.equal(part.headers.get('Content-Range'),'bytes 65534-65538/68000');
+ assert.deepEqual(Buffer.from(await part.arrayBuffer()),videoBytes.subarray(65534,65539));
+ assert.equal((await mf.dispatchFetch(fileURL,{method:'HEAD'})).headers.get('Content-Length'),'68000');
+ assert.equal((await mf.dispatchFetch(fileURL,{headers:{Range:'bytes=68000-'}})).status,416);
+
+ const tampered=new URL(fileURL);tampered.searchParams.set('sig','0'.repeat(64));
+ assert.equal((await mf.dispatchFetch(tampered.href)).status,404);
+ cinemaSend(cinemaE,'playback',{url:fileURL,command:'pause'});
+ await until(cinemaA,p=>p.active?.channel?.file&&p.active.playback.playing===false);
+ cinemaSend(cinemaE,'enter',{room:cinemaRoomB});
+ await until(cinemaE,p=>p.active?.id===cinemaRoomB&&p.active?.channel?.url===two.url);
+ assert.equal(file.active.canClose,true);
+ const guest=await until(cinemaD,p=>p.active?.channel?.file);
+ assert.equal(guest.active.canClose,false);
+ cinemaSend(cinemaD,'close-room');
+ await until(cinemaD,p=>p.type==='error'&&p.message.includes('può chiuderla'));
+ cinemaSend(cinemaA,'close-room');
+ await until(cinemaD,p=>p.type==='room-closed'&&p.id===cinemaRoomA);
+ await until(cinemaB,p=>p.active?.id===cinemaRoomB&&p.rooms.length===1);
+ cinemaSend(cinemaA,'create');
+ const reused=await until(cinemaA,p=>p.active?.id&&p.active.id!==cinemaRoomA&&p.rooms.some(r=>r.id===p.active.id&&r.number===1));
+ assert.equal(reused.rooms.length,2);
  console.log('PASS Cinema runtime: authenticated access, room-scoped channel and presence, global live favorites and persistence.');
  console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
  console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');

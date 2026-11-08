@@ -1,4 +1,5 @@
 import { Cinema } from './cinema-server.js';
+import {MEDIA_LIMIT,MEDIA_TTL,MEDIA_TYPES,readCinemaMedia,storeCinemaMedia} from './cinema-media.js';
 import {chessSnapshot,claimChessDraw} from './chess-rules.js';
 import {initialNaval,playNaval,navalView} from './naval.js';
 import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
@@ -113,6 +114,47 @@ async function sessionUser(req,env){
  }catch{return null}
 }
 
+const cinemaHub=env=>env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1'));
+const cinemaFile=(env,file)=>env.ROOMS.get(env.ROOMS.idFromName('cinema-file:'+file));
+const cinemaSignature=(env,file,expires)=>mac(env.BOT_TOKEN,'cinema-media:'+file+':'+expires);
+async function uploadCinema(req,env,u){
+ const type=req.headers.get('Content-Type');
+ if(!MEDIA_TYPES.has(type))return json({error:'Scegli un video MP4 o WebM.'},415);
+ if(Number(req.headers.get('Content-Length'))>MEDIA_LIMIT)return json({error:'Il video supera 16 MB.'},413);
+ const room=u.searchParams.get('room'),name=u.searchParams.get('name')?.trim().slice(0,96)||'Video condiviso';
+ const file=id(),expires=Date.now()+MEDIA_TTL;
+ const change=(fields={})=>cinemaHub(env).fetch(u.origin+'/cinema/upload',{
+  method:'POST',headers:{'X-Checkmate-User':req.headers.get('X-Checkmate-User')},body:JSON.stringify({room,file,name,...fields})
+ });
+ const reserved=await change();
+ if(!reserved.ok)return reserved;
+ const headers=new Headers({'Content-Type':type,'X-Media-Expires':String(expires)});
+ if(req.headers.has('Content-Length'))headers.set('Content-Length',req.headers.get('Content-Length'));
+ let stored;
+ try{
+  stored=await cinemaFile(env,file).fetch(new Request(u.origin+'/cinema/file',{method:'POST',headers,body:req.body}));
+ }catch{
+  await change({cancel:true});
+  return json({error:'Caricamento interrotto. Riprova.'},503);
+ }
+ if(!stored.ok){
+  await change({cancel:true});
+  return json({error:stored.status===413?'Il video supera 16 MB.':'Il file non è un video MP4 o WebM valido.'},stored.status);
+ }
+ const sig=hex(await cinemaSignature(env,file,expires));
+ const published=await change({url:u.origin+'/api/cinema/media/'+file+'?expires='+expires+'&sig='+sig});
+ if(!published.ok)await change({cancel:true});
+ return published;
+}
+async function serveCinema(req,env,u,file){
+ const expires=Number(u.searchParams.get('expires')),sig=u.searchParams.get('sig')||'';
+ if(!env.BOT_TOKEN||!Number.isSafeInteger(expires)||expires<=Date.now()||!/^[a-f0-9]{64}$/.test(sig))return json({error:'Video non disponibile.'},404);
+ const expected=await cinemaSignature(env,file,expires);
+ const supplied=Uint8Array.from(sig.match(/../g),pair=>parseInt(pair,16));
+ if(!crypto.subtle.timingSafeEqual(expected,supplied))return json({error:'Video non disponibile.'},404);
+ return cinemaFile(env,file).fetch(new Request(u.origin+'/cinema/file',req));
+}
+
 export default {
  async fetch(req,env){
   const u=new URL(req.url);
@@ -126,11 +168,14 @@ export default {
   if(u.pathname==='/api/health')return json({ok:true,version:'1.1.0'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
+  const cinemaMedia=u.pathname.match(/^\/api\/cinema\/media\/([a-f0-9-]{36})$/);
+  if(cinemaMedia&&['GET','HEAD'].includes(req.method))return serveCinema(req,env,u,cinemaMedia[1]);
   const user=await sessionUser(req,env);
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
-  if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1')).fetch(new Request(u.origin+'/cinema/ws',req));
+  if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return cinemaHub(env).fetch(new Request(u.origin+'/cinema/ws',req));
+  if(u.pathname==='/api/cinema/upload'&&req.method==='POST')return uploadCinema(req,env,u);
   const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
   if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
   const moto=u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
@@ -288,7 +333,9 @@ export class Room extends DurableObject {
  async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
-  if(new URL(req.url).pathname==='/cinema/ws')return this.cinema.fetch(req);
+  const path=new URL(req.url).pathname;
+  if(path==='/cinema/ws'||path==='/cinema/upload')return this.cinema.fetch(req);
+  if(path==='/cinema/file')return req.method==='POST'?storeCinemaMedia(req,this.ctx.storage):readCinemaMedia(req,this.ctx.storage);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
@@ -587,6 +634,7 @@ export class Room extends DurableObject {
  }
  webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
+ if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
  if(await this.ctx.storage.get('golf'))return this.golf.alarm();
  if(await this.ctx.storage.get('moto-trial'))return this.moto.alarm();

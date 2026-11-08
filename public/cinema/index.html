@@ -1,8 +1,16 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=2"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=2"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=3"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=3"></script></head>
 <body>
-<header><button id="exit">← Giochi</button><div class="wordmark"><small>BINOTTOLAND · LIVE</small><strong>Cinema Streamer</strong></div><button id="back-rooms" hidden>Sale</button><button id="tools" hidden aria-expanded="false">Comandi</button></header>
-<section id="lobby"><div class="lobby-card"><p class="kicker">IL CINEMA DI BINOTTOLAND</p><h1>Entra in sala</h1><p>Ogni sala ha il suo canale. I preferiti sono condivisi.</p><button id="create" disabled>+ Apri una sala</button><div id="rooms"></div></div></section>
+<header>
+ <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button></div>
+ <div id="cinema-actions" class="screen-actions" hidden>
+  <button id="watch-together">Guarda insieme</button><button id="upload-video">Carica video</button><button id="save-playing" hidden>☆ Preferiti</button>
+  <button id="monitor" aria-pressed="true">Monitor acceso</button><button id="mode" aria-pressed="false">Cinema Mode</button>
+  <label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
+  <button id="close-room" hidden>Chiudi sala</button>
+ </div>
+</header>
+<p id="connecting" role="status">Apertura della sala…</p>
 <main id="cinema" hidden>
  <div class="auditorium">
   <section id="screen" aria-label="Schermo del cinema">
@@ -12,30 +20,29 @@
    <div class="screen-label"><span id="on-air"></span><strong id="channel-name"></strong></div>
    <button id="screen-full" title="Video a schermo intero" aria-label="Video a schermo intero">⛶</button>
   </section>
+  <div id="shared-playback" hidden>
+   <button id="play-shared" aria-label="Riproduci per tutti">▶</button><button id="pause-shared" aria-label="Metti in pausa per tutti">Ⅱ</button>
+   <form id="seek-shared"><input id="seek-time" type="text" placeholder="12:30" inputmode="text" aria-label="Minuti e secondi"><button type="submit">Vai</button></form>
+   <output id="shared-time"></output>
+  </div>
   <button class="split split-y" data-size="seats" aria-label="Ridimensiona schermo e divanetti"></button>
   <section id="audience"><div class="section-title"><strong id="room-name">Sala</strong><span id="audience-count"></span></div><div id="sofas"></div></section>
  </div>
  <button class="split split-x" data-size="sidebar" aria-label="Ridimensiona il pannello destro"></button>
- <aside id="sidebar" aria-label="Comandi cinema">
-  <section id="search-panel"><h2>Ricerca</h2><input id="query" type="search" placeholder="Nome, paese, categoria o URL" aria-label="Cerca canali"><p id="catalog-status"></p><div id="results" class="channel-list"></div></section>
-  <button class="split split-y" data-size="search" aria-label="Ridimensiona ricerca e preferiti"></button>
+ <aside id="sidebar" aria-label="Canali">
   <section id="favorites-panel"><h2>Preferiti <small>Condivisi</small></h2><div id="favorites" class="channel-list"></div></section>
-  <button class="split split-y" data-size="remote" aria-label="Ridimensiona preferiti e telecomando"></button>
-  <section id="remote"><h2>Telecomando</h2>
-   <button id="watch-together">Guarda insieme</button><button id="save-playing" hidden>☆ Salva nei preferiti</button>
-   <div id="shared-playback" hidden><div class="remote-row"><button id="play-shared">Riproduci</button><button id="pause-shared">Pausa</button></div>
-    <form id="seek-shared" class="seek-row"><label>Vai al minuto <input id="seek-time" type="text" placeholder="12:30" inputmode="text" aria-label="Minuti e secondi"></label><button type="submit">Vai</button></form>
-    <output id="shared-time"></output>
-   </div><div class="remote-row"><button id="prev" aria-label="Canale preferito precedente">CH −</button><button id="next" aria-label="Canale preferito successivo">CH +</button></div>
-   <div class="remote-row"><button id="monitor" aria-pressed="true">Monitor acceso</button><button id="mode" aria-pressed="false">Cinema Mode</button></div>
-   <label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
-  </section>
+  <button class="split split-y" data-size="favorites" aria-label="Ridimensiona preferiti e ricerca"></button>
+  <section id="search-panel"><h2>Ricerca</h2><input id="query" type="search" placeholder="Nome, paese, categoria o URL" aria-label="Cerca canali"><p id="catalog-status"></p><div id="results" class="channel-list"></div></section>
  </aside>
 </main>
-<dialog id="watch-dialog"><form id="watch-form"><h2>Guarda insieme</h2><label>Tipo <select id="watch-type"><option value="stream">Link stream</option><option value="youtube">YouTube</option></select></label>
-<label>Link <input id="watch-url" type="url" required placeholder="https://…" maxlength="1400"></label>
-<label>Titolo facoltativo <input id="watch-name" type="text" maxlength="96"></label><p id="watch-error" role="alert"></p>
-<div class="remote-row"><button id="watch-cancel" type="button">Annulla</button><button type="submit">Apri in sala</button></div>
+<dialog id="multisala-dialog" aria-labelledby="multisala-title"><div class="dialog-heading"><h2 id="multisala-title">Multisala</h2><form method="dialog"><button>Chiudi</button></form></div><div id="multisala-rooms"></div></dialog>
+<dialog id="close-dialog" aria-labelledby="close-title"><form method="dialog"><h2 id="close-title">Chiudere la sala per tutti?</h2><p>Gli spettatori torneranno alla lobby di Binottoland.</p><div class="dialog-actions"><button value="cancel" autofocus>Annulla</button><button value="close">Chiudi sala</button></div></form></dialog>
+<dialog id="watch-dialog" aria-labelledby="watch-title"><form id="watch-form"><h2 id="watch-title">Guarda insieme</h2>
+<label>Tipo <select id="watch-type"><option value="stream">Link stream</option><option value="youtube">YouTube</option><option value="file">Carica un video</option></select></label>
+<label id="watch-link-label">Link <input id="watch-url" type="url" required placeholder="https://…" maxlength="1400"></label>
+<label id="watch-file-label" hidden>Video MP4 o WebM <input id="watch-file" type="file" accept="video/mp4,video/webm,.mp4,.webm" disabled><small>Fino a 16 MB · disponibile in sala per 2 ore</small></label>
+<label>Titolo facoltativo <input id="watch-name" type="text" maxlength="96"></label><p id="watch-error" role="alert"></p><p id="watch-progress" role="status" hidden>Caricamento in sala…</p>
+<div class="dialog-actions"><button id="watch-cancel" type="button">Annulla</button><button id="watch-submit" type="submit">Apri in sala</button></div>
 </form></dialog>
 <p id="notice" role="status" aria-live="polite"></p>
 </body></html>

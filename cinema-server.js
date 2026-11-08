@@ -14,7 +14,7 @@ function cleanURL(value,max){
 function cleanChannel(input){
   const name=typeof input?.name==='string'?input.name.trim().slice(0,96):'';
   const url=cleanURL(input?.url,1400),youtube=youtubeId(url);
-  if(!name||!url)return null;
+  if(!name||!url||/\/api\/cinema\/media\//.test(new URL(url).pathname))return null;
   return youtube ? {name,url:'https://www.youtube.com/watch?v='+youtube,youtube,logo:''} : {name,url,logo:cleanURL(input.logo,900)};
 }
 
@@ -45,13 +45,15 @@ export class Cinema {
     for(const {socket,info} of clients){
       const active=data.rooms.find(room=>room.id===info.room);
       try{
-        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null}:null,me:info.user.player,now}));
+        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,canClose:!active.owner||active.owner===info.user.player}:null,me:info.user.player,now}));
         if(favorites)socket.send(favorites);
       }catch{}
     }
   }
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
+      const path=new URL(req.url).pathname;
+      if(path==='/cinema/upload')return this.upload(req);
       if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
       if(!user)return response('Accesso richiesto.',401);
@@ -64,6 +66,28 @@ export class Cinema {
       socket.send(JSON.stringify({type:'favorites',items:data.favorites}));
       return new Response(null,{status:101,webSocket:client,headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     });
+  }
+  async upload(req){
+    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+    const {room:id,file,url,name,cancel}=await req.json();
+    const data=await this.data(),room=data.rooms.find(entry=>entry.id===id);
+    if(!room||!user)return response('Questa sala è stata chiusa.',404);
+    if((url||cancel)&&(room.upload?.file!==file||room.upload.player!==user.player))return response('Caricamento scaduto.',409);
+    if(!cancel&&!this.connections().some(c=>c.info.room===id&&c.info.user.player===user.player))return response('Entra nella sala per condividere un video.',403);
+    const now=Date.now();
+    if(cancel)delete room.upload;
+    else if(!url){
+      if(room.upload?.until>now)return response('È già in corso un caricamento in sala.',409);
+      room.upload={file,player:user.player,until:now+300000};
+    }else{
+      delete room.upload;
+      room.channel={name,url,file:true,logo:''};
+      room.updated=now;
+      room.playback={position:0,playing:true,updated:now,seek:0};
+    }
+    await this.ctx.storage.put(ROOMS,data.rooms);
+    if(url)this.publish(data);
+    return new Response(null,{status:204});
   }
   message(socket,raw){
     return this.ctx.blockConcurrencyWhile(async()=>{
@@ -85,17 +109,28 @@ export class Cinema {
           socket.serializeAttachment({...info,room:null});this.publish(data);return;
         }
         if(input.type==='create'){
+          if(room)throw Error('Esci dalla sala prima di aprirne un’altra.');
           const occupied=new Set(this.connections().map(c=>c.info.room));
           const rooms=data.rooms.filter(r=>occupied.has(r.id)||Date.now()-r.updated<3_600_000);
           if(rooms.length>=MAX_ROOMS)throw Error('Tutte le sale sono occupate.');
           let number=1;while(rooms.some(r=>r.number===number))number++;
-          const next={id:crypto.randomUUID(),number,channel:null,updated:Date.now()};
+          const next={id:crypto.randomUUID(),number,owner:info.user.player,channel:null,updated:Date.now()};
           rooms.push(next);
           await this.ctx.storage.put(ROOMS,rooms);
           socket.serializeAttachment({...info,room:next.id});
           this.publish({...data,rooms});return;
         }
         if(!room)throw Error('Entra in una sala.');
+        if(input.type==='close-room'){
+          if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può chiuderla.');
+          const rooms=data.rooms.filter(entry=>entry!==room);
+          await this.ctx.storage.put(ROOMS,rooms);
+          for(const client of this.connections())if(client.info.room===room.id){
+            client.socket.serializeAttachment({...client.info,room:null});
+            try{client.socket.send(JSON.stringify({type:'room-closed',id:room.id}));}catch{}
+          }
+          this.publish({...data,rooms});return;
+        }
         if(input.type==='channel'){
           const channel=cleanChannel(input.channel);
           if(!channel)throw Error('Canale non valido.');
@@ -105,7 +140,7 @@ export class Cinema {
           await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
         }
         if(input.type==='playback'){
-          if(!room.channel?.youtube||input.url!==room.channel.url||!room.playback)return;
+          if(!(room.channel?.youtube||room.channel?.file)||input.url!==room.channel.url||!room.playback)return;
           const now=Date.now(),playback=room.playback;
           let position=positionAt(playback,now),playing=playback.playing,seek=playback.seek??0;
           if(input.command==='play')playing=true;

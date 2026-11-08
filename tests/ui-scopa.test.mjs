@@ -19,8 +19,22 @@ const source=await fs.readFile('public/app.js','utf8'),bundle=await build({stdin
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
 const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Fausto'},{id:'bot:1',name:'AI 1',bot:true}],user={id:'1',player:'tg:1',name:'Fausto'},scopa=initialScopa(2),view=scopaView(scopa,0);let state={room,number:1,phase:'playing',game:'scopa',players,turn:0,revision:0,moves:[],scopa:view,mode:'tutorial',tutorial:tutorial('scopa',view,0,0),expires:Date.now()+86400000};const payload=()=>({games:[state],users:[],messages:[],leaderboard:[{id:'tg:9',name:'Anna <b>',wins:5,games:{scopa:3,chess:2}}],aiLeaderboard:[{id:'tg:1',name:'Fausto',wins:2,games:{scopa:2}}]});
-let lobbySocket;
-w.WebSocket=class{constructor(url){if(url.endsWith('/api/lobby/ws'))lobbySocket=this;this.readyState=1;w.setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?payload():state)})},1)}send(){}close(){this.readyState=3}};
+let lobbySocket,cinemaSocket;
+const cinemaMessages=[],cinemaId="cinema-fixture",cinemaRooms=[{id:cinemaId,number:1,channel:"Canale Uno",viewers:[{name:"Fausto"}]}];
+w.WebSocket=class{
+ constructor(url){
+  this.url=url;this.readyState=1;this.bufferedAmount=0;
+  if(url.endsWith('/api/lobby/ws'))lobbySocket=this;
+  if(url.endsWith('/api/cinema/ws'))cinemaSocket=this;
+  w.setTimeout(()=>{
+   this.onopen?.();
+   const initial=this===lobbySocket?payload():this===cinemaSocket?{type:'rooms',rooms:cinemaRooms,active:null}:state;
+   this.onmessage?.({data:JSON.stringify(initial)});
+  },1);
+ }
+ send(raw){if(this===cinemaSocket)cinemaMessages.push(JSON.parse(raw));}
+ close(){this.readyState=3;}
+};
 w.fetch=async(path,opts)=>Response.json(path==='/api/session'?{user,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...payload(),pending:false}:path==='/api/lobby'?payload():state);
 w.localStorage.setItem('binotto-golf-ball',JSON.stringify(['#a11293','#197b61']));
 w.eval(bundle.outputFiles[0].text);await new Promise(r=>setTimeout(r,50));assert.equal(w.document.getElementById('app-shell').hidden,false);assert.equal(w.document.querySelector('input[type=password]'),null);await w.__qa.openRoom(room,true);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-hand button').length,3);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-table .sicilian-card').length,4);assert.equal(w.document.getElementById('tutorial-panel').hidden,false);assert.ok(w.document.getElementById('tutorial-reason').textContent.length);assert.equal(w.document.getElementById('create-cluedo'),null);
@@ -70,10 +84,22 @@ w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:ge
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);
-get('open-cinema').click();
+assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
+get('cinema-rooms').querySelector('button').click();
 const cinemaFrame=get('cinema-frame');
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=2');
-w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:exit'}}));
+const cinemaEvent=type=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type}}));
+assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=3');
+cinemaEvent('ready');
+assert.deepEqual(cinemaMessages.at(-1),{type:'enter',room:cinemaId});
+cinemaSocket.onmessage({data:JSON.stringify({type:'rooms',rooms:cinemaRooms,active:{id:cinemaId}})});
+cinemaSocket.onmessage({data:JSON.stringify({type:'room-closed',id:cinemaId})});
+assert.equal(get('cinema-overlay').hidden,true);
+assert.equal(get('page-game').hidden,false);
+assert.match(get('cinema-lobby-status').textContent,/chiusa/);
+get('open-cinema').click();
+cinemaEvent('ready');
+assert.deepEqual(cinemaMessages.at(-1),{type:'create'});
+cinemaEvent('exit');
 assert.equal(get('cinema-overlay').hidden,true);
 
 assert.equal(get('moto-course'),null);
@@ -589,6 +615,54 @@ golfOnline.win.__golf.draw();
 assert.match(golfOnline.find('status').textContent,/Segui Amico/);
 golfOnline.instance.window.close();
 console.log('PASS Golf UI: hub launch, locked left-button aim, granular charge, expanded zoom, rolling ball, spectators and room controls.');
+
+const cinemaBundle=await build({entryPoints:['public/cinema/cinema.js'],bundle:true,write:false,format:'iife',platform:'browser'});
+const cinemaDOM=new JSDOM(await fs.readFile('public/cinema/index.html','utf8'),{url:'https://unit.test/cinema/',runScripts:'outside-only',virtualConsole:vc});
+const cw=cinemaDOM.window,cinemaElement=id=>cw.document.getElementById(id),frameCommands=[];
+cw.matchMedia=()=>({matches:true,addEventListener(){}});
+cw.fetch=async()=>{throw Error('Offline in UI test');};
+cw.HTMLMediaElement.prototype.pause=function(){};
+cw.HTMLMediaElement.prototype.load=function(){};
+cw.HTMLDialogElement.prototype.showModal=function(){this.open=true;};
+cw.HTMLDialogElement.prototype.close=function(value=''){
+ this.returnValue=value;this.open=false;this.dispatchEvent(new cw.Event('close'));
+};
+cw.postMessage=packet=>frameCommands.push(packet);
+cw.eval(cinemaBundle.outputFiles[0].text);
+const frameMessage=(type,data)=>cw.dispatchEvent(new cw.MessageEvent('message',{origin:cw.location.origin,source:cw,data:{type:'cinema:'+type,...data}}));
+frameMessage('connection',{connected:true});
+const otherRoom={id:'other',number:2,channel:'Canale Due',viewers:[{name:'Ospite'}]};
+const activeCinema={id:cinemaId,canClose:true,channel:null};
+frameMessage('packet',{packet:{type:'rooms',rooms:[...cinemaRooms,otherRoom],active:activeCinema}});
+assert.equal(cinemaElement('remote'),null);
+assert.deepEqual([...cinemaElement('sidebar').querySelectorAll('section')].map(el=>el.id),['favorites-panel','search-panel']);
+cinemaElement('multisala').click();
+assert.equal(cinemaElement('multisala-dialog').open,true);
+assert.match(cinemaElement('multisala-rooms').textContent,/Sala 2Canale DueOspite/);
+frameMessage('packet',{packet:{type:'rooms',rooms:[...cinemaRooms,{...otherRoom,channel:'Nuovo canale'}],active:activeCinema}});
+assert.match(cinemaElement('multisala-rooms').textContent,/Nuovo canale/);
+cinemaElement('multisala-rooms').querySelector('[data-room="other"]').click();
+assert.equal(frameCommands.at(-1).action.room,'other');
+assert.equal(cinemaElement('multisala-dialog').open,false);
+let pickerOpened=false;
+cinemaElement('watch-file').click=()=>{pickerOpened=true;};
+cinemaElement('upload-video').click();
+assert.equal(pickerOpened,true);
+assert.equal(cinemaElement('watch-dialog').open,true);
+assert.equal(cinemaElement('watch-type').value,'file');
+assert.equal(cinemaElement('watch-url').disabled,true);
+cinemaElement('watch-cancel').click();
+cinemaElement('watch-together').click();
+assert.equal(cinemaElement('watch-url').disabled,false);
+cinemaElement('watch-cancel').click();
+cinemaElement('close-room').click();
+assert.equal(cinemaElement('close-dialog').open,true);
+cinemaElement('close-dialog').close('close');
+await new Promise(resolve=>setTimeout(resolve,15));
+assert.equal(frameCommands.at(-1).action.type,'close-room');
+await new Promise(resolve=>setTimeout(resolve,0));
+cinemaDOM.window.close();
+console.log('PASS Cinema UI: general Lobby, live Multisala, direct file picker and close confirmation.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
