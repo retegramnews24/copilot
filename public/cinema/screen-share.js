@@ -2,8 +2,8 @@ const RTC_CONFIG={iceServers:[{urls:'stun:stun.cloudflare.com:3478'}]};
 const CONNECTION_TIMEOUT=15000;
 
 export class WindowShare {
-  constructor(video,send,report){
-    this.video=video;this.send=send;this.report=report;
+  constructor(video,send,report,audio=()=>{}){
+    this.video=video;this.send=send;this.report=report;this.audio=audio;this.audioBlocked=false;
     this.room=null;this.share=null;this.capture=null;this.picking=false;this.monitor=true;
     this.peers=new Map();this.watching=false;this.timer=0;
   }
@@ -21,7 +21,7 @@ export class WindowShare {
     let stream;
     try{
       stream=await navigator.mediaDevices.getDisplayMedia({
-        video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:24,max:30}},audio:true
+        video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:24,max:30}},audio:true,systemAudio:'include',windowAudio:'window'
       });
     }catch(error){
       if(this.room===room)this.report(error.name==='NotAllowedError'?'Condivisione annullata o bloccata dal browser.':'Impossibile aprire la condivisione dello schermo.');
@@ -50,7 +50,7 @@ export class WindowShare {
   clearPeers(){
     clearTimeout(this.timer);
     for(const id of this.peers.keys())this.closePeer(id);
-    this.video.pause();this.video.srcObject=null;
+    this.video.pause();this.video.srcObject=null;this.audioBlocked=false;this.reportAudio();
   }
   closePeer(id){
     const peer=this.peers.get(id);
@@ -58,7 +58,8 @@ export class WindowShare {
     this.peers.delete(id);
     peer.pc.close();
   }
-  disconnect(){
+  disconnect(notify=false){
+    if(notify&&this.watching&&this.share)this.send('screen-unwatch',{share:this.share.id});
     this.stop(false);this.clearPeers();
     this.room=null;this.share=null;this.watching=false;
   }
@@ -88,7 +89,7 @@ export class WindowShare {
   }
   volume(value){
     this.video.volume=value/100;
-    this.video.muted=!!this.share?.local||value===0;
+    this.video.muted=!!this.share?.local||value===0||this.audioBlocked;
   }
   watch(){
     if(!this.share||this.share.local||!this.monitor||this.watching)return;
@@ -106,17 +107,38 @@ export class WindowShare {
     this.watching=false;this.clearPeers();
     this.report(message,'retry');
   }
+  reportAudio(){
+    const stream=this.video.srcObject;
+    const audio=!!stream?.getAudioTracks?.().some(track=>track.readyState!=='ended');
+    this.audio({ready:!!stream,audio,blocked:this.audioBlocked,local:!!this.share?.local});
+  }
   async show(stream){
     const id=this.share?.id;
+    const current=()=>this.share?.id===id&&this.video.srcObject===stream;
     this.video.srcObject=stream;
+    this.reportAudio();
     try{
       await this.video.play();
-      if(this.share?.id===id&&this.video.srcObject===stream){
-        clearTimeout(this.timer);this.report('');
-      }
+      if(current()){clearTimeout(this.timer);this.report('');}
     }catch{
-      if(this.share?.id===id&&this.video.srcObject===stream)this.report('Tocca per riprodurre la condivisione.','play');
+      if(!current())return;
+      if(!this.video.muted&&!this.share.local&&stream.getAudioTracks?.().length){
+        this.audioBlocked=true;this.video.muted=true;this.reportAudio();
+        try{
+          await this.video.play();
+          if(current()){clearTimeout(this.timer);this.report('');}
+          return;
+        }catch{}
+      }
+      if(current())this.report('Tocca per riprodurre la condivisione.','play');
     }
+  }
+  enableAudio(){
+    if(!this.video.srcObject||this.share?.local)return;
+    this.audioBlocked=false;
+    if(this.video.volume===0)this.video.volume=.65;
+    this.video.muted=false;
+    this.show(this.video.srcObject);
   }
   retry(){
     if(this.video.srcObject)this.show(this.video.srcObject);
@@ -144,8 +166,9 @@ export class WindowShare {
       for(const track of this.capture.stream.getTracks())pc.addTrack(track,this.capture.stream);
     }else{
       pc.ontrack=({streams})=>{
-        if(!current()||!streams[0]||this.video.srcObject===streams[0])return;
-        this.show(streams[0]);
+        if(!current()||!streams[0])return;
+        if(this.video.srcObject===streams[0])this.reportAudio();
+        else this.show(streams[0]);
       };
     }
     return entry;

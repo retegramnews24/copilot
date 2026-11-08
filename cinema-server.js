@@ -1,5 +1,5 @@
 import {normalizeAppearance} from './public/appearance.js';
-import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
+import {youtubeId,youtubeChannelId,positionAt,telegramCallLink} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
 const response=(message,status)=>Response.json({error:message},{status});
@@ -75,22 +75,29 @@ export class Cinema {
   screenHost(room,clients=this.connections()){
     return clients.find(entry=>entry.info.room===room&&entry.info.screen);
   }
-  dropScreenViewer(info){
-    if(!info.room||!info.client||info.screen)return;
-    const host=this.screenHost(info.room);
-    if(!host?.info.screen.viewers.includes(info.client))return;
-    const screen={...host.info.screen,viewers:host.info.screen.viewers.filter(id=>id!==info.client)};
-    host.socket.serializeAttachment({...host.info,screen});
-    send(host.socket,{type:'screen-peer-left',share:screen.id,peer:info.client});
+  dropScreenViewer(info,shareId=null,crossRoomOnly=false){
+    if(!info.client)return;
+    for(const host of this.connections()){
+      const active=host.info.screen;
+      if(!active?.viewers.includes(info.client)||(shareId&&active.id!==shareId)||(crossRoomOnly&&host.info.room===info.room))continue;
+      const screen={...active,viewers:active.viewers.filter(id=>id!==info.client)};
+      host.socket.serializeAttachment({...host.info,screen});
+      send(host.socket,{type:'screen-peer-left',share:screen.id,peer:info.client});
+    }
   }
   async screenMessage(socket,info,input){
     if(!info.room||!info.client||!validScreenId(input.share))throw Error('Entra nella sala per condividere lo schermo.');
-    const clients=this.connections(),host=this.screenHost(info.room,clients);
+    const clients=this.connections(),localHost=this.screenHost(info.room,clients);
     if(input.type==='screen-start'){
-      if(host)throw Error('C’è già una finestra condivisa in questa sala.');
+      if(localHost)throw Error('C’è già una finestra condivisa in questa sala.');
+      if(clients.some(entry=>entry.info.screen?.id===input.share))throw Error('Avvia una nuova condivisione.');
       socket.serializeAttachment({...info,screen:{id:input.share,viewers:[]}});
       this.publish(await this.data());return;
     }
+    const preview=input.preview===true;
+    const host=preview&&info.mosaic
+      ?clients.find(entry=>entry.info.screen?.id===input.share):localHost;
+    if(preview&&!info.mosaic)return;
     const screen=host?.info.screen;
     if(!screen||screen.id!==input.share)return;
     const isHost=host.socket===socket;
@@ -106,13 +113,13 @@ export class Cinema {
       send(host.socket,{type:'screen-peer',share:screen.id,peer:info.client});return;
     }
     if(input.type==='screen-unwatch'){
-      this.dropScreenViewer(info);return;
+      this.dropScreenViewer(info,screen.id);return;
     }
     if(input.type!=='screen-signal')return;
     const signal=screenSignal(input.signal,isHost);
     if(!signal)return;
     const target=isHost
-      ? clients.find(entry=>entry.info.room===info.room&&entry.info.client===input.peer&&screen.viewers.includes(input.peer))
+      ? clients.find(entry=>(entry.info.room===info.room||entry.info.mosaic)&&entry.info.client===input.peer&&screen.viewers.includes(input.peer))
       : input.peer===host.info.client&&screen.viewers.includes(info.client)?host:null;
     if(target)send(target.socket,{type:'screen-signal',share:screen.id,peer:info.client,signal});
   }
@@ -127,14 +134,17 @@ export class Cinema {
     const rooms=data.rooms.map(({id,number,channel})=>({
       id,number,channel:shares.has(id)?'Finestra condivisa':channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
     }));
+    const viewScreen=(sharing,socket)=>sharing?{id:sharing.info.screen.id,peer:sharing.info.client,name:sharing.info.user.name,local:sharing.socket===socket}:null;
     const favorites=sendFavorites?JSON.stringify({type:'favorites',items:data.favorites}):null;
     const now=Date.now();
     for(const {socket,info} of clients){
       const active=data.rooms.find(room=>room.id===info.room);
-      const sharing=shares.get(info.room);
-      const screen=sharing?{id:sharing.info.screen.id,peer:sharing.info.client,name:sharing.info.user.name,local:sharing.socket===socket}:null;
+      const screen=viewScreen(shares.get(info.room),socket);
+      const previews=info.mosaic&&active?data.rooms.map(entry=>({
+        id:entry.id,channel:entry.channel,playback:entry.playback??null,screen:viewScreen(shares.get(entry.id),socket)
+      })):undefined;
       try{
-        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,screen,canClose:!active.owner||active.owner===info.user.player}:null,me:info.user.player,now}));
+        socket.send(JSON.stringify({type:'rooms',rooms,active:active?{id:active.id,channel:active.channel,playback:active.playback??null,screen,call:active.call??null,canClose:!active.owner||active.owner===info.user.player}:null,previews,me:info.user.player,now}));
         if(favorites)socket.send(favorites);
       }catch{}
     }
@@ -199,12 +209,12 @@ export class Cinema {
         if(input.type==='enter'){
           const next=data.rooms.find(entry=>entry.id===input.room);
           if(next?.id!==info.room)this.dropScreenViewer(info);
-          if(!next){socket.serializeAttachment({...info,room:null,screen:null});this.publish(data);throw Error('Questa sala è stata chiusa.');}
-          socket.serializeAttachment({...info,room:next.id,screen:next.id===info.room?info.screen:null});this.publish(data);return;
+          if(!next){socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});this.publish(data);throw Error('Questa sala è stata chiusa.');}
+          socket.serializeAttachment({...info,room:next.id,screen:next.id===info.room?info.screen:null,mosaic:next.id===info.room&&info.mosaic});this.publish(data);return;
         }
         if(input.type==='leave'){
           this.dropScreenViewer(info);
-          socket.serializeAttachment({...info,room:null,screen:null});this.publish(data);return;
+          socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});this.publish(data);return;
         }
         if(input.type==='create'){
           if(room)throw Error('Esci dalla sala prima di aprirne un’altra.');
@@ -219,12 +229,25 @@ export class Cinema {
           this.publish({...data,rooms});return;
         }
         if(!room)throw Error('Entra in una sala.');
+        if(input.type==='mosaic'){
+          const mosaic=input.open===true;
+          if(!mosaic&&info.mosaic)this.dropScreenViewer(info,null,true);
+          socket.serializeAttachment({...info,mosaic});
+          this.publish(data);return;
+        }
+        if(input.type==='call-link'){
+          const call=input.url===''?null:telegramCallLink(input.url);
+          if(input.url!==''&&!call)throw Error('Incolla un link Telegram a una chiamata o diretta.');
+          room.call=call;
+          await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
+        }
         if(input.type==='close-room'){
           if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può chiuderla.');
           const rooms=data.rooms.filter(entry=>entry!==room);
           await this.ctx.storage.put(ROOMS,rooms);
           for(const client of this.connections())if(client.info.room===room.id){
-            client.socket.serializeAttachment({...client.info,room:null,screen:null});
+            this.dropScreenViewer(client.info);
+            client.socket.serializeAttachment({...client.info,room:null,screen:null,mosaic:false});
             try{client.socket.send(JSON.stringify({type:'room-closed',id:room.id}));}catch{}
           }
           this.publish({...data,rooms});return;

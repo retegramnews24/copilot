@@ -1,14 +1,8 @@
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=5"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=6"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="referrer" content="strict-origin-when-cross-origin"><title>Cinema Streamer</title><link rel="stylesheet" href="cinema.css?v=6"><script defer src="https://cdn.jsdelivr.net/npm/hls.js@1.6.13/dist/hls.min.js"></script><script type="module" src="cinema.js?v=7"></script></head>
 <body>
 <header>
- <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button></div>
- <div id="cinema-actions" class="screen-actions" hidden>
-  <button id="watch-together">Guarda insieme</button><button id="upload-video">Carica video</button><button id="share-window" type="button">Condividi finestra</button><button id="save-playing" hidden>☆ Preferiti</button>
-  <button id="monitor" aria-pressed="true">Monitor acceso</button><button id="mode" aria-pressed="false">Cinema Mode</button>
-  <label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
-  <button id="close-room" hidden>Chiudi sala</button>
- </div>
+ <div class="heading"><button id="exit">← Lobby</button><div class="wordmark"><small>BINOTTOLAND</small><strong>Cinema Streamer</strong></div><button id="multisala" disabled>Multisala</button><button id="tools" aria-expanded="false">Canali</button><button id="close-room" hidden>Chiudi sala</button></div>
 </header>
 <p id="connecting" role="status">Apertura della sala…</p>
 <main id="cinema" hidden>
@@ -24,16 +18,26 @@
   </section>
   <div id="shared-playback" hidden>
    <small>Per tutti</small>
-   <button id="play-shared" aria-label="Riproduci per tutti">▶</button><button id="pause-shared" aria-label="Metti in pausa per tutti">Ⅱ</button>
+   <button id="toggle-shared" type="button" aria-label="Metti in pausa per tutti">Ⅱ</button>
    <form id="seek-shared"><input id="seek-time" type="text" placeholder="12:30" inputmode="text" aria-label="Minuti e secondi"><button type="submit">Vai</button></form>
    <output id="shared-time"></output><div id="youtube-message" role="status" hidden><span id="youtube-status"></span> <button id="youtube-start" hidden>Riproduci qui</button></div>
+  </div>
+  <div id="cinema-actions" hidden>
+   <div id="cinema-personal"><small>Per te</small><button id="local-stop" type="button" aria-label="Ferma solo qui">■</button>
+    <button id="mode" type="button" aria-pressed="false">Cinema Mode</button><label class="volume">Volume <input id="volume" type="range" min="0" max="100" value="65"></label>
+    <button id="share-audio" type="button" hidden>Attiva audio</button><span id="share-audio-state" role="status" hidden></span>
+   </div>
+   <div id="cinema-sources"><button id="watch-together" type="button">Guarda insieme</button>
+    <button id="upload-video" type="button" title="Carica video" aria-label="Carica video">↑</button>
+    <button id="share-window" type="button">Condividi finestra</button><button id="telegram-call" type="button">Chiamata Telegram</button>
+   </div>
   </div>
   <button class="split split-y" data-size="seats" aria-label="Ridimensiona schermo e divanetti"></button>
   <section id="audience"><div class="section-title"><strong id="room-name">Sala</strong><span id="audience-count"></span></div><div id="sofas"></div></section>
  </div>
  <button class="split split-x" data-size="sidebar" aria-label="Ridimensiona il pannello destro"></button>
  <aside id="sidebar" aria-label="Canali">
-  <section id="favorites-panel"><h2>Preferiti <small>Condivisi</small></h2><div id="favorites" class="channel-list"></div></section>
+  <section id="favorites-panel"><h2>Preferiti <small>Condivisi</small> <button id="save-playing" type="button" title="Salva canale in riproduzione" aria-label="Salva canale in riproduzione" hidden>☆</button></h2><div id="favorites" class="channel-list"></div></section>
   <button class="split split-y" data-size="favorites" aria-label="Ridimensiona preferiti e ricerca"></button>
   <section id="search-panel"><div class="search-title"><h2>Ricerca</h2>
    <div class="source-switch" role="group" aria-label="Sorgente di ricerca"><button id="source-tv" type="button" aria-pressed="true">TV</button><button id="source-youtube" type="button" aria-pressed="false">YouTube</button></div></div>
@@ -55,7 +59,13 @@
   </section>
  </aside>
 </main>
-<dialog id="multisala-dialog" aria-labelledby="multisala-title"><div class="dialog-heading"><h2 id="multisala-title">Multisala</h2><form method="dialog"><button>Chiudi</button></form></div><div id="multisala-rooms"></div></dialog>
+<dialog id="multisala-dialog" aria-labelledby="multisala-title"><div class="dialog-heading"><h2 id="multisala-title">Multisala</h2><form method="dialog"><button>Chiudi</button></form></div><div id="multisala-rooms"></div><p id="multisala-empty" hidden>Nessuna sala aperta.</p></dialog>
+<dialog id="telegram-dialog" aria-labelledby="telegram-title"><h2 id="telegram-title">Chiamata Telegram</h2>
+<p>Condividi il link alla chiamata o alla diretta Telegram. Chi è nella sala può aprirla.</p>
+<button id="telegram-join" type="button" hidden>Apri in Telegram</button>
+<form id="telegram-form"><label for="telegram-url">Link della chiamata</label><input id="telegram-url" type="url" maxlength="300" placeholder="https://t.me/call/…">
+<p id="telegram-error" role="alert"></p><div class="dialog-actions"><button id="telegram-cancel" type="button">Chiudi</button><button type="submit">Salva link</button></div></form>
+</dialog>
 <dialog id="close-dialog" aria-labelledby="close-title"><form method="dialog"><h2 id="close-title">Chiudere la sala per tutti?</h2><p>Gli spettatori torneranno alla lobby di Binottoland.</p><div class="dialog-actions"><button value="cancel" autofocus>Annulla</button><button value="close">Chiudi sala</button></div></form></dialog>
 <dialog id="watch-dialog" aria-labelledby="watch-title"><form id="watch-form"><h2 id="watch-title">Guarda insieme</h2>
 <label>Tipo <select id="watch-type"><option value="stream">Link stream</option><option value="youtube">YouTube</option><option value="file">Carica un video</option></select></label>

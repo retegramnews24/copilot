@@ -1131,7 +1131,7 @@ function openCinema(id){
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
  enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=6';
+ $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=7';
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=()=>openCinema();
@@ -1184,6 +1184,14 @@ window.addEventListener('message',event=>{
  }
  if(data?.type==='cinema:exit'){closeCinema();return;}
  if(data?.type==='cinema:action')cinemaSend(data.action);
+ if(data?.type==='cinema:telegram-call'){
+  try{
+   const url=new URL(data.url);
+   if(url.protocol!=='https:'||url.host!=='t.me'||url.username||url.password)return;
+   if(tg?.openTelegramLink)tg.openTelegramLink(url.href);
+   else window.open(url.href,'_blank','noopener,noreferrer');
+  }catch{}
+ }
  if(data?.type==='cinema:upload')uploadCinemaFile(data.file,data.name);
  if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);
 });

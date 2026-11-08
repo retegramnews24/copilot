@@ -1,9 +1,10 @@
 import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=2';
 import {avatarSVG} from '../labyrinth/avatar.js?v=9';
-import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=3';
+import {youtubeId,youtubeChannelId,positionAt,telegramCallLink} from './media.js?v=4';
 import {embedYouTube} from './youtube.js?v=3';
 import {applyInsets} from '../safe-area.js';
-import {WindowShare} from './screen-share.js?v=1';
+import {WindowShare} from './screen-share.js?v=2';
+import {CinemaMosaic} from './mosaic.js?v=1';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar');
@@ -12,7 +13,7 @@ const defaults={monitor:true,volume:65,sizes:{}};
 let settings=defaults;
 try{
   const saved=JSON.parse(localStorage.getItem('binotto-cinema-ui-v1'));
-  settings={monitor:saved?.monitor!==false,volume:Number.isFinite(saved?.volume)?Math.max(0,Math.min(100,saved.volume)):65,sizes:{...saved?.sizes}};
+  settings={monitor:true,volume:Number.isFinite(saved?.volume)?Math.max(0,Math.min(100,saved.volume)):65,sizes:{...saved?.sizes}};
 }catch{}
 let connected=false,room=null,me=null,favorites=[],catalog=[],catalogController=null,playingURL=null,hls=null,drag=null;
 let videoRevision=0,noticeTimer,clockOffset=0,youtube=null,disposeYouTube=null,youtubeBlocked=false,fileBlocked=false,fileStarting=false;
@@ -65,7 +66,7 @@ function pauseYouTube(state){
   if(state===1||state===3){youtubeAutoPause=true;youtube.pauseVideo();}
 }
 function syncYouTube(force=false){
-  if(!youtube||!room?.playback)return;
+  if(multisala.open||!youtube||!room?.playback)return;
   const state=youtube.getPlayerState();
   if(!youtubeVisible()){pauseYouTube(state);return;}
   if(youtubeLocalPaused&&room.playback.playing)return;
@@ -113,7 +114,7 @@ function showYouTube(id){
 }
 
 function syncFile(force=false){
-  if(!room?.channel?.file||!room.playback||!settings.monitor||video.readyState<1)return;
+  if(multisala.open||!room?.channel?.file||!room.playback||!settings.monitor||video.readyState<1)return;
   const position=targetPosition(),playing=room.playback.playing;
   if(force||Math.abs(video.currentTime-position)>2)video.currentTime=position;
   if(!playing){video.pause();$('screen-empty').hidden=true;return;}
@@ -131,6 +132,7 @@ function syncFile(force=false){
 video.addEventListener('loadedmetadata',()=>syncFile(true));
 
 function tune(channel,force=false,seek=false){
+  if(multisala.open)return;
   const url=channel?.url??null;
   $('channel-name').textContent=room?.screen?'Finestra di '+room.screen.name:channel?.name??'';
   if(room?.screen){
@@ -138,13 +140,13 @@ function tune(channel,force=false,seek=false){
     playingURL=null;video.hidden=true;
     $('on-air').textContent='LIVE';
     if(settings.monitor)$('screen-empty').hidden=true;
-    else message('Monitor spento');
+    else message('Riproduzione fermata qui');
     return;
   }
   if(!force&&url===playingURL){syncYouTube(seek);syncFile(seek);return;}
   playingURL=url;stopVideo();
   $('on-air').textContent=url?((channel.youtube||channel.file)?'VIDEO':'LIVE'):'';
-  if(!settings.monitor){message('Monitor spento');return;}
+  if(!settings.monitor){message('Riproduzione fermata qui');return;}
   if(!url){message('In attesa di un canale');return;}
   message('Collegamento al video…');
   if(channel.youtube){showYouTube(channel.youtube);return;}
@@ -178,7 +180,18 @@ const screenShare=new WindowShare($('share-video'),action,(text,button)=>{
   $('share-placeholder').hidden=!text||!settings.monitor;
   $('share-retry').hidden=!button;
   $('share-retry').textContent=button==='retry'?'Riprova collegamento':'Riproduci qui';
+},({ready,audio,blocked,local})=>{
+  $('share-audio').hidden=!room?.screen||!settings.monitor||!ready||!audio||local;
+  const status=$('share-audio-state');
+  status.hidden=!room?.screen||!settings.monitor||!ready;
+  status.textContent=audio?(local?'Audio in trasmissione':blocked?'Audio disattivato dal browser':''):'Solo video';
+  status.title=audio?'':'La sorgente non ha fornito una traccia audio';
+  if(!status.textContent)status.hidden=true;
 });
+$('share-audio').onclick=()=>{
+  if(settings.volume===0){settings.volume=65;$('volume').value=65;screenShare.volume(65);save();}
+  screenShare.enableAudio();
+};
 function drawScreenShare(){
   const active=room?.screen,button=$('share-window');
   button.textContent=active?.local?'Interrompi condivisione':'Condividi finestra';
@@ -186,7 +199,8 @@ function drawScreenShare(){
   button.disabled=!connected||!!active&&!active.local;
   $('share-video').hidden=!active||!settings.monitor;
   if(!active||!settings.monitor)$('share-placeholder').hidden=true;
-  screenShare.update(room,settings.monitor,settings.volume);
+  screenShare.update(room,settings.monitor&&!multisala.open,settings.volume);
+  screenShare.reportAudio();
 }
 $('share-window').onclick=async()=>{
   if(room?.screen?.local){screenShare.stop();return;}
@@ -197,27 +211,50 @@ $('share-window').onclick=async()=>{
   drawScreenShare();
 };
 $('share-retry').onclick=()=>screenShare.retry();
-window.addEventListener('pagehide',()=>screenShare.disconnect());
+window.addEventListener('pagehide',()=>{mosaic.clear();screenShare.disconnect();});
 
 const multisala=$('multisala-dialog');
-let listedRooms=[];
+let listedRooms=[],mosaicPreviews=[],mosaicRequested=false,mosaicTarget=null;
+const mosaic=new CinemaMosaic($('multisala-rooms'),id=>{mosaicTarget=id;multisala.close();},action,()=>screenShare.capture?.stream);
 function drawMultisala(){
-  const list=$('multisala-rooms'),focused=document.activeElement?.dataset.room;
-  list.replaceChildren(...listedRooms.map(entry=>{
-    const current=entry.id===room?.id,button=node('button','','room-card');
-    button.dataset.room=entry.id;
-    button.append(node('strong','Sala '+entry.number+(current?' · Sei qui':'')),
-      node('span',entry.channel??'In attesa di un canale'),
-      node('small',entry.viewers.length?entry.viewers.map(person=>person.name).join(', '):'Nessuno in sala'));
-    button.disabled=!connected||current;
-    if(current)button.setAttribute('aria-current','true');
-    button.onclick=()=>{action('enter',{room:entry.id});multisala.close();};
-    return button;
-  }));
-  if(!listedRooms.length)list.append(node('p','Nessuna sala aperta.'));
-  if(focused)Array.from(list.children).find(el=>el.dataset.room===focused)?.focus();
+  if(!multisala.open)return;
+  if(connected&&room&&!mosaicRequested){mosaicRequested=true;action('mosaic',{open:true});}
+  mosaic.update(listedRooms,mosaicPreviews,null,room?.id);
+  $('multisala-empty').hidden=listedRooms.length>0;
 }
-$('multisala').onclick=()=>{drawMultisala();multisala.showModal();};
+$('multisala').onclick=()=>{
+  if(!room)return;
+  multisala.showModal();
+  stopVideo();playingURL=null;
+  drawScreenShare();drawMultisala();
+};
+multisala.onclose=()=>{
+  mosaic.clear();mosaicPreviews=[];
+  if(mosaicRequested&&connected)action('mosaic',{open:false});
+  mosaicRequested=false;
+  const target=mosaicTarget;mosaicTarget=null;
+  if(target&&target!==room?.id&&connected){action('enter',{room:target});return;}
+  drawScreenShare();tune(room?.channel,true);
+};
+const callDialog=$('telegram-dialog');
+function drawCall(){
+  const join=$('telegram-join');
+  join.hidden=!room?.call;
+  $('telegram-call').classList.toggle('has-call',!!room?.call);
+}
+$('telegram-call').onclick=()=>{
+  $('telegram-url').value=room?.call??'';
+  $('telegram-error').textContent='';drawCall();callDialog.showModal();
+};
+$('telegram-join').onclick=()=>{if(room?.call)send('telegram-call',{url:room.call});};
+$('telegram-cancel').onclick=()=>callDialog.close();
+$('telegram-form').onsubmit=event=>{
+  event.preventDefault();
+  const raw=$('telegram-url').value.trim(),url=telegramCallLink(raw);
+  if(raw&&!url){$('telegram-error').textContent='Usa un link Telegram a una chiamata o diretta.';return;}
+  if(!connected){$('telegram-error').textContent='Collegamento alla sala in corso.';return;}
+  action('call-link',{url:url??''});callDialog.close();
+};
 const closeDialog=$('close-dialog');
 $('close-room').onclick=()=>{closeDialog.returnValue='';closeDialog.showModal();};
 closeDialog.onclose=()=>{if(closeDialog.returnValue==='close')action('close-room');};
@@ -225,14 +262,17 @@ function drawRooms(rooms,active){
   const previous=room;
   const changedVideo=previous?.id!==active?.id||previous?.channel?.url!==active?.channel?.url;
   if(changedVideo||(active?.playback?.playRevision??0)>(previous?.playback?.playRevision??0))youtubeLocalPaused=false;
+  if(previous?.id!==active?.id){settings.monitor=true;updateMonitor();}
   room=active;listedRooms=rooms;
-  drawScreenShare();
-  if(multisala.open)drawMultisala();
+  drawScreenShare();drawCall();drawMultisala();
   $('multisala').disabled=!active;
   $('connecting').hidden=!!active;cinema.hidden=!active;$('cinema-actions').hidden=!active;
   $('close-room').hidden=!active?.canClose;
   $('shared-playback').hidden=!!active?.screen||!active?.playback;
   $('seek-shared').hidden=!!active?.channel?.live;
+  const toggle=$('toggle-shared'),playing=active?.playback?.playing;
+  toggle.textContent=playing?'Ⅱ':'▶';
+  toggle.setAttribute('aria-label',playing?'Metti in pausa per tutti':'Riproduci per tutti');
   updateFavoriteButton();
   if(!active){if(previous)tune(null);return;}
   const current=rooms.find(entry=>entry.id===active.id);
@@ -423,7 +463,7 @@ $('youtube-form').onsubmit=event=>{
 function updateFavoriteButton(){
   const button=$('save-playing'),url=room?.channel?.url;
   const saved=favorites.some(item=>item.url===url);
-  button.hidden=!!room?.screen||!url||room?.channel?.file===true;button.disabled=saved;button.textContent=saved?'★ Nei preferiti':'☆ Salva nei preferiti';
+  button.hidden=!!room?.screen||!url||room?.channel?.file===true;button.disabled=saved;button.textContent=saved?'★':'☆';
 }
 $('save-playing').onclick=()=>{if(room?.channel)action('favorite-add',{channel:packetChannel(room.channel)});};
 function drawFavorites(){
@@ -464,10 +504,11 @@ $('exit').onclick=()=>send('exit');
 let queryTimer;
 $('query').oninput=()=>{clearTimeout(queryTimer);queryTimer=setTimeout(refreshTVPage,100);};
 function updateMonitor(){
-  $('monitor').textContent=settings.monitor?'Monitor acceso':'Monitor spento';
-  $('monitor').setAttribute('aria-pressed',String(settings.monitor));
+  const stop=$('local-stop'),label=settings.monitor?'Ferma solo qui':'Riprendi solo qui';
+  stop.textContent=settings.monitor?'■':'▶';
+  stop.setAttribute('aria-label',label);stop.title=label;
 }
-$('monitor').onclick=()=>{settings.monitor=!settings.monitor;save();updateMonitor();drawScreenShare();tune(room?.channel,true);};
+$('local-stop').onclick=()=>{settings.monitor=!settings.monitor;updateMonitor();drawScreenShare();tune(room?.channel,true);};
 $('volume').value=settings.volume;
 $('volume').oninput=()=>{settings.volume=Number($('volume').value);video.volume=settings.volume/100;video.muted=settings.volume===0;screenShare.volume(settings.volume);if(youtube){youtube.setVolume(settings.volume);if(settings.volume===0)youtube.mute();else youtube.unMute();}save();};
 updateMonitor();
@@ -530,7 +571,7 @@ window.addEventListener('message',event=>{
   if(data?.type==='cinema:insets')applyInsets(document.documentElement,data.insets);
   if(data?.type==='cinema:connection'){
     connected=data.connected;if(multisala.open)drawMultisala();
-    if(!connected){screenShare.disconnect();$('share-window').disabled=true;notice(data.message||'Riconnessione al cinema…');}
+    if(!connected){mosaic.clear();mosaicPreviews=[];mosaicRequested=false;screenShare.disconnect();$('share-window').disabled=true;notice(data.message||'Riconnessione al cinema…');}
     else $('notice').textContent='';
   }
   if(data?.type==='cinema:youtube-result'){
@@ -551,9 +592,9 @@ window.addEventListener('message',event=>{
   }
   if(data?.type!=='cinema:packet')return;
   const packet=data.packet;
-  if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;drawRooms(packet.rooms,packet.active);}
+  if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;mosaic.clock=clockOffset;mosaicPreviews=packet.previews??[];drawRooms(packet.rooms,packet.active);}
   else if(packet.type==='favorites'){favorites=packet.items;drawFavorites();drawYouTube();if(catalogController)drawSearch();}
-  else if(packet.type?.startsWith('screen-'))screenShare.receive(packet);
+  else if(packet.type?.startsWith('screen-')){screenShare.receive(packet);if(multisala.open)mosaic.packet(packet);}
   else if(packet.type==='error')notice(packet.message);
 });
 const watchDialog=$('watch-dialog');
@@ -606,8 +647,7 @@ $('watch-form').onsubmit=event=>{
 function playback(command,position){
   if(room?.playback)action('playback',{url:room.channel.url,command,position});
 }
-$('play-shared').onclick=()=>playback('play');
-$('pause-shared').onclick=()=>playback('pause');
+$('toggle-shared').onclick=()=>playback(room?.playback?.playing?'pause':'play');
 $('seek-shared').onsubmit=event=>{
   event.preventDefault();
   const value=$('seek-time').value.trim();
@@ -623,5 +663,5 @@ setInterval(()=>{
   const seconds=Math.floor(targetPosition());
   $('shared-time').textContent=(room.playback.playing?'In riproduzione':'In pausa')+' · '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
 },1000);
-setInterval(()=>{syncYouTube();syncFile();},5000);
+setInterval(()=>{if(multisala.open)mosaic.sync();else{syncYouTube();syncFile();}},5000);
 send('ready');
