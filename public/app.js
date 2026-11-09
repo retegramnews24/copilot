@@ -1,4 +1,4 @@
-import {blackboardLink} from './blackboard/link.js?v=2';
+import {blackboardLink} from './blackboard/link.js?v=3';
 import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
@@ -900,7 +900,9 @@ function sendArcadeInsets(insets=safeInsets(tg)){
 const arcadeOverlay=$('arcade-overlay'),arcadeFrame=$('arcade-frame');
 let arcadeLaunch;
 let blackboardOpening=false;
-const blackboard = blackboardLink(arcadeFrame, () => sessionToken, readAppearance, renderBlackboardRooms);
+const blackboard = blackboardLink(arcadeFrame, () => sessionToken, readAppearance, renderBlackboardRooms, () => {
+ closeArcade();selectPage('game');$('tab-game').focus();
+});
 function renderBlackboardRooms(rooms, state){
  const list=$('blackboard-rooms'),status=$('blackboard-lobby-status');
  const online=state==='online',focused=document.activeElement?.dataset.blackboardRoom;
@@ -941,7 +943,7 @@ function openArcade(button,game,title,online=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
- arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=3':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
+ arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=4':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
  tg?.BackButton?.show();
 }
 function closeArcade(){

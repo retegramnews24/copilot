@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Blackboard spazio libero</title>
-<link rel="stylesheet" href="./board.css?v=3">
+<link rel="stylesheet" href="./board.css?v=4">
 </head>
 <body>
 <main>
@@ -13,6 +13,23 @@
     <h1>Blackboard <span>spazio libero</span></h1>
     <span id="status" role="status">Collegamento…</span>
   </header>
+  <section id="pictionary" aria-label="Pictionary">
+    <button id="game-start" type="button" disabled>Gioca a Pictionary</button>
+    <div id="game-active" hidden>
+      <div class="game-heading">
+        <strong id="game-turn"></strong>
+        <span id="game-role"></span>
+        <button id="game-skip" type="button">Salta parola</button>
+        <button id="game-stop" type="button">Termina gioco</button>
+      </div>
+      <form id="game-guess" hidden>
+        <input id="game-answer" maxlength="60" autocomplete="off" aria-label="La tua risposta" placeholder="Indovina la parola">
+        <button type="submit">Invia</button>
+      </form>
+      <div id="game-scores" aria-label="Punteggi"></div>
+    </div>
+    <p id="game-result" role="status"></p>
+  </section>
   <div class="stage">
     <section class="frame" aria-label="Lavagna condivisa">
       <div class="slate">
@@ -32,7 +49,7 @@
       </div>
     </section>
   </div>
-  <footer><strong id="room">Sala</strong><span id="count">Presenti</span><ul id="people" aria-label="Persone presenti"></ul></footer>
+  <footer><strong id="room">Sala</strong><span id="count">Presenti</span><ul id="people" aria-label="Persone presenti"></ul><button id="delete-room" class="clear-action" type="button" hidden>Elimina lavagna</button></footer>
 </main>
 <dialog id="confirm-clear">
   <form method="dialog">
@@ -41,7 +58,14 @@
     <div><button id="cancel-clear" type="button" autofocus>Annulla</button><button id="confirm-clear-action" class="clear-action" type="button">Cancella Blackboard</button></div>
   </form>
 </dialog>
+<dialog id="confirm-delete" aria-labelledby="delete-title">
+  <form method="dialog">
+    <h2 id="delete-title">Eliminare questa lavagna?</h2>
+    <p>La sala e i suoi disegni verranno rimossi definitivamente per tutti.</p>
+    <div><button autofocus>Annulla</button><button id="delete-room-action" class="clear-action" type="button">Elimina lavagna</button></div>
+  </form>
+</dialog>
 <script type="module" src="../arcade/bridge.js"></script>
-<script type="module" src="./board.js?v=3"></script>
+<script type="module" src="./board.js?v=4"></script>
 </body>
 </html>

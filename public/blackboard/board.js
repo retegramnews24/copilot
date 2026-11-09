@@ -11,6 +11,19 @@ const confirmClearButton = document.getElementById('confirm-clear-action');
 const cancelClearButton = document.getElementById('cancel-clear');
 const sizeControl = document.getElementById('size');
 const eraser = document.getElementById('eraser');
+const gameStart = document.getElementById('game-start');
+const gameActive = document.getElementById('game-active');
+const gameTurn = document.getElementById('game-turn');
+const gameRole = document.getElementById('game-role');
+const gameSkip = document.getElementById('game-skip');
+const gameStop = document.getElementById('game-stop');
+const gameGuess = document.getElementById('game-guess');
+const gameAnswer = document.getElementById('game-answer');
+const gameScores = document.getElementById('game-scores');
+const gameResult = document.getElementById('game-result');
+const deleteRoom = document.getElementById('delete-room');
+const confirmDelete = document.getElementById('confirm-delete');
+let mode = 'free', game = null, roomId, canDelete = false;
 let epoch = 0, clearing = false, clearTimer;
 let color = 0, pointer = null, current = null, last = null;
 let online = false, needsPreview = false, flushTimer;
@@ -100,7 +113,7 @@ let drawingColor, drawingSize;
 function addPoint(next) {
   if (last && Math.hypot(next[0] - last[0], next[1] - last[1]) < 1.8) return;
   if (!current) {
-    current = {type:'stroke', id:crypto.randomUUID(), color:drawingColor, size:drawingSize, epoch, points:last ? [last] : []};
+    current = {type:'stroke', id:crypto.randomUUID(), color:drawingColor, size:drawingSize, mode, epoch, points:last ? [last] : []};
     flushTimer = setTimeout(flush, 95);
   }
   current.points.push(next);
@@ -110,7 +123,7 @@ function addPoint(next) {
 }
 
 preview.addEventListener('pointerdown', event => {
-  if (!online || clearing || pointer !== null || event.button !== 0) return;
+  if (!canDraw() || clearing || pointer !== null || event.button !== 0) return;
   pointer = event.pointerId;
   last = null;
   drawingColor = color;
@@ -156,26 +169,77 @@ function selectTool(index) {
 }
 eraser.onclick = () => selectTool(ERASER);
 clearButton.onclick = () => {
-  if (!online || clearing) return;
+  if (!canDraw() || clearing) return;
   confirmClear.show();
 };
 cancelClearButton.onclick = () => confirmClear.close();
 confirmClearButton.onclick = () => {
   confirmClear.close();
-  if (!online || clearing) return;
+  if (!canDraw() || clearing) return;
   clearing = true;
   clearButton.disabled = true;
   pointer = null;
   last = null;
   flush();
-  post('clear', {command:{type:'clear', epoch}});
+  post('clear', {command:{type:'clear', mode, epoch}});
   status.textContent = 'Cancellazione in corso…';
   clearTimer = setTimeout(() => {
     if (!clearing) return;
     clearing = false;
-    clearButton.disabled = !online;
+    clearButton.disabled = !canDraw();
     status.textContent = 'Cancellazione non confermata. Riprova.';
   }, 8000);
+};
+
+function canDraw() {
+  return online && (mode === 'free' || game?.drawing === true);
+}
+
+function updateControls() {
+  const drawable = canDraw();
+  clearButton.disabled = !drawable || clearing;
+  sizeControl.disabled = eraser.disabled = !drawable;
+  for (const chalk of chalks.children) chalk.disabled = !drawable;
+  preview.classList.toggle('read-only', !drawable);
+  gameStart.disabled = !online;
+  gameSkip.disabled = gameStop.disabled = !online;
+  for (const control of gameGuess.elements) control.disabled = !online;
+  deleteRoom.hidden = !canDelete;
+  deleteRoom.disabled = !online;
+}
+
+function showGame(packet) {
+  if (game?.round !== packet.game?.round) gameAnswer.value = '';
+  game = packet.game;
+  gameStart.hidden = !!game;
+  gameActive.hidden = !game;
+  gameGuess.hidden = !game || game.drawing;
+  gameSkip.hidden = !game?.drawing;
+  gameResult.textContent = game?.result ?? packet.message ?? '';
+  gameTurn.textContent = game ? 'Pictionary · Turno ' + game.turn : '';
+  gameRole.textContent = game ? (game.drawing ? 'Disegna: ' + game.word : game.drawerName + ' sta disegnando') : '';
+  gameScores.textContent = game?.scores.map(({name, points}) => name + ' ' + points).join(' · ') ?? '';
+  updateControls();
+}
+
+function sendGame(action, extra = {}) {
+  if (online) post('game', {command:{type:'pictionary-' + action, round:game?.round, ...extra}});
+}
+
+gameStart.onclick = () => { flush(); sendGame('start'); };
+gameSkip.onclick = () => sendGame('skip');
+gameStop.onclick = () => sendGame('stop');
+gameGuess.onsubmit = event => {
+  event.preventDefault();
+  const guess = gameAnswer.value.trim();
+  if (!guess || !game || game.drawing) return;
+  sendGame('guess', {guess});
+  gameAnswer.value = '';
+};
+deleteRoom.onclick = () => confirmDelete.show();
+document.getElementById('delete-room-action').onclick = () => {
+  confirmDelete.close();
+  if (online && canDelete) post('delete', {command:{type:'room-delete', room:roomId}});
 };
 
 function clearBoard(nextEpoch) {
@@ -188,7 +252,7 @@ function clearBoard(nextEpoch) {
   pending.clear();
   saved.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
   clearing = false;
-  clearButton.disabled = !online;
+  clearButton.disabled = !canDraw();
   if (confirmClear.open) confirmClear.close('cancel');
 }
 
@@ -216,17 +280,27 @@ window.addEventListener('message', event => {
   const packet = event.data.packet;
   switch (packet.type) {
     case 'sync':
-      if (epoch !== packet.epoch) clearBoard(packet.epoch);
+      if (packet.reset || epoch !== packet.epoch || mode !== (packet.mode ?? 'free')) clearBoard(packet.epoch);
+      mode = packet.mode ?? 'free';
+      roomId = packet.room;
+      canDelete = packet.canDelete === true;
+      updateControls();
       document.getElementById('room').textContent = 'Sala ' + packet.number;
       break;
+    case 'pictionary': showGame(packet); break;
+    case 'pictionary-note':
+      if (packet.round === undefined || game?.round === packet.round) gameResult.textContent = packet.message;
+      break;
+    case 'room-delete-error': gameResult.textContent = packet.message; break;
     case 'clear':
+      if (packet.mode && packet.mode !== mode) break;
       clearBoard(packet.epoch);
       status.textContent = 'Lavagna pulita';
       break;
     case 'clear-error':
       clearTimeout(clearTimer);
       clearing = false;
-      clearButton.disabled = !online;
+      clearButton.disabled = !canDraw();
       status.textContent = 'Cancellazione non riuscita. Riprova.';
       break;
     case 'room-error': status.textContent = packet.message; break;
@@ -240,13 +314,14 @@ window.addEventListener('message', event => {
     case 'ready':
       online = true;
       clearing = false;
-      clearButton.disabled = false;
+      updateControls();
       status.textContent = 'In diretta';
       for (const stroke of pending.values()) post('stroke', {command:stroke});
       break;
     case 'offline':
       online = false;
-      clearButton.disabled = true;
+      updateControls();
+      if (confirmDelete.open) confirmDelete.close();
       if (confirmClear.open) confirmClear.close('cancel');
       pointer = null;
       last = null;
@@ -259,5 +334,6 @@ window.addEventListener('message', event => {
   refreshPreview();
 });
 
+updateControls();
 if (parent === window) status.textContent = 'Apri da Binottoland';
 else post('ready');

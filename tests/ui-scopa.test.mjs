@@ -29,8 +29,10 @@ const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.mess
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
 const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Fausto'},{id:'bot:1',name:'AI 1',bot:true}],user={id:'1',player:'tg:1',name:'Fausto'},scopa=initialScopa(2),view=scopaView(scopa,0);let state={room,number:1,phase:'playing',game:'scopa',players,turn:0,revision:0,moves:[],scopa:view,mode:'tutorial',tutorial:tutorial('scopa',view,0,0),expires:Date.now()+86400000};const payload=()=>({games:[state],users:[],messages:[],leaderboard:[{id:'tg:9',name:'Anna <b>',wins:5,games:{scopa:3,chess:2}}],aiLeaderboard:[{id:'tg:1',name:'Fausto',wins:2,games:{scopa:2}}]});
 let lobbySocket,cinemaSocket,blackboardSocket;
+const blackboardMessages=[];
 const cinemaMessages=[],cinemaId="cinema-fixture",cinemaRooms=[{id:cinemaId,number:1,channel:"Canale Uno",viewers:[{id:"tg:1",name:"Fausto"}]}];
 w.WebSocket=class{
+ static OPEN=1;
  constructor(url){
   this.url=url;this.readyState=1;this.bufferedAmount=0;
   if(url.endsWith('/api/lobby/ws'))lobbySocket=this;
@@ -43,7 +45,10 @@ w.WebSocket=class{
    this.onmessage?.({data:JSON.stringify(this===blackboardSocket?boardRooms:initial)});
   },1);
  }
- send(raw){if(this===cinemaSocket)cinemaMessages.push(JSON.parse(raw));}
+ send(raw){
+  if(this===cinemaSocket)cinemaMessages.push(JSON.parse(raw));
+  if(this===blackboardSocket)blackboardMessages.push(JSON.parse(raw));
+ }
  close(){this.readyState=3;}
 };
 w.fetch=async(path,opts)=>Response.json(path==='/api/session'?{user,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...payload(),pending:false}:path==='/api/lobby'?payload():state);
@@ -150,15 +155,24 @@ arcadeMessage({type:'arcade:exit'});
 w.fetch=originalArcadeFetch;
 assert.match(get('blackboard-rooms').textContent,/Sala 1Fausto/);
 get('blackboard-rooms').querySelector('button').click();
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=3');
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=4');
 arcadeMessage({type:'arcade:exit'});
 w.fetch=(path,options)=>path==='/api/blackboard/create'?Promise.resolve(Response.json({id:'2',number:2})):originalArcadeFetch(path,options);
 get('open-blackboard').click();
 await new Promise(resolve=>setTimeout(resolve,0));
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=3');
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=4');
 w.fetch=originalArcadeFetch;
-arcadeMessage({type:'arcade:exit'});
+arcadeMessage({type:'blackboard:ready'});
+assert.deepEqual(blackboardMessages.at(-1),{type:'enter',room:'2',since:0});
+const blackboardPacket=packet=>blackboardSocket.onmessage({data:JSON.stringify(packet)});
+blackboardPacket({type:'sync',room:'2',number:2,mode:'free',epoch:0,canDelete:true});
+arcadeMessage({type:'blackboard:game',command:{type:'pictionary-start'}});
+assert.deepEqual(blackboardMessages.at(-1),{type:'pictionary-start'});
+arcadeMessage({type:'blackboard:delete',command:{type:'room-delete',room:'2'}});
+assert.deepEqual(blackboardMessages.at(-1),{type:'room-delete',room:'2'});
+blackboardPacket({type:'room-deleted',room:'2'});
 assert.equal(get('arcade-overlay').hidden,true);
+assert.equal(get('tab-game').getAttribute('aria-selected'),'true');
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);

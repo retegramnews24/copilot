@@ -10,7 +10,7 @@ body { margin:0 }
 main {
   height:100dvh;
   display:grid;
-  grid-template-rows:auto minmax(0,1fr) auto;
+  grid-template-rows:auto auto minmax(0,1fr) auto;
   padding:
     max(8px,calc(var(--system-safe-top,0px) + var(--content-safe-top,0px)),env(safe-area-inset-top))
     max(9px,calc(var(--system-safe-right,0px) + var(--content-safe-right,0px)),env(safe-area-inset-right))
@@ -81,14 +81,14 @@ footer { min-height:39px; font-size:11px; color:#d9c7ab }
   .frame { width:min(100cqw,calc((100cqh - 97px) * 4 / 3),1300px) }
 }
 
-.tools { display:flex; align-items:center; justify-content:center; gap:6px; padding:0 4px 6px; color:#fff3df; font-size:12px }
-.tools button,.tools select,dialog button {
+.tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:6px; padding:0 4px 6px; color:#fff3df; font-size:12px }
+.tools button,.tools select,dialog button,#pictionary button,#pictionary input,#delete-room {
   background:#32241c; color:#fff1db; border:1px solid #e1b28b75; border-radius:6px;
   font:inherit; min-height:31px; padding:4px 7px; white-space:nowrap;
 }
-.tools button,dialog button { cursor:pointer }
-.tools button:disabled { opacity:.55; cursor:default }
-.tools .clear-action { border-color:#d58b70; background:#562b25; color:#fff0e8 }
+.tools button,dialog button,#pictionary button,#delete-room { cursor:pointer }
+button:disabled { opacity:.55; cursor:default }
+.tools .clear-action,#delete-room { border-color:#d58b70; background:#562b25; color:#fff0e8 }
 #eraser { display:flex; align-items:center; gap:5px }
 #eraser[aria-pressed=true] { outline:2px solid #f7e7ba }
 #eraser i { display:inline-block; width:17px; height:10px; border-radius:3px; transform:rotate(-8deg);
@@ -107,4 +107,30 @@ dialog form div { display:flex; justify-content:flex-end; gap:8px }
   .chalk { min-width:26px }
   .chalk i { width:23px }
   #chalks { gap:1px }
+}
+
+[hidden] { display:none !important }
+#pictionary { width:100%; max-width:1300px; margin-inline:auto; text-align:center; font-size:13px }
+#game-active { display:grid; gap:4px }
+.game-heading,#game-guess { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:5px 8px }
+#game-role { color:#f6d690 }
+#game-guess input { min-width:0; width:min(230px,65vw); background:#201f1a; font-size:16px }
+#game-scores { color:#d9c7ab; white-space:nowrap; overflow-x:auto }
+#game-result { margin:3px 0 0; color:#f1d4a1 }
+#game-result:empty { display:none }
+#delete-room { margin-inline-start:auto; flex:none }
+#preview.read-only { cursor:default }
+@media (max-height:480px) {
+  #pictionary { font-size:11px }
+  #pictionary button,#delete-room { min-height:26px; padding-block:2px }
+}
+
+@media (orientation:landscape) and (max-height:480px) {
+  main:has(#game-active:not([hidden])) { gap:2px }
+  main:has(#game-active:not([hidden])) .frame {
+    width:min(100cqw,calc((100cqh - 14px) * 4 / 3 + 165px));
+    display:grid; grid-template-columns:minmax(0,1fr) 150px; align-items:center; gap:6px; padding-bottom:6px;
+  }
+  main:has(#game-active:not([hidden])) .tray { margin:0; align-content:center }
+  main:has(#game-active:not([hidden])) #chalks { display:grid; grid-template-columns:repeat(3,1fr) }
 }

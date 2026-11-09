@@ -1,5 +1,6 @@
-export function blackboardLink(frame, sessionToken, appearance, onRooms) {
+export function blackboardLink(frame, sessionToken, appearance, onRooms, onDeleted) {
   let socket = null, retry, lastSequence = 0;
+  let mode = 'free';
   let room = null, frameReady = false, joined = false, rooms = [];
 
   function post(packet) {
@@ -11,14 +12,14 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms) {
   }
 
   function enter() {
-    if (room && frameReady) send({type:'enter', room, since:lastSequence});
+    if (room && frameReady) send({type:'enter', room, since:mode === 'pictionary' ? 0 : lastSequence});
   }
 
   function connect() {
     if (socket || !sessionToken()) return;
     clearTimeout(retry);
     const {shirt, shorts} = appearance();
-    const params = new URLSearchParams({shirt, shorts, directory:'1'});
+    const params = new URLSearchParams({shirt, shorts, directory:'1', pictionary:'1'});
     const url = new URL('/api/blackboard/ws?' + params, location.href);
     url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const connection = socket = new WebSocket(url.href, ['checkmate', sessionToken()]);
@@ -31,7 +32,17 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms) {
         onRooms(rooms, 'online');
         return;
       }
-      if (packet.type === 'sync') joined = packet.room === room;
+      if (packet.type === 'room-deleted' && packet.room === room) {
+        onDeleted();
+        return;
+      }
+      if (packet.type === 'sync') {
+        joined = packet.room === room;
+        if (joined) {
+          if (packet.reset || (mode === 'pictionary' && packet.mode !== 'pictionary')) lastSequence = packet.epoch;
+          mode = packet.mode ?? 'free';
+        }
+      }
       if (packet.type === 'room-error') return post(packet);
       if (!joined) return;
       if (packet.type === 'history') lastSequence = packet.strokes.at(-1).seq;
@@ -58,7 +69,9 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms) {
         frameReady = true;
         enter();
       }
-      if (joined && (data?.type === 'blackboard:stroke' || data?.type === 'blackboard:clear')) send(data.command);
+      if (joined && ['blackboard:stroke', 'blackboard:clear', 'blackboard:game', 'blackboard:delete'].includes(data?.type)) {
+        send(data.command);
+      }
     },
     stop() {
       if (room) send({type:'leave'});
@@ -66,6 +79,7 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms) {
       frameReady = false;
       joined = false;
       lastSequence = 0;
+      mode = 'free';
     }
   };
 }
