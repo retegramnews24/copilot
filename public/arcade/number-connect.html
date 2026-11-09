@@ -17,14 +17,14 @@ main{width:min(100%,31rem)}
 .pulse{animation:pulse .24s ease-out}
 @keyframes pulse{50%{transform:scale(.88);filter:brightness(1.2)}}
 @media(prefers-reduced-motion:reduce){.pulse{animation:none}}
-#message{min-height:1.3em;margin-top:7px;color:#d9edba;text-align:center;font-weight:650;font-size:.83rem}
+#ranking{text-align:center}#message{min-height:1.3em;margin-top:7px;color:#d9edba;text-align:center;font-weight:650;font-size:.83rem}
 @media(orientation:landscape) and (max-height:530px){
   main{width:min(100%,44rem);display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:20px;align-items:start}
   header,.bar,.stats,.hint,#message{grid-column:1}#grid{grid-column:2;grid-row:1 / span 5;width:min(51vw,clamp(10rem,calc((100dvh - 24px - var(--system-safe-top,0px) - var(--content-safe-top,0px) - var(--system-safe-bottom,0px) - var(--content-safe-bottom,0px)) * .833),24rem))}
 }
 </style>
 <script type="module" src="bridge.js?v=1"></script>
-<script type="module" src="number-connect.js?v=1"></script>
+<script type="module" src="number-connect.js?v=2"></script>
 </head>
 <body>
 <main>
@@ -36,7 +36,7 @@ main{width:min(100%,31rem)}
   <div class="stats"><div>Punteggio <strong id="score">0</strong></div><div>Record <strong id="record">0</strong></div></div>
   <p class="hint">Unisci due numeri uguali vicini, anche in diagonale. Due fusioni entro 3 secondi valgono una combo ×2.</p>
   <div id="grid" aria-label="Griglia, 5 colonne per 6 righe"></div>
-  <p id="message" role="status"></p>
+  <p id="message" role="status"></p><p id="ranking" class="hint" role="status"></p>
 </main>
 </body>
 </html>

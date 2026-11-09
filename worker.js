@@ -15,6 +15,7 @@ import {initialConnect4,playConnect4} from './connect4.js';
 import { GolfRoom } from './golf-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
+import {hasMove,replayNumberGame} from './public/arcade/number-connect-rules.js';
 import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
@@ -262,6 +263,12 @@ export default {
   if(lab)return env.ROOMS.get(env.ROOMS.idFromName('lab:'+lab[1])).fetch(new Request(u.origin+'/labyrinth/'+lab[2]+u.search,req));
   const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
+  if(u.pathname==='/api/number-connect/score'&&req.method==='POST'){
+   if(Number(req.headers.get('Content-Length'))>320000)return json({error:'Partita troppo lunga.'},413);
+   const raw=await req.text();
+   if(raw.length>320000)return json({error:'Partita troppo lunga.'},413);
+   return lobby.fetch(new Request(u.origin+'/lobby/number-connect-score',{method:'POST',body:raw,headers:trustedHeaders}));
+  }
   if(u.pathname==='/api/leaderboard'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/leaderboard'+u.search));
   if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
   if(u.pathname==='/api/lobby/ws'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/ws',req));
@@ -422,7 +429,7 @@ export class Room extends DurableObject {
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
-  if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
+  if(Number(req.headers.get('Content-Length')||0)>(path==='/lobby/number-connect-score'?320000:4096))return json({error:'Richiesta troppo grande.'},413);
   return this.ctx.blockConcurrencyWhile(async()=>{
    try{
     const path=new URL(req.url).pathname;
@@ -609,8 +616,12 @@ export class Room extends DurableObject {
    }
   }finally{this.tidyingResults=false;}
  }
+ async numberConnectLeaders(){
+  return [...(await this.ctx.storage.list({prefix:'number-connect:'})).values()]
+   .sort((a,b)=>b.points-a.points||a.at-b.at||a.id.localeCompare(b.id)).slice(0,5);
+ }
  async lobby(req,path){
-  if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&!isArcade(g.game)&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);if(u.searchParams.get('mode')==='both')return json({leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai'),pending:pending.length>8});return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
+  if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&!isArcade(g.game)&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);if(u.searchParams.get('mode')==='both')return json({leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai'),numberConnectLeaders:await this.numberConnectLeaders(),pending:pending.length>8});return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
   if(path==='/lobby/list'){
    const games=await this.lobbyList();
    const old=games.filter(game=>concluded(game)&&game.expires!==null);
@@ -627,6 +638,19 @@ export class Room extends DurableObject {
   }
   if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
   const body=await req.json();
+  if(path==='/lobby/number-connect-score'){
+   const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+   if(!user?.player)return json({error:'Accesso richiesto.'},401);
+   const game=replayNumberGame(body);
+   if(!game||!Number.isSafeInteger(game.score)||game.score<=0||hasMove(game)){
+    return json({error:'Il punteggio richiede una partita completata.'},400);
+   }
+   const key='number-connect:'+user.player,previous=await this.ctx.storage.get(key);
+   if(!previous||game.score>previous.points){
+    await this.ctx.storage.put(key,{id:user.player,name:user.name,points:game.score,level:game.level,at:Date.now()});
+   }
+   return json({leaders:await this.numberConnectLeaders()});
+  }
   if(path==='/lobby/result'){const old=await this.ctx.storage.get('result:'+body.key);if(!old)await this.ctx.storage.put('result:'+body.key,body);return json({ok:true});}
   if(path==='/lobby/join'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);

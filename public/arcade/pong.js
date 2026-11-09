@@ -1,4 +1,4 @@
-import {width,height,radius,paddleWidth,modes,paddlePositions,newMatch,movePaddle,moveOpponent,stepMatch} from './pong-physics.js?v=2';
+import {width,height,radius,paddleWidth,modes,paddlePositions,newMatch,movePaddle,moveOpponent,stepMatch} from './pong-physics.js?v=3';
 
 const $=id=>document.getElementById(id);
 const canvas=$('field'),context=canvas.getContext('2d'),field=$('tube');
@@ -111,17 +111,18 @@ function update(){
     dials[i].disabled=phase==='off'||(online?!connected||i!==seat:i!==0);
   });
   const connection=online?(connected?'Sala '+roomNumber+' · '+players.length+'/2 connessi':'Collegamento alla sala…'):
-    rules.solo?'Singolo · Solitaire':'Singolo contro IA';
+    'Singolo';
   $('connection').textContent=notice||connection;
   const winner=match.winner;
   $('score').textContent=rules.solo?match.scores[0]+' / '+rules.target:match.scores.join(' — ');
   overlay.hidden=playing;
+  field.classList.toggle('playing',playing);
   $('message').textContent=phase==='off'?'Monitor spento':waiting?(connected?'In attesa del secondo giocatore':'Connessione in corso'):
     phase==='over'?(rules.solo?(winner===0?'Traguardo raggiunto':'Palla persa'):'Vince '+playerNames[winner]):
     phase==='paused'?'Pausa':'Pronto a giocare';
   const rule=match.mode==='football'?'Porte centrali · 5 gol':match.mode==='catch'?'Intercetta la palla con la porta · 11 punti':
     rules.solo?'Rimanda la palla contro la parete · 11 risposte':'Primo a 11 punti';
-  $('hint').textContent=rule+' · W/S, ↑/↓, manopola o trascinamento';
+  $('hint').textContent=rule+' · W/S, ↑/↓, manopola, rotellina o trascinamento';
   updateDials();draw();
 }
 function direction(){
@@ -188,13 +189,37 @@ field.addEventListener('pointermove',event=>{if(pointer===event.pointerId)aim(ev
 for(const type of ['pointerup','pointercancel','lostpointercapture']){
   field.addEventListener(type,event=>{if(pointer===event.pointerId){pointer=null;target=null;}});
 }
-dials.forEach(dial=>dial.oninput=()=>{
-  const value=Number(dial.value);
-  if(!online&&phase==='ready'){
-    match.paddles[0]=Math.min(height-modes[match.mode].paddle/2-2,Math.max(modes[match.mode].paddle/2+2,value));
-    updateDials();draw();
+field.addEventListener('wheel',event=>{
+  if(phase!=='playing'||!playable()||event.ctrlKey||!event.deltaY)return;
+  event.preventDefault();unlockAudio();
+  const scale=event.deltaMode===1?14:event.deltaMode===2?height:1;
+  const delta=Math.max(-90,Math.min(90,event.deltaY*scale));
+  target=Math.min(height,Math.max(0,(target??match.paddles[seat])+delta));
+},{passive:false});
+dials.forEach(dial=>{
+  const knob=dial.parentElement.querySelector('.knob');
+  let turn=null;
+  function setDial(value){
+    target=Math.min(height,Math.max(0,value));
+    if(!online&&phase==='ready'){
+      const edge=modes[match.mode].paddle/2+2;
+      match.paddles[0]=Math.min(height-edge,Math.max(edge,target));
+      updateDials();draw();
+    }
   }
-  target=value;
+  dial.oninput=()=>setDial(Number(dial.value));
+  knob.addEventListener('pointerdown',event=>{
+    if(dial.disabled||event.button!==0||turn)return;
+    event.preventDefault();unlockAudio();
+    turn={id:event.pointerId,x:event.clientX,y:event.clientY,value:target??Number(dial.value)};
+    knob.setPointerCapture(event.pointerId);
+  });
+  knob.addEventListener('pointermove',event=>{
+    if(turn?.id===event.pointerId)setDial(turn.value+(event.clientX-turn.x+turn.y-event.clientY)*4);
+  });
+  for(const type of ['pointerup','pointercancel','lostpointercapture']){
+    knob.addEventListener(type,event=>{if(turn?.id===event.pointerId)turn=null;});
+  }
 });
 window.addEventListener('keydown',event=>{
   if(event.target.closest?.('button,select,input,a'))return;

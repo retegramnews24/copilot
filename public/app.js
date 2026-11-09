@@ -903,7 +903,7 @@ function openArcade(button,game,title,online=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
- arcadeFrame.title=title;arcadeFrame.src='/arcade/'+game+'.html'+(game==='pong'?(online?'?v=2&online=1':'?v=2'):'?v=1');
+ arcadeFrame.title=title;arcadeFrame.src='/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
  tg?.BackButton?.show();
 }
 function closeArcade(){
@@ -984,6 +984,20 @@ window.addEventListener('message',event=>{
  if(arcadeOverlay.hidden||event.origin!==location.origin||event.source!==arcadeFrame.contentWindow)return;
  if(event.data?.type==='arcade:ready')sendArcadeInsets();
  else if(event.data?.type==='arcade:exit')closeArcade();
+ else if(arcadeFrame.title==='Number Connect'){
+  const source=event.source,data=event.data;
+  if(data?.type==='number-connect:ready'){
+   source.postMessage({type:'number-connect:identity',player:identity?.player},location.origin);
+  }else if(data?.type==='number-connect:score'&&Number.isInteger(data.run?.seed)&&Array.isArray(data.run.moves)&&data.run.moves.length<=20000){
+   const seed=data.run.seed;
+   const reply=ok=>{
+    if(!arcadeOverlay.hidden&&arcadeFrame.title==='Number Connect'&&source===arcadeFrame.contentWindow){
+     source.postMessage({type:'number-connect:result',seed,ok},location.origin);
+    }
+   };
+   request('/api/number-connect/score',data.run).then(result=>{renderNumberLeaders(result.leaders);reply(true);},()=>reply(false));
+  }
+ }
  else if(arcadeFrame.title==='Pong'){
   const data=event.data;
   if(data?.type==='pong:ready'){
@@ -1144,9 +1158,21 @@ function paintLeaders(kind,rows){
  }
  $('leaderboard-'+kind+'-empty').hidden=rows.length>0;
 }
+function renderNumberLeaders(rows){
+ const list=$('leaderboard-number'),levels={easy:'Facile',medium:'Media',hard:'Difficile'};
+ list.replaceChildren(...rows.map((row,index)=>{
+  const item=document.createElement('li'),name=document.createElement('strong'),points=document.createElement('span');
+  name.textContent=(index+1)+'. '+row.name;
+  points.textContent=Number(row.points).toLocaleString('it-IT')+' punti · '+levels[row.level];
+  item.append(name,points);
+  return item;
+ }));
+ $('leaderboard-number-empty').hidden=rows.length>0;
+}
 function renderLeaders(data){
  paintLeaders('solo',data.aiLeaderboard||[]);
  paintLeaders('multi',data.leaderboard||[]);
+ if(Array.isArray(data.numberConnectLeaders))renderNumberLeaders(data.numberConnectLeaders);
 }
 async function loadLeaders(){
  if(!sessionToken||leaderBusy)return;

@@ -1,3 +1,4 @@
+import {createNumberGame,hasMove,canMerge,mergeNumbers} from '../public/arcade/number-connect-rules.js';
 import {makeCourse,ground} from '../public/moto-trial/physics.js';
 import {randomFleet} from '../public/naval-data.js';
 // Run after Wrangler --dry-run; uses workerd and SQLite Durable Objects, never production.
@@ -205,6 +206,33 @@ try{
  assert.equal(pongRejoined.packets[0].state.phase,'playing');
  pongA.ws.close();pongRejoined.ws.close();
  console.log('PASS Pong runtime: Lobby roster, waiting, automatic start, capacity, authoritative movement, host controls and reconnect.');
+
+ function completedNumbers(seed){
+  const level='hard',game=createNumberGame(seed,level),moves=[];
+  while(hasMove(game)){
+   let merged=false;
+   for(let from=0;from<30&&!merged;from++){
+    for(let to=from+1;to<30;to++){
+     if(!canMerge(game,from,to))continue;
+     mergeNumbers(game,from,to,false);
+     moves.push([from,to,3000]);merged=true;break;
+    }
+   }
+   assert.ok(merged&&moves.length<10000);
+  }
+  return {run:{seed,level,moves},points:game.score};
+ }
+ const results=[completedNumbers(15),completedNumbers(18)].sort((a,b)=>b.points-a.points);
+ const [stronger,weaker]=results;
+ const numberScore='/api/number-connect/score';
+ assert.equal((await call(241,numberScore,{...stronger.run,moves:[]})).status,400);
+ assert.equal((await call(241,numberScore,{...stronger.run,moves:[[0,0,3000]]})).status,400);
+ assert.equal((await call(241,numberScore,stronger.run)).status,200);
+ assert.equal((await call(241,numberScore,weaker.run)).data.leaders[0].points,stronger.points);
+ assert.equal((await call(242,numberScore,weaker.run)).status,200);
+ const publicScores=(await call(243,'/api/leaderboard?mode=both')).data.numberConnectLeaders;
+ assert.deepEqual(publicScores.map(row=>[row.id,row.points]),[['tg:241',stronger.points],['tg:242',weaker.points]]);
+ console.log('PASS Number Connect runtime: completed replays only, per-account records and shared score ranking.');
  const appearance=['#a11293','#197b61'];
  const golf=await call(301,'/api/create',{game:'golf',appearance,campaign:'coast'});
  assert.equal(golf.status,200);

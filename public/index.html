@@ -143,7 +143,7 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 .catalog-grid .catalog-card .catalog-actions button{margin:0;padding:5px 2px;font-size:clamp(9px,2.7vw,12px);min-width:0;overflow-wrap:anywhere}
 .catalog-resume{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}
 .catalog-resume button{width:auto;flex:none}
-.leaderboard-grid section{min-width:0}
+.leaderboard-grid section{min-width:0}.number-leaders{grid-column:1/-1}.number-leaders li{display:flex;justify-content:space-between;gap:6px;padding:4px 0;font-size:12px}.number-leaders span{color:var(--muted);text-align:right}
 .leaderboard-grid h4{margin:0;font-size:13px;color:var(--accent)}
 .leaderboard-grid strong,.leaderboard-grid p{overflow-wrap:anywhere}
 #creation-dialog fieldset{min-width:0;margin:0 0 9px;padding:0;border:0}
@@ -198,7 +198,7 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 <svg viewBox="0 0 60 60" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="42" r="9"/><circle cx="47" cy="42" r="9"/><path d="M13 42l10-18 12 1-5 12-17 5m34 0-9-25h-8m-7 7-5-5h-7m12 5 7 13"/></svg>
 </div><h3>Moto Trial</h3></div><div class="catalog-card-content"><p>10 livelli da superare in ordine</p><div class="catalog-actions"><button id="play-moto-trial" class="alt" type="button">Singolo</button><button id="create-moto-trial" type="button" disabled>Multiplayer</button></div></div></article>
 <article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon" aria-hidden="true">2⁴</div><h3>Number Connect</h3></div><div class="catalog-card-content"><p>Unisci i numeri e migliora il tuo record</p><button id="play-number-connect" class="alt" type="button">Singolo</button></div></article>
-<article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon pong-symbol" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2.5" y="7.5" width="43" height="33" rx="5"/><path d="M24 12v4m0 16v4" opacity=".55"/><path d="M9.5 17v10m29-6v10" stroke-width="4"/><rect x="22" y="22" width="4" height="4" fill="currentColor" stroke="none"/></svg></div><h3>Pong</h3></div><div class="catalog-card-content"><p>Console rétro · 5 modalità</p><div class="catalog-actions"><button id="play-pong" class="alt" type="button">Singolo contro IA</button><button id="create-pong" type="button" disabled>2 giocatori</button></div></div></article>
+<article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon pong-symbol" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="2.5" y="7.5" width="43" height="33" rx="5"/><path d="M24 12v4m0 16v4" opacity=".55"/><path d="M9.5 17v10m29-6v10" stroke-width="4"/><rect x="22" y="22" width="4" height="4" fill="currentColor" stroke="none"/></svg></div><h3>Pong</h3></div><div class="catalog-card-content"><p>Console rétro · 5 modalità</p><div class="catalog-actions"><button id="play-pong" class="alt" type="button">Singolo</button><button id="create-pong" type="button" disabled>2 giocatori</button></div></div></article>
 </div></section>
 <section aria-labelledby="catalog-board-title">
 <h3 id="catalog-board-title" class="catalog-heading">Giochi da tavolo</h3>
@@ -209,6 +209,7 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
   <div class="leaderboard-grid">
     <section><h4>Singolo</h4><ol id="leaderboard-solo"></ol><p id="leaderboard-solo-empty" class="hint">Nessuna vittoria</p></section>
     <section><h4>Multiplayer</h4><ol id="leaderboard-multi"></ol><p id="leaderboard-multi-empty" class="hint">Nessuna vittoria</p></section>
+    <section class="number-leaders"><h4>Number Connect · Punti</h4><ol id="leaderboard-number"></ol><p id="leaderboard-number-empty" class="hint">Nessun punteggio</p></section>
   </div>
 </section>
 <div id="owned-table" class="catalog-resume" hidden><p id="owned-table-note" class="hint"></p><button id="resume-table" class="alt">Riprendi tavolo</button></div>
@@ -245,7 +246,7 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 <div id="golf-overlay" hidden style="position:fixed;inset:0;z-index:30;background:#172938"><iframe id="golf-frame" title="Golf with your gay friends" style="position:absolute;inset:0;width:100%;height:100%;border:0" src="about:blank"></iframe></div>
 <div id="cinema-overlay" hidden style="position:fixed;inset:0;z-index:30;background:#0d0d16"><iframe id="cinema-frame" title="Cinema Streamer" allow="autoplay; fullscreen; display-capture" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0" src="about:blank"></iframe></div>
 <section id="arcade-overlay" aria-label="Giochi arcade" hidden><iframe id="arcade-frame" title="Giochi arcade" sandbox="allow-scripts allow-same-origin"></iframe></section>
-<script src="https://telegram.org/js/telegram-web-app.js"></script><script type="module" src="app.js?v=pong2"></script><script src="radio.js"></script></body></html>
+<script src="https://telegram.org/js/telegram-web-app.js"></script><script type="module" src="app.js?v=arcade3"></script><script src="radio.js"></script></body></html>
 
 
 

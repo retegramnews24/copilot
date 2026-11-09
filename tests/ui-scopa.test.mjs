@@ -16,6 +16,7 @@ import {drawTrial} from '../public/moto-trial/render.js';
 import * as trialPhysics from '../public/moto-trial/physics.js';
 import {FrameBudget} from '../public/labyrinth/performance.js';
 import {newMatch,movePaddle,stepMatch,paddlePositions,width,height,radius} from '../public/arcade/pong-physics.js';
+import {createNumberGame,canMerge,mergeNumbers} from '../public/arcade/number-connect-rules.js';
 const source=await fs.readFile('public/app.js','utf8');
 const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};';
 const importLines=/^import .+;$/gm;
@@ -93,7 +94,7 @@ for(const game of ['number-connect','pong']){
  const launch=get('play-'+game),frame=get('arcade-frame'),overlay=get('arcade-overlay');
  launch.click();
  assert.equal(overlay.hidden,false);
- assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v='+(game==='pong'?2:1));
+ assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v='+(game==='pong'?3:2));
  w.dispatchEvent(new w.MessageEvent('message',{origin:'https://wrong.test',source:frame.contentWindow,data:{type:'arcade:exit'}}));
  assert.equal(overlay.hidden,false);
  w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:frame.contentWindow,data:{type:'arcade:exit'}}));
@@ -118,7 +119,7 @@ w.WebSocket=class extends originalArcadeSocket{
 };
 get('create-pong').click();
 await new Promise(resolve=>setTimeout(resolve,0));
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/arcade/pong.html?v=2&online=1');
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/arcade/pong.html?v=3&online=1');
 const arcadeMessage=data=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:arcadeOnlineFrame.contentWindow,data}));
 arcadeMessage({type:'pong:ready'});
 assert.ok(pongSocketFixture);
@@ -127,6 +128,24 @@ assert.deepEqual(pongMessages.at(-1),{type:'input',direction:1,target:null});
 arcadeMessage({type:'arcade:exit'});
 assert.equal(pongSocketFixture.readyState,3);
 w.fetch=originalArcadeFetch;w.WebSocket=originalArcadeSocket;
+get('play-number-connect').click();
+const numberBridge=[];
+arcadeOnlineFrame.contentWindow.postMessage=data=>numberBridge.push(data);
+arcadeMessage({type:'number-connect:ready'});
+assert.equal(numberBridge.at(-1).player,'tg:1');
+w.fetch=async(path,options)=>{
+ if(path==='/api/number-connect/score'){
+  assert.equal(JSON.parse(options.body).seed,99);
+  return Response.json({leaders:[{name:'Fausto',points:120,level:'easy'}]});
+ }
+ return originalArcadeFetch(path,options);
+};
+arcadeMessage({type:'number-connect:score',run:{seed:99,level:'easy',moves:[]}});
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(numberBridge.at(-1).ok,true);
+assert.match(get('leaderboard-number').textContent,/Fausto.*120 punti/);
+arcadeMessage({type:'arcade:exit'});
+w.fetch=originalArcadeFetch;
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);
@@ -891,32 +910,49 @@ await new Promise(resolve=>setTimeout(resolve,0));
 cinemaDOM.window.close();
 console.log('PASS Cinema UI: shared controls, live mosaic layout, window capture and viewer audio activation.');
 
-const numberDOM=new JSDOM(await fs.readFile('public/arcade/number-connect.html','utf8'),{url:'https://unit.test/arcade/number-connect.html',runScripts:'outside-only'});
-const nw=numberDOM.window,nd=nw.document;
-let generated=0;
-nw.Math.random=()=>{
- const i=generated++;
- return i<30&&(Math.floor(i/5)+i%5)%2===1 ? 0.3 : 0;
+const numberPage=await fs.readFile('public/arcade/number-connect.html','utf8');
+const numberBundle=await build({entryPoints:['public/arcade/number-connect.js'],bundle:true,write:false,format:'iife',platform:'browser'});
+const openNumber=saved=>{
+ const dom=new JSDOM(numberPage,{url:'https://unit.test/arcade/number-connect.html',runScripts:'outside-only'});
+ const w=dom.window;
+ w.localStorage.setItem('binottoland-number-connect:save:local',saved);
+ w.eval(numberBundle.outputFiles[0].text);
+ return w;
 };
-nw.eval(await fs.readFile('public/arcade/number-connect.js','utf8'));
+let numberSeed=0;
+while(!canMerge(createNumberGame(numberSeed,'easy'),0,6))numberSeed++;
+const initialNumbers=createNumberGame(numberSeed,'easy'),firstValue=initialNumbers.board[0]*2;
+const nw=openNumber(JSON.stringify({seed:numberSeed,level:'easy',moves:[]})),nd=nw.document;
 const tiles=[...nd.querySelectorAll('.cell')];
 assert.equal(tiles.length,30);
 assert.equal(tiles[0].textContent,tiles[6].textContent);
-assert.notEqual(tiles[0].textContent,tiles[1].textContent);
 tiles[0].click();tiles[6].click();
-assert.equal(nd.getElementById('score').textContent,'4');
-assert.equal(tiles[6].textContent,'4');
+assert.equal(Number(nd.getElementById('score').textContent),firstValue);
+assert.equal(Number(tiles[6].textContent),firstValue);
+mergeNumbers(initialNumbers,0,6,false);
+let nextPair;
+for(let from=0;from<30&&!nextPair;from++){
+ for(let to=from+1;to<30;to++)if(canMerge(initialNumbers,from,to)){nextPair=[from,to];break;}
+}
+assert.ok(nextPair);
+const [secondFrom,secondTo]=nextPair;
+const total=firstValue+initialNumbers.board[secondTo]*4;
 const numberGrid=nd.getElementById('grid');
 numberGrid.setPointerCapture=()=>{};
 const emitPointer=(name,target)=>target.dispatchEvent(Object.assign(new nw.Event(name,{bubbles:true}),{pointerId:1,button:0,clientX:1,clientY:1}));
-nd.elementFromPoint=()=>tiles[1];
-emitPointer('pointerdown',tiles[6]);emitPointer('pointerup',numberGrid);
-assert.equal(nd.getElementById('score').textContent,'20');
+nd.elementFromPoint=()=>tiles[secondTo];
+emitPointer('pointerdown',tiles[secondFrom]);emitPointer('pointerup',numberGrid);
+assert.equal(Number(nd.getElementById('score').textContent),total);
 assert.match(nd.getElementById('message').textContent,/Combo/);
+const savedRun=nw.localStorage.getItem('binottoland-number-connect:save:local');
+const resumed=openNumber(savedRun),resumedDoc=resumed.document;
+assert.deepEqual([...resumedDoc.querySelectorAll('.cell')].map(tile=>tile.textContent),tiles.map(tile=>tile.textContent));
+assert.equal(Number(resumedDoc.getElementById('score').textContent),total);
+assert.equal(resumedDoc.getElementById('difficulty').value,'easy');
 nd.getElementById('start').click();
-assert.equal(nd.getElementById('record').textContent,'20');
+assert.equal(Number(nd.getElementById('record').textContent),total);
 assert.equal(nd.getElementById('score').textContent,'0');
-numberDOM.window.close();
+resumed.close();nw.close();
 
 function shot(mode,x,y,vx){
  const match=newMatch(mode);
@@ -944,6 +980,13 @@ const front=paddlePositions('football',1)[1];
 const intercepted=shot('football',front-radius-2,height/2,550);
 assert.equal(stepMatch(intercepted,1/120),'paddle');
 assert.ok(intercepted.ball.vx<0);
+const leftFront=paddlePositions('football',0)[1];
+const leftRear=shot('football',leftFront-radius-2,height/2,550);
+assert.equal(stepMatch(leftRear,1/120),'paddle');
+assert.ok(leftRear.ball.vx<0);
+const rightRear=shot('football',front+9+radius+2,height/2,-550);
+assert.equal(stepMatch(rightRear,1/120),'paddle');
+assert.ok(rightRear.ball.vx>0);
 assert.equal(paddlePositions('super',0).length,2);
 const catchPoint=shot('catch',width-radius-2,height/2,550);
 assert.equal(stepMatch(catchPoint,1/120),'score');
@@ -968,8 +1011,17 @@ assert.equal(pd.querySelector('h1').textContent.startsWith('PONG'),true);
 assert.ok(pd.getElementById('cabinet').compareDocumentPosition(pd.getElementById('power'))&pw.Node.DOCUMENT_POSITION_FOLLOWING);
 pd.getElementById('primary').click();
 assert.equal(pd.getElementById('overlay').hidden,true);
+const monitor=pd.getElementById('tube');
+assert.ok(monitor.classList.contains('playing'));
+const pongWheel=new pw.WheelEvent('wheel',{deltaY:50,cancelable:true});
+monitor.dispatchEvent(pongWheel);
+assert.equal(pongWheel.defaultPrevented,true);
 pd.getElementById('primary').click();
 assert.equal(pd.getElementById('message').textContent,'Pausa');
+assert.equal(monitor.classList.contains('playing'),false);
+const pausedWheel=new pw.WheelEvent('wheel',{deltaY:50,cancelable:true});
+monitor.dispatchEvent(pausedWheel);
+assert.equal(pausedWheel.defaultPrevented,false);
 pongDOM.window.close();
 console.log('PASS Arcade: both launchers, diagonal merge, pointer drag, combo, record, Pong rebounds, goals and win conditions.');
 

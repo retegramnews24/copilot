@@ -50,10 +50,12 @@ export function stepMatch(match,dt,random=Math.random){
     const edgeTime=(edgeX-ball.x)/ball.vx;
     let hitTime=Infinity,offset=0;
     if(!catchMode&&!(rules.solo&&toRight)){
-      for(const x of paddlePositions(match.mode,player)){
+      const candidates=paddlePositions(match.mode,player).map(x=>({x,owner:player}));
+      if(rules.goal)candidates.push({x:paddlePositions(match.mode,1-player)[1],owner:1-player});
+      for(const {x,owner} of candidates){
         const face=toRight?x-radius:x+paddleWidth+radius;
         const time=(face-ball.x)/ball.vx;
-        const aim=(ball.y+ball.vy*time-match.paddles[player])/(rules.paddle/2);
+        const aim=(ball.y+ball.vy*time-match.paddles[owner])/(rules.paddle/2);
         if(time>=0&&time<hitTime&&Math.abs(aim)<=1+radius/(rules.paddle/2)){
           hitTime=time;offset=aim;
         }
