@@ -39,6 +39,9 @@ export class Blackboard {
     const boardColumns = new Set(this.sql.exec('PRAGMA table_info(boards)').toArray().map(row => row.name));
     if (!boardColumns.has('owner')) this.sql.exec('ALTER TABLE boards ADD COLUMN owner TEXT');
     if (!boardColumns.has('deleted')) this.sql.exec('ALTER TABLE boards ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0');
+    // The primary key stays stable even when the room's public number is reused.
+    if (!boardColumns.has('display_number')) this.sql.exec('ALTER TABLE boards ADD COLUMN display_number INTEGER');
+    this.sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS active_board_number ON boards (COALESCE(display_number, number)) WHERE deleted = 0');
     this.sql.exec('CREATE TABLE IF NOT EXISTS pictionary (room TEXT PRIMARY KEY, state TEXT NOT NULL)');
     this.sql.exec('INSERT OR IGNORE INTO boards (number) VALUES (1)');
     for (const socket of ctx.getWebSockets(TAG)) {
@@ -77,8 +80,11 @@ export class Blackboard {
 
   directory(accessTag, exclude = null) {
     const peers = this.peers(accessTag, exclude);
-    const rooms = this.sql.exec('SELECT number FROM boards WHERE deleted = 0 ORDER BY number').toArray().map(({number}) => {
-      const room = String(number);
+    const entries = this.sql.exec(
+      'SELECT number AS id, COALESCE(display_number, number) AS display FROM boards WHERE deleted = 0 ORDER BY COALESCE(display_number, number)'
+    ).toArray();
+    const rooms = entries.map(({id, display:number}) => {
+      const room = String(id);
       return {id:room, number, people:this.people(peers.filter(socket => socket.deserializeAttachment().room === room))};
     });
     for (const socket of peers) {
@@ -91,9 +97,23 @@ export class Blackboard {
     const user = JSON.parse(request.headers.get('X-Checkmate-User') || 'null');
     if (!user?.player) return new Response(null, {status:401});
     if (request.method === 'POST' && new URL(request.url).pathname === '/blackboard/create') {
-      const {number} = this.sql.exec('INSERT INTO boards (owner) VALUES (?) RETURNING number', user.player).one();
+      const entry = this.ctx.storage.transactionSync(() => {
+        let number = 1;
+        const active = this.sql.exec(
+          'SELECT COALESCE(display_number, number) AS display FROM boards WHERE deleted = 0 ORDER BY COALESCE(display_number, number)'
+        ).toArray();
+        for (const {display} of active) {
+          if (display > number) break;
+          number++;
+        }
+        const {id} = this.sql.exec(
+          'INSERT INTO boards (owner, display_number) VALUES (?, ?) RETURNING number AS id',
+          user.player, number
+        ).one();
+        return {id:String(id), number};
+      });
       this.directory(accessTag);
-      return Response.json({id:String(number), number});
+      return Response.json(entry);
     }
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return new Response('WebSocket richiesto', {status:426});
@@ -135,7 +155,7 @@ export class Blackboard {
     const mode = game ? 'pictionary' : 'free';
     const epoch = game?.epoch ?? entry.epoch;
     const surface = game ? 'pictionary:' + peer.room : peer.room;
-    if (!peer.legacy) send(socket, {type:'sync', room:peer.room, number:entry.number, epoch, mode,
+    if (!peer.legacy) send(socket, {type:'sync', room:peer.room, number:entry.display_number ?? entry.number, epoch, mode,
       reset:reset || !!game, canDelete:true});
     if (peer.canPlay) {
       const players = game && this.gamePlayers(this.gamePeers(peer.accessTag, peer.room));
