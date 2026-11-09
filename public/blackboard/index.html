@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Blackboard spazio libero</title>
-<link rel="stylesheet" href="./board.css?v=1">
+<link rel="stylesheet" href="./board.css?v=2">
 </head>
 <body>
 <main>
@@ -16,15 +16,32 @@
   <div class="stage">
     <section class="frame" aria-label="Lavagna condivisa">
       <div class="slate">
-        <canvas id="board" aria-label="Disegni condivisi"></canvas>
         <canvas id="preview" aria-label="Disegna con il gessetto"></canvas>
       </div>
-      <div id="chalks" role="group" aria-label="Gessetti colorati"></div>
+      <div class="tray">
+        <div id="chalks" role="group" aria-label="Gessetti colorati"></div>
+        <div class="tools">
+          <button id="eraser" type="button" aria-pressed="false"><i aria-hidden="true"></i>Gomma</button>
+          <label for="size">Spessore</label>
+          <select id="size">
+            <option value="5">Fine</option><option value="9" selected>Medio</option>
+            <option value="16">Grande</option><option value="26">Maxi</option>
+          </select>
+          <button id="clear" type="button" disabled>Pulisci tutto</button>
+        </div>
+      </div>
     </section>
   </div>
-  <footer><span id="count">Presenti</span><ul id="people" aria-label="Persone presenti"></ul></footer>
+  <footer><strong id="room">Sala</strong><span id="count">Presenti</span><ul id="people" aria-label="Persone presenti"></ul></footer>
 </main>
+<dialog id="confirm-clear">
+  <form method="dialog">
+    <h2>Pulire tutta la lavagna?</h2>
+    <p>I disegni di questa sala verranno cancellati per tutti.</p>
+    <div><button value="cancel" autofocus>Annulla</button><button value="clear">Pulisci tutto</button></div>
+  </form>
+</dialog>
 <script type="module" src="../arcade/bridge.js"></script>
-<script type="module" src="./board.js?v=1"></script>
+<script type="module" src="./board.js?v=2"></script>
 </body>
 </html>

@@ -28,17 +28,19 @@ const imports=await build({stdin:{
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
 const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Fausto'},{id:'bot:1',name:'AI 1',bot:true}],user={id:'1',player:'tg:1',name:'Fausto'},scopa=initialScopa(2),view=scopaView(scopa,0);let state={room,number:1,phase:'playing',game:'scopa',players,turn:0,revision:0,moves:[],scopa:view,mode:'tutorial',tutorial:tutorial('scopa',view,0,0),expires:Date.now()+86400000};const payload=()=>({games:[state],users:[],messages:[],leaderboard:[{id:'tg:9',name:'Anna <b>',wins:5,games:{scopa:3,chess:2}}],aiLeaderboard:[{id:'tg:1',name:'Fausto',wins:2,games:{scopa:2}}]});
-let lobbySocket,cinemaSocket;
+let lobbySocket,cinemaSocket,blackboardSocket;
 const cinemaMessages=[],cinemaId="cinema-fixture",cinemaRooms=[{id:cinemaId,number:1,channel:"Canale Uno",viewers:[{id:"tg:1",name:"Fausto"}]}];
 w.WebSocket=class{
  constructor(url){
   this.url=url;this.readyState=1;this.bufferedAmount=0;
   if(url.endsWith('/api/lobby/ws'))lobbySocket=this;
   if(url.endsWith('/api/cinema/ws'))cinemaSocket=this;
+  if(url.includes('/api/blackboard/ws?'))blackboardSocket=this;
   w.setTimeout(()=>{
    this.onopen?.();
    const initial=this===lobbySocket?payload():this===cinemaSocket?{type:'rooms',rooms:cinemaRooms,active:null}:state;
-   this.onmessage?.({data:JSON.stringify(initial)});
+   const boardRooms={type:'rooms',rooms:[{id:'1',number:1,people:[user]}]};
+   this.onmessage?.({data:JSON.stringify(this===blackboardSocket?boardRooms:initial)});
   },1);
  }
  send(raw){if(this===cinemaSocket)cinemaMessages.push(JSON.parse(raw));}
@@ -146,8 +148,15 @@ assert.equal(numberBridge.at(-1).ok,true);
 assert.match(get('leaderboard-number').textContent,/Fausto.*120 punti/);
 arcadeMessage({type:'arcade:exit'});
 w.fetch=originalArcadeFetch;
+assert.match(get('blackboard-rooms').textContent,/Sala 1Fausto/);
+get('blackboard-rooms').querySelector('button').click();
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=2');
+arcadeMessage({type:'arcade:exit'});
+w.fetch=(path,options)=>path==='/api/blackboard/create'?Promise.resolve(Response.json({id:'2',number:2})):originalArcadeFetch(path,options);
 get('open-blackboard').click();
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=1');
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=2');
+w.fetch=originalArcadeFetch;
 arcadeMessage({type:'arcade:exit'});
 assert.equal(get('arcade-overlay').hidden,true);
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');

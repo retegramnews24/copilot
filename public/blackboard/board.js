@@ -1,10 +1,15 @@
 import {avatarSVG} from '../labyrinth/avatar.js?v=8';
-import {BOARD_WIDTH, BOARD_HEIGHT, CHALKS, MAX_POINTS} from './chalk.js';
+import {BOARD_WIDTH, BOARD_HEIGHT, CHALKS, MAX_POINTS, ERASER, DEFAULT_SIZE} from './chalk.js?v=2';
 
-const board = document.getElementById('board');
+const board = document.createElement('canvas');
 const preview = document.getElementById('preview');
 const status = document.getElementById('status');
 const pending = new Map();
+const clearButton = document.getElementById('clear');
+const confirmClear = document.getElementById('confirm-clear');
+const sizeControl = document.getElementById('size');
+const eraser = document.getElementById('eraser');
+let epoch = 0, clearing = false;
 let color = 0, pointer = null, current = null, last = null;
 let online = false, needsPreview = false, flushTimer;
 for (const canvas of [board, preview]) {
@@ -15,29 +20,33 @@ const saved = board.getContext('2d');
 const draft = preview.getContext('2d');
 
 function paint(ctx, stroke) {
-  const {points} = stroke;
+  const {points, size = DEFAULT_SIZE} = stroke;
+  const erase = stroke.color === ERASER;
   let seed = Number.parseInt(stroke.id.slice(0, 8), 16);
   function random() {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     return seed / 4294967296;
   }
 
-  ctx.fillStyle = ctx.strokeStyle = CHALKS[stroke.color][1];
+  ctx.save();
+  if (erase) ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = ctx.strokeStyle = erase ? '#000' : CHALKS[stroke.color][1];
   ctx.lineCap = ctx.lineJoin = 'round';
-  ctx.lineWidth = 4;
-  ctx.globalAlpha = 0.24;
+  ctx.lineWidth = erase ? size * 3 : size * 4 / DEFAULT_SIZE;
+  ctx.globalAlpha = erase ? 1 : 0.24;
   ctx.beginPath();
   ctx.moveTo(...points[0]);
   if (points.length === 1) ctx.lineTo(points[0][0] + 0.1, points[0][1]);
   for (const point of points.slice(1)) ctx.lineTo(...point);
   ctx.stroke();
+  if (erase) { ctx.restore(); return; }
 
   ctx.globalAlpha = 0.72;
   ctx.beginPath();
   function dust(x, y) {
     for (let i = 0; i < 6; i++) {
-      const size = 0.65 + random() * 1.35;
-      ctx.rect(x + (random() - 0.5) * 9, y + (random() - 0.5) * 9, size, size);
+      const speck = (0.65 + random() * 1.35) * Math.sqrt(size / DEFAULT_SIZE);
+      ctx.rect(x + (random() - 0.5) * size, y + (random() - 0.5) * size, speck, speck);
     }
   }
 
@@ -49,7 +58,7 @@ function paint(ctx, stroke) {
     for (let k = 1; k <= samples; k++) dust(x + dx * k / samples, y + dy * k / samples);
   }
   ctx.fill();
-  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 
 function refreshPreview() {
@@ -58,6 +67,7 @@ function refreshPreview() {
   requestAnimationFrame(() => {
     needsPreview = false;
     draft.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+    draft.drawImage(board, 0, 0);
     for (const stroke of pending.values()) paint(draft, stroke);
     if (current) paint(draft, current);
   });
@@ -74,7 +84,7 @@ function flush() {
   const stroke = current;
   current = null;
   pending.set(stroke.id, stroke);
-  if (online) post('stroke', {stroke});
+  if (online) post('stroke', {command:stroke});
   refreshPreview();
 }
 
@@ -84,11 +94,11 @@ function point(event, rect) {
   return [Math.max(0, Math.min(BOARD_WIDTH, x)), Math.max(0, Math.min(BOARD_HEIGHT, y))];
 }
 
-let drawingColor;
+let drawingColor, drawingSize;
 function addPoint(next) {
   if (last && Math.hypot(next[0] - last[0], next[1] - last[1]) < 1.8) return;
   if (!current) {
-    current = {type:'stroke', id:crypto.randomUUID(), color:drawingColor, points:last ? [last] : []};
+    current = {type:'stroke', id:crypto.randomUUID(), color:drawingColor, size:drawingSize, epoch, points:last ? [last] : []};
     flushTimer = setTimeout(flush, 95);
   }
   current.points.push(next);
@@ -98,10 +108,11 @@ function addPoint(next) {
 }
 
 preview.addEventListener('pointerdown', event => {
-  if (!online || pointer !== null || event.button !== 0) return;
+  if (!online || clearing || pointer !== null || event.button !== 0) return;
   pointer = event.pointerId;
   last = null;
   drawingColor = color;
+  drawingSize = Number(sizeControl.value);
   preview.setPointerCapture(pointer);
   addPoint(point(event, preview.getBoundingClientRect()));
 });
@@ -131,13 +142,43 @@ CHALKS.forEach(([name, tint, angle], index) => {
   button.style.setProperty('--chalk', tint);
   button.style.setProperty('--angle', angle + 'deg');
   button.append(document.createElement('i'));
-  button.onclick = () => {
-    chalks.children[color].setAttribute('aria-pressed', 'false');
-    color = index;
-    button.setAttribute('aria-pressed', 'true');
-  };
+  button.onclick = () => selectTool(index);
   chalks.append(button);
 });
+
+function selectTool(index) {
+  color = index;
+  for (const [i, button] of [...chalks.children, eraser].entries()) {
+    button.setAttribute('aria-pressed', String(i === color));
+  }
+}
+eraser.onclick = () => selectTool(ERASER);
+clearButton.onclick = () => {
+  confirmClear.returnValue = 'cancel';
+  confirmClear.showModal();
+};
+confirmClear.addEventListener('close', () => {
+  if (confirmClear.returnValue !== 'clear' || !online || clearing) return;
+  clearing = true;
+  clearButton.disabled = true;
+  pointer = null;
+  last = null;
+  flush();
+  post('clear', {command:{type:'clear', epoch}});
+});
+
+function clearBoard(nextEpoch) {
+  epoch = nextEpoch;
+  clearTimeout(flushTimer);
+  current = null;
+  last = null;
+  pointer = null;
+  pending.clear();
+  saved.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
+  clearing = false;
+  clearButton.disabled = !online;
+  if (confirmClear.open) confirmClear.close('cancel');
+}
 
 function showPeople(people) {
   const list = document.getElementById('people');
@@ -162,6 +203,20 @@ window.addEventListener('message', event => {
   if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'blackboard:packet') return;
   const packet = event.data.packet;
   switch (packet.type) {
+    case 'sync':
+      if (epoch !== packet.epoch) clearBoard(packet.epoch);
+      document.getElementById('room').textContent = 'Sala ' + packet.number;
+      break;
+    case 'clear':
+      clearBoard(packet.epoch);
+      status.textContent = 'Lavagna pulita';
+      break;
+    case 'clear-error':
+      clearing = false;
+      clearButton.disabled = !online;
+      status.textContent = 'Pulizia non riuscita';
+      break;
+    case 'room-error': status.textContent = packet.message; break;
     case 'history': packet.strokes.forEach(commit); break;
     case 'stroke': commit(packet); break;
     case 'ack': pending.delete(packet.id); break;
@@ -171,11 +226,15 @@ window.addEventListener('message', event => {
       break;
     case 'ready':
       online = true;
+      clearing = false;
+      clearButton.disabled = false;
       status.textContent = 'In diretta';
-      for (const stroke of pending.values()) post('stroke', {stroke});
+      for (const stroke of pending.values()) post('stroke', {command:stroke});
       break;
     case 'offline':
       online = false;
+      clearButton.disabled = true;
+      if (confirmClear.open) confirmClear.close('cancel');
       pointer = null;
       last = null;
       flush();

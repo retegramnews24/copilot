@@ -251,9 +251,9 @@ export default {
   if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
-  if(u.pathname==='/api/blackboard/ws'&&req.method==='GET'){
+  if((u.pathname==='/api/blackboard/ws'&&req.method==='GET')||(u.pathname==='/api/blackboard/create'&&req.method==='POST')){
    const board=env.ROOMS.get(env.ROOMS.idFromName('blackboard-spazio-libero-v1'));
-   return board.fetch(new Request(u.origin+'/blackboard/ws'+u.search,req));
+   return board.fetch(new Request(u.origin+u.pathname.slice(4)+u.search,req));
   }
   if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return cinemaHub(env).fetch(new Request(u.origin+'/cinema/ws',req));
   if(u.pathname==='/api/cinema/youtube'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-youtube-v1')).fetch(new Request(u.origin+'/cinema/youtube'+u.search,req));
@@ -430,7 +430,7 @@ export class Room extends DurableObject {
   if(path==='/cinema/ws'||path==='/cinema/upload'||['arm','disarm','enqueue','asset','asset-ready'].some(action=>path==='/cinema/group-'+action))return this.cinema.fetch(req);
   if(path==='/cinema/youtube')return (this.youtube??=new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req,viewer);
   if(path==='/cinema/file')return req.method==='POST'?storeCinemaMedia(req,this.ctx.storage):readCinemaMedia(req,this.ctx.storage);
-  if(path==='/blackboard/ws')return this.blackboard.fetch(req);
+  if(path==='/blackboard/ws'||path==='/blackboard/create')return this.blackboard.fetch(req);
   if(path.startsWith('/pong/'))return this.pong.fetch(req);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);

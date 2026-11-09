@@ -27,7 +27,7 @@ h1 span { color:#d7b684; font-weight:normal }
 #status { color:#d7caad; font-size:11px; text-align:right }
 .stage { container-type:size; display:grid; place-items:center; min-height:0; width:100% }
 .frame {
-  width:min(100cqw,calc((100cqh - 60px) * 4 / 3),1300px);
+  width:min(100cqw,calc((100cqh - 98px) * 4 / 3),1300px);
   padding:clamp(6px,1.15vmin,13px);
   padding-bottom:0;
   border:1px solid #a76f44;
@@ -45,13 +45,15 @@ h1 span { color:#d7b684; font-weight:normal }
   box-shadow:inset 0 2px 12px #000b;
 }
 canvas { position:absolute; inset:0; width:100%; height:100% }
-#board { pointer-events:none }
 #preview { touch-action:none; cursor:crosshair; user-select:none }
+.tray {
+  margin-inline:-4px;
+  background:linear-gradient(#2c170c8c,transparent 36%,#f2ac6569 92%,#3b2115 94%),var(--wood);
+  box-shadow:inset 0 -3px 0 #321d13; border-radius:0 0 5px 5px;
+}
 #chalks {
   display:flex; justify-content:center; align-items:center; gap:clamp(0px,1.8vw,17px);
-  min-height:44px; margin-inline:-4px;
-  background:linear-gradient(#2c170c8c,transparent 36%,#f2ac6569 80%,#3b2115 83%),var(--wood);
-  box-shadow:inset 0 -3px 0 #321d13; border-radius:0 0 5px 5px;
+  min-height:40px;
 }
 .chalk { background:none; border:0; padding:5px; min-width:40px; height:42px; cursor:pointer }
 .chalk i {
@@ -76,5 +78,30 @@ footer { min-height:39px; font-size:11px; color:#d9c7ab }
   header { min-height:28px }
   footer { min-height:24px }
   #people svg { height:24px }
-  .frame { width:min(100cqw,calc((100cqh - 50px) * 4 / 3),1300px) }
+  .frame { width:min(100cqw,calc((100cqh - 97px) * 4 / 3),1300px) }
+}
+
+.tools { display:flex; align-items:center; justify-content:center; gap:6px; padding:0 4px 6px; color:#fff3df; font-size:12px }
+.tools button,.tools select,dialog button {
+  background:#32241c; color:#fff1db; border:1px solid #e1b28b75; border-radius:6px;
+  font:inherit; min-height:31px; padding:4px 7px; white-space:nowrap;
+}
+.tools button,dialog button { cursor:pointer }
+.tools button:disabled { opacity:.55; cursor:default }
+#eraser { display:flex; align-items:center; gap:5px }
+#eraser[aria-pressed=true] { outline:2px solid #f7e7ba }
+#eraser i { display:inline-block; width:17px; height:10px; border-radius:3px; transform:rotate(-8deg);
+  background:linear-gradient(#b88b5d 0 51%,#817a6e 52% 80%,#5d5348 81%);
+}
+#room { white-space:nowrap; color:#f1d4a1 }
+dialog { color:#f4ecda; background:#2d2b23; border:1px solid #a76f44; border-radius:12px; max-width:min(380px,90vw); padding:18px }
+dialog::backdrop { background:#0a0908b8 }
+dialog h2 { margin:0; font:600 21px Georgia,serif }
+dialog form div { display:flex; justify-content:flex-end; gap:8px }
+@media (orientation:landscape) and (max-height:450px) {
+  .tray { display:flex; justify-content:center; flex-wrap:wrap }
+  .tools { padding:0 4px 5px }
+  .chalk { min-width:26px }
+  .chalk i { width:23px }
+  #chalks { gap:1px }
 }

@@ -1,4 +1,4 @@
-import {blackboardLink} from './blackboard/link.js?v=1';
+import {blackboardLink} from './blackboard/link.js?v=2';
 import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
@@ -64,7 +64,7 @@ function makeAvatar(user){
  return avatar;
 }
 function renderLobby(){
- $('open-blackboard').disabled=!identity;
+ $('open-blackboard').disabled=!identity||blackboardOpening;
  $('play-labyrinth').disabled=!identity;
  $('create-golf').disabled=!identity||golfPending;
  $('create-moto-trial').disabled=!identity||motoOpening;
@@ -695,7 +695,7 @@ async function startSession(){
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chatMessages=payload.messages||[];renderLeaders(payload);
-  renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();
+  renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();blackboard.connect();
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
@@ -899,15 +899,49 @@ function sendArcadeInsets(insets=safeInsets(tg)){
 }
 const arcadeOverlay=$('arcade-overlay'),arcadeFrame=$('arcade-frame');
 let arcadeLaunch;
-const blackboard = blackboardLink(arcadeFrame, () => sessionToken, readAppearance);
-$('open-blackboard').onclick=()=>openArcade($('open-blackboard'),'blackboard','Blackboard spazio libero');
+let blackboardOpening=false;
+const blackboard = blackboardLink(arcadeFrame, () => sessionToken, readAppearance, renderBlackboardRooms);
+function renderBlackboardRooms(rooms, state){
+ const list=$('blackboard-rooms'),status=$('blackboard-lobby-status');
+ const online=state==='online',focused=document.activeElement?.dataset.blackboardRoom;
+ status.hidden=online&&rooms.length>0;
+ status.textContent=online?'Nessuna sala aperta.':state==='expired'?'Riapri Binottoland da Telegram.':'Collegamento alle lavagne…';
+ list.replaceChildren(...rooms.map(entry=>{
+  const button=document.createElement('button');
+  const title=document.createElement('strong'),people=document.createElement('small');
+  button.type='button';button.className='alt cinema-room-card';button.disabled=!online;
+  button.dataset.blackboardRoom=entry.id;
+  title.textContent='Sala '+entry.number;
+  people.textContent=entry.people.length?entry.people.map(person=>person.name).join(', '):'Nessuno in sala';
+  button.append(title,people);
+  button.onclick=()=>openBlackboard(button,entry.id);
+  return button;
+ }));
+ if(focused)Array.from(list.children).find(el=>el.dataset.blackboardRoom===focused)?.focus();
+}
+function openBlackboard(button,id){
+ if(!arcadeOverlay.hidden)return;
+ blackboard.open(id);
+ openArcade(button,'blackboard','Blackboard spazio libero');
+}
+$('open-blackboard').onclick=async()=>{
+ if(blackboardOpening||!arcadeOverlay.hidden)return;
+ const button=$('open-blackboard');
+ blackboardOpening=true;
+ button.disabled=true;
+ try{
+  const entry=await request('/api/blackboard/create',{});
+  openBlackboard(button,entry.id);
+ }catch(error){err(error.message);}
+ finally{blackboardOpening=false;button.disabled=!identity;}
+};
 function openArcade(button,game,title,online=false){
  if(!arcadeOverlay.hidden)return;
  arcadeLaunch=button;
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
- arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=1':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
+ arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=2':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
  tg?.BackButton?.show();
 }
 function closeArcade(){
@@ -917,7 +951,9 @@ function closeArcade(){
  arcadeOverlay.hidden=true;arcadeFrame.src='about:blank';
  tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}
- arcadeLaunch?.focus();
+ const roomButton=arcadeLaunch?.dataset.blackboardRoom;
+ if(roomButton)Array.from($('blackboard-rooms').children).find(el=>el.dataset.blackboardRoom===roomButton)?.focus();
+ else arcadeLaunch?.focus();
 }
 for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong']]){
  const button=$('play-'+game);

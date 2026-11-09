@@ -158,8 +158,8 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 .golf-setup-label{display:grid;gap:4px;margin-bottom:10px}
 .golf-collision-choice{display:flex;align-items:center;gap:8px;margin:8px 0}
 .golf-collision-choice input{width:auto;margin:0;accent-color:var(--accent)}
-#cinema-lobby{margin-top:16px}
-#cinema-rooms{display:grid;gap:6px}
+#cinema-lobby,#blackboard-lobby{margin-top:16px}
+#cinema-rooms,#blackboard-rooms{display:grid;gap:6px}
 .cinema-room-card{display:grid;gap:2px;text-align:left;width:100%;min-width:0;padding:8px 10px}
 .cinema-room-card span,.cinema-room-card small{overflow-wrap:anywhere}
 #arcade-overlay{position:fixed;inset:0;z-index:30;background:#101915}#arcade-frame{display:block;width:100%;height:100%;border:0}
@@ -175,7 +175,8 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 
 <p id="empty-games" class="empty-lobby">Nessuna partita. Apri il primo tavolo.</p><div id="games" aria-live="polite"></div></section>
 <section id="cinema-lobby"><div class="section-heading"><h3>Sale Cinema</h3></div>
-<p id="cinema-lobby-status" class="empty-lobby" role="status">Collegamento al cinema…</p><div id="cinema-rooms"></div></section></div>
+<p id="cinema-lobby-status" class="empty-lobby" role="status">Collegamento al cinema…</p><div id="cinema-rooms"></div></section><section id="blackboard-lobby"><div class="section-heading"><h3>Sale Blackboard</h3></div>
+<p id="blackboard-lobby-status" class="empty-lobby" role="status">Collegamento alle lavagne…</p><div id="blackboard-rooms"></div></section></div>
 <aside class="community-panel"><section class="community-card"><div class="section-heading"><h3>Persone</h3><span id="online-count" class="count-pill">Collegamento…</span></div><div id="online-users"></div></section>
 <section class="community-card chat-card">
   <div class="section-heading"><h3>Chat Lobby</h3></div>
@@ -186,7 +187,7 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 </section>
 <section class="page" id="page-games" role="tabpanel" aria-labelledby="tab-games" hidden><section aria-labelledby="catalog-app-title">
 <h3 id="catalog-app-title" class="catalog-heading">Applicazioni</h3>
-<div class="catalog-grid"><article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon" aria-hidden="true">🎬</div><h3>Cinema Streamer</h3></div><div class="catalog-card-content"><p>TV live in sale condivise</p><button id="open-cinema" type="button" disabled>Apri una sala</button></div></article><article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon pong-symbol" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="38" height="29" rx="2"/><path d="M4 37h40M13 29l8-10 5 5 9-9M30 32h7"/></svg></div><h3>Blackboard spazio libero</h3></div><div class="catalog-card-content"><p>Lavagna condivisa a gessetti</p><button id="open-blackboard" type="button" disabled>Apri la lavagna</button></div></article></div>
+<div class="catalog-grid"><article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon" aria-hidden="true">🎬</div><h3>Cinema Streamer</h3></div><div class="catalog-card-content"><p>TV live in sale condivise</p><button id="open-cinema" type="button" disabled>Apri una sala</button></div></article><article class="catalog-card"><div class="catalog-card-title"><div class="catalog-icon pong-symbol" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="7" width="38" height="29" rx="2"/><path d="M4 37h40M13 29l8-10 5 5 9-9M30 32h7"/></svg></div><h3>Blackboard spazio libero</h3></div><div class="catalog-card-content"><p>Lavagna condivisa a gessetti</p><button id="open-blackboard" type="button" disabled>Apri una sala</button></div></article></div>
 </section>
 <section aria-labelledby="catalog-3d-title">
 <h3 id="catalog-3d-title" class="catalog-heading">Giochi 3D</h3>
@@ -246,7 +247,7 @@ html,body{width:100%;min-width:0}.shell{width:min(100%,760px);margin-inline:auto
 <div id="golf-overlay" hidden style="position:fixed;inset:0;z-index:30;background:#172938"><iframe id="golf-frame" title="Golf with your gay friends" style="position:absolute;inset:0;width:100%;height:100%;border:0" src="about:blank"></iframe></div>
 <div id="cinema-overlay" hidden style="position:fixed;inset:0;z-index:30;background:#0d0d16"><iframe id="cinema-frame" title="Cinema Streamer" allow="autoplay; fullscreen; display-capture" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0" src="about:blank"></iframe></div>
 <section id="arcade-overlay" aria-label="Giochi arcade" hidden><iframe id="arcade-frame" title="Giochi arcade" sandbox="allow-scripts allow-same-origin"></iframe></section>
-<script src="https://telegram.org/js/telegram-web-app.js"></script><script type="module" src="app.js?v=blackboard1"></script><script src="radio.js"></script></body></html>
+<script src="https://telegram.org/js/telegram-web-app.js"></script><script type="module" src="app.js?v=blackboard2"></script><script src="radio.js"></script></body></html>
 
 
 
