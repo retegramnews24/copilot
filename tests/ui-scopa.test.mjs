@@ -22,7 +22,7 @@ const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,ca
 const importLines=/^import .+;$/gm;
 const root=process.cwd()+'/public';
 const imports=await build({stdin:{
- contents:source.match(importLines).join('\n')+'\nObject.assign(window,{renderScopa,renderNaval,renderBriscola,renderScarabeo,safeInsets,applyInsets,viewportHeight,CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN,golfColors,readAppearance});',
+ contents:source.match(importLines).join('\n')+'\nObject.assign(window,{renderScopa,renderNaval,renderBriscola,renderScarabeo,safeInsets,applyInsets,viewportHeight,CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN,golfColors,readAppearance,blackboardLink});',
  resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
 
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
@@ -146,6 +146,10 @@ assert.equal(numberBridge.at(-1).ok,true);
 assert.match(get('leaderboard-number').textContent,/Fausto.*120 punti/);
 arcadeMessage({type:'arcade:exit'});
 w.fetch=originalArcadeFetch;
+get('open-blackboard').click();
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=1');
+arcadeMessage({type:'arcade:exit'});
+assert.equal(get('arcade-overlay').hidden,true);
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);

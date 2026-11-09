@@ -1,0 +1,80 @@
+:root {
+  color-scheme: dark;
+  font: 15px system-ui,sans-serif;
+  background: #171713;
+  color: #f4ecda;
+  --wood: repeating-linear-gradient(1deg,#43281a35 0 1px,transparent 2px 5px,#efae6738 6px 7px),linear-gradient(100deg,#68432a,#9d6439 38%,#7c4a2d 78%,#58351f);
+}
+* { box-sizing:border-box }
+body { margin:0 }
+main {
+  height:100dvh;
+  display:grid;
+  grid-template-rows:auto minmax(0,1fr) auto;
+  padding:
+    max(8px,calc(var(--system-safe-top,0px) + var(--content-safe-top,0px)),env(safe-area-inset-top))
+    max(9px,calc(var(--system-safe-right,0px) + var(--content-safe-right,0px)),env(safe-area-inset-right))
+    max(8px,calc(var(--system-safe-bottom,0px) + var(--content-safe-bottom,0px)),env(safe-area-inset-bottom))
+    max(9px,calc(var(--system-safe-left,0px) + var(--content-safe-left,0px)),env(safe-area-inset-left));
+  gap:8px;
+  background:radial-gradient(ellipse at 50% 15%,#343127,#171713 76%);
+}
+header,footer { width:100%; max-width:1300px; margin-inline:auto; display:flex; align-items:center; gap:10px }
+header { min-height:38px; justify-content:space-between }
+header a { color:#e8d4b1; text-decoration:none; padding:6px; white-space:nowrap }
+h1 { margin:0; font-family:Georgia,serif; font-size:clamp(17px,3.6vw,27px); line-height:1.05; text-align:center }
+h1 span { color:#d7b684; font-weight:normal }
+#status { color:#d7caad; font-size:11px; text-align:right }
+.stage { container-type:size; display:grid; place-items:center; min-height:0; width:100% }
+.frame {
+  width:min(100cqw,calc((100cqh - 60px) * 4 / 3),1300px);
+  padding:clamp(6px,1.15vmin,13px);
+  padding-bottom:0;
+  border:1px solid #a76f44;
+  border-radius:8px;
+  background:var(--wood);
+  box-shadow:inset 0 0 0 2px #dfab6344,0 9px 27px #0009;
+}
+.slate {
+  width:100%; aspect-ratio:4 / 3; position:relative;
+  overflow:hidden; border-radius:3px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.62' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)' opacity='.1'/%3E%3C/svg%3E"),
+    radial-gradient(ellipse at 25% 30%,#ffffff09,transparent 55%),
+    radial-gradient(ellipse at 70% 65%,#95b5a00e,transparent 52%),#192320;
+  box-shadow:inset 0 2px 12px #000b;
+}
+canvas { position:absolute; inset:0; width:100%; height:100% }
+#board { pointer-events:none }
+#preview { touch-action:none; cursor:crosshair; user-select:none }
+#chalks {
+  display:flex; justify-content:center; align-items:center; gap:clamp(0px,1.8vw,17px);
+  min-height:44px; margin-inline:-4px;
+  background:linear-gradient(#2c170c8c,transparent 36%,#f2ac6569 80%,#3b2115 83%),var(--wood);
+  box-shadow:inset 0 -3px 0 #321d13; border-radius:0 0 5px 5px;
+}
+.chalk { background:none; border:0; padding:5px; min-width:40px; height:42px; cursor:pointer }
+.chalk i {
+  display:block; width:clamp(27px,6vw,45px); height:13px; border-radius:4px 3px 3px 5px;
+  background:
+    radial-gradient(circle at 25% 40%,#fff5 0 1px,transparent 1.5px) 0 0/7px 6px,
+    radial-gradient(circle at 40% 40%,#2415112f 0 1px,transparent 1.5px) 1px 2px/5px 7px,
+    linear-gradient(#fff5,transparent 45%,#0005),var(--chalk);
+  box-shadow:inset 4px 0 1px #fff5,inset -2px 0 1px #0003,0 3px 3px #0008;
+  transform:rotate(var(--angle)); transition:transform .16s;
+}
+.chalk[aria-pressed=true] i { transform:translateY(-4px) rotate(-7deg); box-shadow:0 3px 0 -1px #f7e7ba,0 5px 5px #0008 }
+.chalk:focus-visible,header a:focus-visible { outline:2px solid #f7e7ba; outline-offset:-2px; border-radius:5px }
+footer { min-height:39px; font-size:11px; color:#d9c7ab }
+#count { white-space:nowrap }
+#people { display:flex; align-items:center; gap:9px; margin:0; padding:0; list-style:none; overflow:auto }
+#people li { display:flex; align-items:center; gap:4px; white-space:nowrap }
+#people svg { height:31px; width:20px }
+@media (max-width:450px) { header a span { display:none } }
+@media (max-height:450px) {
+  main { gap:3px }
+  header { min-height:28px }
+  footer { min-height:24px }
+  #people svg { height:24px }
+  .frame { width:min(100cqw,calc((100cqh - 50px) * 4 / 3),1300px) }
+}

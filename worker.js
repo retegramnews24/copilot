@@ -1,3 +1,4 @@
+import {Blackboard} from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
 import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
 import { YouTubeCatalog } from './cinema-youtube.js';
@@ -250,6 +251,10 @@ export default {
   if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
+  if(u.pathname==='/api/blackboard/ws'&&req.method==='GET'){
+   const board=env.ROOMS.get(env.ROOMS.idFromName('blackboard-spazio-libero-v1'));
+   return board.fetch(new Request(u.origin+'/blackboard/ws'+u.search,req));
+  }
   if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return cinemaHub(env).fetch(new Request(u.origin+'/cinema/ws',req));
   if(u.pathname==='/api/cinema/youtube'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-youtube-v1')).fetch(new Request(u.origin+'/cinema/youtube'+u.search,req));
   if(u.pathname==='/api/cinema/upload'&&req.method==='POST')return uploadCinema(req,env,u);
@@ -425,6 +430,7 @@ export class Room extends DurableObject {
   if(path==='/cinema/ws'||path==='/cinema/upload'||['arm','disarm','enqueue','asset','asset-ready'].some(action=>path==='/cinema/group-'+action))return this.cinema.fetch(req);
   if(path==='/cinema/youtube')return (this.youtube??=new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req,viewer);
   if(path==='/cinema/file')return req.method==='POST'?storeCinemaMedia(req,this.ctx.storage):readCinemaMedia(req,this.ctx.storage);
+  if(path==='/blackboard/ws')return this.blackboard.fetch(req);
   if(path.startsWith('/pong/'))return this.pong.fetch(req);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
@@ -710,8 +716,10 @@ export class Room extends DurableObject {
   return json({error:'Percorso non trovato.'},404);
  }
 
+ get blackboard(){return this._blackboard??=new Blackboard(this.ctx);}
+
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;
@@ -721,6 +729,7 @@ export class Room extends DurableObject {
  }
  async webSocketClose(ws,code){
   const attachment=ws.deserializeAttachment();
+  if(attachment?.kind==='blackboard')return this.blackboard.close(ws);
   if(attachment?.kind==='cinema')return this.cinema.close(ws);
   if(attachment?.kind==='lab'){
    await this.lab.close(ws);
@@ -741,7 +750,7 @@ export class Room extends DurableObject {
   }
   try{ws.close(code===1006?1000:code);}catch{}
  }
- webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
+ webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='blackboard')return this.blackboard.close(ws);if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
  if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
