@@ -88,6 +88,7 @@ footer { min-height:39px; font-size:11px; color:#d9c7ab }
 }
 .tools button,dialog button { cursor:pointer }
 .tools button:disabled { opacity:.55; cursor:default }
+.tools .clear-action { border-color:#d58b70; background:#562b25; color:#fff0e8 }
 #eraser { display:flex; align-items:center; gap:5px }
 #eraser[aria-pressed=true] { outline:2px solid #f7e7ba }
 #eraser i { display:inline-block; width:17px; height:10px; border-radius:3px; transform:rotate(-8deg);
@@ -95,7 +96,9 @@ footer { min-height:39px; font-size:11px; color:#d9c7ab }
 }
 #room { white-space:nowrap; color:#f1d4a1 }
 dialog { color:#f4ecda; background:#2d2b23; border:1px solid #a76f44; border-radius:12px; max-width:min(380px,90vw); padding:18px }
-dialog::backdrop { background:#0a0908b8 }
+dialog::backdrop { background:transparent }
+dialog[open] { z-index:10; box-shadow:0 12px 36px #0009 }
+dialog button.clear-action { border-color:#d58b70; background:#562b25; color:#fff0e8 }
 dialog h2 { margin:0; font:600 21px Georgia,serif }
 dialog form div { display:flex; justify-content:flex-end; gap:8px }
 @media (orientation:landscape) and (max-height:450px) {

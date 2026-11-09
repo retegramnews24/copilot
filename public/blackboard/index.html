@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Blackboard spazio libero</title>
-<link rel="stylesheet" href="./board.css?v=2">
+<link rel="stylesheet" href="./board.css?v=3">
 </head>
 <body>
 <main>
@@ -27,7 +27,7 @@
             <option value="5">Fine</option><option value="9" selected>Medio</option>
             <option value="16">Grande</option><option value="26">Maxi</option>
           </select>
-          <button id="clear" type="button" disabled>Pulisci tutto</button>
+          <button id="clear" class="clear-action" type="button" disabled>Cancella Blackboard</button>
         </div>
       </div>
     </section>
@@ -36,12 +36,12 @@
 </main>
 <dialog id="confirm-clear">
   <form method="dialog">
-    <h2>Pulire tutta la lavagna?</h2>
+    <h2>Cancellare la lavagna?</h2>
     <p>I disegni di questa sala verranno cancellati per tutti.</p>
-    <div><button value="cancel" autofocus>Annulla</button><button value="clear">Pulisci tutto</button></div>
+    <div><button id="cancel-clear" type="button" autofocus>Annulla</button><button id="confirm-clear-action" class="clear-action" type="button">Cancella Blackboard</button></div>
   </form>
 </dialog>
 <script type="module" src="../arcade/bridge.js"></script>
-<script type="module" src="./board.js?v=2"></script>
+<script type="module" src="./board.js?v=3"></script>
 </body>
 </html>

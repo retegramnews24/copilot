@@ -941,7 +941,7 @@ function openArcade(button,game,title,online=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
- arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=2':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
+ arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=3':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
  tg?.BackButton?.show();
 }
 function closeArcade(){

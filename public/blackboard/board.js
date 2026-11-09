@@ -7,9 +7,11 @@ const status = document.getElementById('status');
 const pending = new Map();
 const clearButton = document.getElementById('clear');
 const confirmClear = document.getElementById('confirm-clear');
+const confirmClearButton = document.getElementById('confirm-clear-action');
+const cancelClearButton = document.getElementById('cancel-clear');
 const sizeControl = document.getElementById('size');
 const eraser = document.getElementById('eraser');
-let epoch = 0, clearing = false;
+let epoch = 0, clearing = false, clearTimer;
 let color = 0, pointer = null, current = null, last = null;
 let online = false, needsPreview = false, flushTimer;
 for (const canvas of [board, preview]) {
@@ -154,20 +156,30 @@ function selectTool(index) {
 }
 eraser.onclick = () => selectTool(ERASER);
 clearButton.onclick = () => {
-  confirmClear.returnValue = 'cancel';
-  confirmClear.showModal();
+  if (!online || clearing) return;
+  confirmClear.show();
 };
-confirmClear.addEventListener('close', () => {
-  if (confirmClear.returnValue !== 'clear' || !online || clearing) return;
+cancelClearButton.onclick = () => confirmClear.close();
+confirmClearButton.onclick = () => {
+  confirmClear.close();
+  if (!online || clearing) return;
   clearing = true;
   clearButton.disabled = true;
   pointer = null;
   last = null;
   flush();
   post('clear', {command:{type:'clear', epoch}});
-});
+  status.textContent = 'Cancellazione in corso…';
+  clearTimer = setTimeout(() => {
+    if (!clearing) return;
+    clearing = false;
+    clearButton.disabled = !online;
+    status.textContent = 'Cancellazione non confermata. Riprova.';
+  }, 8000);
+};
 
 function clearBoard(nextEpoch) {
+  clearTimeout(clearTimer);
   epoch = nextEpoch;
   clearTimeout(flushTimer);
   current = null;
@@ -212,9 +224,10 @@ window.addEventListener('message', event => {
       status.textContent = 'Lavagna pulita';
       break;
     case 'clear-error':
+      clearTimeout(clearTimer);
       clearing = false;
       clearButton.disabled = !online;
-      status.textContent = 'Pulizia non riuscita';
+      status.textContent = 'Cancellazione non riuscita. Riprova.';
       break;
     case 'room-error': status.textContent = packet.message; break;
     case 'history': packet.strokes.forEach(commit); break;
