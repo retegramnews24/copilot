@@ -134,3 +134,11 @@ dialog form div { display:flex; justify-content:flex-end; gap:8px }
   main:has(#game-active:not([hidden])) .tray { margin:0; align-content:center }
   main:has(#game-active:not([hidden])) #chalks { display:grid; grid-template-columns:repeat(3,1fr) }
 }
+
+#game-feedback { color:#f1d4a1 }
+#game-feedback:empty { display:none }
+main:has(#game-active:not([hidden])) .frame:has(.tray[hidden]) {
+  display:block;
+  width:min(100cqw,calc((100cqh - 26px) * 4 / 3),1300px);
+  padding-bottom:clamp(6px,1.15vmin,13px);
+}

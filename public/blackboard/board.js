@@ -21,6 +21,8 @@ const gameGuess = document.getElementById('game-guess');
 const gameAnswer = document.getElementById('game-answer');
 const gameScores = document.getElementById('game-scores');
 const gameResult = document.getElementById('game-result');
+const gameFeedback = document.getElementById('game-feedback');
+const tray = document.querySelector('.tray');
 const deleteRoom = document.getElementById('delete-room');
 const confirmDelete = document.getElementById('confirm-delete');
 let mode = 'free', game = null, roomId, canDelete = false;
@@ -207,7 +209,7 @@ confirmClearButton.onclick = () => {
 };
 
 function canDraw() {
-  return online && (mode === 'free' || game?.drawing === true);
+  return online && (mode === 'free' || (game?.drawing === true && !game.waiting));
 }
 
 function updateControls() {
@@ -217,22 +219,31 @@ function updateControls() {
   for (const chalk of chalks.children) chalk.disabled = !drawable;
   preview.classList.toggle('read-only', !drawable);
   gameStart.disabled = !online;
-  gameSkip.disabled = gameStop.disabled = !online;
-  for (const control of gameGuess.elements) control.disabled = !online;
+  gameStop.disabled = !online;
+  gameSkip.disabled = !online || game?.waiting === 'players';
+  for (const control of gameGuess.elements) control.disabled = !online || !!game?.waiting;
   deleteRoom.hidden = !canDelete;
   deleteRoom.disabled = !online;
 }
 
 function showGame(packet) {
-  if (game?.round !== packet.game?.round) gameAnswer.value = '';
+  if (game?.round !== packet.game?.round) {
+    gameAnswer.value = '';
+    gameFeedback.textContent = '';
+  }
   game = packet.game;
   gameStart.hidden = !!game;
   gameActive.hidden = !game;
   gameGuess.hidden = !game || game.drawing;
-  gameSkip.hidden = !game?.drawing;
+  tray.hidden = !!game && !game.drawing;
+  gameSkip.hidden = !game?.drawing && game?.waiting !== 'drawer';
+  gameSkip.textContent = game?.waiting === 'drawer' ? 'Cambia disegnatore' : 'Salta parola';
   gameResult.textContent = game?.result ?? packet.message ?? '';
   gameTurn.textContent = game ? 'Pictionary · Turno ' + game.turn : '';
-  gameRole.textContent = game ? (game.drawing ? 'Disegna: ' + game.word : game.drawerName + ' sta disegnando') : '';
+  if (!game) gameRole.textContent = '';
+  else if (game.waiting === 'players') gameRole.textContent = 'In attesa di un altro giocatore.';
+  else if (game.waiting === 'drawer') gameRole.textContent = 'In attesa di ' + game.drawerName + '.';
+  else gameRole.textContent = game.drawing ? 'Disegna: ' + game.word : game.drawerName + ' sta disegnando';
   gameScores.textContent = game?.scores.map(({name, points}) => name + ' ' + points).join(' · ') ?? '';
   updateControls();
 }
@@ -247,7 +258,7 @@ gameStop.onclick = () => sendGame('stop');
 gameGuess.onsubmit = event => {
   event.preventDefault();
   const guess = gameAnswer.value.trim();
-  if (!guess || !game || game.drawing) return;
+  if (!guess || !online || !game || game.drawing || game.waiting) return;
   sendGame('guess', {guess});
   gameAnswer.value = '';
 };
@@ -257,13 +268,13 @@ document.getElementById('delete-room-action').onclick = () => {
   if (online && canDelete) post('delete', {command:{type:'room-delete', room:roomId}});
 };
 
-function clearBoard(nextEpoch) {
+function clearBoard(nextEpoch, keepPending = false) {
   clearTimeout(clearTimer);
   epoch = nextEpoch;
   clearTimeout(flushTimer);
   current = null;
   resetPointer();
-  pending.clear();
+  if (!keepPending) pending.clear();
   saved.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
   clearing = false;
   clearButton.disabled = !canDraw();
@@ -294,7 +305,10 @@ window.addEventListener('message', event => {
   const packet = event.data.packet;
   switch (packet.type) {
     case 'sync':
-      if (packet.reset || epoch !== packet.epoch || mode !== (packet.mode ?? 'free')) clearBoard(packet.epoch);
+      if (packet.reset || epoch !== packet.epoch || mode !== (packet.mode ?? 'free')) {
+        const sameRound = mode === 'pictionary' && packet.mode === mode && epoch === packet.epoch;
+        clearBoard(packet.epoch, sameRound);
+      }
       mode = packet.mode ?? 'free';
       roomId = packet.room;
       canDelete = packet.canDelete === true;
@@ -303,7 +317,8 @@ window.addEventListener('message', event => {
       break;
     case 'pictionary': showGame(packet); break;
     case 'pictionary-note':
-      if (packet.round === undefined || game?.round === packet.round) gameResult.textContent = packet.message;
+      if (packet.round === undefined) gameResult.textContent = packet.message;
+      else if (game?.round === packet.round) gameFeedback.textContent = packet.message;
       break;
     case 'room-delete-error': gameResult.textContent = packet.message; break;
     case 'clear':

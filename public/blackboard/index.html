@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Blackboard spazio libero</title>
-<link rel="stylesheet" href="./board.css?v=5">
+<link rel="stylesheet" href="./board.css?v=6">
 </head>
 <body>
 <main>
@@ -23,9 +23,10 @@
         <button id="game-stop" type="button">Termina gioco</button>
       </div>
       <form id="game-guess" hidden>
-        <input id="game-answer" maxlength="60" autocomplete="off" aria-label="La tua risposta" placeholder="Indovina la parola">
+        <input id="game-answer" maxlength="60" autocomplete="off" autocapitalize="none" enterkeyhint="send" aria-label="La tua risposta" placeholder="Indovina la parola">
         <button type="submit">Invia</button>
       </form>
+      <div id="game-feedback" role="status"></div>
       <div id="game-scores" aria-label="Punteggi"></div>
     </div>
     <p id="game-result" role="status"></p>
@@ -66,6 +67,6 @@
   </form>
 </dialog>
 <script type="module" src="../arcade/bridge.js"></script>
-<script type="module" src="./board.js?v=5"></script>
+<script type="module" src="./board.js?v=6"></script>
 </body>
 </html>

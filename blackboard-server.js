@@ -13,7 +13,8 @@ const WORDS = ('aquilone astronauta balena bicicletta binocolo bussola cactus ca
 
 function normalizeGuess(value) {
   return value.normalize('NFD').replace(/\p{M}/gu, '').toLocaleLowerCase('it')
-    .trim().replace(/^(?:l['’]\s*|(?:il|lo|la|un|uno|una)\s+)/, '').replace(/[.!?]+$/, '');
+    .replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '')
+    .replace(/^(?:(?:l|un)['’]\s*|(?:il|lo|la|un|uno|una)\s+)/, '');
 }
 
 function send(socket, packet) {
@@ -122,10 +123,10 @@ export class Blackboard {
     this.sendBoard(socket, entry, since, peer.canPlay ? this.game(room) : null);
     if (oldRoom !== room) {
       this.updatePeople(peer.accessTag, oldRoom);
-      if (peer.canPlay) this.onPlayerLeft(peer.accessTag, oldRoom);
+      if (peer.canPlay) this.updateGamePresence(peer.accessTag, oldRoom);
     }
     this.updatePeople(peer.accessTag, room);
-    if (peer.canPlay) this.onPlayerLeft(peer.accessTag, room);
+    if (peer.canPlay) this.updateGamePresence(peer.accessTag, room, socket);
     this.directory(peer.accessTag);
   }
 
@@ -135,8 +136,11 @@ export class Blackboard {
     const epoch = game?.epoch ?? entry.epoch;
     const surface = game ? 'pictionary:' + peer.room : peer.room;
     if (!peer.legacy) send(socket, {type:'sync', room:peer.room, number:entry.number, epoch, mode,
-      reset:reset || !!game, canDelete:!entry.owner || entry.owner === peer.player});
-    if (peer.canPlay) this.sendGame(socket, game);
+      reset:reset || !!game, canDelete:true});
+    if (peer.canPlay) {
+      const players = game && this.gamePlayers(this.gamePeers(peer.accessTag, peer.room));
+      this.sendGame(socket, game, players);
+    }
     let cursor = !reset && !game && Number.isSafeInteger(since) && since > epoch ? since : epoch;
     for (;;) {
       const rows = this.sql.exec(
@@ -173,10 +177,11 @@ export class Blackboard {
     }));
   }
 
-  sendGame(socket, game) {
+  sendGame(socket, game, players) {
     const drawing = game?.drawer === socket.deserializeAttachment().player;
+    const waiting = game && (players.size < 2 ? 'players' : players.has(game.drawer) ? null : 'drawer');
     send(socket, {type:'pictionary', game:game ? {
-      turn:game.turn, round:game.round, drawerName:game.drawerName, drawing,
+      turn:game.turn, round:game.round, drawerName:game.drawerName, drawing, waiting,
       word:drawing ? game.word : undefined,
       scores:Object.values(game.scores).sort((a, b) => b.points - a.points),
       result:game.result
@@ -216,7 +221,7 @@ export class Blackboard {
       if (!previous) this.sendBoard(socket, this.getRoom(room), 0, game, true);
       else {
         send(socket, {type:'clear', mode:'pictionary', epoch:game.epoch});
-        this.sendGame(socket, game);
+        this.sendGame(socket, game, players);
       }
     }
   }
@@ -233,32 +238,39 @@ export class Blackboard {
     }
   }
 
-  onPlayerLeft(accessTag, room, exclude) {
+  updateGamePresence(accessTag, room, joinedSocket) {
     const game = this.game(room);
     if (!game) return;
-    const sockets = this.gamePeers(accessTag, room, exclude);
+    const sockets = this.gamePeers(accessTag, room);
     const players = this.gamePlayers(sockets);
-    if (players.size < 2) {
-      this.endGame(room, sockets, 'Pictionary terminato. Servono almeno due giocatori.');
-    } else if (!players.has(game.drawer)) {
-      this.nextTurn(room, game.drawer, sockets, game, game.drawerName + ' ha lasciato il turno.');
+    for (const socket of sockets) {
+      if (socket !== joinedSocket) this.sendGame(socket, game, players);
     }
   }
 
   play(socket, peer, command, game) {
     const {room, player, name, accessTag} = peer;
     const sockets = this.gamePeers(accessTag, room);
+    const players = this.gamePlayers(sockets);
     if (command.type === 'pictionary-start') {
       if (game) return;
-      if (this.gamePlayers(sockets).size < 2) {
-        return send(socket, {type:'pictionary-note', message:'Servono almeno due persone nella sala.'});
+      if (players.size < 2) {
+        return send(socket, {type:'pictionary-note', message:'Per giocare, un’altra persona deve entrare in questa stessa sala dalla Lobby.'});
       }
       return this.nextTurn(room, player, sockets, null, '');
     }
     if (!game || command.round !== game.round) return;
     if (command.type === 'pictionary-stop') return this.endGame(room, sockets, 'Pictionary terminato.');
-    if (command.type === 'pictionary-skip' && player === game.drawer) {
-      return this.nextTurn(room, player, sockets, game, 'Parola saltata: ' + game.word + '.');
+    if (players.size < 2) {
+      return send(socket, {type:'pictionary-note', message:'In attesa di un altro giocatore.', round:game.round});
+    }
+    const drawerPresent = players.has(game.drawer);
+    if (command.type === 'pictionary-skip' && (player === game.drawer || !drawerPresent)) {
+      const result = drawerPresent ? 'Parola saltata: ' + game.word + '.' : 'Disegnatore cambiato.';
+      return this.nextTurn(room, player, sockets, game, result);
+    }
+    if (!drawerPresent) {
+      return send(socket, {type:'pictionary-note', message:'Il disegnatore non è collegato.', round:game.round});
     }
     if (command.type !== 'pictionary-guess' || player === game.drawer ||
         typeof command.guess !== 'string' || !command.guess.trim() || command.guess.length > 60) return;
@@ -270,11 +282,8 @@ export class Blackboard {
     this.nextTurn(room, player, sockets, game, name + ' ha indovinato: ' + game.word + '.');
   }
 
-  deleteRoom(socket, peer, entry) {
+  deleteRoom(peer, entry) {
     const {room, player, accessTag} = peer;
-    if (entry.owner && entry.owner !== player) {
-      return send(socket, {type:'room-delete-error', message:'Solo chi ha creato la sala può eliminarla.'});
-    }
     this.ctx.storage.transactionSync(() => {
       this.sql.exec('UPDATE boards SET deleted = 1 WHERE number = ?', entry.number);
       this.sql.exec('DELETE FROM pictionary WHERE room = ?', room);
@@ -299,7 +308,7 @@ export class Blackboard {
     peer.room = null;
     socket.serializeAttachment(peer);
     this.updatePeople(peer.accessTag, room);
-    if (peer.canPlay) this.onPlayerLeft(peer.accessTag, room);
+    if (peer.canPlay) this.updateGamePresence(peer.accessTag, room);
     this.directory(peer.accessTag);
   }
 
@@ -313,7 +322,7 @@ export class Blackboard {
     const room = this.getRoom(peer.room);
     if (!room) return;
     if (peer.canPlay && command?.type === 'room-delete' && command.room === peer.room) {
-      try { this.deleteRoom(socket, peer, room); }
+      try { this.deleteRoom(peer, room); }
       catch { send(socket, {type:'room-delete-error', message:'Eliminazione non riuscita. Riprova.'}); }
       return;
     }
@@ -370,8 +379,11 @@ export class Blackboard {
 
   close(socket) {
     const peer = socket.deserializeAttachment();
-    this.updatePeople(peer?.accessTag, peer?.room, socket);
-    if (peer?.canPlay) this.onPlayerLeft(peer.accessTag, peer.room, socket);
+    if (peer?.room) {
+      socket.serializeAttachment({...peer, room:null});
+      this.updatePeople(peer.accessTag, peer.room);
+      if (peer.canPlay) this.updateGamePresence(peer.accessTag, peer.room);
+    }
     this.directory(peer?.accessTag, socket);
     try { socket.close(1000, 'Lavagna chiusa'); } catch {}
   }
