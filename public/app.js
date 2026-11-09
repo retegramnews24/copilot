@@ -386,6 +386,7 @@ function fitViewport(){
  const insets=safeInsets(tg);applyInsets(document.documentElement,insets);
  if(!$('labyrinth-overlay').hidden)$('labyrinth-frame').contentWindow?.postMessage({type:'labyrinth:insets',insets},location.origin);
  sendMotoInsets(insets);
+ sendArcadeInsets(insets);
  golfPost('insets',{insets});
  cinemaPost('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
@@ -879,7 +880,45 @@ window.addEventListener('message',event=>{
   if(packet?.length<=420)motoSocket.send(packet);
  }
 });
-tg?.onEvent('backButtonClicked',()=>{if(!$('cinema-overlay').hidden)closeCinema();else if(!$('golf-overlay').hidden)closeGolf();else if(!motoOverlay.hidden)closeMotoTrial();else closeLabyrinth()});
+function sendArcadeInsets(insets=safeInsets(tg)){
+ if(!$('arcade-overlay').hidden)$('arcade-frame').contentWindow?.postMessage({type:'arcade:insets',insets},location.origin);
+}
+const arcadeOverlay=$('arcade-overlay'),arcadeFrame=$('arcade-frame');
+let arcadeLaunch;
+function openArcade(button,game,title){
+ if(!arcadeOverlay.hidden)return;
+ arcadeLaunch=button;
+ enterFullscreen();
+ try{tg?.disableVerticalSwipes?.()}catch{}
+ arcadeOverlay.hidden=false;
+ arcadeFrame.title=title;arcadeFrame.src='/arcade/'+game+'.html?v=1';
+ tg?.BackButton?.show();
+}
+function closeArcade(){
+ if(arcadeOverlay.hidden)return;
+ arcadeOverlay.hidden=true;arcadeFrame.src='about:blank';
+ tg?.BackButton?.hide();
+ try{tg?.enableVerticalSwipes?.()}catch{}
+ arcadeLaunch?.focus();
+}
+for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong CRT']]){
+ const button=$('play-'+game);
+ button.onclick=()=>openArcade(button,game,title);
+}
+arcadeFrame.addEventListener('load',()=>{if(!arcadeOverlay.hidden){arcadeFrame.focus();sendArcadeInsets();}});
+window.addEventListener('message',event=>{
+ if(arcadeOverlay.hidden||event.origin!==location.origin||event.source!==arcadeFrame.contentWindow)return;
+ if(event.data?.type==='arcade:ready')sendArcadeInsets();
+ else if(event.data?.type==='arcade:exit')closeArcade();
+});
+tg?.onEvent('backButtonClicked',()=>{
+ if(!arcadeOverlay.hidden)closeArcade();
+ else if(!$('cinema-overlay').hidden)closeCinema();
+ else if(!$('golf-overlay').hidden)closeGolf();
+ else if(!motoOverlay.hidden)closeMotoTrial();
+ else closeLabyrinth();
+});
+
 
 function golfPost(type,payload={}){
  if(!$('golf-overlay').hidden)$('golf-frame').contentWindow?.postMessage({type:'golf:'+type,...payload},location.origin);

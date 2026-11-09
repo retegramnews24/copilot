@@ -15,6 +15,7 @@ import {CAMPAIGN_LENGTH} from '../public/moto-trial/courses.js';
 import {drawTrial} from '../public/moto-trial/render.js';
 import * as trialPhysics from '../public/moto-trial/physics.js';
 import {FrameBudget} from '../public/labyrinth/performance.js';
+import {newMatch,movePaddle,stepMatch,width,height,radius} from '../public/arcade/pong-physics.js';
 const source=await fs.readFile('public/app.js','utf8');
 const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};';
 const importLines=/^import .+;$/gm;
@@ -88,6 +89,18 @@ separateColors.click();
 get('solo-labyrinth').click();
 assert.equal(get('labyrinth-frame').getAttribute('src'),'/labyrinth/index.html?dev=1&v=dev3');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:get('labyrinth-frame').contentWindow,data:{type:'labyrinth:exit'}}));
+for(const game of ['number-connect','pong']){
+ const launch=get('play-'+game),frame=get('arcade-frame'),overlay=get('arcade-overlay');
+ launch.click();
+ assert.equal(overlay.hidden,false);
+ assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v=1');
+ w.dispatchEvent(new w.MessageEvent('message',{origin:'https://wrong.test',source:frame.contentWindow,data:{type:'arcade:exit'}}));
+ assert.equal(overlay.hidden,false);
+ w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:frame.contentWindow,data:{type:'arcade:exit'}}));
+ assert.equal(overlay.hidden,true);
+ assert.equal(frame.getAttribute('src'),'about:blank');
+ assert.equal(w.document.activeElement,launch);
+}
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);
@@ -851,6 +864,74 @@ assert.equal(rtc.closed,true);
 await new Promise(resolve=>setTimeout(resolve,0));
 cinemaDOM.window.close();
 console.log('PASS Cinema UI: shared controls, live mosaic layout, window capture and viewer audio activation.');
+
+const numberDOM=new JSDOM(await fs.readFile('public/arcade/number-connect.html','utf8'),{url:'https://unit.test/arcade/number-connect.html',runScripts:'outside-only'});
+const nw=numberDOM.window,nd=nw.document;
+let generated=0;
+nw.Math.random=()=>{
+ const i=generated++;
+ return i<30&&(Math.floor(i/5)+i%5)%2===1 ? 0.3 : 0;
+};
+nw.eval(await fs.readFile('public/arcade/number-connect.js','utf8'));
+const tiles=[...nd.querySelectorAll('.cell')];
+assert.equal(tiles.length,30);
+assert.equal(tiles[0].textContent,tiles[6].textContent);
+assert.notEqual(tiles[0].textContent,tiles[1].textContent);
+tiles[0].click();tiles[6].click();
+assert.equal(nd.getElementById('score').textContent,'4');
+assert.equal(tiles[6].textContent,'4');
+const numberGrid=nd.getElementById('grid');
+numberGrid.setPointerCapture=()=>{};
+const emitPointer=(name,target)=>target.dispatchEvent(Object.assign(new nw.Event(name,{bubbles:true}),{pointerId:1,button:0,clientX:1,clientY:1}));
+nd.elementFromPoint=()=>tiles[1];
+emitPointer('pointerdown',tiles[6]);emitPointer('pointerup',numberGrid);
+assert.equal(nd.getElementById('score').textContent,'20');
+assert.match(nd.getElementById('message').textContent,/Combo/);
+nd.getElementById('start').click();
+assert.equal(nd.getElementById('record').textContent,'20');
+assert.equal(nd.getElementById('score').textContent,'0');
+numberDOM.window.close();
+
+function shot(mode,x,y,vx){
+ const match=newMatch(mode);
+ match.serve=0;
+ Object.assign(match.ball,{x,y,vx,vy:0});
+ return match;
+}
+const rally=shot('classic',width-54,height/2+12,760);
+assert.equal(stepMatch(rally,1/120),'paddle');
+assert.ok(rally.ball.vx<0&&rally.ball.vy>0);
+const shotWide=shot('football',width-radius-2,65,550);
+assert.equal(stepMatch(shotWide,1/120),'wall');
+assert.ok(shotWide.ball.vx<0);
+assert.deepEqual(shotWide.scores,[0,0]);
+for(const [mode,limit,edge] of [['classic',11,width+radius],['football',5,width-radius]]){
+ const match=shot(mode,edge-2,height/2,550);
+ match.scores[0]=limit-1;
+ assert.equal(stepMatch(match,1/120),'score');
+ assert.equal(match.winner,0);
+ assert.equal(match.scores[0],limit);
+ stepMatch(match,1/120);
+ assert.equal(match.scores[0],limit);
+}
+const keepers=newMatch('football');
+movePaddle(keepers,0,0,0,1);
+movePaddle(keepers,1,0,height,1);
+assert.ok(keepers.paddles[0]<height/2&&keepers.paddles[1]>height/2);
+const pongBundle=await build({entryPoints:['public/arcade/pong.js'],bundle:true,write:false,format:'iife',platform:'browser'});
+const pongDOM=new JSDOM(await fs.readFile('public/arcade/pong.html','utf8'),{url:'https://unit.test/arcade/pong.html',runScripts:'outside-only',pretendToBeVisual:true});
+const pw=pongDOM.window,pd=pw.document;
+pw.HTMLCanvasElement.prototype.getContext=()=>null;
+pw.eval(pongBundle.outputFiles[0].text);
+pd.querySelector('[data-mode="football"]').click();
+assert.match(pd.getElementById('hint').textContent,/arriva a 5/);
+assert.equal(pd.querySelector('[data-mode="football"]').getAttribute('aria-pressed'),'true');
+pd.getElementById('primary').click();
+assert.equal(pd.getElementById('overlay').hidden,true);
+pd.getElementById('primary').click();
+assert.equal(pd.getElementById('message').textContent,'Pausa');
+pongDOM.window.close();
+console.log('PASS Arcade: both launchers, diagonal merge, pointer drag, combo, record, Pong rebounds, goals and win conditions.');
 
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
