@@ -14,6 +14,7 @@ import {initialUno,playUno,unoView} from './uno.js';
 import {initialConnect4,playConnect4} from './connect4.js';
 import { GolfRoom } from './golf-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
+import { PongRoom } from './pong-server.js';
 import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
@@ -253,6 +254,8 @@ export default {
   if(u.pathname==='/api/cinema/upload'&&req.method==='POST')return uploadCinema(req,env,u);
   const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
   if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
+  const pong=u.pathname.match(/^\/api\/pong\/([a-f0-9-]{36})\/(state|ws)$/);
+  if(pong)return env.ROOMS.get(env.ROOMS.idFromName('pong:'+pong[1])).fetch(new Request(u.origin+'/pong/'+pong[2],req));
   const moto=u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
   if(moto)return env.ROOMS.get(env.ROOMS.idFromName('moto:'+moto[1])).fetch(new Request(u.origin+'/moto-trial/'+moto[2],req));
   const lab=u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
@@ -284,11 +287,11 @@ export default {
   return response;
  }
 };
-const isArcade=game=>game==='labyrinth'||game==='moto-trial'||game==='golf';
+const isArcade=game=>game==='labyrinth'||game==='moto-trial'||game==='golf'||game==='pong';
 const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived;
 
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.golf=new GolfRoom(ctx,env);this.cinema=new Cinema(ctx);}
+ constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.pong=new PongRoom(ctx,env);this.golf=new GolfRoom(ctx,env);this.cinema=new Cinema(ctx);}
  public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
  newTable(room,b,token){
   const game=b.game??'chess';
@@ -415,6 +418,7 @@ export class Room extends DurableObject {
   if(path==='/cinema/ws'||path==='/cinema/upload'||['arm','disarm','enqueue','asset','asset-ready'].some(action=>path==='/cinema/group-'+action))return this.cinema.fetch(req);
   if(path==='/cinema/youtube')return (this.youtube??=new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req,viewer);
   if(path==='/cinema/file')return req.method==='POST'?storeCinemaMedia(req,this.ctx.storage):readCinemaMedia(req,this.ctx.storage);
+  if(path.startsWith('/pong/'))return this.pong.fetch(req);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
   if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
   if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
@@ -579,7 +583,7 @@ export class Room extends DurableObject {
   const users=[...unique.values()].map(a=>{
    const own=games.find(g=>!isArcade(g.game)&&activeTable(g)&&g.players.some(p=>p.id===a.user.player));
    const watching=tables.find(g=>g.room===a.room);
-   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':watching.game==='moto-trial'?'Moto Trial ':watching.game==='golf'?'Golf ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
+   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':watching.game==='moto-trial'?'Moto Trial ':watching.game==='golf'?'Golf ':watching.game==='pong'?'Pong ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
   }).sort((a,b)=>a.name.localeCompare(b.name));
   const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()];return {games,users,messages:await this.ctx.storage.get('chat')||[],leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai')};
  }
@@ -646,17 +650,17 @@ export class Room extends DurableObject {
   if(path==='/lobby/create'){
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
    const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5','labyrinth','moto-trial','golf'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
+   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5','labyrinth','moto-trial','golf','pong'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
    const active=(await this.lobbyList()).filter(activeTable);
-   if(body.game!=='moto-trial'&&body.game!=='golf'&&active.some(g=>!isArcade(g.game)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
+   if(body.game!=='moto-trial'&&body.game!=='golf'&&body.game!=='pong'&&active.some(g=>!isArcade(g.game)&&g.players.some(p=>p.id===user.player)))return json({error:'Hai già una partita aperta.'},409);
    createSeries(body.target);
    const occupied=new Set(active.map(g=>g.number));
    let number=1;
    while(occupied.has(number))number++;
    if(isArcade(body.game)){
-    const room=id(),prefix=body.game==='labyrinth'?'lab:':body.game==='golf'?'golf:':'moto:';
+    const room=id(),prefix=body.game==='labyrinth'?'lab:':body.game==='golf'?'golf:':body.game==='pong'?'pong:':'moto:';
     const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix+room));
-    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,appearance:body.game==='golf'?body.appearance:undefined,campaign:body.game==='golf'?body.campaign:undefined,collisions:body.game==='golf'?body.collisions===true:undefined,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
+    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,mode:body.game==='pong'?body.mode:undefined,appearance:body.game==='golf'?body.appearance:undefined,campaign:body.game==='golf'?body.campaign:undefined,collisions:body.game==='golf'?body.collisions===true:undefined,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
     if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
    }
    const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));
@@ -683,7 +687,7 @@ export class Room extends DurableObject {
  }
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;
@@ -698,6 +702,8 @@ export class Room extends DurableObject {
    await this.lab.close(ws);
   }else if(attachment?.kind==='moto-trial'){
    await this.moto.close(ws);
+  }else if(attachment?.kind==='pong'){
+   await this.pong.close(ws);
   }else if(attachment?.kind==='lobby'){
    attachment.closed=true;ws.serializeAttachment(attachment);await this.lobbyBroadcast();
   }else if(attachment?.player&&(code===1000||code===1001)){
@@ -711,13 +717,14 @@ export class Room extends DurableObject {
   }
   try{ws.close(code===1006?1000:code);}catch{}
  }
- webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);ws.close(1011,'Riconnettersi.');}
+ webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
  if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
  if(await this.ctx.storage.get('golf'))return this.golf.alarm();
  if(await this.ctx.storage.get('moto-trial'))return this.moto.alarm();
+ if(await this.ctx.storage.get('pong'))return this.pong.alarm();
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('checkmate-lobby-v1').toString()){
   return this.ctx.blockConcurrencyWhile(async()=>{
    const entries=await this.ctx.storage.list({prefix:'game:'});

@@ -3,44 +3,50 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Pong CRT</title>
+<title>Pong</title>
 <link rel="stylesheet" href="arcade.css?v=1">
-<style>
-:root{background:#101416;color:#f2ede1}
-main{width:min(100%,49rem)}
-.bar{margin-bottom:8px}
-.mode{display:flex;gap:5px}
-.mode button[aria-pressed=true]{background:#d8e6bc;border-color:#d8e6bc;color:#172218;font-weight:750}
-#cabinet{position:relative;background:linear-gradient(150deg,#575856,#2a2d2d 43%,#15191a);padding:clamp(6px,1.4vw,13px);border:1px solid #757775;border-radius:20px;box-shadow:0 8px 32px #000a,inset 0 0 0 3px #181b1b}
-#tube{position:relative;overflow:hidden;border-radius:13px;aspect-ratio:4/3;background:#07100a;isolation:isolate;touch-action:none}
-canvas{display:block;width:100%;height:100%;image-rendering:pixelated}
-#tube::after{content:"";position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 44%,transparent 50%,#000a 100%),repeating-linear-gradient(0deg,#0004 0 1px,transparent 1px 3px);box-shadow:inset 0 0 16px #000e}
-#tube::before{content:"";position:absolute;inset:0;z-index:1;pointer-events:none;background:linear-gradient(145deg,#f2f3c80c,transparent 42%);}
-#overlay{position:absolute;inset:0;z-index:2;display:grid;place-content:center;pointer-events:none;text-align:center;text-shadow:0 0 9px #a5ed9c82,0 2px 4px #000}
-#overlay strong{padding:7px 13px;border-radius:5px;background:#08110be8;color:#e2f5d2;font:800 clamp(.8rem,3.3vw,1.44rem) ui-monospace,monospace;letter-spacing:.08em;text-transform:uppercase}
-#controls{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}
-#controls #primary{background:#d8e6bc;color:#172218;font-weight:750;border-color:#d8e6bc}
-#hint{margin-top:6px}
-#score{font:700 .86rem ui-monospace,monospace;color:#d4e5ca;white-space:nowrap}
-@media(min-height:600px){#cabinet{width:min(100%,calc((100dvh - 192px - var(--system-safe-top,0px) - var(--content-safe-top,0px) - var(--system-safe-bottom,0px) - var(--content-safe-bottom,0px)) * 1.333));margin:auto}}
-@media(orientation:landscape) and (max-height:599px){
-  main{display:grid;grid-template-columns:minmax(10rem,1fr) auto;column-gap:12px;align-items:start}
-  header,.bar,#controls,#hint{grid-column:1}
-  #cabinet{grid-column:2;grid-row:1 / span 4;width:min(65vw,clamp(12rem,calc((100dvh - 24px - var(--system-safe-top,0px) - var(--content-safe-top,0px) - var(--system-safe-bottom,0px) - var(--content-safe-bottom,0px)) * 1.333),42rem))}
-}
-</style>
+<link rel="stylesheet" href="pong.css?v=2">
 <script type="module" src="bridge.js?v=1"></script>
-<script type="module" src="pong.js?v=1"></script>
+<script type="module" src="pong.js?v=2"></script>
 </head>
 <body>
 <main>
-  <header><div><p class="eyebrow">Arcade · 2 giocatori in locale</p><h1>Pong CRT</h1></div><a class="back" data-arcade-back href="/">← Giochi</a></header>
-  <div class="bar"><div class="mode" role="group" aria-label="Modalità"><button type="button" data-mode="classic" aria-pressed="true">Classico</button><button type="button" data-mode="football" aria-pressed="false">Football</button></div><output id="score" aria-label="Punteggio" aria-live="polite">0 — 0</output></div>
-  <div id="cabinet"><div id="tube">
-    <canvas id="field" width="640" height="480" aria-label="Campo di Pong"></canvas>
-    <div id="overlay"><strong id="message" role="status"></strong></div>
-  </div></div>
-  <div id="controls"><button id="primary" type="button">Inizia</button><button id="restart" type="button">Ricomincia</button><button id="sound" type="button" aria-pressed="true">Audio attivo</button></div>
+  <section id="cabinet" aria-label="Monitor Pong">
+    <div id="tube">
+      <canvas id="field" width="640" height="480" aria-label="Campo di Pong"></canvas>
+      <div id="overlay" role="status"><strong id="message"></strong></div>
+    </div>
+    <div class="monitor-label" aria-hidden="true"><span>BINOTTO / VIDEO</span><span>VHF ▪ 1976</span></div>
+  </section>
+  <section class="console" aria-label="Console di gioco">
+    <div class="fascia">
+      <h1>PONG<span>BINOTTOLAND • TELE GAMES</span></h1>
+      <div class="speaker" aria-hidden="true"></div>
+      <a class="back" data-arcade-back href="/">← Giochi</a>
+    </div>
+    <div class="deck">
+      <label class="dial" id="dial-0"><span class="player" id="player-0">Giocatore 1</span><span class="knob" aria-hidden="true"></span><input aria-label="Manopola giocatore 1" data-dial="0" type="range" min="0" max="480" value="240"><span class="dial-scale" aria-hidden="true">− &nbsp; +</span></label>
+      <div class="switchboard">
+        <div class="switches" role="group" aria-label="Interruttori della console">
+          <button id="power" class="switch" type="button" aria-pressed="true"><span class="lever" aria-hidden="true"></span>ON / OFF</button>
+          <button id="audio" class="switch" type="button" aria-pressed="true"><span class="lever" aria-hidden="true"></span>AUDIO</button>
+          <button id="online" class="switch" type="button" aria-pressed="false"><span class="lever" aria-hidden="true"></span>2 ONLINE</button>
+        </div>
+        <div class="game-switch"><label for="mode">SELEZIONE GIOCO</label><select id="mode">
+          <option value="classic">1 · Classico</option>
+          <option value="super">2 · Super Pong</option>
+          <option value="catch">3 · Catch</option>
+          <option value="solitaire">4 · Solitaire</option>
+          <option value="football">5 · Football</option>
+        </select></div>
+        <div class="transport">
+          <button id="primary" type="button">Avvia</button><button id="restart" type="button">Reset</button>
+        </div>
+      </div>
+      <label class="dial" id="dial-1"><span class="player" id="player-1">IA</span><span class="knob" aria-hidden="true"></span><input aria-label="Manopola giocatore 2" data-dial="1" type="range" min="0" max="480" value="240"><span class="dial-scale" aria-hidden="true">− &nbsp; +</span></label>
+    </div>
+    <div class="readout"><p id="connection" role="status"></p><output id="score" aria-label="Punteggio" aria-live="polite"></output></div>
+  </section>
   <p class="hint" id="hint"></p>
 </main>
 </body>

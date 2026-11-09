@@ -10,6 +10,7 @@ if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='a
 const $=id=>document.getElementById(id);
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
+let pongRoom=null,pongSocket=null,pongRetry=0,pongEpoch=0,pongOpening=false;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
 let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
@@ -41,12 +42,12 @@ async function request(path,data,keepalive=false){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='golf'?'Golf with your gay friends':g?.game==='labyrinth'?'Labyrinth':g?.game==='moto-trial'?'Moto Trial':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
+const gameTitle=g=>g?.game==='pong'?'Pong':g?.game==='golf'?'Golf with your gay friends':g?.game==='labyrinth'?'Labyrinth':g?.game==='moto-trial'?'Moto Trial':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
 const staged=g=>['uno','scarabeo','scopa','naval','briscola','briscola5'].includes(g?.game);
 const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:10}:{min:2,max:2});
 const ongoing=g=>!g.archived&&(g.phase!=='finished'||g.series&&!g.series.done);
-function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -65,6 +66,7 @@ function renderLobby(){
  $('play-labyrinth').disabled=!identity;
  $('create-golf').disabled=!identity||golfPending;
  $('create-moto-trial').disabled=!identity||motoOpening;
+ $('create-pong').disabled=!identity||pongOpening;
  const own=ownedGame();
  document.querySelectorAll('[data-create-game]').forEach(button=>{button.disabled=!identity;});
  $('owned-table').hidden=!own;
@@ -91,6 +93,15 @@ function renderLobby(){
    enter.disabled=!identity;
    enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';
    enter.onclick=()=>openGolf(game.room);card.append(title,info,enter);$('games').append(card);continue;
+  }
+  if(game.game==='pong'){
+   const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
+   card.className='table-card';info.className='turn-note';title.textContent='Sala '+game.number+' · Pong';
+   const count=game.players.length,mine=game.players.some(p=>p.id===identity?.player);
+   info.textContent=count+'/2 connessi'+(count?' · '+game.players.map(p=>p.name).join(' · '):'');
+   enter.disabled=!identity||!mine&&count>=2;
+   enter.textContent=mine?'Riprendi':count>=2?'Al completo':'Entra';
+   enter.onclick=()=>openPong(game.room);card.append(title,info,enter);$('games').append(card);continue;
   }
   if(game.game==='moto-trial'){
    const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
@@ -147,6 +158,7 @@ function leaveRoom(){
  showLobby();
 }
 async function openRoom(nextRoom,watchOnly=false){
+ if(games.find(g=>g.room===nextRoom)?.game==='pong')return openPong(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='golf')return openGolf(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='moto-trial')return openMotoRace(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='labyrinth')return openLabyrinth(nextRoom,watchOnly);
@@ -685,7 +697,7 @@ async function startSession(){
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:golfRoom||motoRace?.room||labyrinthRoom||room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:pongRoom||golfRoom||motoRace?.room||labyrinthRoom||room,away}));
 }
 
 function renderSpectators(){
@@ -885,31 +897,105 @@ function sendArcadeInsets(insets=safeInsets(tg)){
 }
 const arcadeOverlay=$('arcade-overlay'),arcadeFrame=$('arcade-frame');
 let arcadeLaunch;
-function openArcade(button,game,title){
+function openArcade(button,game,title,online=false){
  if(!arcadeOverlay.hidden)return;
  arcadeLaunch=button;
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
- arcadeFrame.title=title;arcadeFrame.src='/arcade/'+game+'.html?v=1';
+ arcadeFrame.title=title;arcadeFrame.src='/arcade/'+game+'.html'+(game==='pong'?(online?'?v=2&online=1':'?v=2'):'?v=1');
  tg?.BackButton?.show();
 }
 function closeArcade(){
  if(arcadeOverlay.hidden)return;
+ stopPong();
  arcadeOverlay.hidden=true;arcadeFrame.src='about:blank';
  tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}
  arcadeLaunch?.focus();
 }
-for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong CRT']]){
+for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong']]){
  const button=$('play-'+game);
  button.onclick=()=>openArcade(button,game,title);
 }
+function pongPost(type,data={}){
+ if(!arcadeOverlay.hidden&&arcadeFrame.title==='Pong'){
+  arcadeFrame.contentWindow?.postMessage({type:'pong:'+type,...data},location.origin);
+ }
+}
+function stopPong(){
+ const wasOnline=!!pongRoom;
+ pongEpoch++;pongOpening=false;pongRoom=null;clearTimeout(pongRetry);
+ $('create-pong').disabled=!identity;
+ if(pongSocket){pongSocket.onclose=null;pongSocket.close();pongSocket=null;}
+ if(wasOnline)sendPresence();
+}
+function connectPong(){
+ if(!pongRoom||pongSocket)return;
+ const selected=pongRoom;
+ const socket=pongSocket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/pong/'+selected+'/ws',['checkmate',sessionToken]);
+ socket.onmessage=event=>{
+  if(pongSocket!==socket)return;
+  try{
+   const packet=JSON.parse(event.data);
+   if(packet.type==='state')pongPost('state',{state:packet.state,player:identity.player});
+  }catch{}
+ };
+ socket.onclose=async event=>{
+  if(pongSocket!==socket)return;
+  pongSocket=null;
+  if(event.code===4000||event.code===4001){
+   stopPong();pongPost('status',{online:false,error:event.code===4000?'Pong aperto in un’altra finestra.':'Riapri Binottoland da Telegram.'});return;
+  }
+  pongPost('status',{online:true,connected:false});
+  try{
+   const {state}=await request('/api/pong/'+selected+'/state');
+   if(state.players.length===2&&!state.players.some(p=>p.id===identity.player))throw Object.assign(Error('La sala Pong è al completo.'),{status:409});
+  }catch(e){
+   if(pongRoom!==selected)return;
+   if(e.status===404||e.status===409){stopPong();pongPost('status',{online:false,error:e.message});return;}
+  }
+  if(pongRoom===selected)pongRetry=setTimeout(connectPong,850);
+ };
+}
+async function openPong(selected,mode='classic',inside=false){
+ if(pongOpening||pongRoom)return;
+ if(!identity){if(inside)pongPost('status',{online:false,error:'Apri Binottoland da Telegram per giocare online.'});return;}
+ if(!inside&&!arcadeOverlay.hidden)return;
+ pongOpening=true;
+ const epoch=++pongEpoch;
+ $('create-pong').disabled=true;
+ try{
+  const {state}=selected?await request('/api/pong/'+selected+'/state'):await request('/api/create',{game:'pong',mode});
+  if(epoch!==pongEpoch)return;
+  if(state.players.length===2&&!state.players.some(p=>p.id===identity.player))throw Error('La sala Pong è al completo.');
+  pongRoom=state.room;
+  if(inside){pongPost('status',{online:true,connected:false});connectPong();}
+  else openArcade($('create-pong'),'pong','Pong',true);
+  sendPresence();
+ }catch(e){
+  if(epoch!==pongEpoch)return;
+  if(inside)pongPost('status',{online:false,error:e.message});else err(e.message);
+ }finally{if(epoch===pongEpoch){pongOpening=false;$('create-pong').disabled=!identity;}}
+}
+$('create-pong').onclick=()=>openPong();
 arcadeFrame.addEventListener('load',()=>{if(!arcadeOverlay.hidden){arcadeFrame.focus();sendArcadeInsets();}});
 window.addEventListener('message',event=>{
  if(arcadeOverlay.hidden||event.origin!==location.origin||event.source!==arcadeFrame.contentWindow)return;
  if(event.data?.type==='arcade:ready')sendArcadeInsets();
  else if(event.data?.type==='arcade:exit')closeArcade();
+ else if(arcadeFrame.title==='Pong'){
+  const data=event.data;
+  if(data?.type==='pong:ready'){
+   pongPost('identity',{name:identity?.name});
+   if(pongRoom)connectPong();
+  }else if(data?.type==='pong:join')openPong(null,data.mode,true);
+  else if(data?.type==='pong:leave')stopPong();
+  else if((data?.type==='pong:input'||data?.type==='pong:command')&&pongSocket?.readyState===1&&pongSocket.bufferedAmount<4096){
+   const packet=data.type==='pong:input'?{type:'input',direction:data.direction,target:data.target}:{type:data.action,mode:data.mode};
+   const raw=JSON.stringify(packet);if(raw.length<=200)pongSocket.send(raw);
+  }
+ }
 });
 tg?.onEvent('backButtonClicked',()=>{
  if(!arcadeOverlay.hidden)closeArcade();

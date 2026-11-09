@@ -168,6 +168,43 @@ try{
  await until(rider1NewWindow,p=>p.type==='state'&&p.state.players.length===1);
  assert.equal((await call(201,'/api/lobby')).data.games.find(g=>g.room===race.room).online,1);
  console.log('PASS Moto Trial runtime: shared campaign, authenticated live riders, sequential unlocks, reconnect and Lobby presence.');
+
+ const pongMade=await call(241,'/api/create',{game:'pong',mode:'football'});
+ assert.equal(pongMade.status,200);
+ const pongRoom=pongMade.data.state.room;
+ const pongA=await connect(241,pongRoom,false,'pong');
+ assert.equal(pongA.packets[0].state.phase,'waiting');
+ assert.equal(pongA.packets[0].state.players[0].name,'Test 241');
+ const waitingPong=(await call(241,'/api/lobby')).data.games.find(g=>g.room===pongRoom);
+ assert.equal(waitingPong.phase,'waiting');
+ assert.equal(waitingPong.players.length,1);
+ const pongB=await connect(242,pongRoom,false,'pong');
+ await until(pongA,p=>p.state?.phase==='playing'&&p.state.players.length===2);
+ const third=await mf.dispatchFetch('https://unit.test/api/pong/'+pongRoom+'/ws',{
+  headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(243)}
+ });
+ assert.equal(third.status,409);
+ pongB.ws.send(JSON.stringify({type:'mode',mode:'catch'}));
+ for(let i=0;i<19;i++){
+  pongA.ws.send(JSON.stringify({type:'input',direction:-1,target:null}));
+  pongB.ws.send(JSON.stringify({type:'input',direction:1,target:null}));
+  await new Promise(resolve=>setTimeout(resolve,52));
+ }
+ const running=(await call(241,'/api/pong/'+pongRoom+'/state')).data.state;
+ assert.equal(running.match.mode,'football');
+ assert.ok(running.match.paddles[0]<150&&running.match.paddles[1]>330);
+ assert.ok(running.match.ball.x>320);
+ pongA.ws.send(JSON.stringify({type:'mode',mode:'catch'}));
+ await until(pongB,p=>p.state?.phase==='paused'&&p.state.match.mode==='catch');
+ pongA.ws.send(JSON.stringify({type:'start'}));
+ await until(pongB,p=>p.state?.phase==='playing'&&p.state.match.mode==='catch');
+ pongB.ws.close();
+ await until(pongA,p=>p.state?.phase==='waiting'&&p.state.match.mode==='catch');
+ const pongRejoined=await connect(242,pongRoom,false,'pong');
+ assert.equal(pongRejoined.packets[0].state.players[1].seat,1);
+ assert.equal(pongRejoined.packets[0].state.phase,'playing');
+ pongA.ws.close();pongRejoined.ws.close();
+ console.log('PASS Pong runtime: Lobby roster, waiting, automatic start, capacity, authoritative movement, host controls and reconnect.');
  const appearance=['#a11293','#197b61'];
  const golf=await call(301,'/api/create',{game:'golf',appearance,campaign:'coast'});
  assert.equal(golf.status,200);

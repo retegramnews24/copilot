@@ -15,7 +15,7 @@ import {CAMPAIGN_LENGTH} from '../public/moto-trial/courses.js';
 import {drawTrial} from '../public/moto-trial/render.js';
 import * as trialPhysics from '../public/moto-trial/physics.js';
 import {FrameBudget} from '../public/labyrinth/performance.js';
-import {newMatch,movePaddle,stepMatch,width,height,radius} from '../public/arcade/pong-physics.js';
+import {newMatch,movePaddle,stepMatch,paddlePositions,width,height,radius} from '../public/arcade/pong-physics.js';
 const source=await fs.readFile('public/app.js','utf8');
 const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,canMove};';
 const importLines=/^import .+;$/gm;
@@ -93,7 +93,7 @@ for(const game of ['number-connect','pong']){
  const launch=get('play-'+game),frame=get('arcade-frame'),overlay=get('arcade-overlay');
  launch.click();
  assert.equal(overlay.hidden,false);
- assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v=1');
+ assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v='+(game==='pong'?2:1));
  w.dispatchEvent(new w.MessageEvent('message',{origin:'https://wrong.test',source:frame.contentWindow,data:{type:'arcade:exit'}}));
  assert.equal(overlay.hidden,false);
  w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:frame.contentWindow,data:{type:'arcade:exit'}}));
@@ -101,6 +101,32 @@ for(const game of ['number-connect','pong']){
  assert.equal(frame.getAttribute('src'),'about:blank');
  assert.equal(w.document.activeElement,launch);
 }
+assert.ok(get('play-pong').closest('article').querySelector('.pong-symbol svg'));
+const arcadeOnlineFrame=get('arcade-frame'),originalArcadeFetch=w.fetch,originalArcadeSocket=w.WebSocket;
+const pongMessages=[];
+let pongSocketFixture;
+w.fetch=async(path,options)=>{
+ if(path==='/api/create'&&JSON.parse(options.body).game==='pong')return Response.json({state:{room:'pong-fixture',players:[]}});
+ return originalArcadeFetch(path,options);
+};
+w.WebSocket=class extends originalArcadeSocket{
+ constructor(url,protocol){
+  super(url,protocol);
+  if(url.endsWith('/api/pong/pong-fixture/ws'))pongSocketFixture=this;
+ }
+ send(raw){if(this===pongSocketFixture)pongMessages.push(JSON.parse(raw));else super.send(raw);}
+};
+get('create-pong').click();
+await new Promise(resolve=>setTimeout(resolve,0));
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/arcade/pong.html?v=2&online=1');
+const arcadeMessage=data=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:arcadeOnlineFrame.contentWindow,data}));
+arcadeMessage({type:'pong:ready'});
+assert.ok(pongSocketFixture);
+arcadeMessage({type:'pong:input',direction:1,target:null});
+assert.deepEqual(pongMessages.at(-1),{type:'input',direction:1,target:null});
+arcadeMessage({type:'arcade:exit'});
+assert.equal(pongSocketFixture.readyState,3);
+w.fetch=originalArcadeFetch;w.WebSocket=originalArcadeSocket;
 assert.equal(get('catalog-platform-title').textContent,'Giochi 2D');
 assert.equal(get('tab-games').textContent,'Giochi e Applicazioni');
 assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','catalog-3d-title','catalog-platform-title','catalog-board-title']);
@@ -914,6 +940,17 @@ for(const [mode,limit,edge] of [['classic',11,width+radius],['football',5,width-
  stepMatch(match,1/120);
  assert.equal(match.scores[0],limit);
 }
+const front=paddlePositions('football',1)[1];
+const intercepted=shot('football',front-radius-2,height/2,550);
+assert.equal(stepMatch(intercepted,1/120),'paddle');
+assert.ok(intercepted.ball.vx<0);
+assert.equal(paddlePositions('super',0).length,2);
+const catchPoint=shot('catch',width-radius-2,height/2,550);
+assert.equal(stepMatch(catchPoint,1/120),'score');
+assert.deepEqual(catchPoint.scores,[0,1]);
+const solitaire=shot('solitaire',width-radius-2,height/2,550);
+assert.equal(stepMatch(solitaire,1/120),'wall');
+assert.equal(solitaire.winner,null);
 const keepers=newMatch('football');
 movePaddle(keepers,0,0,0,1);
 movePaddle(keepers,1,0,height,1);
@@ -923,9 +960,12 @@ const pongDOM=new JSDOM(await fs.readFile('public/arcade/pong.html','utf8'),{url
 const pw=pongDOM.window,pd=pw.document;
 pw.HTMLCanvasElement.prototype.getContext=()=>null;
 pw.eval(pongBundle.outputFiles[0].text);
-pd.querySelector('[data-mode="football"]').click();
-assert.match(pd.getElementById('hint').textContent,/arriva a 5/);
-assert.equal(pd.querySelector('[data-mode="football"]').getAttribute('aria-pressed'),'true');
+const selectMode=pd.getElementById('mode');
+selectMode.value='football';selectMode.dispatchEvent(new pw.Event('change'));
+assert.match(pd.getElementById('hint').textContent,/5 gol/);
+assert.equal(selectMode.value,'football');
+assert.equal(pd.querySelector('h1').textContent.startsWith('PONG'),true);
+assert.ok(pd.getElementById('cabinet').compareDocumentPosition(pd.getElementById('power'))&pw.Node.DOCUMENT_POSITION_FOLLOWING);
 pd.getElementById('primary').click();
 assert.equal(pd.getElementById('overlay').hidden,true);
 pd.getElementById('primary').click();
