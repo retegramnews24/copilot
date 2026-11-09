@@ -55,9 +55,9 @@ canvas { position:absolute; inset:0; width:100%; height:100% }
   display:flex; justify-content:center; align-items:center; gap:clamp(0px,1.8vw,17px);
   min-height:40px;
 }
-.chalk { background:none; border:0; padding:5px; min-width:40px; height:42px; cursor:pointer }
+.chalk { touch-action:manipulation; background:none; border:0; padding:5px; min-width:40px; height:42px; cursor:pointer }
 .chalk i {
-  display:block; width:clamp(27px,6vw,45px); height:13px; border-radius:4px 3px 3px 5px;
+  pointer-events:none; display:block; width:clamp(27px,6vw,45px); height:13px; border-radius:4px 3px 3px 5px;
   background:
     radial-gradient(circle at 25% 40%,#fff5 0 1px,transparent 1.5px) 0 0/7px 6px,
     radial-gradient(circle at 40% 40%,#2415112f 0 1px,transparent 1.5px) 1px 2px/5px 7px,
@@ -89,9 +89,9 @@ footer { min-height:39px; font-size:11px; color:#d9c7ab }
 .tools button,dialog button,#pictionary button,#delete-room { cursor:pointer }
 button:disabled { opacity:.55; cursor:default }
 .tools .clear-action,#delete-room { border-color:#d58b70; background:#562b25; color:#fff0e8 }
-#eraser { display:flex; align-items:center; gap:5px }
+#eraser { touch-action:manipulation; display:flex; align-items:center; gap:5px }
 #eraser[aria-pressed=true] { outline:2px solid #f7e7ba }
-#eraser i { display:inline-block; width:17px; height:10px; border-radius:3px; transform:rotate(-8deg);
+#eraser i { pointer-events:none; display:inline-block; width:17px; height:10px; border-radius:3px; transform:rotate(-8deg);
   background:linear-gradient(#b88b5d 0 51%,#817a6e 52% 80%,#5d5348 81%);
 }
 #room { white-space:nowrap; color:#f1d4a1 }

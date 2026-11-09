@@ -103,6 +103,20 @@ function flush() {
   refreshPreview();
 }
 
+function resetPointer() {
+  const captured = pointer;
+  pointer = null;
+  last = null;
+  if (captured !== null && preview.hasPointerCapture?.(captured)) {
+    preview.releasePointerCapture(captured);
+  }
+}
+
+function finishStroke() {
+  resetPointer();
+  flush();
+}
+
 function point(event, rect) {
   const x = Math.round((event.clientX - rect.left) / rect.width * BOARD_WIDTH);
   const y = Math.round((event.clientY - rect.top) / rect.height * BOARD_HEIGHT);
@@ -123,12 +137,16 @@ function addPoint(next) {
 }
 
 preview.addEventListener('pointerdown', event => {
-  if (!canDraw() || clearing || pointer !== null || event.button !== 0) return;
+  if (!canDraw() || clearing || event.button !== 0) return;
+  if (pointer !== null) {
+    // A new primary touch also recovers a stroke whose end never reached the canvas.
+    if (event.pointerType !== 'touch' || !event.isPrimary) return;
+    finishStroke();
+  }
   pointer = event.pointerId;
-  last = null;
   drawingColor = color;
   drawingSize = Number(sizeControl.value);
-  preview.setPointerCapture(pointer);
+  preview.setPointerCapture?.(pointer);
   addPoint(point(event, preview.getBoundingClientRect()));
 });
 preview.addEventListener('pointermove', event => {
@@ -140,9 +158,7 @@ preview.addEventListener('pointermove', event => {
 function endStroke(event) {
   if (event.pointerId !== pointer) return;
   if (event.type === 'pointerup' && online) addPoint(point(event, preview.getBoundingClientRect()));
-  pointer = null;
-  last = null;
-  flush();
+  finishStroke();
 }
 for (const event of ['pointerup', 'pointercancel', 'lostpointercapture']) preview.addEventListener(event, endStroke);
 
@@ -162,6 +178,7 @@ CHALKS.forEach(([name, tint, angle], index) => {
 });
 
 function selectTool(index) {
+  finishStroke();
   color = index;
   for (const [i, button] of [...chalks.children, eraser].entries()) {
     button.setAttribute('aria-pressed', String(i === color));
@@ -178,9 +195,7 @@ confirmClearButton.onclick = () => {
   if (!canDraw() || clearing) return;
   clearing = true;
   clearButton.disabled = true;
-  pointer = null;
-  last = null;
-  flush();
+  finishStroke();
   post('clear', {command:{type:'clear', mode, epoch}});
   status.textContent = 'Cancellazione in corso…';
   clearTimer = setTimeout(() => {
@@ -247,8 +262,7 @@ function clearBoard(nextEpoch) {
   epoch = nextEpoch;
   clearTimeout(flushTimer);
   current = null;
-  last = null;
-  pointer = null;
+  resetPointer();
   pending.clear();
   saved.clearRect(0, 0, BOARD_WIDTH, BOARD_HEIGHT);
   clearing = false;
@@ -323,9 +337,7 @@ window.addEventListener('message', event => {
       updateControls();
       if (confirmDelete.open) confirmDelete.close();
       if (confirmClear.open) confirmClear.close('cancel');
-      pointer = null;
-      last = null;
-      flush();
+      finishStroke();
       showPeople([]);
       status.textContent = packet.expired ? 'Riapri da Telegram' : 'Riconnessione…';
       break;
