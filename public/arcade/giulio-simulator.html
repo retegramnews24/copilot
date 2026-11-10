@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10191a">
+<title>Giulio Simulator · Linea dei Due Laghi</title>
+<link rel="stylesheet" href="../giulio/cab.css?v=1">
+</head>
+<body>
+<header>
+  <div class="brand"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="3" width="12" height="15" rx="3"/><path d="M6 10h12M9 18l-2 4m8-4 2 4M9 14h1m4 0h1"/></svg></span><div><strong>Giulio Simulator</strong><small>REGIONALE 01 / DUE LAGHI · v0.3</small></div></div>
+  <div class="actions"><button id="exit" type="button" hidden>← Esci</button><button id="sound" aria-pressed="false" type="button">Audio</button><button id="full" type="button" aria-label="Schermo intero">⛶</button><button id="pause" type="button" disabled>Pausa</button></div>
+</header>
+<main id="simulator">
+  <section class="windscreen" aria-label="Vista 3D dalla cabina">
+    <canvas id="view" aria-label="Vista dalla cabina. Trascina per guardare dai finestrini."></canvas>
+    <div class="view-controls" aria-label="Direzione della visuale">
+      <button type="button" id="look-left" aria-label="Guarda a sinistra">‹</button>
+      <button type="button" id="look-center" title="Ricomponi la visuale (Home)">Cabina <output id="view-angle">0°</output></button>
+      <button type="button" id="look-right" aria-label="Guarda a destra">›</button>
+    </div>
+    <div class="route-hud"><div class="route-label"><span class="eyebrow" id="hud-status">Prossima fermata</span><strong id="destination">Ponte Verde</strong><span id="distance">1.120 m</span></div><div class="speed-sign"><strong id="limit">45</strong><span>KM/H</span></div></div>
+    <div class="route-message" id="message" role="status">Pronto in banchina.</div>
+  </section>
+  <section class="desk" aria-label="Strumenti e comandi">
+    <div class="panel speed-panel">
+      <p class="panel-label">Velocità</p>
+      <div class="dial">
+        <svg viewBox="0 0 150 92" aria-hidden="true">
+          <path d="M16 73 A60 60 0 1 1 134 73" fill="none" stroke="#354b46" stroke-width="8" stroke-linecap="round"/>
+          <path id="speed-arc" d="M16 73 A60 60 0 1 1 134 73" pathLength="100" fill="none" stroke="#bce28b" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100"/>
+          <line id="cab-needle" class="cab-needle" x1="75" x2="75" y1="56" y2="22" transform="rotate(-130 75 56)"/>
+          <circle cx="75" cy="56" r="4" fill="#d7c199"/>
+          <g fill="#abbdb1" font-size="10" font-family="monospace" text-anchor="middle"><text x="10" y="90">0</text><text x="75" y="24">55</text><text x="137" y="90">110</text></g>
+        </svg>
+        <output class="speed-number" id="speed">0</output><span class="speed-unit">km/h</span>
+      </div>
+      <p class="state-line" id="state">FERMO</p>
+    </div>
+    <div class="panel controls">
+      <div class="bank"><div class="bank-head">Trazione <output id="traction">0 / 4</output></div><div class="steps" id="traction-steps" aria-hidden="true"></div><div class="lever-control"><div id="traction-lever" class="lever-slot" aria-hidden="true"><div class="lever-handle"></div></div><div class="keys"><button data-cmd="powerDown" aria-label="Riduci trazione">− <kbd>S</kbd></button><button data-cmd="powerUp" aria-label="Aumenta trazione">+ <kbd>W</kbd></button></div></div></div>
+      <div class="bank brake"><div class="bank-head">Freno <output id="brake">3 / 5</output></div><div class="steps" id="brake-steps" aria-hidden="true"></div><div class="lever-control"><div id="brake-lever" class="lever-slot" aria-hidden="true"><div class="lever-handle"></div></div><div class="keys"><button data-cmd="brakeDown" aria-label="Allenta il freno">− <kbd>A</kbd></button><button data-cmd="brakeUp" aria-label="Aumenta il freno">+ <kbd>D</kbd></button></div></div></div>
+      <div class="secondary">
+        <button data-cmd="left" id="doors-left">Porte Sx <kbd>Q</kbd></button>
+        <button data-cmd="right" id="doors-right">Porte Dx <kbd>E</kbd></button>
+        <button data-cmd="reverse" id="reverser">Avanti <kbd>R</kbd></button>
+        <button data-cmd="sand" id="sand">Sabbia <kbd>C</kbd></button>
+        <button data-cmd="emergency" id="emergency" class="emergency">Emergenza <kbd>X</kbd></button>
+      </div>
+    </div>
+    <div class="panel stats-panel">
+      <p class="panel-label">Telemetria di bordo</p>
+      <dl class="readout">
+        <div class="pressure"><dt>Condotta</dt><dd id="pipe">4,25 bar</dd><i id="pipe-gauge" class="mini-gauge" aria-hidden="true"></i></div><div class="pressure"><dt>Cilindri</dt><dd id="cyl">1,87 bar</dd><i id="cyl-gauge" class="mini-gauge" aria-hidden="true"></i></div>
+        <div><dt>Accelerazione</dt><dd id="acc">0,00 m/s²</dd></div><div><dt>Pendenza</dt><dd id="grade">0 ‰</dd></div>
+      </dl>
+      <p class="next-limit" id="next-limit"></p>
+    </div>
+  </section>
+  <div class="route-strip"><span>Officina</span><progress id="progress" max="8420" value="0" aria-label="Avanzamento sulla linea"></progress><span id="stop-count">0 / 6 fermate</span><span id="clock">08:17:00</span></div>
+</main>
+<div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="brief-title">
+  <section class="brief">
+    <span class="eyebrow" id="brief-kicker">Linea dei Due Laghi · 8,42 km</span>
+    <h1 id="brief-title">Giulio Simulator</h1>
+    <div id="brief-body"></div>
+    <div class="weather-options" id="weather"><button data-weather="dry" aria-pressed="true">Binario asciutto</button><button data-weather="wet" aria-pressed="false">Pioggia</button></div>
+    <div class="brief-buttons"><button id="restart" hidden>Nuova corsa</button><button class="primary" id="continue">Entra in cabina</button></div>
+    <p class="minor" id="brief-note">Tratta e rotabile di fantasia. Parametri del modello semplificati per questa prova.</p>
+  </section>
+</div>
+<script defer src="../giulio/line.js?v=1"></script>
+<script defer src="../giulio/scenery.js?v=1"></script>
+<script defer src="../giulio/cab.js?v=1"></script>
+</body>
+</html>
