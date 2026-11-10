@@ -29,7 +29,6 @@
     <button id="share-audio" type="button" hidden>Attiva audio</button><span id="share-audio-state" role="status" hidden></span>
    </div>
    <div id="cinema-sources"><button id="watch-together" type="button">Guarda insieme</button><button id="group-media" type="button">Invia al Cinema</button>
-    <button id="upload-video" type="button" title="Carica video" aria-label="Carica video">↑</button>
     <button id="share-window" type="button">Condividi finestra</button>
    </div>
    <div id="group-forward-panel" hidden><a id="group-bot" target="_blank" rel="noopener noreferrer" hidden>Apri il bot</a><button id="group-stop" type="button" hidden>Scollega</button><span id="group-forward-help" role="status"></span></div>
@@ -65,10 +64,9 @@
 <dialog id="multisala-dialog" aria-labelledby="multisala-title"><div class="dialog-heading"><h2 id="multisala-title">Multisala</h2><form method="dialog"><button>Chiudi</button></form></div><div id="multisala-rooms"></div><p id="multisala-empty" hidden>Nessuna sala aperta.</p></dialog>
 <dialog id="close-dialog" aria-labelledby="close-title"><form method="dialog"><h2 id="close-title">Chiudere la sala per tutti?</h2><p>Gli spettatori torneranno alla lobby di Binottoland.</p><div class="dialog-actions"><button value="cancel" autofocus>Annulla</button><button value="close">Chiudi sala</button></div></form></dialog>
 <dialog id="watch-dialog" aria-labelledby="watch-title"><form id="watch-form"><h2 id="watch-title">Guarda insieme</h2>
-<label>Tipo <select id="watch-type"><option value="stream">Link stream</option><option value="youtube">YouTube</option><option value="file">Carica un video</option></select></label>
+<label>Tipo <select id="watch-type"><option value="stream">Link stream</option><option value="youtube">YouTube</option></select></label>
 <label id="watch-link-label">Link <input id="watch-url" type="url" required placeholder="https://…" maxlength="1400"></label>
-<label id="watch-file-label" hidden>Video MP4 o WebM <input id="watch-file" type="file" accept="video/mp4,video/webm,.mp4,.webm" disabled><small>Fino a 16 MB · disponibile in sala per 2 ore</small></label>
-<label>Titolo facoltativo <input id="watch-name" type="text" maxlength="96"></label><p id="watch-error" role="alert"></p><p id="watch-progress" role="status" hidden>Caricamento in sala…</p>
+<label>Titolo facoltativo <input id="watch-name" type="text" maxlength="96"></label><p id="watch-error" role="alert"></p>
 <div class="dialog-actions"><button id="watch-cancel" type="button">Annulla</button><button id="watch-submit" type="submit">Apri in sala</button></div>
 </form></dialog>
 <p id="notice" role="status" aria-live="polite"></p>

@@ -192,7 +192,7 @@ export class Cinema {
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
       const path=new URL(req.url).pathname;
-      if(path==='/cinema/upload')return this.upload(req);
+      
       if(path.startsWith('/cinema/group-'))return this.groupForward(req,path.slice('/cinema/group-'.length));
       if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
@@ -271,29 +271,6 @@ export class Cinema {
     if(!info.room)return;
     const key='forward:'+info.user.player,pending=await this.ctx.storage.get(key);
     if(pending?.room===info.room)await this.ctx.storage.delete(key);
-  }
-  async upload(req){
-    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
-    const {room:id,file,url,name,cancel}=await req.json();
-    const data=await this.data(),room=data.rooms.find(entry=>entry.id===id);
-    if(!room||!user)return response('Questa sala è stata chiusa.',404);
-    if((url||cancel)&&(room.upload?.file!==file||room.upload.player!==user.player))return response('Caricamento scaduto.',409);
-    if(!cancel&&!this.connections().some(c=>c.info.room===id&&c.info.user.player===user.player))return response('Entra nella sala per condividere un video.',403);
-    const now=Date.now();
-    if(cancel)delete room.upload;
-    else if(!url){
-      if(room.upload?.until>now)return response('È già in corso un caricamento in sala.',409);
-      room.upload={file,player:user.player,until:now+300000};
-    }else{
-      delete room.upload;
-      room.current=null;delete room.inboxHold;
-      room.channel={name,url,file:true,logo:''};
-      room.updated=now;
-      room.playback={position:0,playing:true,updated:now,seek:0};
-    }
-    await this.ctx.storage.put(ROOMS,data.rooms);
-    if(url)this.publish(data);
-    return new Response(null,{status:204});
   }
   message(socket,raw){
     return this.ctx.blockConcurrencyWhile(async()=>{

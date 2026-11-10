@@ -2,7 +2,7 @@ import {Blackboard} from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
 import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
 import { YouTubeCatalog } from './cinema-youtube.js';
-import {MEDIA_LIMIT,MEDIA_TTL,MEDIA_TYPES,readCinemaMedia,storeCinemaMedia} from './cinema-media.js';
+import {readCinemaMedia} from './cinema-media.js';
 import {chessSnapshot,claimChessDraw} from './chess-rules.js';
 import {initialNaval,playNaval,navalView} from './naval.js';
 import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
@@ -124,46 +124,6 @@ async function sessionUser(req,env){
 }
 
 const cinemaHub=env=>env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1'));
-const cinemaFile=(env,file)=>env.ROOMS.get(env.ROOMS.idFromName('cinema-file:'+file));
-const cinemaSignature=(env,file,expires)=>mac(env.BOT_TOKEN,'cinema-media:'+file+':'+expires);
-async function uploadCinema(req,env,u){
- const type=req.headers.get('Content-Type');
- if(!MEDIA_TYPES.has(type))return json({error:'Scegli un video MP4 o WebM.'},415);
- if(Number(req.headers.get('Content-Length'))>MEDIA_LIMIT)return json({error:'Il video supera 16 MB.'},413);
- const room=u.searchParams.get('room'),name=u.searchParams.get('name')?.trim().slice(0,96)||'Video condiviso';
- const file=id(),expires=Date.now()+MEDIA_TTL;
- const change=(fields={})=>cinemaHub(env).fetch(u.origin+'/cinema/upload',{
-  method:'POST',headers:{'X-Checkmate-User':req.headers.get('X-Checkmate-User')},body:JSON.stringify({room,file,name,...fields})
- });
- const reserved=await change();
- if(!reserved.ok)return reserved;
- const headers=new Headers({'Content-Type':type,'X-Media-Expires':String(expires)});
- if(req.headers.has('Content-Length'))headers.set('Content-Length',req.headers.get('Content-Length'));
- let stored;
- try{
-  stored=await cinemaFile(env,file).fetch(new Request(u.origin+'/cinema/file',{method:'POST',headers,body:req.body}));
- }catch{
-  await change({cancel:true});
-  return json({error:'Caricamento interrotto. Riprova.'},503);
- }
- if(!stored.ok){
-  await change({cancel:true});
-  return json({error:stored.status===413?'Il video supera 16 MB.':'Il file non è un video MP4 o WebM valido.'},stored.status);
- }
- const sig=hex(await cinemaSignature(env,file,expires));
- const published=await change({url:u.origin+'/api/cinema/media/'+file+'?expires='+expires+'&sig='+sig});
- if(!published.ok)await change({cancel:true});
- return published;
-}
-async function serveCinema(req,env,u,file){
- const expires=Number(u.searchParams.get('expires')),sig=u.searchParams.get('sig')||'';
- if(!env.BOT_TOKEN||!Number.isSafeInteger(expires)||expires<=Date.now()||!/^[a-f0-9]{64}$/.test(sig))return json({error:'Video non disponibile.'},404);
- const expected=await cinemaSignature(env,file,expires);
- const supplied=Uint8Array.from(sig.match(/../g),pair=>parseInt(pair,16));
- if(!crypto.subtle.timingSafeEqual(expected,supplied))return json({error:'Video non disponibile.'},404);
- return cinemaFile(env,file).fetch(new Request(u.origin+'/cinema/file',req));
-}
-
 function telegramCinemaDirectory(env,origin,op,params={},user=null,body){
  const query=new URLSearchParams({op,...params});
  const target=env.ROOMS.get(env.ROOMS.idFromName('cinema-telegram-v1'));
@@ -238,8 +198,6 @@ export default {
   if(u.pathname==='/api/health')return json({ok:true,version:'1.1.0'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
-  const cinemaMedia=u.pathname.match(/^\/api\/cinema\/media\/([a-f0-9-]{36})$/);
-  if(cinemaMedia&&['GET','HEAD'].includes(req.method))return serveCinema(req,env,u,cinemaMedia[1]);
   const groupMedia=/^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
   let authRequest=req;
   if(groupMedia&&!req.headers.has('Authorization')){
@@ -257,7 +215,7 @@ export default {
   }
   if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return cinemaHub(env).fetch(new Request(u.origin+'/cinema/ws',req));
   if(u.pathname==='/api/cinema/youtube'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-youtube-v1')).fetch(new Request(u.origin+'/cinema/youtube'+u.search,req));
-  if(u.pathname==='/api/cinema/upload'&&req.method==='POST')return uploadCinema(req,env,u);
+  
   const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
   if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
   const pong=u.pathname.match(/^\/api\/pong\/([a-f0-9-]{36})\/(state|ws)$/);
@@ -427,9 +385,8 @@ export class Room extends DurableObject {
   if(path==='/cinema/group-directory')return (this.telegramCinema??=new TelegramCinema(this.ctx,this.env.BOT_TOKEN)).fetch(req);
   if(path==='/cinema/group-file')return req.method==='POST'
    ?this.ctx.blockConcurrencyWhile(()=>cacheTelegramMedia(req,this.ctx,this.env.BOT_TOKEN)):readCinemaMedia(req,this.ctx.storage);
-  if(path==='/cinema/ws'||path==='/cinema/upload'||['arm','disarm','enqueue','asset','asset-ready'].some(action=>path==='/cinema/group-'+action))return this.cinema.fetch(req);
+  if(path==='/cinema/ws'||['arm','disarm','enqueue','asset','asset-ready'].some(action=>path==='/cinema/group-'+action))return this.cinema.fetch(req);
   if(path==='/cinema/youtube')return (this.youtube??=new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req,viewer);
-  if(path==='/cinema/file')return req.method==='POST'?storeCinemaMedia(req,this.ctx.storage):readCinemaMedia(req,this.ctx.storage);
   if(path==='/blackboard/ws'||path==='/blackboard/create')return this.blackboard.fetch(req);
   if(path.startsWith('/pong/'))return this.pong.fetch(req);
   if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
