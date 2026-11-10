@@ -1,3 +1,4 @@
+import {checkGroupAccess,groupPolicy,GroupSockets,socketGroupAccess,GROUP_DENIED,GROUP_UNAVAILABLE} from './telegram-access.js';
 import {Blackboard} from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
 import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
@@ -67,15 +68,22 @@ async function telegramWebhook(req,env){
   const update=await req.json();
   const message=update?.message;
   const submission=cinemaSubmission(message);
-  if(submission)return receiveCinemaSubmission(env,new URL(req.url).origin,submission);
+  if(submission){
+   const access=await checkGroupAccess(env,submission.user);
+   if(access.status===403)return json({ok:true});
+   if(access.status!==200)return groupAccessError(access);
+   return receiveCinemaSubmission(env,new URL(req.url).origin,submission);
+  }
   const text=typeof message?.text==='string'?message.text.trim():'';
   if(!message||message.from?.is_bot||!text)return json({ok:true});
   const match=text.match(/^\/(?:gioca|start)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
   if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
+  const access=await checkGroupAccess(env,String(message.from?.id??''));
+  if(access.status!==200&&access.status!==403)return groupAccessError(access);
   const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
    chat_id:message.chat.id,
-   text:'Benvenuto nel circolo Binottoland. Lobby, amici e tavoli da gioco.',
-   reply_markup:{inline_keyboard:[[{text:'Apri Binottoland',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
+   text:access.status===403?GROUP_DENIED:'Benvenuto nel circolo Binottoland. Lobby, amici e tavoli da gioco.',
+   ...(access.status===200?{reply_markup:{inline_keyboard:[[{text:'Apri Binottoland',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}}:{})
   });
   if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
   return json({ok:true});
@@ -89,7 +97,15 @@ async function mac(key,text){
  return new Uint8Array(await crypto.subtle.sign('HMAC',k,encoder.encode(text)));
 }
 const hex=bytes=>[...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
-const telegramAccessTag=async env=>env.BOT_TOKEN?hex(await mac(env.BOT_TOKEN,'telegram-session-v1')):null;
+async function telegramAccessTag(env){
+ if(!env.BOT_TOKEN)return null;
+ const group=groupPolicy(env);
+ return hex(await mac(env.BOT_TOKEN,group===null?'telegram-session-v1':'telegram-group-session:'+group));
+}
+function groupAccessError({status}){
+ return status===403?json({error:GROUP_DENIED,code:'group_membership_required'},403)
+  :json({error:GROUP_UNAVAILABLE},503);
+}
 async function login(req,env){
  try{
   if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN mancante.'},503);
@@ -103,6 +119,8 @@ async function login(req,env){
   if(!Number.isFinite(age)||age< -60||age>86400)throw Error();
   const u=JSON.parse(p.get('user')||'null');if(!u||!Number.isSafeInteger(u.id)||u.id<=0)throw Error();
   const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):'',photo:typeof u.photo_url==='string'&&u.photo_url.startsWith('https://')&&u.photo_url.length<=512?u.photo_url:''};
+  const access=await checkGroupAccess(env,user.id);
+  if(access.status!==200)return groupAccessError(access);
   const accessTag=await telegramAccessTag(env);
   const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,accessTag,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
   const token='session.'+payload+'.'+hex(await mac(env.BOT_TOKEN,'session.'+payload));
@@ -111,7 +129,7 @@ async function login(req,env){
   return response;
  }catch{return json({error:'Accesso Telegram non valido o scaduto. Chiudi e riapri la Mini App dal bot.'},401)}
 }
-async function sessionUser(req,env){
+async function readSession(req,env){
  try{
   const offered=(req.headers.get('Sec-WebSocket-Protocol')||'').split(',').map(x=>x.trim());
   const token=(req.headers.get('Authorization')||'').replace(/^Bearer /,'')||offered.find(x=>x.startsWith('session.'));
@@ -119,7 +137,7 @@ async function sessionUser(req,env){
   if(!m||!env.BOT_TOKEN||hex(await mac(env.BOT_TOKEN,'session.'+m[1]))!==m[2])return null;
   const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[1].replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))));
   if(payload.accessTag!==await telegramAccessTag(env))return null;
-  return payload.expires>Date.now()?payload.user:null;
+  return Number.isSafeInteger(payload.expires)&&payload.expires>Date.now()&&payload.user?.id?payload:null;
  }catch{return null}
 }
 
@@ -204,11 +222,21 @@ export default {
    const cookie=req.headers.get('Cookie')?.match(/(?:^|;\s*)binottoland_cinema=([^;]+)/)?.[1];
    if(cookie)authRequest=new Request(req,{headers:{Authorization:'Bearer '+cookie}});
   }
-  const user=await sessionUser(authRequest,env);
-  if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
+  const session=await readSession(authRequest,env);
+  if(!session)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
+  const {user}=session;
+  const access=await checkGroupAccess(env,user.id);
+  if(access.status!==200)return groupAccessError(access);
   if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
-  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
+  const trustedHeaders=new Headers(req.headers);
+  trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));
+  trustedHeaders.set('X-Access-Tag',session.accessTag);
+  trustedHeaders.delete('X-Group-Access');
+  if(access.until&&req.headers.get('Upgrade')?.toLowerCase()==='websocket'){
+   trustedHeaders.set('X-Group-Access',JSON.stringify({user:user.id,group:groupPolicy(env),until:access.until,expires:session.expires}));
+  }
+  req=new Request(req,{headers:trustedHeaders});
   if((u.pathname==='/api/blackboard/ws'&&req.method==='GET')||(u.pathname==='/api/blackboard/create'&&req.method==='POST')){
    const board=env.ROOMS.get(env.ROOMS.idFromName('blackboard-spazio-libero-v1'));
    return board.fetch(new Request(u.origin+u.pathname.slice(4)+u.search,req));
@@ -261,7 +289,15 @@ const isArcade=game=>game==='labyrinth'||game==='moto-trial'||game==='golf'||gam
 const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived;
 
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.pong=new PongRoom(ctx,env);this.golf=new GolfRoom(ctx,env);this.cinema=new Cinema(ctx);}
+ constructor(ctx,env){
+  super(ctx,env);this.ctx=ctx;this.env=env;
+  this.groupSockets=new GroupSockets(ctx,env);
+  this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env),this.groupSockets);
+  this.moto=new MotoTrialRoom(ctx,env,this.groupSockets);
+  this.pong=new PongRoom(ctx,env,this.groupSockets);
+  this.golf=new GolfRoom(ctx,env);
+  this.cinema=new Cinema(ctx,this.groupSockets);
+ }
  public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
  newTable(room,b,token){
   const game=b.game??'chess';
@@ -327,7 +363,7 @@ export class Room extends DurableObject {
   await this.ctx.storage.deleteAlarm();
   await this.ctx.storage.deleteAll();
   for(const ws of this.ctx.getWebSockets()){
-   try{ws.send(JSON.stringify(result));ws.close(1000,'Partita eliminata');}catch{}
+   this.groupSockets.send(ws,JSON.stringify(result),true);
   }
   return result;
  }
@@ -378,7 +414,7 @@ export class Room extends DurableObject {
 
     }
  }
- async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
+ async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}this.groupSockets.send(ws,JSON.stringify(this.public(s,a.player)))}catch{}}}
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
   const path=new URL(req.url).pathname;
@@ -426,7 +462,7 @@ export class Room extends DurableObject {
     if(path.endsWith('/ws')){
      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
      if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
-     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({accessTag:req.headers.get('X-Access-Tag'),player:viewer});pair[1].send(JSON.stringify(this.public(s,viewer)));
+     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({accessTag:req.headers.get('X-Access-Tag'),groupAccess:socketGroupAccess(req),player:viewer});this.groupSockets.send(pair[1],JSON.stringify(this.public(s,viewer)));
      return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     }
     if(path.endsWith('/replay')&&req.method==='GET'){
@@ -562,7 +598,7 @@ export class Room extends DurableObject {
   if(!force&&signature===this.presenceSignature)return;
   this.presenceSignature=signature;
   const message=JSON.stringify(payload),tag=await telegramAccessTag(this.env);
-  for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
+  for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}this.groupSockets.send(ws,message)}catch{}}
  }
  async tidyLegacyResults(games){
   if(this.tidyingResults)return;
@@ -595,7 +631,7 @@ export class Room extends DurableObject {
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
    if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,accessTag:req.headers.get('X-Access-Tag')});
+   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,accessTag:req.headers.get('X-Access-Tag'),groupAccess:socketGroupAccess(req)});
    await this.lobbyBroadcast();
    return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
   }
@@ -673,10 +709,16 @@ export class Room extends DurableObject {
   return json({error:'Percorso non trovato.'},404);
  }
 
- get blackboard(){return this._blackboard??=new Blackboard(this.ctx);}
+ get blackboard(){return this._blackboard??=new Blackboard(this.ctx,this.groupSockets);}
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  if(!this.env.BOT_TOKEN||ws.deserializeAttachment()?.accessTag!==await telegramAccessTag(this.env)){
+   ws.close(4001,'Riapri la Mini App');
+   return;
+  }
+  if(!await this.groupSockets.authorize(ws))return;
+  const a=ws.deserializeAttachment();
+  if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;

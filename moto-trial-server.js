@@ -1,3 +1,4 @@
+import {socketGroupAccess} from './telegram-access.js';
 import {COURSE_VERSION, makeCourse, ground} from './public/moto-trial/physics.js';
 
 import {CAMPAIGN_LENGTH} from './public/moto-trial/courses.js';
@@ -25,9 +26,10 @@ function readPose(packet, bounds) {
 }
 
 export class MotoTrialRoom {
-  constructor(ctx, env) {
+  constructor(ctx, env, groupSockets) {
     this.ctx = ctx;
     this.env = env;
+    this.groupSockets = groupSockets;
   }
 
   sockets() {
@@ -53,7 +55,7 @@ export class MotoTrialRoom {
   broadcast(packet, except) {
     const data = JSON.stringify(packet);
     for (const {socket} of this.sockets()) if (socket !== except) {
-      try { socket.send(data); } catch {}
+      this.groupSockets.send(socket, data);
     }
   }
 
@@ -94,7 +96,7 @@ export class MotoTrialRoom {
       const pair = new WebSocketPair(), socket = pair[1];
       this.ctx.acceptWebSocket(socket, ['moto-trial']);
       const progress = room.campaign && await this.ctx.storage.get('progress:' + user.player);
-      socket.serializeAttachment({kind: 'moto-trial', accessTag: req.headers.get('X-Access-Tag'),
+      socket.serializeAttachment({kind: 'moto-trial', accessTag: req.headers.get('X-Access-Tag'), groupAccess: socketGroupAccess(req),
         id: user.player, name: user.name.slice(0, 45), color, pose: previous?.member.pose ?? null,
         stage: room.campaign ? progress?.stage ?? 1 : undefined, complete: !!progress?.complete, seq: 0, sentAt: 0});
       this.broadcast({type: 'state', state: this.state(room)});
