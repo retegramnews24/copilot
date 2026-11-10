@@ -1,10 +1,11 @@
+import {socketGroupAccess} from './telegram-access.js';
 import {height,modes,validMode,newMatch,movePaddle,stepMatch} from './public/arcade/pong-physics.js';
 
 const KEY='pong', EMPTY_GRACE=60_000, STEP=1/120;
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export class PongRoom {
-  constructor(ctx,env){
-    this.ctx=ctx;this.env=env;
+  constructor(ctx,env,groupSockets){
+    this.ctx=ctx;this.env=env;this.groupSockets=groupSockets;
     this.tickAt=0;this.broadcastAt=0;
     this.inputs=[];
   }
@@ -24,7 +25,7 @@ export class PongRoom {
   }
   broadcast(room,peers=this.peers()){
     const data=JSON.stringify({type:'state',state:this.state(room,peers)});
-    for(const {socket} of peers)try{socket.send(data);}catch{}
+    for(const {socket} of peers)this.groupSockets.send(socket,data);
     this.broadcastAt=Date.now();
   }
   async syncLobby(room,action='update'){
@@ -75,7 +76,7 @@ export class PongRoom {
       const pair=new WebSocketPair(),socket=pair[1];
       this.ctx.acceptWebSocket(socket,[KEY]);
       socket.serializeAttachment({kind:KEY,id:user.player,name:user.name.slice(0,45),seat,
-        accessTag:req.headers.get('X-Access-Tag')});
+        accessTag:req.headers.get('X-Access-Tag'),groupAccess:socketGroupAccess(req)});
       const current=this.peers();
       if(current.length===2&&room.phase==='waiting'){room.phase='playing';this.tickAt=Date.now();}
       await this.ctx.storage.deleteAlarm();

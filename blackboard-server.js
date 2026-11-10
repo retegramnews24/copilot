@@ -1,3 +1,4 @@
+import {socketGroupAccess} from './telegram-access.js';
 import {DEFAULT_SIZE, ERASER, validStroke} from './public/blackboard/chalk.js';
 import {normalizeAppearance} from './public/appearance.js';
 
@@ -17,13 +18,10 @@ function normalizeGuess(value) {
     .replace(/^(?:(?:l|un)['’]\s*|(?:il|lo|la|un|uno|una)\s+)/, '');
 }
 
-function send(socket, packet) {
-  try { socket.send(JSON.stringify(packet)); } catch {}
-}
-
 export class Blackboard {
-  constructor(ctx) {
+  constructor(ctx, groupSockets) {
     this.ctx = ctx;
+    this.groupSockets = groupSockets;
     this.sql = ctx.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS chalk (
       seq INTEGER PRIMARY KEY, player TEXT NOT NULL, id TEXT NOT NULL,
@@ -48,6 +46,10 @@ export class Blackboard {
       const peer = socket.deserializeAttachment();
       if (peer && peer.legacy === undefined) socket.serializeAttachment({...peer, legacy:true, room:DEFAULT_ROOM});
     }
+  }
+
+  send(socket, packet) {
+    this.groupSockets.send(socket, JSON.stringify(packet));
   }
 
   getRoom(room) {
@@ -75,7 +77,7 @@ export class Blackboard {
     if (!room) return;
     const peers = this.roomPeers(accessTag, room, exclude);
     const packet = {type:'people', people:this.people(peers)};
-    for (const socket of peers) send(socket, packet);
+    for (const socket of peers) this.send(socket, packet);
   }
 
   directory(accessTag, exclude = null) {
@@ -88,7 +90,7 @@ export class Blackboard {
       return {id:room, number, people:this.people(peers.filter(socket => socket.deserializeAttachment().room === room))};
     });
     for (const socket of peers) {
-      if (!socket.deserializeAttachment().legacy) send(socket, {type:'rooms', rooms});
+      if (!socket.deserializeAttachment().legacy) this.send(socket, {type:'rooms', rooms});
     }
   }
 
@@ -123,7 +125,7 @@ export class Blackboard {
     const {0:client, 1:socket} = new WebSocketPair();
     this.ctx.acceptWebSocket(socket, [TAG]);
     socket.serializeAttachment({
-      kind:TAG, player:user.player, name:user.name.slice(0, 45), accessTag, legacy, room:null,
+      kind:TAG, player:user.player, name:user.name.slice(0, 45), accessTag, groupAccess:socketGroupAccess(request), legacy, room:null,
       canPlay:!legacy && query.get('pictionary') === '1',
       outfit:normalizeAppearance({shirt:query.get('shirt'), shorts:query.get('shorts')})
     });
@@ -155,7 +157,7 @@ export class Blackboard {
     const mode = game ? 'pictionary' : 'free';
     const epoch = game?.epoch ?? entry.epoch;
     const surface = game ? 'pictionary:' + peer.room : peer.room;
-    if (!peer.legacy) send(socket, {type:'sync', room:peer.room, number:entry.display_number ?? entry.number, epoch, mode,
+    if (!peer.legacy) this.send(socket, {type:'sync', room:peer.room, number:entry.display_number ?? entry.number, epoch, mode,
       reset:reset || !!game, canDelete:true});
     if (peer.canPlay) {
       const players = game && this.gamePlayers(this.gamePeers(peer.accessTag, peer.room));
@@ -170,10 +172,10 @@ export class Blackboard {
       if (!rows.length) break;
       const strokes = rows.filter(row => !peer.legacy || row.color !== ERASER)
         .map(row => ({...row, points:JSON.parse(row.points)}));
-      if (strokes.length) send(socket, {type:'history', strokes});
+      if (strokes.length) this.send(socket, {type:'history', strokes});
       cursor = rows.at(-1).seq;
     }
-    send(socket, {type:'ready'});
+    this.send(socket, {type:'ready'});
   }
 
   game(room) {
@@ -200,7 +202,7 @@ export class Blackboard {
   sendGame(socket, game, players) {
     const drawing = game?.drawer === socket.deserializeAttachment().player;
     const waiting = game && (players.size < 2 ? 'players' : players.has(game.drawer) ? null : 'drawer');
-    send(socket, {type:'pictionary', game:game ? {
+    this.send(socket, {type:'pictionary', game:game ? {
       turn:game.turn, round:game.round, drawerName:game.drawerName, drawing, waiting,
       word:drawing ? game.word : undefined,
       scores:Object.values(game.scores).sort((a, b) => b.points - a.points),
@@ -240,7 +242,7 @@ export class Blackboard {
     for (const socket of sockets) {
       if (!previous) this.sendBoard(socket, this.getRoom(room), 0, game, true);
       else {
-        send(socket, {type:'clear', mode:'pictionary', epoch:game.epoch});
+        this.send(socket, {type:'clear', mode:'pictionary', epoch:game.epoch});
         this.sendGame(socket, game, players);
       }
     }
@@ -254,7 +256,7 @@ export class Blackboard {
     const entry = this.getRoom(room);
     for (const socket of sockets) {
       this.sendBoard(socket, entry, 0, null, true);
-      send(socket, {type:'pictionary-note', message});
+      this.send(socket, {type:'pictionary-note', message});
     }
   }
 
@@ -275,14 +277,14 @@ export class Blackboard {
     if (command.type === 'pictionary-start') {
       if (game) return;
       if (players.size < 2) {
-        return send(socket, {type:'pictionary-note', message:'Per giocare, un’altra persona deve entrare in questa stessa sala dalla Lobby.'});
+        return this.send(socket, {type:'pictionary-note', message:'Per giocare, un’altra persona deve entrare in questa stessa sala dalla Lobby.'});
       }
       return this.nextTurn(room, player, sockets, null, '');
     }
     if (!game || command.round !== game.round) return;
     if (command.type === 'pictionary-stop') return this.endGame(room, sockets, 'Pictionary terminato.');
     if (players.size < 2) {
-      return send(socket, {type:'pictionary-note', message:'In attesa di un altro giocatore.', round:game.round});
+      return this.send(socket, {type:'pictionary-note', message:'In attesa di un altro giocatore.', round:game.round});
     }
     const drawerPresent = players.has(game.drawer);
     if (command.type === 'pictionary-skip' && (player === game.drawer || !drawerPresent)) {
@@ -290,12 +292,12 @@ export class Blackboard {
       return this.nextTurn(room, player, sockets, game, result);
     }
     if (!drawerPresent) {
-      return send(socket, {type:'pictionary-note', message:'Il disegnatore non è collegato.', round:game.round});
+      return this.send(socket, {type:'pictionary-note', message:'Il disegnatore non è collegato.', round:game.round});
     }
     if (command.type !== 'pictionary-guess' || player === game.drawer ||
         typeof command.guess !== 'string' || !command.guess.trim() || command.guess.length > 60) return;
     if (normalizeGuess(command.guess) !== game.word) {
-      return send(socket, {type:'pictionary-note', message:'Riprova!', round:game.round});
+      return this.send(socket, {type:'pictionary-note', message:'Riprova!', round:game.round});
     }
     game.scores[player] ??= {name, points:0};
     game.scores[player].points++;
@@ -314,9 +316,9 @@ export class Blackboard {
     for (const client of this.roomPeers(accessTag, room)) {
       const attached = client.deserializeAttachment();
       client.serializeAttachment({...attached, room:null});
-      if (attached.canPlay) send(client, {type:'room-deleted', room});
+      if (attached.canPlay) this.send(client, {type:'room-deleted', room});
       else if (attached.legacy) client.close(4001, 'Lavagna eliminata');
-      else send(client, {type:'room-error', message:'Lavagna eliminata.'});
+      else this.send(client, {type:'room-error', message:'Lavagna eliminata.'});
     }
     this.directory(accessTag);
   }
@@ -343,7 +345,7 @@ export class Blackboard {
     if (!room) return;
     if (peer.canPlay && command?.type === 'room-delete' && command.room === peer.room) {
       try { this.deleteRoom(peer, room); }
-      catch { send(socket, {type:'room-delete-error', message:'Eliminazione non riuscita. Riprova.'}); }
+      catch { this.send(socket, {type:'room-delete-error', message:'Eliminazione non riuscita. Riprova.'}); }
       return;
     }
     const {player, accessTag} = peer;
@@ -360,7 +362,7 @@ export class Blackboard {
     const peers = () => this.roomPeers(accessTag, peer.room)
       .filter(client => !activeGame || !!client.deserializeAttachment().canPlay === !!game);
     if (command?.type === 'clear' && !peer.legacy) {
-      if (!canEdit) return send(socket, {type:'clear-error'});
+      if (!canEdit) return this.send(socket, {type:'clear-error'});
       try {
         const next = this.ctx.storage.transactionSync(() => {
           const seq = this.resetChalk(surface, player);
@@ -372,28 +374,28 @@ export class Blackboard {
         });
         for (const client of peers()) {
           if (client.deserializeAttachment().legacy) client.close(4001, 'Riapri la Mini App');
-          else send(client, {type:'clear', mode, epoch:next});
+          else this.send(client, {type:'clear', mode, epoch:next});
         }
       } catch {
-        send(socket, {type:'clear-error'});
+        this.send(socket, {type:'clear-error'});
       }
       return;
     }
     if (command?.type !== 'stroke' || !validStroke(command)) return;
     const {id, color, points, size = DEFAULT_SIZE} = command;
-    if (!canEdit) return send(socket, {type:'rejected', id});
+    if (!canEdit) return this.send(socket, {type:'rejected', id});
     try {
       const rows = this.sql.exec(
         'INSERT INTO chalk (player, id, color, points, room, size) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(player,id) DO NOTHING RETURNING seq',
         player, id, color, JSON.stringify(points), surface, size
       ).toArray();
-      if (!rows.length) return send(socket, {type:'ack', id});
+      if (!rows.length) return this.send(socket, {type:'ack', id});
       const packet = {type:'stroke', seq:rows[0].seq, id, color, points, size};
       for (const client of peers()) {
-        if (color !== ERASER || !client.deserializeAttachment().legacy) send(client, packet);
+        if (color !== ERASER || !client.deserializeAttachment().legacy) this.send(client, packet);
       }
     } catch {
-      send(socket, {type:'rejected', id});
+      this.send(socket, {type:'rejected', id});
     }
   }
 

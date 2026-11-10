@@ -1,4 +1,5 @@
 import {MEDIA_LIMIT,MEDIA_TTL,storeCinemaMedia} from './cinema-media.js';
+import {isTelegramMember,telegramBotResult} from './telegram-access.js';
 
 const GROUPS='cinema-groups', ID=/^[a-f0-9-]{36}$/;
 const HOME='binotto corsa competizione';
@@ -6,21 +7,6 @@ const homeTitle=value=>String(value??'').normalize('NFKC').toLowerCase().replace
 const assetKey=(group,id)=>'asset:'+group+':'+id;
 const reply=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const denied=()=>reply({error:'Questo media è riservato ai membri del gruppo Telegram.'},403);
-const isAdmin=member=>['creator','administrator'].includes(member?.status);
-const isMember=member=>isAdmin(member)||member?.status==='member'||(member?.status==='restricted'&&member.is_member===true);
-
-export async function telegramBotResult(token,method,payload){
-  try{
-    const result=await fetch('https://api.telegram.org/bot'+token+'/'+method,{
-      method:'POST',redirect:'manual',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload),signal:AbortSignal.timeout(5500)
-    });
-    if(!result.ok)return null;
-    const data=await result.json();
-    return data.ok===true?data.result:null;
-  }catch{return null;}
-}
-
 const playableTypes=new Map([
   ['video/mp4','video'],['video/webm','video'],['image/jpeg','image'],
   ['image/png','image'],['image/gif','image'],['image/webp','image'],
@@ -71,7 +57,7 @@ export class TelegramCinema {
     const groups=await this.ctx.storage.get(GROUPS)??[];
     const group=groups.find(entry=>entry.id===url.searchParams.get('group'));
     if(!group||!homeTitle(group.title))return reply({error:'Gruppo non trovato.'},404);
-    if(!isMember(await this.member(group.chatId,user.id)))return denied();
+    if(!isTelegramMember(await this.member(group.chatId,user.id)))return denied();
     if(op!=='asset')return reply({error:'Operazione non disponibile.'},404);
     const id=url.searchParams.get('item');
     if(!ID.test(id??''))return reply({error:'Media non disponibile.'},404);

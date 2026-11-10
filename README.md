@@ -6,7 +6,11 @@ Mini App Telegram del circolo: una Lobby condivisa con account verificati, prese
 
 ## Configurazione privata
 
-Configura il secret `BOT_TOKEN` del bot Telegram nel Worker Cloudflare di produzione. Il server verifica i dati firmati da Telegram e crea una sessione di 12 ore, conservata in memoria dal client. Chi può aprire la Mini App da Telegram può entrare. I permessi di archiviazione e cancellazione restano ai partecipanti delle rispettive partite.
+Configura i secret `BOT_TOKEN` e `TELEGRAM_ALLOWED_GROUP_ID` sul Worker Cloudflare di produzione. Il secondo contiene l'ID numerico negativo del gruppo Telegram autorizzato. Il bot `@checkmategame_bot` deve essere amministratore del gruppo per garantire le verifiche `getChatMember`. Conserva entrambi i valori nella configurazione privata del Worker.
+
+Aggiungi `TELEGRAM_ALLOWED_GROUP_ID` prima di pubblicare il controllo di accesso. Con Wrangler già autenticato, esegui `npx wrangler secret put TELEGRAM_ALLOWED_GROUP_ID` e inserisci l'ID quando richiesto. La configurazione di produzione richiede il gruppo: se il secret manca o Telegram non riesce a verificare un utente, l'accesso viene sospeso.
+
+Il server verifica la firma Telegram e l'appartenenza al gruppo prima di creare la sessione. Il controllo si applica anche alle API e alle connessioni in diretta. Le conferme di appartenenza sono riutilizzate per un massimo di un minuto. Gli utenti con una sessione precedente devono riaprire la Mini App dal bot. I permessi di archiviazione e cancellazione restano ai partecipanti delle rispettive partite.
 
 ## Avvio e pubblicazione
 
