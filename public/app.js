@@ -957,7 +957,7 @@ function closeArcade(){
  if(roomButton)Array.from($('blackboard-rooms').children).find(el=>el.dataset.blackboardRoom===roomButton)?.focus();
  else arcadeLaunch?.focus();
 }
-for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong']]){
+for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong'],['giulio-simulator','Giulio Simulator']]){
  const button=$('play-'+game);
  button.onclick=()=>openArcade(button,game,title);
 }
