@@ -599,12 +599,6 @@ window.addEventListener('message',event=>{
     drawYouTube();return;
   }
   if(data?.type==='cinema:group-armed'){groupArmed(data);return;}
-  if(data?.type==='cinema:upload-result'){
-    setUploading(false);
-    if(data.error)$('watch-error').textContent=data.error;
-    else watchDialog.close();
-    return;
-  }
   if(data?.type!=='cinema:packet')return;
   const packet=data.packet;
   if(packet.type==='rooms'){me=packet.me;clockOffset=Number.isFinite(packet.now)?packet.now-Date.now():0;mosaic.clock=clockOffset;mosaicPreviews=packet.previews??[];drawRooms(packet.rooms,packet.active);}
@@ -649,44 +643,20 @@ function groupForwardStatus({queued,error}){
   else if(error){groupPanel.hidden=false;groupHelp.textContent=error;}
 }
 const watchDialog=$('watch-dialog');
-let uploading=false;
-function updateWatchType(){
-  const file=$('watch-type').value==='file';
-  $('watch-link-label').hidden=file;$('watch-url').disabled=file;
-  $('watch-file-label').hidden=!file;$('watch-file').disabled=!file;$('watch-file').required=file;
-}
-function setUploading(value){
-  uploading=value;
-  for(const id of ['watch-type','watch-name','watch-submit','watch-cancel'])$(id).disabled=value;
-  if(value)$('watch-file').disabled=true;
-  else updateWatchType();
-  $('watch-progress').hidden=!value;
-}
-$('watch-type').onchange=updateWatchType;
-watchDialog.oncancel=event=>{if(uploading)event.preventDefault();};
 function openWatch(type){
   $('watch-form').reset();$('watch-error').textContent='';
   $('watch-type').value=type;
-  updateWatchType();watchDialog.showModal();
-  const input=$(type==='file'?'watch-file':'watch-url');
-  input.focus();
-  if(type==='file')input.click();
+  watchDialog.showModal();
+  $('watch-url').focus();
 }
 $('watch-together').onclick=()=>openWatch('stream');
-$('upload-video').onclick=()=>openWatch('file');
 $('watch-cancel').onclick=()=>watchDialog.close();
 $('watch-form').onsubmit=event=>{
   event.preventDefault();
-  if(uploading)return;
   const error=$('watch-error');
   error.textContent='';
   if(!connected){error.textContent='Riconnessione in corso.';return;}
   const url=$('watch-url').value.trim(),id=youtubeId(url),type=$('watch-type').value;
-  if(type==='file'){
-    const file=$('watch-file').files[0];
-    if(!file||!file.size||file.size>16*1024*1024){error.textContent='Scegli un video fino a 16 MB.';return;}
-    setUploading(true);send('upload',{file,name:$('watch-name').value.trim()});return;
-  }
   if(!/^https:\/\//i.test(url)||(type==='youtube'&&!id)){
     $('watch-error').textContent=type==='youtube'?'Inserisci un link a un video YouTube.':'Inserisci un link HTTPS allo stream.';
     return;

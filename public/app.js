@@ -15,7 +15,7 @@ let pongRoom=null,pongSocket=null,pongRetry=0,pongEpoch=0,pongOpening=false;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
 let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
 let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
-let cinemaUpload=null,cinemaLookup=null;
+let cinemaLookup=null;
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
@@ -1313,7 +1313,7 @@ function connectCinema(){
 function closeCinema(message='',leave=true){
  if($('cinema-overlay').hidden)return;
  if(leave)cinemaSend({type:'leave'});
- cinemaUpload?.abort();cinemaUpload=null;cinemaLookup?.abort();cinemaLookup=null;
+ cinemaLookup?.abort();cinemaLookup=null;
  cinemaRoom=null;cinemaEntry=null;cinemaReady=false;cinemaRooms={...cinemaRooms,active:null};
  $('cinema-overlay').hidden=true;$('cinema-frame').src='about:blank';
  tg?.BackButton?.hide();
@@ -1330,23 +1330,6 @@ function openCinema(id){
  tg?.BackButton?.show();
 }
 $('open-cinema').onclick=()=>openCinema();
-async function uploadCinemaFile(file,name){
- if(!cinemaRoom||cinemaUpload||!(file instanceof File))return;
- if(!file.size||file.size>16*1024*1024){
-  cinemaPost('upload-result',{error:'Scegli un video fino a 16 MB.'});return;
- }
- const type=file.type||(/\.mp4$/i.test(file.name)?'video/mp4':/\.webm$/i.test(file.name)?'video/webm':'');
- const query=new URLSearchParams({room:cinemaRoom,name:String(name||file.name).slice(0,96)});
- const controller=new AbortController();cinemaUpload=controller;
- let error;
- try{
-  const response=await fetch('/api/cinema/upload?'+query,{
-   method:'POST',headers:{Authorization:'Bearer '+sessionToken,'Content-Type':type},body:file,signal:controller.signal
-  });
-  if(!response.ok)throw Error((await response.json()).error||'Caricamento non riuscito.');
- }catch(e){error=e.name==='AbortError'?'Caricamento annullato.':e.message||'Caricamento non riuscito.';}
- if(cinemaUpload===controller){cinemaUpload=null;cinemaPost('upload-result',{error});}
-}
 async function lookupCinemaYouTube(id,params){
  if(!Number.isSafeInteger(id)||!params||typeof params!=='object')return;
  cinemaLookup?.abort();
@@ -1393,7 +1376,7 @@ window.addEventListener('message',event=>{
  }
  if(data?.type==='cinema:exit'){closeCinema();return;}
  if(data?.type==='cinema:action')cinemaSend(data.action);
- if(data?.type==='cinema:upload')uploadCinemaFile(data.file,data.name);
+ 
  if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);
  if(data?.type==='cinema:group-arm')armCinemaGroup(event.source,data.stop===true);
 });

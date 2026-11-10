@@ -1,5 +1,7 @@
 # Binottoland
 
+[Guida alla struttura del codice](docs/architecture/README.md)
+
 Mini App Telegram del circolo: una Lobby condivisa con account verificati, presenti, chat e tavoli numerati. Checkmate! (scacchi) e Dama italiana sono disponibili nella stessa Lobby. Labyrinth aggiunge un’esplorazione individuale in prima persona.
 
 ## Configurazione privata
@@ -176,7 +178,7 @@ Il volume, il monitor e le dimensioni dei riquadri si salvano sul dispositivo. T
 
 La ricerca combina playlist M3U e il catalogo JSON IPTV-org con fonti FAST, tra cui Tubi, Pluto TV, Samsung TV Plus, Plex e Roku. Puoi filtrare per paese, categoria e fonte o aggiungere una playlist M3U pubblica via HTTPS per la sessione. La ricerca unisce i duplicati per URL e conserva gli stream alternativi. I flussi HTTPS sono riprodotti direttamente dal dispositivo. La disponibilità dipende dalla fonte e dal dispositivo.
 
-Con **Guarda insieme** puoi aprire un link HTTPS diretto a uno stream o un video YouTube incorporabile. Il link cambia il contenuto della sala. **Carica video** apre il selettore file del dispositivo. Sono accettati video MP4 e WebM fino a 16 MB, disponibili fino a due ore. Per i file e YouTube, riproduzione, pausa e posizione sono condivise anche con chi entra dopo. I canali e i link possono essere salvati nei preferiti globali.
+Con **Guarda insieme** puoi aprire un link HTTPS diretto a uno stream o un video YouTube incorporabile. Il link cambia il contenuto della sala. Per YouTube, riproduzione, pausa e posizione sono condivise anche con chi entra dopo. I canali e i link possono essere salvati nei preferiti globali.
 
 Nella sezione **Ricerca → YouTube**, incolla un link video per riprodurlo in sala o un link con ID del canale (`/channel/UC…`) per vedere i video recenti e aggiungere il canale ai preferiti condivisi. Quando il Worker ha il secret `YOUTUBE_API_KEY` per un progetto con YouTube Data API v3 attiva, si può cercare anche per nome, ottenere fino a 30 risultati e filtrare video, canali e dirette e aprire un canale con il suo `@handle`. Il lettore incorporato usa i controlli YouTube per le opzioni personali, mentre i pulsanti sotto lo schermo controllano la riproduzione condivisa.
 
