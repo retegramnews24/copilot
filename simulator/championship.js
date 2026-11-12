@@ -1,5 +1,5 @@
 export const POINTS=[25,18,15,12,10,8,6,4,2,1];
-export const TEAM_PRIZES=[2000000,1500000,1200000,1000000,800000,600000,500000,400000,300000,200000];
+export const TEAM_PRIZES=[4000000,3000000,2400000,2000000,1600000,1200000,1000000,800000,600000,400000];
 export const DRIVER_PRIZES=TEAM_PRIZES.map(n=>n/2);
 const driverKey=r=>r.team+':'+(r.driverId||r.name);
 function rank(rows){return rows.sort((a,b)=>{if(a.points!==b.points)return b.points-a.points;for(let p=1;p<=128;p++){const diff=(b.finishes[p]||0)-(a.finishes[p]||0);if(diff)return diff}return a.id.localeCompare(b.id)}).map((r,i)=>({...r,position:i+1}));}

@@ -75,7 +75,7 @@ export class PongRoom {
       const pair=new WebSocketPair(),socket=pair[1];
       this.ctx.acceptWebSocket(socket,[KEY]);
       socket.serializeAttachment({kind:KEY,id:user.player,name:user.name.slice(0,45),seat,
-        memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag')});
+        memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,expires:Number(req.headers.get('X-Session-Expires')),accessTag:req.headers.get('X-Access-Tag')});
       const current=this.peers();
       if(current.length===2&&room.phase==='waiting'){room.phase='playing';this.tickAt=Date.now();}
       await this.ctx.storage.deleteAlarm();
