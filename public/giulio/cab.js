@@ -92,7 +92,7 @@ const embedded=window.parent!==window;
 if(embedded){
   $('exit').hidden=false;
   $('full').hidden=true;
-  $('exit').onclick=()=>parent.postMessage({type:'arcade:exit'},location.origin);
+  $('exit').onclick=()=>{saveCab();parent.postMessage({type:'arcade:exit'},location.origin)};
   window.addEventListener('message',event=>{
     if(event.origin!==location.origin||event.source!==parent||event.data?.type!=='arcade:insets')return;
     for(const side of ['top','bottom','left','right']){
@@ -191,6 +191,10 @@ function loop(now){
   }
   requestAnimationFrame(loop);
 }
-setOverlay('intro');
+function saveCab(){try{localStorage.setItem('binottoland-giulio-run-v1',JSON.stringify({train,mode,weather:selectedWeather,yaw:lookYaw,pitch:lookPitch}))}catch{}}
+function restoreCab(){try{const saved=JSON.parse(localStorage.getItem('binottoland-giulio-run-v1')||'null');if(!saved)return false;if(['dry','wet'].includes(saved.weather))selectedWeather=saved.weather;const t=saved.train;if(!t||Object.keys(train).some(k=>typeof train[k]==='number'&&!Number.isFinite(t[k]))||!Array.isArray(t.stopResults)||t.next<1||t.next>=stops.length||t.traction<0||t.traction>4||t.brake<0||t.brake>5)return false;train=t;setLook(Number(saved.yaw)||0,Number(saved.pitch)||0);for(const b of document.querySelectorAll('[data-weather]'))b.setAttribute('aria-pressed',String(b.dataset.weather===selectedWeather));if(['run','paused'].includes(saved.mode)){setOverlay('paused');return true}}catch{}return false}
+if(!restoreCab())setOverlay('intro');
+for(const event of ['click','keydown','pointerup'])document.addEventListener(event,()=>queueMicrotask(saveCab));
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveCab()});window.addEventListener('pagehide',saveCab);setInterval(()=>{if(mode==='run')saveCab()},1000);
 drawHUD();
 requestAnimationFrame(loop);

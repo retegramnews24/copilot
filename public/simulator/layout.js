@@ -1,0 +1,24 @@
+// Device-local panel proportions. No game/account data is stored here.
+const KEY='binotto-simulator-view-v1';
+let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')||{};if(typeof saved!=='object'||Array.isArray(saved))saved={}}catch{}
+const write=()=>{try{localStorage.setItem(KEY,JSON.stringify(saved))}catch{}};
+export function saveView(value){saved.view=value;write()}
+export function readView(){return saved.view||{}}
+export function installPanelLayouts(root,page){
+ const selector='.paddock,.two,.grid,.driver-controls,.session-stage,.session-layout,.calendar';
+ const records=new Map();let queued=false,disposed=false;
+ const profile=()=>innerWidth<=700?'phone':innerWidth<=850?'tablet':'desktop';
+ const scan=()=>{queued=false;if(disposed)return;for(const [el,r] of records)if(!el.isConnected){r.ro?.disconnect();records.delete(el)}
+ root.querySelectorAll(selector).forEach((el,index)=>{let rec=records.get(el);if(!rec){rec={key:page+':'+index,profile:null,handles:[]};records.set(el,rec);el.classList.add('resizable-panels');if(typeof ResizeObserver!=='undefined'){rec.ro=new ResizeObserver(()=>refresh(el,rec));rec.ro.observe(el)}}refresh(el,rec)});};
+ function refresh(el,rec){if(rec.drag)return;const mode=profile();if(rec.profile!==mode){el.style.gridTemplateColumns='';el.style.gridTemplateRows='';rec.profile=mode;const values=saved[rec.key+':'+mode];if(values)for(const axis of ['Columns','Rows'])if(typeof values[axis]==='string'&&/^[\d\s.()%a-z,-]+$/.test(values[axis]))el.style['gridTemplate'+axis]=values[axis]}
+ for(const h of rec.handles)h.remove();rec.handles=[];const cs=getComputedStyle(el);if(cs.display!=='grid')return;
+ for(const axis of ['Columns','Rows']){const sizes=cs['gridTemplate'+axis].split(' ').map(parseFloat);if(sizes.length<2||sizes.some(n=>!Number.isFinite(n)||n<=0))continue;const gap=parseFloat(cs[axis==='Columns'?'columnGap':'rowGap'])||0;let offset=0;
+ sizes.slice(0,-1).forEach((size,i)=>{offset+=size;const h=document.createElement('div');h.className='layout-handle '+(axis==='Columns'?'vertical':'horizontal');h.setAttribute('role','separator');h.tabIndex=0;h.setAttribute('aria-orientation',axis==='Columns'?'vertical':'horizontal');h.setAttribute('aria-label',axis==='Columns'?'Redimensiona larghezza pannelli':'Redimensiona altezza pannelli');h.title='Trascina per ridimensionare · doppio clic per ripristinare';h.style[axis==='Columns'?'left':'top']=(offset+gap/2)+'px';h.setAttribute('aria-valuenow',Math.round(size/(size+sizes[i+1])*100));h.setAttribute('aria-valuemin','10');h.setAttribute('aria-valuemax','90');offset+=gap;
+ const change=delta=>{const values=[...sizes],total=values[i]+values[i+1],min=Math.min(axis==='Columns'?100:64,total*.25);values[i]=Math.max(min,Math.min(total-min,values[i]+delta));values[i+1]=total-values[i];const fluid=axis==='Columns'||(el.matches('.paddock')&&mode==='desktop')||el.matches('.session-layout');const value=values.map(v=>fluid?'minmax(0,'+v.toFixed(3)+'fr)':v.toFixed(1)+'px').join(' ');el.style['gridTemplate'+axis]=value;h.style[axis==='Columns'?'left':'top']=(values.slice(0,i+1).reduce((a,b)=>a+b,0)+gap*i+gap/2)+'px';h.setAttribute('aria-valuenow',Math.round(values[i]/total*100));saved[rec.key+':'+mode]={...(saved[rec.key+':'+mode]||{}),[axis]:value};write();};
+ let start=null;h.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();start=e[axis==='Columns'?'clientX':'clientY'];rec.drag=true;h.setPointerCapture?.(e.pointerId);document.body.classList.add('panel-dragging')};h.onpointermove=e=>{if(start!==null)change(e[axis==='Columns'?'clientX':'clientY']-start)};const end=()=>{if(start===null)return;start=null;rec.drag=false;document.body.classList.remove('panel-dragging');refresh(el,rec);write()};h.onpointerup=h.onpointercancel=h.onlostpointercapture=end;
+ h.onkeydown=e=>{const keys=axis==='Columns'?['ArrowLeft','ArrowRight']:['ArrowUp','ArrowDown'];if(!keys.includes(e.key))return;e.preventDefault();change((e.key===keys[0]?-1:1)*(e.shiftKey?30:10));refresh(el,rec)};h.ondblclick=()=>{delete saved[rec.key+':'+mode];el.style.gridTemplateColumns='';el.style.gridTemplateRows='';write();refresh(el,rec)};el.append(h);rec.handles.push(h);});}}
+ const schedule=()=>{if(!queued){queued=true;queueMicrotask(scan)}};
+ const observer=new MutationObserver(changes=>{if(changes.some(c=>[...c.addedNodes,...c.removedNodes].some(n=>n.nodeType===1&&!n.classList.contains('layout-handle'))))schedule()});observer.observe(root,{childList:true,subtree:true});window.addEventListener('resize',schedule);scan();
+ return ()=>{disposed=true;observer.disconnect();window.removeEventListener('resize',schedule);for(const r of records.values())r.ro?.disconnect();document.body.classList.remove('panel-dragging');write()};
+}
+window.addEventListener('pagehide',write);document.addEventListener('visibilitychange',()=>{if(document.hidden)write()});

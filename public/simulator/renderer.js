@@ -1,5 +1,7 @@
 import {shapes,position} from './geometry.js';
 let cached=null,canvas=null,camera={zoom:1,x:0,y:0},pointer=null;
+export function getCamera(){return {...camera}}
+export function setCamera(value){if(value&&['zoom','x','y'].every(k=>Number.isFinite(value[k])))camera={zoom:Math.max(1,Math.min(4,value.zoom)),x:Math.max(-2000,Math.min(2000,value.x)),y:Math.max(-2000,Math.min(2000,value.y))}}
 export function resetCamera(){camera={zoom:1,x:0,y:0}}
 export function attachCanvas(el){canvas=el;el.addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(1,Math.min(4,camera.zoom-e.deltaY*.0015))},{passive:false});el.onpointerdown=e=>{pointer={x:e.clientX,y:e.clientY};el.setPointerCapture(e.pointerId)};el.onpointermove=e=>{if(!pointer)return;camera.x+=e.clientX-pointer.x;camera.y+=e.clientY-pointer.y;pointer={x:e.clientX,y:e.clientY}};el.onpointerup=el.onpointercancel=()=>pointer=null}
 function landscape(idx){const pts=shapes[idx],bg=document.createElement('canvas');bg.width=2000;bg.height=1300;const g=bg.getContext('2d');g.scale(2,2);const urban=idx===12,water=[4,5,10,12].includes(idx);let seed=291+idx;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};const gradient=g.createLinearGradient(0,0,1000,650);gradient.addColorStop(0,urban?'#6b766f':'#4c6850');gradient.addColorStop(.55,urban?'#59696b':'#35583e');gradient.addColorStop(1,urban?'#354f59':'#233f33');g.fillStyle=gradient;g.fillRect(0,0,1000,650);for(let i=0;i<8000;i++){g.fillStyle=i%2?'#bfd39b09':'#122a200f';g.fillRect(rand()*1000,rand()*650,rand()*8,1+rand()*2)}

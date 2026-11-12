@@ -9,6 +9,8 @@ let online=parent!==window&&new URLSearchParams(location.search).get('online')==
 let seat=0,players=[],roomNumber=null,account=null,frame=null,last=0,elapsed=0;
 let match=newMatch('classic'),shown=match,phase=online?'waiting':'ready',sound=true,audio,lastPulse=null;
 let pointer=null,target=null,notice='';
+try{const pref=JSON.parse(localStorage.getItem('binottoland-pong-settings')||'{}');if(typeof pref.sound==='boolean')sound=pref.sound;if(!online&&modes[pref.mode])shown=match=newMatch(pref.mode)}catch{}
+function savePreferences(){try{localStorage.setItem('binottoland-pong-settings',JSON.stringify({sound,mode:match.mode}))}catch{}}
 
 function unlockAudio(){
   if(!sound)return;
@@ -237,8 +239,8 @@ primary.onclick=()=>{command('start');canvas.focus();};
 canvas.tabIndex=0;
 $('restart').onclick=()=>command('reset');
 $('power').onclick=()=>command('power');
-modeSelect.onchange=()=>command('mode',modeSelect.value);
-$('audio').onclick=()=>{if(sound)clickSound();sound=!sound;if(sound)clickSound();update();};
+modeSelect.onchange=()=>{command('mode',modeSelect.value);savePreferences()};
+$('audio').onclick=()=>{if(sound)clickSound();sound=!sound;if(sound)clickSound();savePreferences();update();};
 $('online').onclick=()=>{
   clickSound();notice='';
   if(online){send('leave');online=false;connected=false;players=[];seat=0;lastPulse=null;reset();return;}
