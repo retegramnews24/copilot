@@ -6,13 +6,13 @@ Mini App Telegram del circolo: una Lobby condivisa con account verificati, prese
 
 ## Configurazione privata
 
-Configura il secret `BOT_TOKEN` del bot Telegram nel Worker Cloudflare di produzione. Il server verifica i dati firmati da Telegram e crea una sessione di 12 ore, conservata in memoria dal client. Chi può aprire la Mini App da Telegram può entrare. I permessi di archiviazione e cancellazione restano ai partecipanti delle rispettive partite.
+Configura il secret `BOT_TOKEN` del bot Telegram nel Worker Cloudflare di produzione. Il server verifica i dati firmati da Telegram e crea una sessione di 12 ore, conservata in memoria dal client. Sono ammessi solo i membri del gruppo Telegram configurato (default -1001803941686), verificati al login, al rinnovo e sulle API, con cache massima 60 secondi. Le nuove autenticazioni accettano initData di massimo 5 minuti; le sessioni valide si rinnovano tramite /api/session/refresh. I permessi di archiviazione e cancellazione restano ai partecipanti delle rispettive partite.
 
 ## Avvio e pubblicazione
 
 La configurazione Wrangler mantiene il nome del Worker e i binding già esistenti. Il ramo main è destinato alla pubblicazione Cloudflare con `npx wrangler deploy`. L'URL HTTPS del Worker va configurato come Main Mini App del bot in BotFather.
 
-Per registrare webhook e comandi del bot è disponibile la pagina `/telegram-setup.html`, protetta dal token del bot inserito dal proprietario. Il token va inserito solo nella pagina HTTPS del proprio Worker, mai in chat o nel codice.
+La pagina pubblica di inserimento del token è stata rimossa. La route di configurazione è disattivata per default; solo una riattivazione esplicita con SETUP_ENABLED=true consente il setup autenticato. Il webhook verifica sempre il proprio secret token.
 
 ## Interfaccia
 

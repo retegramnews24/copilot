@@ -200,7 +200,7 @@ export class Cinema {
       if(this.ctx.getWebSockets().length>=120)return response('Cinema pieno.',429);
       const [client,socket]=Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(socket);
-      socket.serializeAttachment({kind:'cinema',user,room:null,client:crypto.randomUUID(),accessTag:req.headers.get('X-Access-Tag')});
+      socket.serializeAttachment({kind:'cinema',user,room:null,client:crypto.randomUUID(),memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag')});
       const data=await this.data();
       this.publish(data);
       socket.send(JSON.stringify({type:'favorites',items:data.favorites}));

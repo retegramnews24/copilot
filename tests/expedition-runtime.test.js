@@ -11,7 +11,7 @@ import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 const directory=await mkdtemp(join(tmpdir(),'binottoland-test-')),bot='synthetic-test-bot';
 const mac=(k,v)=>createHmac('sha256',k).update(v).digest('hex');
 const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payload=Buffer.from(JSON.stringify({user,expires:Date.now()+3600000,accessTag:mac(bot,'telegram-session-v1')})).toString('base64url');return 'session.'+payload+'.'+mac(bot,'session.'+payload)};
-const runtimeConfig={rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot}};
+const runtimeConfig={rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot},outboundService:async req=>{assert(new URL(req.url).pathname.endsWith("/getChatMember"));return Response.json({ok:true,result:{status:"member"}})}};
 const options=convertV4MiniflareOptions(runtimeConfig);let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
 function until(client,predicate){const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet'))},7000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
@@ -419,6 +419,7 @@ const searchWorker=new Miniflare(convertV4MiniflareOptions({
    const action=url.pathname.split('/').at(-1),payload=await req.json();
    if(action==='getMe')return Response.json({ok:true,result:{id:999}});
    if(action==='getChatMember'){
+    if(String(payload.chat_id)==='-1001803941686')return Response.json({ok:true,result:{status:'member'}});
     assert.equal(payload.chat_id,-100123);
     const status=payload.user_id===999||payload.user_id===801?'administrator':payload.user_id===802?'member':'left';
     return Response.json({ok:true,result:{status}});

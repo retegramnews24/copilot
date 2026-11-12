@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import {initial,act,view} from '../simulator/engine.js';
+const dom=new JSDOM(readFileSync('public/arcade/binotto-simulator.html','utf8'),{url:'https://test/arcade/binotto-simulator',runScripts:'outside-only',pretendToBeVisual:true});
+const w=dom.window,s=initial(Date.now()),u={id:'1',name:'Test'};act(s,u,{action:'create'},Date.now());s.revision=1;
+w.setInterval=()=>0;w.requestAnimationFrame=()=>0;w.fetch=async(url,opts)=>{if(opts.body){act(s,u,JSON.parse(opts.body),Date.now());s.revision++}return {ok:true,json:async()=>structuredClone(view(s,u,Date.now()))}};
+const source=readFileSync('public/simulator/app.js','utf8').replace(/^import .*\n/,'const attachCanvas=()=>{},draw=()=>{},resetCamera=()=>{};\n');
+w.eval(source+'\nwindow.qa={accept,render,poll,getData:()=>data,start:next=>{token="test";opened=true;tab="Scuderia";accept(next);render()}};');
+w.qa.start(structuredClone(view(s,u,Date.now())));
+const form=w.document.querySelector('[data-form="identity"]');form.elements.color0.value='#123456';form.elements.count.value='3';form.elements.color0.dispatchEvent(new w.Event('input',{bubbles:true}));
+s.revision++;await w.qa.poll();assert.equal(w.document.querySelector('[name="color0"]').value,'#123456','poll must preserve unsaved livery');
+const old=structuredClone(view(s,u,Date.now()));
+form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,30));
+assert.equal(s.teams['1'].colors[0],'#123456');assert.equal(s.teams['1'].count,3);
+w.qa.accept(old);assert.equal(w.qa.getData().me.colors[0],'#123456','late response must not undo saved livery');w.qa.render();assert.equal(w.document.querySelector('[name="color0"]').value,'#123456');
+dom.window.close();console.log('PASS livery UI: draft survives polling, real form submits, delayed state cannot revert saved colors.');
