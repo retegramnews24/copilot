@@ -34,4 +34,8 @@ f.elements.wing.value='81';f.elements.wing.dispatchEvent(new w.Event('input',{bu
 await new Promise(r=>setTimeout(r,80));assert.equal(s.teams['1'].strategies[0].wing,80);assert.equal(w.document.querySelector('[data-slot="0"]').elements.wing.value,'81');
 w.fetch=async()=>{throw Error('Rete assente')};f=w.document.querySelector('[data-slot="0"]');f.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,30));
 assert.equal(f.elements.wing.value,'81');assert.match(f.querySelector('[data-save-status]').textContent,/Non salvato/);
+w.fetch=normalFetch;
+w.qa.tab('Libere');assert(w.document.getElementById('session-clock'));assert.match(w.document.getElementById('session-info').textContent,/Iscriviti/);
+w.qa.tab('Qualifiche');assert.match(w.document.getElementById('session-info').textContent,/calendario/);
+w.qa.tab('Strategia');assert.match(w.document.getElementById('main').textContent,/Carico aerodinamico/);assert(!w.document.getElementById('main').textContent.includes('Ala /'));
 dom.window.close();console.log('PASS settings UI: livery, both driver drafts, queued slow saves, edits during save, explicit network failure, stale response protection.');
