@@ -40,3 +40,8 @@ L’oggetto dedicato usa transazioni SQLite Durable Object, snapshot spezzato in
 - Il controllo browser mobile si è interrotto per indisponibilità dell’anteprima. I client Telegram reali e una gara con più persone vere non sono stati verificati in questa sessione.
 
 Le scene sono stilizzate: non sono scansioni del paesaggio e il modello gestionale non è una simulazione fisica di guida. Fonte geometrie e licenza MIT: `public/simulator/CIRCUITS-LICENSE.txt`.
+
+## Correzione livrea e accesso (12 novembre 2026)
+Le bozze della livrea resistono al polling; cambiare scheda salva il modulo, e una risposta arretrata non ripristina i vecchi colori. Test DOM del modulo e test di persistenza dopo riavvio. Accesso di gruppo esteso all’hub, rinnovo tramite sessione valida, initData iniziale massimo 5 minuti, setup chiuso per default.
+
+La radio verifica A/AAAA prima di ogni fetch e redirect. Il preflight DNS è una protezione aggiuntiva, non un pinning IP: la risoluzione interna di fetch resta della piattaforma. Le protezioni esistenti di media e YouTube restano attive. Nessuna cancellazione degli archivi storici e nessuna separazione aggiuntiva della Lobby senza misurazioni di carico.

@@ -1,3 +1,4 @@
+import {publicDNS} from './radio-dns.js';
 // Short, bounded ICY probes. Audio playback remains direct from the listener.
 const hosts=['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info','https://at1.api.radio-browser.info'];
 const cache=new Map(),inflight=new Map(),requests=new Map();
@@ -54,6 +55,7 @@ async function probe(station){
   for(const candidate of await stationURLs(station,signal)){
    let url=candidate;
    for(let redirects=0;redirects<=3&&!signal.aborted;redirects++){
+    if(!await publicDNS(new URL(url).hostname,signal))break;
     const response=await fetch(url,{signal,redirect:'manual',headers:{'Icy-MetaData':'1','User-Agent':'Binottoland/1.1','Accept':'audio/*'}});
     if([301,302,303,307,308].includes(response.status)){
      const location=response.headers.get('Location');await response.body?.cancel();if(!location)break;

@@ -28,6 +28,8 @@ const id=()=>crypto.randomUUID();
 const bad=(message)=>{throw new Error(message)};
 const BOT_USERNAME='checkmategame_bot';
 const name=x=>{if(typeof x!=='string'||!x.trim())bad('Inserisci un nome.');return x.trim().slice(0,30)};
+function secureEqual(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0;}
+async function requireMember(user,env){const allowed=await memberAccess(user,env);return allowed===true?null:json({error:allowed===false?'Binottoland è riservato ai membri del gruppo.':'Verifica del gruppo temporaneamente non disponibile.'},allowed===false?403:503);}
 async function webhookSecret(token){
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
  return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -40,11 +42,12 @@ async function telegramCall(token,method,payload){
  return {ok:response.ok&&result?.ok===true,description:result?.description||'Telegram non ha confermato la richiesta.'};
 }
 async function setupTelegram(req,env,u){
+ if(env.SETUP_ENABLED!=='true')return json({error:'Configurazione disattivata.'},404);
  if(!env.BOT_TOKEN)return json({error:'Secret BOT_TOKEN non configurato.'},503);
  if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
  try{
   const body=await req.json();
-  if(typeof body.token!=='string'||body.token!==env.BOT_TOKEN)return json({error:'Token non valido.'},403);
+  if(typeof body.token!=='string'||!secureEqual(body.token,env.BOT_TOKEN))return json({error:'Token non valido.'},403);
   const secret=await webhookSecret(env.BOT_TOKEN);
   const hook=await telegramCall(env.BOT_TOKEN,'setWebhook',{
    url:u.origin+'/api/telegram/webhook',
@@ -62,13 +65,13 @@ async function setupTelegram(req,env,u){
 async function telegramWebhook(req,env){
  if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN non configurato.'},503);
  const supplied=req.headers.get('X-Telegram-Bot-Api-Secret-Token')||'';
- if(supplied!==await webhookSecret(env.BOT_TOKEN))return json({error:'Richiesta Telegram non autorizzata.'},403);
+ if(!secureEqual(supplied,await webhookSecret(env.BOT_TOKEN)))return json({error:'Richiesta Telegram non autorizzata.'},403);
  if(Number(req.headers.get('Content-Length')||0)>32768)return json({ok:true});
  try{
   const update=await req.json();
   const message=update?.message;
   const submission=cinemaSubmission(message);
-  if(submission)return receiveCinemaSubmission(env,new URL(req.url).origin,submission);
+  if(submission){const denied=await requireMember({id:String(submission.user)},env);if(denied)return json({ok:true});return receiveCinemaSubmission(env,new URL(req.url).origin,submission);}
   const text=typeof message?.text==='string'?message.text.trim():'';
   if(!message||message.from?.is_bot||!text)return json({ok:true});
   const match=text.match(/^\/(?:gioca|start)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
@@ -99,25 +102,29 @@ async function login(req,env){
   const keys=[...p.keys()];if(new Set(keys).size!==keys.length)throw Error();
   const checked=[...p.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>k+'='+v).join('\n');
   const secret=await mac('WebAppData',env.BOT_TOKEN);
-  if(!hash||hex(await mac(secret,checked))!==hash)throw Error();
+  if(!hash||!secureEqual(hex(await mac(secret,checked)),hash))throw Error();
   const age=Date.now()/1000-Number(p.get('auth_date'));
-  if(!Number.isFinite(age)||age< -60||age>86400)throw Error();
+  if(!Number.isFinite(age)||age< -60||age>300)throw Error();
   const u=JSON.parse(p.get('user')||'null');if(!u||!Number.isSafeInteger(u.id)||u.id<=0)throw Error();
   const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):'',photo:typeof u.photo_url==='string'&&u.photo_url.startsWith('https://')&&u.photo_url.length<=512?u.photo_url:''};
+  return issueSession(user,env);
+ }catch{return json({error:'Accesso Telegram non valido o scaduto. Chiudi e riapri la Mini App dal bot.'},401)}
+}
+async function issueSession(user,env){
+ const denied=await requireMember(user,env);if(denied)return denied;
   const accessTag=await telegramAccessTag(env);
   const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,accessTag,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
   const token='session.'+payload+'.'+hex(await mac(env.BOT_TOKEN,'session.'+payload));
   const response=json({user,token});
   response.headers.append('Set-Cookie','binottoland_cinema='+token+'; Max-Age=43200; Path=/api/cinema/; HttpOnly; Secure; SameSite=None; Partitioned');
   return response;
- }catch{return json({error:'Accesso Telegram non valido o scaduto. Chiudi e riapri la Mini App dal bot.'},401)}
 }
 async function sessionUser(req,env){
  try{
   const offered=(req.headers.get('Sec-WebSocket-Protocol')||'').split(',').map(x=>x.trim());
   const token=(req.headers.get('Authorization')||'').replace(/^Bearer /,'')||offered.find(x=>x.startsWith('session.'));
   const m=String(token||'').match(/^session\.([A-Za-z0-9_-]+)\.([a-f0-9]{64})$/);
-  if(!m||!env.BOT_TOKEN||hex(await mac(env.BOT_TOKEN,'session.'+m[1]))!==m[2])return null;
+  if(!m||!env.BOT_TOKEN||!secureEqual(hex(await mac(env.BOT_TOKEN,'session.'+m[1])),m[2]))return null;
   const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[1].replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))));
   if(payload.accessTag!==await telegramAccessTag(env))return null;
   return payload.expires>Date.now()?payload.user:null;
@@ -207,9 +214,9 @@ export default {
   }
   const user=await sessionUser(authRequest,env);
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
+  const denied=await requireMember(user,env);if(denied)return denied;
+  if(u.pathname==='/api/session/refresh'&&req.method==='POST')return issueSession(user,env);
   if(u.pathname.startsWith('/api/simulator/')){
-   const allowed=await memberAccess(user,env);
-   if(allowed!==true)return json({error:allowed===false?'Binotto Simulator è riservato ai membri di Binotto Corsa Competizione.':'Verifica del gruppo temporaneamente non disponibile. Riprova tra poco.'},allowed===false?403:503);
    const headers=new Headers({'X-Checkmate-User':JSON.stringify(user),'Content-Type':'application/json'});
    return env.ROOMS.get(env.ROOMS.idFromName('binotto-simulator-league-v1')).fetch(new Request(u.origin+u.pathname.slice(4),{method:req.method,headers,...(req.method==='POST'?{body:req.body}:{} )}));
   }
@@ -434,7 +441,7 @@ export class Room extends DurableObject {
     if(path.endsWith('/ws')){
      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
      if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
-     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({accessTag:req.headers.get('X-Access-Tag'),player:viewer});pair[1].send(JSON.stringify(this.public(s,viewer)));
+     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag'),player:viewer});pair[1].send(JSON.stringify(this.public(s,viewer)));
      return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     }
     if(path.endsWith('/replay')&&req.method==='GET'){
@@ -603,7 +610,7 @@ export class Room extends DurableObject {
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
    if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,accessTag:req.headers.get('X-Access-Tag')});
+   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag')});
    await this.lobbyBroadcast();
    return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
   }
@@ -684,7 +691,7 @@ export class Room extends DurableObject {
  get blackboard(){return this._blackboard??=new Blackboard(this.ctx);}
 
  async webSocketMessage(ws,message){
-  const a=ws.deserializeAttachment();if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
+  const a=ws.deserializeAttachment();const memberId=a?.memberId||a?.user?.id||(a?.player?.startsWith('tg:')?a.player.slice(3):null)||(typeof a?.id==='string'?a.id.replace(/^tg:/,''):null);if(!memberId||await memberAccess({id:memberId},this.env)!==true){ws.close(4003,'Accesso al gruppo richiesto');return}if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
    const b=JSON.parse(message);if(b.type!=='presence')return;

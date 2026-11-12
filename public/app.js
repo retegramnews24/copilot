@@ -16,6 +16,9 @@ let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastSt
 let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
 let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
 let cinemaLookup=null;
+let sessionRefresh=null;
+async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return sessionRefresh;const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.expires>Date.now()+3600000)return;sessionRefresh=(async()=>{const r=await fetch('/api/session/refresh',{method:'POST',headers:{Authorization:'Bearer '+sessionToken}});const value=await r.json();if(!r.ok)throw Error(value.error);sessionToken=value.token;})().finally(()=>sessionRefresh=null);return sessionRefresh;}
+setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
 let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
@@ -35,6 +38,7 @@ history.replaceState(null,'',location.pathname);
 function err(s){$('error').textContent=s;if(s)trace('ERROR',s)}
 async function request(path,data,keepalive=false){
  if(!sessionToken)throw Error('Apri Binottoland da Telegram per accedere.');
+ await refreshSession();
  const started=performance.now();trace('HTTP',(data?'POST ':'GET ')+path);
  try{
   const response=await fetch(path,{method:data?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:'Bearer '+sessionToken,'X-Player-Token':credentials.token||''},...(data?{body:JSON.stringify(data)}:{}),keepalive,signal:AbortSignal.timeout(15000)});
@@ -1029,11 +1033,7 @@ window.addEventListener('message',event=>{
   const source=event.source;
   (async()=>{
    try{
-    const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));
-    if(payload.expires<Date.now()+60000){
-     const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg?.initData})});
-     const value=await res.json();if(!res.ok)throw Error(value.error);sessionToken=value.token;
-    }
+    await refreshSession();
     if(source===arcadeFrame.contentWindow&&!arcadeOverlay.hidden)source.postMessage({type:'simulator:session',token:sessionToken},location.origin);
    }catch(e){err(e.message||'Riapri Binottoland da Telegram.')}
   })();

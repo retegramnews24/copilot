@@ -9,11 +9,11 @@ const body=new ReadableStream({pull(c){if(i<bytes.length)c.enqueue(bytes.slice(i
 assert.equal(await readICY(new Response(body,{headers:{'icy-metaint':'4'}})),'Artista – Titolo');assert.equal(cancelled,1);
 let rejected=false;const plain=new ReadableStream({cancel(){rejected=true}});assert.equal(await readICY(new Response(plain,{headers:{'icy-metaint':'999999'}})),null);assert.equal(rejected,true);
 const station='f0000000-0000-0000-0000-000000000001';let calls=[];const native=globalThis.fetch;
-globalThis.fetch=async(url,options)=>{calls.push({url,options});if(url.includes('radio-browser.info'))return Response.json([{stationuuid:station,url_resolved:'https://radio.example.org/live'}]);return new Response(icy('Gruppo - Brano'),{headers:{'icy-metaint':'4'}})};
+globalThis.fetch=async(url,options)=>{if(url.includes('cloudflare-dns.com'))return Response.json({Status:0,Answer:[{type:1,data:'8.8.8.8'}]});calls.push({url,options});if(url.includes('radio-browser.info'))return Response.json([{stationuuid:station,url_resolved:'https://radio.example.org/live'}]);return new Response(icy('Gruppo - Brano'),{headers:{'icy-metaint':'4'}})};
 const values=await Promise.all([radioNowPlaying(station,'one'),radioNowPlaying(station,'two')]);assert.equal(values[0].title,'Gruppo - Brano');assert.equal(values[1].title,'Gruppo - Brano');assert.equal(calls.length,2);assert.equal(calls[1].options.headers['Icy-MetaData'],'1');assert.equal((await radioNowPlaying(station,'three')).title,'Gruppo - Brano');assert.equal(calls.length,2);
 assert.equal(await radioNowPlaying('https://evil.test/','one'),null);
 // Redirects to loopback are cancelled without fetching their destination.
 const other='f0000000-0000-0000-0000-000000000002';calls=[];
-globalThis.fetch=async(url,options)=>{calls.push(url);if(url.includes('radio-browser.info'))return Response.json([{stationuuid:other,url_resolved:'https://radio.example.org/redirect'}]);return new Response(null,{status:302,headers:{Location:'https://127.0.0.1/secret'}})};
+globalThis.fetch=async(url,options)=>{if(url.includes('cloudflare-dns.com'))return Response.json({Status:0,Answer:[{type:1,data:'8.8.8.8'}]});calls.push(url);if(url.includes('radio-browser.info'))return Response.json([{stationuuid:other,url_resolved:'https://radio.example.org/redirect'}]);return new Response(null,{status:302,headers:{Location:'https://127.0.0.1/secret'}})};
 assert.equal((await radioNowPlaying(other,'four')).title,null);assert.equal(calls.length,2);globalThis.fetch=native;
 console.log('PASS metadata: chunked/empty ICY blocks, encoding fallback, bounded intervals and cancellation, UUID-only lookup, concurrent/cache reuse and blocked redirect.');
