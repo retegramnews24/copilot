@@ -957,7 +957,7 @@ function closeArcade(){
  if(roomButton)Array.from($('blackboard-rooms').children).find(el=>el.dataset.blackboardRoom===roomButton)?.focus();
  else arcadeLaunch?.focus();
 }
-for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong'],['giulio-simulator','Giulio Simulator']]){
+for(const [game,title] of [['number-connect','Number Connect'],['pong','Pong'],['giulio-simulator','Giulio Simulator'],['binotto-simulator','Binotto Simulator']]){
  const button=$('play-'+game);
  button.onclick=()=>openArcade(button,game,title);
 }
@@ -1025,7 +1025,20 @@ $('create-pong').onclick=()=>openPong();
 arcadeFrame.addEventListener('load',()=>{if(!arcadeOverlay.hidden){arcadeFrame.focus();sendArcadeInsets();}});
 window.addEventListener('message',event=>{
  if(arcadeOverlay.hidden||event.origin!==location.origin||event.source!==arcadeFrame.contentWindow)return;
- if(event.data?.type==='arcade:ready')sendArcadeInsets();
+ if(event.data?.type==='simulator:ready'&&arcadeFrame.title==='Binotto Simulator'){
+  const source=event.source;
+  (async()=>{
+   try{
+    const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));
+    if(payload.expires<Date.now()+60000){
+     const res=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg?.initData})});
+     const value=await res.json();if(!res.ok)throw Error(value.error);sessionToken=value.token;
+    }
+    if(source===arcadeFrame.contentWindow&&!arcadeOverlay.hidden)source.postMessage({type:'simulator:session',token:sessionToken},location.origin);
+   }catch(e){err(e.message||'Riapri Binottoland da Telegram.')}
+  })();
+ }
+ else if(event.data?.type==='arcade:ready')sendArcadeInsets();
  else if(event.data?.type==='arcade:exit')closeArcade();
  else if(arcadeFrame.title==='Blackboard spazio libero')blackboard.receive(event.data);
  else if(arcadeFrame.title==='Number Connect'){
