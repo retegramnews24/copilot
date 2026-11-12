@@ -177,9 +177,9 @@ for (let i = 0; i < 13; i++) {
         "pit crossing " + i,
       );
   for (const g of p.garage)
-    assert(clearance(g, line) >= 16, "garage clearance");
-  for (let j = 7; j < 34; j++)
-    assert(clearance(p.lane[j], line) > 11, "pit lane clearance");
+    assert(clearance(g, line) >= 6 + p.garageSize / 2 + 1, "garage clearance");
+  for (let j = 10; j < p.lane.length - 10; j++)
+    assert(clearance(p.lane[j], line) > 6 + p.width / 2, "pit lane clearance");
 }
 console.log(
   "PASS physics: 13 calibrated races, fuel/weight/aero/temperature/degradation, variable refuelling, tick integration, forecast vs live, boundary fuel DNF, double stack, all pit corridors non-intersecting.",

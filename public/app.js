@@ -902,7 +902,7 @@ function sendArcadeInsets(insets=safeInsets(tg)){
  if(!$('arcade-overlay').hidden)$('arcade-frame').contentWindow?.postMessage({type:'arcade:insets',insets},location.origin);
 }
 const arcadeOverlay=$('arcade-overlay'),arcadeFrame=$('arcade-frame');
-let arcadeLaunch;
+let arcadeLaunch,simulatorBackReady=false;
 let blackboardOpening=false;
 const blackboard = blackboardLink(arcadeFrame, () => sessionToken, readAppearance, renderBlackboardRooms, () => {
  closeArcade();selectPage('game');$('tab-game').focus();
@@ -943,7 +943,7 @@ $('open-blackboard').onclick=async()=>{
 };
 function openArcade(button,game,title,online=false){
  if(!arcadeOverlay.hidden)return;
- arcadeLaunch=button;
+ arcadeLaunch=button;simulatorBackReady=false;
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
@@ -1039,7 +1039,7 @@ window.addEventListener('message',event=>{
    }catch(e){err(e.message||'Riapri Binottoland da Telegram.')}
   })();
  }
- else if(event.data?.type==='arcade:ready')sendArcadeInsets();
+ else if(event.data?.type==='arcade:ready'){simulatorBackReady=arcadeFrame.title==='Binotto Simulator';sendArcadeInsets();}
  else if(event.data?.type==='arcade:exit')closeArcade();
  else if(arcadeFrame.title==='Blackboard spazio libero')blackboard.receive(event.data);
  else if(arcadeFrame.title==='Number Connect'){
@@ -1070,7 +1070,7 @@ window.addEventListener('message',event=>{
  }
 });
 tg?.onEvent('backButtonClicked',()=>{
- if(!arcadeOverlay.hidden)closeArcade();
+ if(!arcadeOverlay.hidden){if(arcadeFrame.title==='Binotto Simulator'&&simulatorBackReady)arcadeFrame.contentWindow?.postMessage({type:'simulator:back'},location.origin);else closeArcade();}
  else if(!$('cinema-overlay').hidden)closeCinema();
  else if(!$('golf-overlay').hidden)closeGolf();
  else if(!motoOverlay.hidden)closeMotoTrial();
