@@ -1,3 +1,4 @@
+import {SimulatorLeague,memberAccess} from './simulator/server.js';
 import {Blackboard} from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
 import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
@@ -206,6 +207,12 @@ export default {
   }
   const user=await sessionUser(authRequest,env);
   if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
+  if(u.pathname.startsWith('/api/simulator/')){
+   const allowed=await memberAccess(user,env);
+   if(allowed!==true)return json({error:allowed===false?'Binotto Simulator è riservato ai membri di Binotto Corsa Competizione.':'Verifica del gruppo temporaneamente non disponibile. Riprova tra poco.'},allowed===false?403:503);
+   const headers=new Headers({'X-Checkmate-User':JSON.stringify(user),'Content-Type':'application/json'});
+   return env.ROOMS.get(env.ROOMS.idFromName('binotto-simulator-league-v1')).fetch(new Request(u.origin+u.pathname.slice(4),{method:req.method,headers,...(req.method==='POST'?{body:req.body}:{} )}));
+  }
   if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
@@ -382,6 +389,7 @@ export class Room extends DurableObject {
  async fetch(req){
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
   const path=new URL(req.url).pathname;
+  if(path.startsWith('/simulator/'))return (this.simulator??=new SimulatorLeague(this.ctx)).fetch(req);
   if(path==='/cinema/group-directory')return (this.telegramCinema??=new TelegramCinema(this.ctx,this.env.BOT_TOKEN)).fetch(req);
   if(path==='/cinema/group-file')return req.method==='POST'
    ?this.ctx.blockConcurrencyWhile(()=>cacheTelegramMedia(req,this.ctx,this.env.BOT_TOKEN)):readCinemaMedia(req,this.ctx.storage);
@@ -709,6 +717,7 @@ export class Room extends DurableObject {
  }
  webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='blackboard')return this.blackboard.close(ws);if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
+ if(this.ctx.id.toString()===this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())return (this.simulator??=new SimulatorLeague(this.ctx)).alarm();
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
  if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
