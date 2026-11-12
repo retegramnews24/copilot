@@ -10,7 +10,7 @@
     "test:multiplayer-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/expedition-runtime.test.js .test-bundle/worker.js",
     "test:table-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/table-ai-runtime.test.js .test-bundle/worker.js",
     "test:ui": "node tests/ui-scopa.test.mjs",
-    "test:simulator": "node tests/simulator.test.js && node tests/simulator-sessions.test.js && node tests/simulator-championship.test.js && node tests/simulator-layout.test.js && node tests/simulator-ui.test.js && node tests/simulator-runtime.test.js",
+    "test:simulator": "node tests/simulator-physics.test.js && node tests/simulator.test.js && node tests/simulator-sessions.test.js && node tests/simulator-championship.test.js && node tests/simulator-layout.test.js && node tests/simulator-ui.test.js && node tests/simulator-runtime.test.js",
     "test:access": "node tests/access-runtime.test.js"
   },
   "devDependencies": {
