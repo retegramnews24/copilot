@@ -94,7 +94,7 @@ export class MotoTrialRoom {
       const pair = new WebSocketPair(), socket = pair[1];
       this.ctx.acceptWebSocket(socket, ['moto-trial']);
       const progress = room.campaign && await this.ctx.storage.get('progress:' + user.player);
-      socket.serializeAttachment({kind: 'moto-trial', accessTag: req.headers.get('X-Access-Tag'),
+      socket.serializeAttachment({kind: 'moto-trial', expires:Number(req.headers.get('X-Session-Expires')), accessTag: req.headers.get('X-Access-Tag'),
         id: user.player, name: user.name.slice(0, 45), color, pose: previous?.member.pose ?? null,
         stage: room.campaign ? progress?.stage ?? 1 : undefined, complete: !!progress?.complete, seq: 0, sentAt: 0});
       this.broadcast({type: 'state', state: this.state(room)});

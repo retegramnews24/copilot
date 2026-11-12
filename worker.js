@@ -98,7 +98,7 @@ async function login(req,env){
  try{
   if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN mancante.'},503);
   const body=await req.json();if(typeof body.initData!=='string'||body.initData.length>16384)throw Error();
-  const p=new URLSearchParams(body.initData),hash=p.get('hash');p.delete('hash');
+  const p=new URLSearchParams(body.initData);if(p.getAll('hash').length!==1)throw Error();const hash=p.get('hash');p.delete('hash');
   const keys=[...p.keys()];if(new Set(keys).size!==keys.length)throw Error();
   const checked=[...p.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>k+'='+v).join('\n');
   const secret=await mac('WebAppData',env.BOT_TOKEN);
@@ -127,7 +127,8 @@ async function sessionUser(req,env){
   if(!m||!env.BOT_TOKEN||!secureEqual(hex(await mac(env.BOT_TOKEN,'session.'+m[1])),m[2]))return null;
   const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[1].replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))));
   if(payload.accessTag!==await telegramAccessTag(env))return null;
-  return payload.expires>Date.now()?payload.user:null;
+  if(!Number.isFinite(payload.expires)||payload.expires<=Date.now()||!/^\d{1,20}$/.test(payload.user?.id)||payload.user?.player!=='tg:'+payload.user.id)return null;
+  return {...payload.user,sessionExpires:payload.expires};
  }catch{return null}
 }
 
@@ -222,7 +223,7 @@ export default {
   }
   if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
-  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));req=new Request(req,{headers:trustedHeaders});
+  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));trustedHeaders.set('X-Session-Expires',String(user.sessionExpires));req=new Request(req,{headers:trustedHeaders});
   if((u.pathname==='/api/blackboard/ws'&&req.method==='GET')||(u.pathname==='/api/blackboard/create'&&req.method==='POST')){
    const board=env.ROOMS.get(env.ROOMS.idFromName('blackboard-spazio-libero-v1'));
    return board.fetch(new Request(u.origin+u.pathname.slice(4)+u.search,req));
@@ -393,7 +394,20 @@ export class Room extends DurableObject {
     }
  }
  async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
+ async guardSockets(){
+  const sockets=this.ctx.getWebSockets();if(!sockets.length)return;
+  const tag=await telegramAccessTag(this.env);
+  await Promise.all(sockets.map(async ws=>{
+   const a=ws.deserializeAttachment();if(a?.authDenied)return;
+   const memberId=a?.memberId||a?.user?.id||(a?.player?.startsWith('tg:')?a.player.slice(3):null)||(typeof a?.id==='string'?a.id.replace(/^tg:/,''):null);
+   let reason=null;
+   if(!tag||a?.accessTag!==tag||!Number.isFinite(a?.expires)||a.expires<=Date.now())reason='Sessione scaduta: riapri la Mini App';
+   else if(!memberId||await memberAccess({id:memberId},this.env)!==true)reason='Accesso al gruppo richiesto';
+   if(reason){try{ws.serializeAttachment({...a,authDenied:true});ws.close(4003,reason)}catch{}}
+  }));
+ }
  async fetch(req){
+  await this.guardSockets();
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
   const path=new URL(req.url).pathname;
   if(path.startsWith('/simulator/'))return (this.simulator??=new SimulatorLeague(this.ctx)).fetch(req);
@@ -441,7 +455,7 @@ export class Room extends DurableObject {
     if(path.endsWith('/ws')){
      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
      if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
-     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag'),player:viewer});pair[1].send(JSON.stringify(this.public(s,viewer)));
+     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag'),expires:Number(req.headers.get('X-Session-Expires')),player:viewer});pair[1].send(JSON.stringify(this.public(s,viewer)));
      return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
     }
     if(path.endsWith('/replay')&&req.method==='GET'){
@@ -610,7 +624,7 @@ export class Room extends DurableObject {
    if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
    if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag')});
+   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag'),expires:Number(req.headers.get('X-Session-Expires'))});
    await this.lobbyBroadcast();
    return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
   }
@@ -691,6 +705,7 @@ export class Room extends DurableObject {
  get blackboard(){return this._blackboard??=new Blackboard(this.ctx);}
 
  async webSocketMessage(ws,message){
+  await this.guardSockets();if(ws.deserializeAttachment()?.authDenied)return;
   const a=ws.deserializeAttachment();const memberId=a?.memberId||a?.user?.id||(a?.player?.startsWith('tg:')?a.player.slice(3):null)||(typeof a?.id==='string'?a.id.replace(/^tg:/,''):null);if(!memberId||await memberAccess({id:memberId},this.env)!==true){ws.close(4003,'Accesso al gruppo richiesto');return}if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
   try{
    if(typeof message!=='string'||message.length>512)return;
@@ -700,6 +715,7 @@ export class Room extends DurableObject {
   }catch{}
  }
  async webSocketClose(ws,code){
+  await this.guardSockets();
   const attachment=ws.deserializeAttachment();
   if(attachment?.kind==='blackboard')return this.blackboard.close(ws);
   if(attachment?.kind==='cinema')return this.cinema.close(ws);
@@ -724,6 +740,7 @@ export class Room extends DurableObject {
  }
  webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='blackboard')return this.blackboard.close(ws);if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
+ await this.guardSockets();
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())return (this.simulator??=new SimulatorLeague(this.ctx)).alarm();
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
  if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();

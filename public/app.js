@@ -947,6 +947,7 @@ function openArcade(button,game,title,online=false){
  enterFullscreen();
  try{tg?.disableVerticalSwipes?.()}catch{}
  arcadeOverlay.hidden=false;
+ arcadeFrame.setAttribute('sandbox','allow-scripts allow-same-origin'+(game==='binotto-simulator'?' allow-forms':''));
  arcadeFrame.title=title;arcadeFrame.src=game==='blackboard'?'/blackboard/index.html?v=6':'/arcade/'+game+'.html'+(game==='pong'?(online?'?v=3&online=1':'?v=3'):'?v=2');
  tg?.BackButton?.show();
 }

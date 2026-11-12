@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {initial,act,advance,view,strategy} from '../simulator/engine.js';
 import {standings,archiveChampionship,TEAM_PRIZES,DRIVER_PRIZES} from '../simulator/championship.js';
+assert.deepEqual(TEAM_PRIZES,[4000000,3000000,2400000,2000000,1600000,1200000,1000000,800000,600000,400000]);assert.deepEqual(DRIVER_PRIZES,TEAM_PRIZES.map(n=>n/2));
 const now=Date.parse('2026-11-12T12:00Z'),s=initial(now);
 for(const id of ['1','2','3']){act(s,{id,name:id},{action:'create'},now);const t=s.teams[id];t.enrolled=true;t.drivers=[0,1].map(i=>({id:id+i,name:'Driver '+id+i,skill:70,consistency:70,tyres:70,salary:1,points:0}));t.crew={motor:{skill:70,salary:1},aero:{skill:70,salary:1},mechanic:{skill:70,salary:1}};t.engine={skill:70};}
 act(s,{id:'1'},{action:'proposal',days:[0,1,2,3,4,5,6],times:['21:00'],start:'2026-11-13'},now);const id=s.proposals[0].id;

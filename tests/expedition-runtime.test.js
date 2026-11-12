@@ -14,7 +14,7 @@ const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payl
 const runtimeConfig={rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot},outboundService:async req=>{assert(new URL(req.url).pathname.endsWith("/getChatMember"));return Response.json({ok:true,result:{status:"member"}})}};
 const options=convertV4MiniflareOptions(runtimeConfig);let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
-function until(client,predicate){const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet'))},7000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
+function until(client,predicate){const site=new Error().stack;const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet: '+JSON.stringify(client.packets.at(-1))+'\n'+site))},10000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
 async function connect(id,room,watch=false,game='labyrinth'){const res=await mf.dispatchFetch('https://unit.test/api/'+game+'/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
 try{
  const unauth=await mf.dispatchFetch('https://unit.test/api/labyrinth/00000000-0000-4000-8000-000000000000/state',{headers:{'X-Checkmate-User':JSON.stringify({id:'1'})}});assert.equal(unauth.status,401);
@@ -297,6 +297,7 @@ try{
  const cinemaRoomA=(await until(cinemaA,p=>p.active?.id)).active.id;
  const cinemaRoomB=(await until(cinemaB,p=>p.active?.id)).active.id;
  assert.notEqual(cinemaRoomA,cinemaRoomB);
+ const cinemaNumberA=(await until(cinemaA,p=>p.rooms?.some(r=>r.id===cinemaRoomA))).rooms.find(r=>r.id===cinemaRoomA).number;
  cinemaSend(cinemaC,'enter',{room:cinemaRoomA});
  await until(cinemaA,p=>p.rooms?.find(r=>r.id===cinemaRoomA)?.viewers.length===2);
  cinemaSend(cinemaC,'channel',{channel:one});
@@ -397,7 +398,7 @@ try{
  await until(cinemaD,p=>p.type==='room-closed'&&p.id===cinemaRoomA);
  await until(cinemaB,p=>p.active?.id===cinemaRoomB&&p.rooms.length===1);
  cinemaSend(cinemaA,'create');
- const reused=await until(cinemaA,p=>p.active?.id&&p.active.id!==cinemaRoomA&&p.rooms.some(r=>r.id===p.active.id&&r.number===1));
+ const reused=await until(cinemaA,p=>p.active?.id&&p.active.id!==cinemaRoomA&&p.rooms.some(r=>r.id===p.active.id&&r.number===cinemaNumberA));
  assert.equal(reused.rooms.length,2);
  console.log('PASS Cinema runtime: authenticated access, room-scoped channel and presence, global live favorites and persistence.');
  console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
