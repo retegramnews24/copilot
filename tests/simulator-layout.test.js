@@ -17,3 +17,6 @@ console.log('PASS live separator node survives content replacement and manager i
 
 // Telegram back is delegated only to a ready manager frame; other games still close.
 let callback,closed=0,posted=[];const at=app.indexOf("tg?.onEvent('backButtonClicked'"),handler=app.slice(at,app.indexOf('\n});',at)+4);const register=ready=>new Function('tg','arcadeOverlay','arcadeFrame','simulatorBackReady','closeArcade','location',handler)({onEvent:(_,fn)=>callback=fn},{hidden:false},{title:'Binotto Simulator',contentWindow:{postMessage:(m)=>posted.push(m)}},ready,()=>closed++,{origin:'https://test'});register(true);callback();assert.equal(closed,0);assert.equal(posted[0].type,'simulator:back');register(false);callback();assert.equal(closed,1);
+
+// The session root must not get separators around the header/note/track rows.
+dom=boot();w=dom.window;const grid=w.document.querySelector('.two');grid.classList.add('session-layout');grid.dataset.noResize='true';dispose=w.qa.installPanelLayouts(w.document.querySelector('main'),'Libere');assert.equal(grid.querySelectorAll('[role=separator]').length,0);dispose();dom.window.close();

@@ -172,7 +172,7 @@ export function metrics(c, track, weather) {
     wearPerLap,
     target,
     temperature: temp,
-    lap: Math.max(50, base),
+    lap: Math.max(50, base + (c.damage ? 6 : 0)) * (c.puncture ? 1.6 : 1),
     grip: clamp(100 - deg * 5 - heat * 1.2 - cold * 0.5 - mismatch * 2, 5, 100),
     profile: p,
     load,

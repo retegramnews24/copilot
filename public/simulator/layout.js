@@ -15,7 +15,7 @@ export function replacePanelContent(el, html) {
 }
 
 export function installPanelLayouts(root, page) {
-  const selector = '.paddock,.two,.grid,.driver-controls,.session-stage,.session-layout,.calendar';
+  const selector = '.paddock,.two,.grid,.driver-controls,.session-stage,.session-layout,.calendar,.team-layout,.box-workspace';
   const records = new Map();
   let queued = false, disposed = false;
   const tracks = (el, axis) => {
@@ -118,7 +118,7 @@ export function installPanelLayouts(root, page) {
   const scan = () => {
     queued = false; if (disposed) return;
     for (const [el, rec] of records) if (!el.isConnected) { release(rec); records.delete(el); }
-    root.querySelectorAll(selector).forEach((el, index) => {
+    [...root.querySelectorAll(selector)].filter(el=>el.dataset.noResize!=='true').forEach((el, index) => {
       let rec = records.get(el);
       if (!rec) {
         rec = {key:page + ':' + index, profile:null, handles:new Map(), cleanup:[]}; records.set(el, rec); el.classList.add('resizable-panels');
