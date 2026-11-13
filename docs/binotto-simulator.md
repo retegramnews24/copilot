@@ -129,3 +129,12 @@ Tema blu/turchese/oro in cockpit.css. Libere, qualifiche e gara usano pista pien
 Il modulo cockpit.js ridimensiona il contenuto effettivo dei pannelli entro il riquadro, conservando i nodi degli input e quindi focus, valori e autosalvataggio. L'adattamento reagisce alle dimensioni, ai dati live e all'apertura dei dettagli. Su schermi piccoli i testi diventano più compatti. Mercato, classifiche, chat, bacheca, iscritti, proposte e archivi hanno navigazione a pagine; nessun record viene cancellato dal server. In Paddock le pagine della chat partono dai messaggi più recenti.
 
 Verifica: regressioni DOM su salvataggi concorrenti/livrea/strategie/chat e accesso ai livelli del mercato attraverso le pagine; controlli sul ridimensionamento e conservazione degli input; controllo bundle e aree sicure. La resa visiva su Android Telegram reale resta da verificare sul dispositivo.
+
+
+### Muretto integrato (v13)
+
+- Bacheca e chat del paddock mostrano tutti gli elementi disponibili in un flusso scorrevole, senza pagine. Le schede mercato hanno altezza naturale.
+- Piani sosta e consigli tecnici sono aperti inizialmente in Box. Le sessioni espongono i propri controlli direttamente nel muretto; su desktop il pannello informazioni laterale è ridimensionabile.
+- In libere e qualifiche ritmo e freni si applicano subito; gli altri valori modificati in pista sono persistiti come assetto programmato e applicati al rientro. La telemetria del giro concluso resta riferita ai valori effettivi.
+- In gara il carico effettivo è separato da quello pianificato e cambia all’ingresso ai box. Mescola e rifornimento seguono il piano sosta. I comandi di rientro attendono il completamento dell’autosalvataggio, evitando di ripristinare un piano precedente.
+- Gli aggiornamenti live preservano i nodi dei campi e le modifiche in corso. Le impostazioni private non sono esposte agli spettatori.

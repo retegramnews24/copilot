@@ -104,7 +104,7 @@ export function metrics(c, track, weather) {
       typeof weather === "boolean"
         ? { water: weather ? 0.7 : 0, trackTemp: 30 }
         : weather;
-  const st = c.strategy,
+  const st = {...c.strategy,wing:c.appliedWing??c.strategy.wing},
     tyre = tyreTypes[c.compound] || tyreTypes.medium,
     pace = st.pace || "normal",
     load = st.wing / 100,
