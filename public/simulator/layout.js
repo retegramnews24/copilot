@@ -16,6 +16,7 @@ export function replacePanelContent(el, html) {
 
 export function installPanelLayouts(root, page) {
   const selector = '.paddock,.two,.grid,.driver-controls,.session-stage,.session-layout,.calendar,.team-layout,.box-workspace';
+  if (['Libere','Qualifiche'].includes(page)) return () => {};
   const records = new Map();
   let queued = false, disposed = false;
   const tracks = (el, axis) => {
