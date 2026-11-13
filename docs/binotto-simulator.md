@@ -122,3 +122,10 @@ Test aggiunti: soglia/probabilità di ciascun evento, applicazione singola, pit 
 Accetta proposta salva la scelta senza chiudere le iscrizioni. Pronto! richiede una proposta accettata ed è revocabile finché tutti gli iscritti non sono pronti sulla stessa proposta (minimo due). Quindi le scelte vengono bloccate e ogni iscritto deve premere Si parte!!: solo l'ultima conferma pubblica il calendario e abilita le sessioni. Riformulare o cambiare iscritti azzera i pronti; cambiare proposta azzera il proprio pronto. Tutto è persistito dal server. Se il primo GP è ormai a meno di 30 minuti, i pronti vengono azzerati per consentire una nuova proposta. I campionati già approvati restano invariati.
 
 Libere e Qualifiche hanno un unico separatore orizzontale pista/muretto. Non ripristinano le vecchie griglie generiche; il nuovo divisore conserva la sua altezza per dispositivo. Splash con titolo intero e nessuno scorrimento orizzontale.
+
+## Cockpit grafico e adattamento verticale
+Tema blu/turchese/oro in cockpit.css. Libere, qualifiche e gara usano pista piena con classifica sovrapposta, due muretti affiancati e un separatore orizzontale. La navigazione su telefono ha due righe per mantenere tutte le sezioni raggiungibili. Le proporzioni del cockpit vengono salvate separatamente per pagina e tipo di schermo; i valori precedenti vengono ignorati.
+
+Il modulo cockpit.js ridimensiona il contenuto effettivo dei pannelli entro il riquadro, conservando i nodi degli input e quindi focus, valori e autosalvataggio. L'adattamento reagisce alle dimensioni, ai dati live e all'apertura dei dettagli. Su schermi piccoli i testi diventano più compatti. Mercato, classifiche, chat, bacheca, iscritti, proposte e archivi hanno navigazione a pagine; nessun record viene cancellato dal server. In Paddock le pagine della chat partono dai messaggi più recenti.
+
+Verifica: regressioni DOM su salvataggi concorrenti/livrea/strategie/chat e accesso ai livelli del mercato attraverso le pagine; controlli sul ridimensionamento e conservazione degli input; controllo bundle e aree sicure. La resa visiva su Android Telegram reale resta da verificare sul dispositivo.
