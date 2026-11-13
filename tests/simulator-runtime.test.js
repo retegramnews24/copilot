@@ -46,5 +46,12 @@ const qns=await mf.getDurableObjectNamespace('ROOMS'),qstub=qns.get(qns.idFromNa
 // Practice pause survives an actual SQLite restart, without polling to keep it alive.
 const pNow=Date.now(),ps=structuredClone(done);ps.round=0;ps.race=null;ps.schedule={dates:[pNow+2*86400000],participants:['1','2']};ps.sessions=null;advance(ps,pNow-5000);act(ps,{id:'1'},{action:'session-start',mode:'practice',slot:0},pNow-5000);advance(ps,pNow-3000);act(ps,{id:'1'},{action:'presence',visible:false},pNow-3000);await qstub.fetch('https://internal/__test-seed',{method:'POST',body:JSON.stringify(ps)});await mf.dispose();mf=new Miniflare(convertV4MiniflareOptions(conf));assert.equal((await call(1)).value.sessions.practice.remaining,1798000);
 console.log('PASS workerd sessions: real qualifying timeout alarm, paused practice budget survives SQLite restart.');
+// Real API commands must persist each approval phase independently.
+const approval=structuredClone(ps);approval.schedule=null;approval.sessions=null;approval.proposals=[];approval.votes={};approval.calendarReady={};approval.calendarStart={};
+const ans=await mf.getDurableObjectNamespace('ROOMS'),astub=ans.get(ans.idFromName('binotto-simulator-league-v1'));await astub.fetch('https://internal/__test-seed',{method:'POST',body:JSON.stringify(approval)});
+const pr=await call(1,{action:'proposal',days:[0,1,2,3,4,5,6],times:['21:00'],start:new Date(Date.now()+2*86400000).toISOString().slice(0,10)});assert.equal(pr.status,200);const pid=pr.value.proposals[0].id;
+for(const id of [1,2])assert.equal((await call(id,{action:'vote',proposal:pid})).status,200);assert.equal((await call(1)).value.schedule,null);
+for(const id of [1,2])assert.equal((await call(id,{action:'calendar-ready',ready:true})).status,200);await call(1,{action:'calendar-start'});await mf.dispose();mf=new Miniflare(convertV4MiniflareOptions(conf));assert.equal((await call(1)).value.approval.started,true);assert.equal((await call(2)).value.schedule,null);const activated=await call(2,{action:'calendar-start'});assert.equal(activated.status,200);assert.equal(activated.value.schedule.dates.length,13);
+console.log('PASS approval API: votes and ready do not start; final confirmations survive SQLite restart and last member activates calendar.');
 console.log('PASS workerd + SQLite: authenticated member access, forged/outsider rejection, competing purchase, rollback, persistent restart, actual unattended alarm, no duplicate payout.');
 }finally{await mf.dispose();await rm(dir,{recursive:true,force:true})}
