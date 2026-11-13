@@ -122,7 +122,7 @@ export function installPanelLayouts(root, page) {
     [...root.querySelectorAll(selector)].filter(el=>el.dataset.noResize!=='true').forEach((el, index) => {
       let rec = records.get(el);
       if (!rec) {
-        rec = {key:page + ':' + index, profile:null, handles:new Map(), cleanup:[]}; records.set(el, rec); el.classList.add('resizable-panels');
+        rec = {key:'cockpit-v3:' + page + ':' + index, profile:null, handles:new Map(), cleanup:[]}; records.set(el, rec); el.classList.add('resizable-panels');
         if (typeof ResizeObserver !== 'undefined') { rec.ro = new ResizeObserver(() => refresh(el, rec)); rec.ro.observe(el); }
       }
       refresh(el, rec);
