@@ -800,7 +800,17 @@ function renderSpectators(){
 (()=>{
  const order=['game','games','settings'];let start=null;
  const current=()=>{const open=document.querySelector('.page:not([hidden])')?.id?.replace('page-','');return ['debug','archive','info'].includes(open)?'settings':open};
- const blocked=el=>!!el.closest('input,select,textarea,button,a,canvas,iframe,[role=slider],.tile-row,#recent-games,table,#board,#radio-panel,dialog,[data-no-swipe]')||[...function*(){for(let e=el;e&&e!==document.body;e=e.parentElement)yield e}()].some(e=>e.scrollWidth>e.clientWidth+4&&/(auto|scroll)/.test(getComputedStyle(e).overflowX));
+ // Swipe starts anywhere: a tap still presses buttons, a horizontal drag becomes a swipe.
+ // Only controls that already use a horizontal drag keep it (volume slider, games, open dialogs).
+ const blocked=el=>!!el.closest('input[type=range],[role=slider],canvas,iframe,dialog,#board,[data-no-swipe]');
+ // A row that can still scroll sideways in that direction scrolls first; at its edge the page swipes.
+ const scrollsSideways=(el,dx)=>{
+  for(let e=el;e&&e!==document.body;e=e.parentElement){
+   if(e.scrollWidth<=e.clientWidth+4||!/(auto|scroll)/.test(getComputedStyle(e).overflowX))continue;
+   if(dx<0?e.scrollLeft+e.clientWidth<e.scrollWidth-2:e.scrollLeft>2)return true;
+  }
+  return false;
+ };
  // Like Android: the page follows the finger and the next one slides in beside it.
  let drag=null,busy=false;
  const pageEl=name=>$('page-'+name);
@@ -823,6 +833,7 @@ function renderSpectators(){
   if(!drag){
    if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){start=null;return}
    if(Math.abs(dx)<10||Math.abs(dx)<Math.abs(dy)*1.2)return;
+   if(scrollsSideways(e.target,dx)){start=null;return}
    const name=current(),i=order.indexOf(name);if(i<0){start=null;return}
    drag={cur:pageEl(document.querySelector('.page:not([hidden])').id.replace('page-','')),i,peer:null,dir:0};
   }
@@ -835,8 +846,12 @@ function renderSpectators(){
   if(drag.peer)place(drag.peer,x+dir*w,false);
   drag.dx=x;drag.w=w;
  },{passive:false});
+ // After a swipe that began on a button, swallow the click the browser may still send.
+ let swallowUntil=0;
+ document.addEventListener('click',e=>{if(Date.now()<swallowUntil){e.preventDefault();e.stopPropagation();swallowUntil=0}},true);
  document.addEventListener('touchend',()=>{
   if(!drag){start=null;return}
+  swallowUntil=Date.now()+500;
   const {cur,peer,dx,w,dir}=drag,speed=Math.abs(dx)/Math.max(1,Date.now()-start.at);drag=null;start=null;
   const go=!!peer&&(Math.abs(dx)>w*0.3||(speed>0.45&&Math.abs(dx)>40));
   busy=true;
