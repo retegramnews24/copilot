@@ -159,7 +159,7 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.8'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.9'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
   const groupMedia=/^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);

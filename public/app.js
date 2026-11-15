@@ -10,7 +10,7 @@ import {initCatalog,renderCatalog} from './games-catalog.js?v=4';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.8',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.9',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
 const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};
@@ -769,7 +769,19 @@ trace('BOOT',APP_NAME+' · registro sessione attivo');
 
 
 
-function enterFullscreen(){try{if(tg?.requestFullscreen&&!tg.isFullscreen)tg.requestFullscreen()}catch{}}
+// PC (Telegram Desktop, macOS, Web): a small Lobby button switches between full screen and window.
+// The choice is remembered: in window mode the app no longer goes full screen by itself.
+const desktopTelegram=['tdesktop','macos','web','weba','webk','unigram'].includes(tg?.platform)&&typeof tg?.requestFullscreen==='function';
+const windowMode=()=>desktopTelegram&&pref('binottoland-window-mode','0')==='1';
+function enterFullscreen(){try{if(tg?.requestFullscreen&&!tg.isFullscreen&&!windowMode())tg.requestFullscreen()}catch{}}
+{
+ const button=$('window-mode');
+ const paint=()=>{const full=!!tg?.isFullscreen,label=full?'Modalità finestra':'Schermo intero';button.textContent=full?'⤡':'⤢';button.title=label;button.setAttribute('aria-label',label)};
+ if(button&&desktopTelegram){
+  button.hidden=false;paint();tg.onEvent?.('fullscreenChanged',paint);
+  button.onclick=()=>{try{if(tg.isFullscreen){setPref('binottoland-window-mode','1');tg.exitFullscreen()}else{setPref('binottoland-window-mode','0');tg.requestFullscreen()}}catch{}setTimeout(paint,300)};
+ }
+}
 async function startSession(){
  enterFullscreen();
  $('access-retry').hidden=true;$('access-error').textContent='Collegamento a Telegram…';
