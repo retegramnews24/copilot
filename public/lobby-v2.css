@@ -399,3 +399,28 @@
     height: 60%;
   }
 }
+/* Swipe tra le pagine: breve scorrimento d'ingresso. */
+.page.swipe-in-left {
+  animation: swipe-in-left 0.22s ease-out;
+}
+.page.swipe-in-right {
+  animation: swipe-in-right 0.22s ease-out;
+}
+@keyframes swipe-in-left {
+  from {
+    transform: translateX(28px);
+    opacity: 0.4;
+  }
+}
+@keyframes swipe-in-right {
+  from {
+    transform: translateX(-28px);
+    opacity: 0.4;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page.swipe-in-left,
+  .page.swipe-in-right {
+    animation: none;
+  }
+}

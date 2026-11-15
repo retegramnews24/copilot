@@ -795,6 +795,26 @@ function renderSpectators(){
  if(identity&&!document.hidden&&!seated.has(identity.player)&&!seen.has(identity.id))watchers.push(identity);
  output.textContent=watchers.length?(watchers.length===1?'Assiste':'Assistono')+' · '+watchers.map(u=>u.name+(u.id===identity?.id?' (tu)':'')).join(', '):'Nessuno spettatore';
 }
+// Swipe left/right to move between Lobby, Giochi and Settings.
+// Ignored inside a game table, on controls and on areas that scroll sideways.
+(()=>{
+ const order=['game','games','settings'];let start=null;
+ const current=()=>{const open=document.querySelector('.page:not([hidden])')?.id?.replace('page-','');return ['debug','archive','info'].includes(open)?'settings':open};
+ const blocked=el=>!!el.closest('input,select,textarea,button,a,canvas,iframe,[role=slider],.tile-row,#recent-games,table,#board,#radio-panel,dialog,[data-no-swipe]')||[...function*(){for(let e=el;e&&e!==document.body;e=e.parentElement)yield e}()].some(e=>e.scrollWidth>e.clientWidth+4&&/(auto|scroll)/.test(getComputedStyle(e).overflowX));
+ document.addEventListener('touchstart',e=>{
+  start=null;
+  if(e.touches.length!==1||$('app-shell').hidden||!$('table').hidden||blocked(e.target))return;
+  const t=e.touches[0];start={x:t.clientX,y:t.clientY,at:Date.now()};
+ },{passive:true});
+ document.addEventListener('touchend',e=>{
+  if(!start)return;const t=e.changedTouches[0],dx=t.clientX-start.x,dy=t.clientY-start.y,fast=Date.now()-start.at<700;start=null;
+  if(!fast||Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*1.8)return;
+  const i=order.indexOf(current()),next=order[i+(dx<0?1:-1)];
+  if(i<0||!next)return;
+  selectPage(next);$('page-'+next).classList.remove('swipe-in-left','swipe-in-right');void $('page-'+next).offsetWidth;$('page-'+next).classList.add(dx<0?'swipe-in-left':'swipe-in-right');
+  tg?.HapticFeedback?.selectionChanged?.();
+ },{passive:true});
+})();
 // Box height: exactly the first 20 messages; older ones are reached by scrolling inside it.
 function limitChat(){
  const list=$('chat-messages'),rows=[...list.children];
