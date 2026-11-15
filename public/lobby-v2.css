@@ -693,4 +693,5 @@
 }
 #radio-toggle .radio-viz {
   flex: none;
+  margin-right: 12px;
 }
