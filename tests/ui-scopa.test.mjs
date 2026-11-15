@@ -28,6 +28,8 @@ const imports=await build({stdin:{
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;
 w.AbortSignal=AbortSignal;w.matchMedia=()=>({matches:false,addEventListener(){}});w.Telegram={WebApp:{platform:'android',ready(){},expand(){},onEvent(){},initData:'test-fixture'}};
 const room='11111111-1111-4111-8111-111111111111',players=[{id:'tg:1',name:'Fausto'},{id:'bot:1',name:'AI 1',bot:true}],user={id:'1',player:'tg:1',name:'Fausto'},scopa=initialScopa(2),view=scopaView(scopa,0);let state={room,number:1,phase:'playing',game:'scopa',players,turn:0,revision:0,moves:[],scopa:view,mode:'tutorial',tutorial:tutorial('scopa',view,0,0),expires:Date.now()+86400000};const payload=()=>({games:[state],users:[],messages:[],leaderboard:[{id:'tg:9',name:'Anna <b>',wins:5,games:{scopa:3,chess:2}}],aiLeaderboard:[{id:'tg:1',name:'Fausto',wins:2,games:{scopa:2}}]});
+// Fake session token in the real "session.<payload>.<signature>" shape: refreshSession() reads its expiry.
+const fixtureToken='session.'+Buffer.from(JSON.stringify({user,expires:Date.now()+86400000})).toString('base64url')+'.'+'0'.repeat(64);
 let lobbySocket,cinemaSocket,blackboardSocket;
 const blackboardMessages=[];
 const cinemaMessages=[],cinemaId="cinema-fixture",cinemaRooms=[{id:cinemaId,number:1,channel:"Canale Uno",viewers:[{id:"tg:1",name:"Fausto"}]}];
@@ -51,7 +53,7 @@ w.WebSocket=class{
  }
  close(){this.readyState=3;}
 };
-w.fetch=async(path,opts)=>Response.json(path==='/api/session'?{user,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...payload(),pending:false}:path==='/api/lobby'?payload():state);
+w.fetch=async(path,opts)=>Response.json(path==='/api/session'?{user,token:fixtureToken}:path.startsWith('/api/leaderboard')?{...payload(),pending:false}:path==='/api/lobby'?payload():state);
 w.localStorage.setItem('binotto-golf-ball',JSON.stringify(['#a11293','#197b61']));
 w.eval(imports.outputFiles[0].text);w.eval(source.replace(importLines,'')+exposed);await new Promise(r=>setTimeout(r,50));assert.equal(w.document.getElementById('app-shell').hidden,false);assert.equal(w.document.querySelector('input[type=password]'),null);await w.__qa.openRoom(room,true);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-hand button').length,3);assert.equal(w.document.querySelectorAll('#scopa-area .briscola-table .sicilian-card').length,4);assert.equal(w.document.getElementById('tutorial-panel').hidden,false);assert.ok(w.document.getElementById('tutorial-reason').textContent.length);assert.equal(w.document.getElementById('create-cluedo'),null);
 w.__qa.createGame('briscola5','solo');
@@ -189,7 +191,7 @@ const searchReplies=[],previousCinemaFetch=w.fetch;
 cinemaFrame.contentWindow.postMessage=packet=>searchReplies.push(packet);
 w.fetch=async(path,options)=>{
  if(!path.startsWith('/api/cinema/youtube?'))return previousCinemaFetch(path,options);
- assert.equal(options.headers.Authorization,'Bearer synthetic');
+ assert.equal(options.headers.Authorization,'Bearer '+fixtureToken);
  assert.equal(new URL(path,w.location.origin).searchParams.get('q'),'motorsport');
  return Response.json({error:'Google ha rifiutato la chiave.'},{status:503});
 };
@@ -412,7 +414,7 @@ for(const rank of [8,9,10]){
 }
 // Telegram embeds Labyrinth in a sandbox where native confirm is suppressed.
 const labHtml=await fs.readFile('public/labyrinth/index.html','utf8');
-const labScript=(await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\n/gm,'');
+const labScript=(await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\r?\n/gm,'');
 const labDom=new JSDOM(labHtml,{url:'https://unit.test/labyrinth/index.html?dev=1',runScripts:'outside-only',pretendToBeVisual:true});
 const lab=labDom.window,labGet=id=>lab.document.getElementById(id);
 Object.assign(lab,labCore,labAdventure,labTraps,labSpring,{FrameBudget});
@@ -532,7 +534,7 @@ trialGet('trail').getBoundingClientRect=()=>({width:1280,height:720});
 trialGet('trail').getContext=()=>new Proxy({
  roundRect:undefined,rect(){signs++},createLinearGradient:()=>({addColorStop(){}})
 },{get:(target,key)=>key in target?target[key]:()=>{}});
-const trialScript=(await fs.readFile('public/moto-trial/game.js','utf8')).replace(/^import .*;\n/gm,'');
+const trialScript=(await fs.readFile('public/moto-trial/game.js','utf8')).replace(/^import .*;\r?\n/gm,'');
 trial.eval(trialScript+
  '\nwindow.__trialTest={tick:()=>tick(lastFrame+32),bike:()=>bike,seed:()=>course.seed,mode:()=>mode};');
 assert.equal(trial.__trialTest.seed(),1,'A query parameter cannot skip levels');
@@ -819,15 +821,12 @@ assert.equal(cinemaElement('multisala-dialog').open,false);
 assert.equal(tileVideo.getAttribute('src'),null);
 assert.equal(cinemaElement('telegram-call'),null);
 assert.equal(cinemaElement('cinema-personal').contains(cinemaElement('local-stop')),true);
-let pickerOpened=false;
-cinemaElement('watch-file').click=()=>{pickerOpened=true;};
-cinemaElement('upload-video').click();
-assert.equal(pickerOpened,true);
-assert.equal(cinemaElement('watch-dialog').open,true);
-assert.equal(cinemaElement('watch-type').value,'file');
-assert.equal(cinemaElement('watch-url').disabled,true);
-cinemaElement('watch-cancel').click();
+// Direct device upload was removed from the Cinema (9a8368d): only stream links and YouTube remain.
+assert.equal(cinemaElement('upload-video'),null);
+assert.equal(cinemaElement('watch-file'),null);
 cinemaElement('watch-together').click();
+assert.equal(cinemaElement('watch-dialog').open,true);
+assert.deepEqual(Array.from(cinemaElement('watch-type').options,option=>option.value),['stream','youtube']);
 assert.equal(cinemaElement('watch-url').disabled,false);
 cinemaElement('watch-cancel').click();
 cinemaElement('close-room').click();
@@ -1056,7 +1055,7 @@ console.log('PASS Arcade: both launchers, diagonal merge, pointer drag, combo, r
 if(process.argv.includes('--preview')){
 const bundle=await build({stdin:{contents:source+exposed,resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
 const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/labyrinth',preview+'/public/labyrinth',{recursive:true});await fs.cp('public/moto-trial',preview+'/public/moto-trial',{recursive:true});await fs.cp('public/golf',preview+'/public/golf',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');
-const fixture=`window.Telegram={WebApp:{ready(){},expand(){},onEvent(){},initData:'preview'}};const qaUser=${JSON.stringify(user)};const qaState=${JSON.stringify({...state,game:'scopa',scopa:view,scarabeo:null,turn:0,tutorial:tutorial('scopa',view,0,0)})};const qaPayload=${JSON.stringify(payload())};window.WebSocket=class{constructor(url){this.readyState=1;setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?qaPayload:qaState)})},10)}send(){}close(){this.readyState=3}};window.fetch=async(path)=>Response.json(path==='/api/session'?{user:qaUser,token:'synthetic'}:path.startsWith('/api/leaderboard')?{...qaPayload,pending:false}:path==='/api/lobby'?qaPayload:qaState);window.addEventListener('load',()=>{setTimeout(()=>window.__qa.openRoom(qaState.room,true),200)});`;
+const fixture=`window.Telegram={WebApp:{ready(){},expand(){},onEvent(){},initData:'preview'}};const qaUser=${JSON.stringify(user)};const qaState=${JSON.stringify({...state,game:'scopa',scopa:view,scarabeo:null,turn:0,tutorial:tutorial('scopa',view,0,0)})};const qaPayload=${JSON.stringify(payload())};window.WebSocket=class{constructor(url){this.readyState=1;setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?qaPayload:qaState)})},10)}send(){}close(){this.readyState=3}};window.fetch=async(path)=>Response.json(path==='/api/session'?{user:qaUser,token:${JSON.stringify(fixtureToken)}}:path.startsWith('/api/leaderboard')?{...qaPayload,pending:false}:path==='/api/lobby'?qaPayload:qaState);window.addEventListener('load',()=>{setTimeout(()=>window.__qa.openRoom(qaState.room,true),200)});`;
 await fs.writeFile(preview+'/public/fixture.js',fixture);
 
 }
