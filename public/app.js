@@ -6,7 +6,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=12';
 import {golfColors,readAppearance} from './appearance.js?v=9';
 import './labyrinth/avatar.js?v=8';
-import {initCatalog,renderCatalog} from './games-catalog.js?v=2';
+import {initCatalog,renderCatalog} from './games-catalog.js?v=3';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);

@@ -125,10 +125,8 @@ export function renderCatalog() {
   const state = read();
   // Cards never move: "I tuoi giochi" and the Lobby show icon tiles that lead to them.
   for (const card of cards) if (card.parentElement !== homes.get(card)) homes.get(card).append(card);
-  const recent = Object.entries(state.recent)
-    .sort((a, b) => b[1] - a[1])
-    .map(([key]) => key);
-  const picks = [...new Set([...state.fav, ...recent])].slice(0, 8);
+  // Only the games marked ★: removing the star removes the tile, in Giochi and in the Lobby.
+  const picks = state.fav.slice(0, 12);
   const box = document.getElementById('recent-games');
   box.replaceChildren(...tiles(picks));
   document.getElementById('recent-games-section').hidden = !box.children.length;

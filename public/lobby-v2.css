@@ -107,7 +107,7 @@
   color: var(--cover, var(--accent));
 }
 #recent-games-section .catalog-heading::after {
-  content: ' · tocca ☆ per tenerne uno fisso';
+  content: ' · i giochi con ★';
   font-weight: 400;
   font-size: 11.5px;
   color: var(--muted);
