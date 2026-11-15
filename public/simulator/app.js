@@ -535,13 +535,15 @@ function render() {
   restoreChatDraft();
   const availability = document.querySelector('[data-form=proposal]');
   if (availability) updateAvailability(availability);
+  const compact = isCompact();
+  document.documentElement.classList.toggle('compact', compact);
   if (tab === 'Gara') {
     attachCanvas($('track'));
-    installSplitters();
+    if (!compact) installSplitters();
     updateRace();
   } else if (['Libere', 'Qualifiche'].includes(tab)) {
     attachCanvas($('track'));
-    installSplitters();
+    if (!compact) installSplitters();
     updateSessions();
   }
   updateCommunity();
@@ -550,12 +552,87 @@ function render() {
     if (e) e.scrollTop = saved.id === 'chat' && saved.bottom ? e.scrollHeight : saved.top;
   }
   updateEventBoard();
-  disposePanels = ['Gara', 'Libere', 'Qualifiche'].includes(tab)
-    ? () => {}
-    : installPanelLayouts($('main'), tab);
-  disposeCockpit = installCockpit($('main'));
+  // Phone: natural sizes and page scroll, no scaling and no drag handles; a sub-menu per section.
+  disposePanels =
+    compact || ['Gara', 'Libere', 'Qualifiche'].includes(tab)
+      ? () => {}
+      : installPanelLayouts($('main'), tab);
+  disposeCockpit = compact ? () => {} : installCockpit($('main'));
+  if (compact) installSubnav(tab);
   persistView();
 }
+// Compact layout for phones (portrait, or landscape with little height).
+function isCompact() {
+  return !!globalThis.matchMedia?.('(max-width: 760px), (max-height: 520px)').matches;
+}
+const SUBPANELS = {
+  Paddock: [
+    ['GP', '.paddock > .hero-card'],
+    ['Scuderia', '.paddock > .team-summary'],
+    ['Bacheca', '.paddock > .community-panel:not(.purple)'],
+    ['Chat', '.paddock > .community-panel.purple']
+  ],
+  Team: [
+    ['Scuderia', '.team-management'],
+    ['Mercato', '.team-market']
+  ],
+  Box: [
+    ['Strategia', '.box-workspace > section:nth-of-type(1)'],
+    ['Telemetria', '.box-workspace > section:nth-of-type(2)']
+  ],
+  Libere: [
+    ['Muretto', '.session-drivers'],
+    ['Pista', '.track-wrap'],
+    ['Classifica', '.session-stage > aside']
+  ],
+  Gara: [
+    ['Muretto', '.driver-controls'],
+    ['Pista', '.race-top > .track-wrap'],
+    ['Classifica', '.race-board']
+  ]
+};
+SUBPANELS.Qualifiche = SUBPANELS.Libere;
+SUBPANELS.Evento = [
+  ['Classifiche', '#event-live'],
+  ['Premi e archivio', '.event-extra']
+];
+const subTabs = {};
+function installSubnav(page) {
+  const panels = SUBPANELS[page]
+    ?.map(([label, sel]) => [label, $('main').querySelector(sel)])
+    .filter(p => p[1]);
+  if (!panels || panels.length < 2) return;
+  const current = panels.some(p => p[0] === subTabs[page]) ? subTabs[page] : panels[0][0];
+  const nav = document.createElement('div');
+  nav.className = 'subnav';
+  nav.setAttribute('role', 'tablist');
+  const show = label => {
+    subTabs[page] = label;
+    for (const [name, el] of panels) el.classList.toggle('sub-hidden', name !== label);
+    for (const b of nav.children) b.setAttribute('aria-selected', String(b.dataset.sub === label));
+    $('main').dataset.sub = label;
+    // The track canvas measures its box: let it re-measure once visible.
+    if (label === 'Pista') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  };
+  for (const [label] of panels) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'tab');
+    b.dataset.sub = label;
+    b.textContent = label;
+    b.onclick = () => show(label);
+    nav.append(b);
+  }
+  $('main').prepend(nav);
+  show(current);
+}
+let wasCompact = isCompact();
+window.addEventListener('resize', () => {
+  if (isCompact() !== wasCompact && opened) {
+    wasCompact = isCompact();
+    render();
+  }
+});
 function onboarding() {
   return `<div class="notice"><b>Il tuo primo campionato inizia qui.</b> Crea la scuderia con 10 milioni, ingaggia due piloti e tre tecnici, acquista il motore e iscriviti.${button('create', 'Crea la mia scuderia', '', 'primary')}</div>`;
 }
@@ -866,12 +943,12 @@ function updateRace() {
   $('lap-hud').textContent = r
     ? `GIRO ${Math.min(r.laps || data.laps, 1 + Math.floor(cars[0]?.progress || 0))} / ${r.laps || data.laps}`
     : 'NESSUNA GARA IN CORSO';
-  const page = paged(cars, 'race-leaders', 3);
+  const page = paged(cars, 'race-leaders', isCompact() ? 40 : 3);
   $('leaders').innerHTML = cars.length
     ? page.items
         .map(
           (c, i) =>
-            `<button class="leader ${follow === c.id ? 'selected' : ''}" data-action="follow" data-id="${c.id}"><span style="color:${c.colors[0]}">${pagePositions['race-leaders'] * 3 + i + 1}</span><span><b>${esc(c.name)}</b><small>${esc(c.teamName)} · ${c.compound.toUpperCase()}</small></span><span>${c.dnf ? 'RIT' : c.finished ? 'ARRIVO' : pagePositions['race-leaders'] * 3 + i ? '≈ +' + ((cars[0].progress - c.progress) * (c.lastLap || 90)).toFixed(1) + 's' : 'LEADER'}</span></button>`
+            `<button class="leader ${follow === c.id ? 'selected' : ''}" data-action="follow" data-id="${c.id}"><span style="color:${c.colors[0]}">${pagePositions['race-leaders'] * (isCompact() ? 40 : 3) + i + 1}</span><span><b>${esc(c.name)}</b><small>${esc(c.teamName)} · ${c.compound.toUpperCase()}</small></span><span>${c.dnf ? 'RIT' : c.finished ? 'ARRIVO' : pagePositions['race-leaders'] * (isCompact() ? 40 : 3) + i ? '≈ +' + ((cars[0].progress - c.progress) * (c.lastLap || 90)).toFixed(1) + 's' : 'LEADER'}</span></button>`
         )
         .join('') + page.controls
     : '<p class="empty">La gara parte all’orario approvato.</p>';
@@ -1522,12 +1599,12 @@ function updateSessions() {
           ? 'Qualifiche concluse'
           : 'In attesa delle qualifiche';
   const cars = [...v.cars].sort((a, b) => (a.best || Infinity) - (b.best || Infinity));
-  const page = paged(cars, 'session-leaders', 3);
+  const page = paged(cars, 'session-leaders', isCompact() ? 40 : 3);
   $('session-leaders').innerHTML = cars.length
     ? page.items
         .map(
           (c, i) =>
-            `<button class="leader" data-action="session-follow" data-id="${esc(c.id)}"><span>${pagePositions['session-leaders'] * 3 + i + 1}</span><span><b>${esc(c.name)}</b><small>${c.onTrack ? 'IN PISTA' : 'AI BOX'} · ${esc(c.teamName)}</small></span><span>${lapTime(c.best)}</span></button>`
+            `<button class="leader" data-action="session-follow" data-id="${esc(c.id)}"><span>${pagePositions['session-leaders'] * (isCompact() ? 40 : 3) + i + 1}</span><span><b>${esc(c.name)}</b><small>${c.onTrack ? 'IN PISTA' : 'AI BOX'} · ${esc(c.teamName)}</small></span><span>${lapTime(c.best)}</span></button>`
         )
         .join('') + page.controls
     : '<p class="empty">Nessun giro registrato.</p>';
@@ -1675,7 +1752,7 @@ function updateEventBoard() {
 }
 
 window.addEventListener('resize', () => {
-  if (['Gara', 'Libere', 'Qualifiche'].includes(tab) && $('split-height')) installSplitters();
+  if (['Gara', 'Libere', 'Qualifiche'].includes(tab) && $('split-height') && !isCompact()) installSplitters();
 });
 
 // The host sends {system, content} objects, not a numeric inset. Keep both layers.
