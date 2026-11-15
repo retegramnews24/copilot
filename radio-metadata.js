@@ -36,6 +36,15 @@ export async function readICY(response){
  }finally{await reader.cancel().catch(()=>{})}
 }
 
+// icy-name / icy-description / icy-genre: plain text, no control characters, short.
+export function icyInfo(headers){
+ const clean=v=>typeof v==='string'?v.replace(/[\x00-\x1f\x7f]/g,' ').replace(/\s+/g,' ').trim().slice(0,120):'';
+ // Some servers send an internal id as name (e.g. "syk7c423n48uv"): ignore single tokens mixing letters and digits.
+ const token=v=>/^[a-z0-9_-]{8,}$/i.test(v)&&/\d/.test(v)&&/[a-z]/i.test(v);
+ const name=clean(headers.get('icy-name')),description=clean(headers.get('icy-description')),genre=clean(headers.get('icy-genre'));
+ if(token(name))return {name:null,description:description&&!token(description)?description:null,genre:genre||null};
+ return {name:name||null,description:description&&description!==name?description:null,genre:genre||null};
+}
 async function stationURLs(station,signal){
  const key='station:'+station,hit=cached(key);if(hit)return hit;
  for(const host of hosts){
@@ -44,7 +53,9 @@ async function stationURLs(station,signal){
    const r=await fetch(host+'/json/stations/byuuid/'+station,{signal,headers:{'User-Agent':'Binottoland/1.1','Accept':'application/json'}});if(!r.ok){await r.body?.cancel();continue}
    const rows=await r.json(),row=Array.isArray(rows)?rows.find(s=>s.stationuuid?.toLowerCase()===station):null;
    if(!row)continue;
-   const urls=[...new Set([row.url_resolved,row.url].map(publicStreamURL).filter(Boolean))];return remember(key,urls,3600000);
+   // http:// entries are tried as https:// (same as the player): many servers answer both.
+   const upgrade=x=>typeof x==='string'?x.replace(/^http:\/\//i,'https://'):x;
+   const urls=[...new Set([row.url_resolved,row.url].map(upgrade).map(publicStreamURL).filter(Boolean))];return remember(key,urls,3600000);
   }catch{}
  }
  return [];
@@ -61,7 +72,9 @@ async function probe(station){
      const location=response.headers.get('Location');await response.body?.cancel();if(!location)break;
      url=publicStreamURL(new URL(location,url).href);if(!url)break;continue;
     }
-    const title=await readICY(response);if(title)return {title,checkedAt:Date.now()};break;
+    // Station info the stream sends in its headers, shown with the song in the radio bar.
+    const info=icyInfo(response.headers);
+    const title=await readICY(response);return {title,...info,checkedAt:Date.now()};
    }
   }
  }catch{}
@@ -74,6 +87,6 @@ export async function radioNowPlaying(station,userId){
  const previous=requests.get(userId)||0;if(Date.now()-previous<5000)return {title:null,checkedAt:Date.now()};
  if(requests.size>=256)requests.delete(requests.keys().next().value);requests.set(userId,Date.now());
  if(inflight.size>=20)return {title:null,checkedAt:Date.now()};
- const pending=probe(station).then(value=>remember(key,value,value.title?45000:120000)).finally(()=>inflight.delete(station));
+ const pending=probe(station).then(value=>remember(key,value,value.title||value.name?45000:120000)).finally(()=>inflight.delete(station));
  inflight.set(station,pending);return pending;
 }

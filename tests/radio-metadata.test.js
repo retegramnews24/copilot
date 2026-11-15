@@ -1,4 +1,5 @@
-import assert from 'node:assert/strict';import {readICY,icyTitle,publicStreamURL,radioNowPlaying} from '../radio-metadata.js';
+import assert from 'node:assert/strict';import {readICY,icyTitle,icyInfo,publicStreamURL,radioNowPlaying} from '../radio-metadata.js';
+assert.deepEqual(icyInfo(new Headers({'icy-name':'Radio Test','icy-description':'La musica\u0007 di sempre','icy-genre':'Pop'})),{name:'Radio Test',description:'La musica di sempre',genre:'Pop'});assert.deepEqual(icyInfo(new Headers({'icy-name':'Uno','icy-description':'Uno'})),{name:'Uno',description:null,genre:null});assert.equal(icyInfo(new Headers({'icy-name':'syk7c423n48uv'})).name,null);
 for(const url of ['http://radio.example.org/','https://localhost/','https://127.0.0.1/','https://[::1]/','https://2130706433/','https://user:pass@radio.example.org/','https://radio.internal/','https://radio.example.org:22/'])assert.equal(publicStreamURL(url),null,url);
 assert.ok(publicStreamURL('https://radio.example.org/live'));
 assert.equal(icyTitle(new TextEncoder().encode("StreamTitle='Artista - Canzone';StreamUrl='';")),'Artista - Canzone');

@@ -33,18 +33,36 @@
  plain.volume=fx.volume=startVolume;volume.value=String(startVolume);
  let track='',metadataEpoch=0,metadataTimer=null,metadataPending=false;
  const trackBox=$('radio-now-playing'),trackLabel=$('radio-track'),nowName=$('radio-now-name'),nowTrack=$('radio-now-track');
- function showTrack(title){
-  track=typeof title==='string'?title.trim().slice(0,240):'';trackLabel.textContent=track;nowTrack.textContent=track;
-  trackBox.hidden=!track||!wantsPlay;
-  trackBox.classList.toggle('scrolling',!!track);
-  trackBox.style.setProperty('--track-duration',Math.max(18,Math.min(45,track.length*.32))+'s');
+ // Radio bar: one scrolling line with station · song · description · genre (whatever the stream sends).
+ let streamInfo=null;
+ function showTrack(data){
+  const title=typeof data==='string'?data:data?.title;
+  track=typeof title==='string'?title.trim().slice(0,240):'';trackLabel.textContent=track;
+  streamInfo=data&&typeof data==='object'?data:null;
+  nowTrack.textContent=[track,streamInfo?.description,streamInfo?.genre].filter(Boolean).join(' · ');
+  trackBox.hidden=true;renderMarquee();
+ }
+ function renderMarquee(){
+  const seen=new Set(),parts=[];
+  for(const part of [current?.name||'Radio',wantsPlay?track:'',wantsPlay?streamInfo?.name:'',wantsPlay?streamInfo?.description:'',wantsPlay&&streamInfo?.genre?'Genere: '+streamInfo.genre:''])
+   if(part&&!seen.has(part.toLowerCase())){seen.add(part.toLowerCase());parts.push(part)}
+  const text=parts.join('   •   ');
+  if(label.dataset.text===text)return;label.dataset.text=text;
+  const inner=document.createElement('span');inner.className='marquee-inner';inner.textContent=text;label.replaceChildren(inner);
+  // Scroll only when it does not fit; the text is doubled so the loop is seamless.
+  const fit=()=>{
+   label.classList.remove('marquee');inner.textContent=text;
+   const overflow=inner.scrollWidth>label.clientWidth+2;label.classList.toggle('marquee',overflow);
+   if(overflow){inner.textContent=text+'   •   '+text+'   •   ';label.style.setProperty('--marquee-duration',Math.max(10,text.length*.28)+'s')}
+  };
+  fit();requestAnimationFrame(fit);
  }
  function stopMetadata(clear=true){metadataEpoch++;clearTimeout(metadataTimer);metadataTimer=null;metadataPending=false;if(clear)showTrack('')}
  async function loadMetadata(){
   clearTimeout(metadataTimer);metadataTimer=null;
   if(!wantsPlay||document.hidden||!allowed()||!current||metadataPending||typeof window.binottolandRadioMetadata!=='function')return;
   const epoch=metadataEpoch,station=current.id;metadataPending=true;
-  try{const data=await window.binottolandRadioMetadata(station);if(epoch===metadataEpoch&&current?.id===station&&wantsPlay)showTrack(data.title)}catch{if(epoch===metadataEpoch)showTrack('')}
+  try{const data=await window.binottolandRadioMetadata(station);if(epoch===metadataEpoch&&current?.id===station&&wantsPlay)showTrack(data)}catch{if(epoch===metadataEpoch)showTrack('')}
   finally{if(epoch===metadataEpoch){metadataPending=false;if(wantsPlay&&!document.hidden)metadataTimer=setTimeout(loadMetadata,60000)}}
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMetadata(false);else if(wantsPlay){loadMetadata();startViz()}});
@@ -187,10 +205,10 @@
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!screen.hidden)closeScreen()});
 
  function update(){
-  label.textContent=current?current.name:'Radio';nowName.textContent=current?current.name:'Scegli una radio';
+  renderMarquee();nowName.textContent=current?current.name:'Scegli una radio';
   const favorite=isFav(current);star.textContent=favorite?'★':'☆';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
   for(const b of [play,bigPlay]){b.textContent=wantsPlay?'Ⅱ':'▶';b.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');b.setAttribute('aria-pressed',String(wantsPlay));b.setAttribute('aria-busy',String(pending))}
-  status.textContent=playbackMessage||directoryMessage;trackBox.hidden=!track||!wantsPlay;
+  status.textContent=playbackMessage||directoryMessage;trackBox.hidden=true;
   document.documentElement.classList.toggle('radio-playing',wantsPlay&&!pending);
   if(wantsPlay&&!pending)startViz();else if(!frame)drawViz();
   if('mediaSession' in navigator){try{navigator.mediaSession.playbackState=wantsPlay&&!pending?'playing':current?'paused':'none'}catch{}}

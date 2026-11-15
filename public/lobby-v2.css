@@ -657,3 +657,40 @@
 .radio-row.down .radio-pick {
   opacity: 0.7;
 }
+
+/* Barra radio: nome stazione, brano e info in un'unica riga che scorre se non entra. */
+.radio-title .radio-viz {
+  flex: none;
+  overflow: visible;
+}
+#radio-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+  mask-image: linear-gradient(to right, transparent 0, #000 8px, #000 calc(100% - 14px), transparent 100%);
+}
+#radio-label .marquee-inner {
+  display: inline-block;
+  white-space: nowrap;
+}
+#radio-label.marquee .marquee-inner {
+  animation: radio-marquee var(--marquee-duration, 16s) linear infinite;
+}
+@keyframes radio-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #radio-label.marquee .marquee-inner {
+    animation: none;
+  }
+}
+#radio-toggle .radio-viz {
+  flex: none;
+}
