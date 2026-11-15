@@ -87,4 +87,116 @@ const load = createLeaderboardLoader({
 await Promise.all([load(), load()]);
 assert.equal(calls, 3, 'second call skipped while busy; pending repeats until done');
 
-console.log('PASS App modules: game info, pieces, preferences, debug log redaction, themes, leaderboard.');
+// Avatar: initials, photo only from https.
+const { makeAvatar } = await import('../public/avatar.js');
+assert.equal(makeAvatar({ name: 'mario rossi' }).textContent, 'MR');
+assert.equal(makeAvatar({ name: 'A', photo: 'http://x/y.jpg' }).querySelector('img'), null);
+assert.ok(makeAvatar({ name: 'A', photo: 'https://x/y.jpg' }).querySelector('img'));
+
+// Chat: newest first, own messages marked, send adds the reply once and clears the field.
+document.body.insertAdjacentHTML(
+  'beforeend',
+  `<form id="chat-form"><input id="chat-input"><button id="chat-send"></button></form><div id="chat-messages"></div>`
+);
+window.requestAnimationFrame = fn => setTimeout(fn, 0);
+globalThis.requestAnimationFrame = window.requestAnimationFrame;
+globalThis.addEventListener = window.addEventListener.bind(window);
+const { createChat } = await import('../public/chat.js');
+let refreshed = 0,
+  posted = null;
+const chat = createChat({
+  me: () => ({ id: '1' }),
+  request: async (path, body) => {
+    posted = [path, body];
+    return { message: { id: 'm3', userId: '1', name: 'Io', at: 3, text: body.text } };
+  },
+  onError: e => assert.equal(e, ''),
+  refresh: () => {
+    refreshed++;
+    chat.render(true);
+  }
+});
+chat.set([
+  { id: 'm1', userId: '2', name: 'Ada', at: 1, text: 'primo' },
+  { id: 'm2', userId: '1', name: 'Io', at: 2, text: 'secondo' }
+]);
+chat.render(true);
+const texts = () => [...document.querySelectorAll('#chat-messages p')].map(p => p.textContent);
+assert.deepEqual(texts(), ['secondo', 'primo']);
+assert.equal(document.querySelectorAll('#chat-messages .mine').length, 1);
+assert.equal(document.getElementById('chat-send').disabled, false);
+chat.render(false);
+assert.equal(document.getElementById('chat-send').disabled, true, 'no sending while disconnected');
+document.getElementById('chat-input').value = '  ciao  ';
+document.getElementById('chat-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
+await new Promise(r => setTimeout(r, 10));
+assert.deepEqual(posted, ['/api/chat', { text: 'ciao' }]);
+assert.deepEqual(texts(), ['ciao', 'secondo', 'primo']);
+assert.equal(document.getElementById('chat-input').value, '');
+assert.equal(refreshed, 2);
+
+// Forza 4: full columns disabled, winning discs marked, a click sends the column.
+const { renderConnect4 } = await import('../public/connect4-ui.js');
+const board = document.createElement('div'),
+  hint = document.createElement('p'),
+  cells = Array(42).fill(null);
+cells[35] = 0;
+cells[0] = 1;
+const moves = [];
+renderConnect4(
+  board,
+  hint,
+  { board: cells, legalMoves: [1, 2, 3, 4, 5, 6], winning: [35], lastMove: { row: 5, column: 0 } },
+  { phase: 'playing', replaying: false, active: true, move: m => moves.push(m) }
+);
+assert.equal(board.children.length, 7);
+assert.equal(board.children[0].disabled, true);
+assert.match(board.children[0].getAttribute('aria-label'), /piena/);
+assert.equal(board.querySelectorAll('.winning').length, 1);
+assert.equal(hint.textContent, 'Scegli una colonna');
+board.children[3].click();
+assert.deepEqual(moves, [{ column: 3 }]);
+
+// UNO: hand shown to the player, only legal cards enabled, the card is played with the chosen colour.
+document.body.insertAdjacentHTML(
+  'beforeend',
+  `<p id="uno-message"></p><div id="uno-top"></div><span id="uno-active-color"></span><button id="uno-draw"></button>
+   <button id="uno-pass"></button><div id="uno-color-row"></div><select id="uno-color"><option value="blue">b</option></select>
+   <button id="uno-opening-color"></button><button id="uno-accept-four"></button><button id="uno-challenge-four"></button>
+   <button id="uno-declare"></button><button id="uno-catch"></button><label id="uno-call-option"><input id="uno-call-with-card" type="checkbox"></label>
+   <p id="uno-score"></p><div id="uno-revealed"></div><div id="uno-hand"></div><div id="uno-history"></div>`
+);
+const { renderUno } = await import('../public/uno-ui.js');
+const played = [];
+const unoState = {
+  phase: 'playing',
+  players: [{ name: 'Io' }, { name: 'Ada' }],
+  moves: [{ by: 'Ada', description: 'gioca 5 rosso' }],
+  uno: {
+    top: { color: 'red', value: '5' },
+    color: 'red',
+    hand: [
+      { id: 'a', color: 'red', value: '7' },
+      { id: 'b', color: 'green', value: '2' }
+    ],
+    legalMoves: ['a'],
+    canDraw: true,
+    scores: [0, 40],
+    lastEvent: 'Tocca a te'
+  }
+};
+renderUno(unoState, { mine: 0, active: true, busy: false, move: m => played.push(m) });
+const cards = document.querySelectorAll('#uno-hand button');
+assert.equal(cards.length, 2);
+assert.equal(cards[1].disabled, true);
+assert.equal(document.getElementById('uno-active-color').textContent, 'Colore · Rosso');
+assert.match(document.getElementById('uno-score').textContent, /Ada 40/);
+document.getElementById('uno-call-with-card').checked = true;
+cards[0].click();
+assert.deepEqual(played, [{ kind: 'play', card: 'a', color: 'blue', uno: true }]);
+renderUno(unoState, { mine: -1, active: false, busy: false, move: () => {} });
+assert.match(document.getElementById('uno-hand').textContent, /private/);
+
+console.log(
+  'PASS App modules: game info, pieces, preferences, debug log, themes, leaderboard, avatar, chat, Forza 4, UNO.'
+);

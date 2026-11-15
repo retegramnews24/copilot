@@ -1,6 +1,6 @@
 {
   "name": "binottoland-motore",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,8 +15,8 @@
     "test:ui": "node tests/ui-scopa.test.mjs",
     "test:simulator": "node tests/simulator-physics.test.js && node tests/simulator.test.js && node tests/simulator-sessions.test.js && node tests/simulator-pitwall.test.js && node tests/simulator-progression.test.js && node tests/simulator-championship.test.js && node tests/simulator-calendar-approval.test.js && node tests/simulator-layout.test.js && node tests/simulator-cockpit.test.js && node tests/simulator-presets.test.js && node tests/simulator-commentary.test.js && node tests/simulator-sponsor.test.js && node tests/simulator-ai.test.js && node tests/simulator-notify.test.js && node tests/simulator-summary.test.js && node tests/simulator-ui.test.js && node tests/simulator-runtime.test.js",
     "test:access": "node tests/access-runtime.test.js",
-    "format:simulator": "prettier --write \"simulator/*.js\" \"public/simulator/*.{js,css}\" public/radio.js public/swipe.js public/window-mode.js public/pieces.js public/game-info.js public/prefs.js public/debug-log.js public/themes.js public/settings.js public/leaderboard.js public/cinema-lobby.js scripts/release.mjs tests/encoding.test.js tests/lobby-modules.test.mjs tests/app-modules.test.mjs",
-    "format:check": "prettier --check auth.js \"simulator/*.js\" \"public/simulator/*.{js,css}\" public/radio.js public/swipe.js public/window-mode.js public/pieces.js public/game-info.js public/prefs.js public/debug-log.js public/themes.js public/settings.js public/leaderboard.js public/cinema-lobby.js scripts/release.mjs tests/encoding.test.js tests/lobby-modules.test.mjs tests/app-modules.test.mjs"
+    "format:simulator": "prettier --write \"simulator/*.js\" \"public/simulator/*.{js,css}\" public/radio.js public/swipe.js public/window-mode.js public/pieces.js public/game-info.js public/prefs.js public/debug-log.js public/themes.js public/settings.js public/leaderboard.js public/cinema-lobby.js public/avatar.js public/chat.js public/uno-ui.js public/connect4-ui.js scripts/release.mjs tests/encoding.test.js tests/lobby-modules.test.mjs tests/app-modules.test.mjs",
+    "format:check": "prettier --check auth.js \"simulator/*.js\" \"public/simulator/*.{js,css}\" public/radio.js public/swipe.js public/window-mode.js public/pieces.js public/game-info.js public/prefs.js public/debug-log.js public/themes.js public/settings.js public/leaderboard.js public/cinema-lobby.js public/avatar.js public/chat.js public/uno-ui.js public/connect4-ui.js scripts/release.mjs tests/encoding.test.js tests/lobby-modules.test.mjs tests/app-modules.test.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

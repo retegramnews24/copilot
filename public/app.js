@@ -17,13 +17,18 @@ import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=64a501b9f0';
 import {renderLeaders,renderNumberLeaders,createLeaderboardLoader} from './leaderboard.js?v=6ae06cf3ca';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
+import {makeAvatar} from './avatar.js?v=7a059821b4';
+import {createChat} from './chat.js?v=532b8aadbd';
+import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
+import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.15',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.16',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
+const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
 initCatalog();
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
@@ -40,7 +45,7 @@ setInterval(()=>{if(!$('page-game')?.hidden)loadSimSummary()},15000);
 let sessionRefresh=null;
 async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return sessionRefresh;const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.expires>Date.now()+3600000)return;sessionRefresh=(async()=>{const r=await fetch('/api/session/refresh',{method:'POST',headers:{Authorization:'Bearer '+sessionToken}});const value=await r.json();if(!r.ok)throw Error(value.error);sessionToken=value.token;})().finally(()=>sessionRefresh=null);return sessionRefresh;}
 setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
-let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=false;
+let sessionToken='',identity=null,onlineUsers=[];
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
 let replayFrames=[],replayPly=null,replayTimer=null,replayRevision=null,replayLoading=false;
@@ -65,15 +70,6 @@ function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
  $('profile-username').textContent=identity?.username?'@'+identity.username:identity?'Account Telegram':'';
-}
-function makeAvatar(user){
- const avatar=document.createElement('span');avatar.className='avatar';
- avatar.textContent=(user.name||'?').trim().split(/\s+/).slice(0,2).map(word=>[...word][0]).join('').toUpperCase();
- const photo=user.photo||'';
- if(photo.startsWith('https://')){
-  const image=document.createElement('img');image.alt='';image.referrerPolicy='no-referrer';image.src=photo;image.onerror=()=>image.remove();avatar.append(image);
- }
- return avatar;
 }
 function renderLobby(){
  $('open-blackboard').disabled=!identity||blackboardOpening;
@@ -191,7 +187,7 @@ function stopRoom(){
 }
 function showLobby(){
  stopRoom();room=null;state=null;credentials={};$('table').hidden=true;$('lobby').hidden=false;
- $('log').replaceChildren();err('');renderLobby();scrollChatToLatest();sendPresence();
+ $('log').replaceChildren();err('');renderLobby();chat.scrollToLatest();sendPresence();
 }
 function discardResult(keepalive=false){
  if(!room||!state||state.archived||ongoing(state)||!state.players.some(p=>p.id===credentials.player))return;
@@ -301,7 +297,7 @@ function connectLobby(){
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
- socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chatMessages=data.messages||[];renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
+ socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
  socket.onclose=()=>{trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
@@ -415,7 +411,7 @@ function selectPage(page){
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===activeTab;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1});
  document.querySelectorAll('.page').forEach(section=>section.hidden=section.id!=='page-'+page);
  if(page!=='game')stopReplay();trace('UI','Pagina '+page);
- if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game'){loadSimSummary(true);limitChat()}if(page==='game')requestAnimationFrame(fitBoard);
+ if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game'){loadSimSummary(true);chat.limit()}if(page==='game')requestAnimationFrame(fitBoard);
 }
 function navigate(page){
  if(busy)return;
@@ -493,30 +489,12 @@ function renderMoveStrip(){
  updateReplayControls();requestAnimationFrame(fitBoard);
 }
 function renderUno(){
- const u=state.uno,mine=state.players.findIndex(p=>p.id===credentials.player),waiting=state.phase==='waiting',active=canMove();
- $('uno-message').textContent=waiting?state.players.length+'/10 giocatori · '+(mine===0?'Avvia quando siete pronti.':'Attendi che il creatore avvii.'):u.lastEvent;
- $('uno-top').replaceChildren(unoCard(u.top));$('uno-active-color').textContent=u.color?'Colore · '+unoNames[u.color]:'Scegli il colore iniziale';$('uno-active-color').dataset.color=u.color||'';
- $('uno-draw').hidden=waiting||mine<0||state.phase==='finished';$('uno-draw').disabled=!active||!u.canDraw;
- $('uno-pass').hidden=!active||!u.canPass;$('uno-color-row').hidden=mine<0||waiting||state.phase==='finished';
- $('uno-opening-color').hidden=!active||!u.chooseColor;
- $('uno-accept-four').hidden=$('uno-challenge-four').hidden=!active||!u.decidePenalty;
- $('uno-declare').hidden=busy||state.phase!=='playing'||!u.canDeclare;
- $('uno-catch').hidden=busy||state.phase!=='playing'||!u.canCatch;
- $('uno-call-option').hidden=!active||u.hand.length!==2||!u.legalMoves.length;
- $('uno-score').textContent=waiting?'':('Manche '+(u.round||1)+' · traguardo 500 · '+(u.scores||[]).map((points,i)=>state.players[i].name+' '+points).join(' · '));
- const revealed=$('uno-revealed');revealed.hidden=!u.shownHand?.length;revealed.replaceChildren(...(u.shownHand||[]).map(c=>unoCard(c)));
- const hand=$('uno-hand');hand.replaceChildren();
- if(mine<0||waiting){const p=document.createElement('p');p.className='hint';p.textContent=mine<0?'Le mani dei giocatori sono private.':'Sette carte a testa all’avvio.';hand.append(p)}
- else for(const c of u.hand){const b=unoCard(c,true);b.disabled=!active||!u.legalMoves.includes(c.id);b.onclick=()=>{const uno=u.hand.length===2&&$('uno-call-with-card').checked;$('uno-call-with-card').checked=false;sendMove({kind:'play',card:c.id,color:$('uno-color').value,uno,revision:state.revision})};hand.append(b)}
- const history=$('uno-history');history.replaceChildren();for(const m of state.moves.slice(-12).reverse()){const p=document.createElement('p');p.textContent=m.by+' · '+m.description;history.append(p)}
+ renderUnoTable(state,{mine:state.players.findIndex(p=>p.id===credentials.player),active:canMove(),busy,move:a=>sendMove({...a,revision:state.revision})});
 }
 function renderConnect4(){
- const view=replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:state.connect4,board=$('board');
- board.setAttribute('aria-label','Forza 4 · sette colonne, sei righe');board.replaceChildren();$('cancel-capture').hidden=true;
- $('board-hint').textContent=state.phase==='waiting'?'In attesa del secondo giocatore':replayPly!==null?'Rivedi la partita':canMove()?'Scegli una colonna':state.phase==='finished'?view.reason||'Partita conclusa':'Quattro pedine in fila per vincere';
- for(let col=0;col<7;col++){const button=document.createElement('button');button.className='connect4-column';button.disabled=!canMove()||!view.legalMoves.includes(col);button.setAttribute('aria-label','Colonna '+(col+1)+(view.board[col]!==null?' · piena':''));
- for(let row=0;row<6;row++){const i=row*7+col,disc=document.createElement('span');disc.className='connect4-disc'+(view.board[i]===0?' red':view.board[i]===1?' yellow':'')+(view.winning?.includes(i)?' winning':'')+(view.lastMove?.row===row&&view.lastMove.column===col?' latest':'');disc.setAttribute('aria-hidden','true');button.append(disc)}
- button.onclick=()=>sendMove({column:col,revision:state.revision});board.append(button)}
+ const view=replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:state.connect4;
+ $('cancel-capture').hidden=true;
+ drawConnect4($('board'),$('board-hint'),view,{phase:state.phase,replaying:replayPly!==null,active:canMove(),move:a=>sendMove({...a,revision:state.revision})});
  updateReplayControls();requestAnimationFrame(fitBoard);
 }
 function matchingCaptures(){return (state.checkers.legalMoves||[]).filter(m=>capturePath.every((s,i)=>m.path[i]===s))}
@@ -698,7 +676,7 @@ async function startSession(){
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
-  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chatMessages=payload.messages||[];renderLeaders(payload);
+  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);
   renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();blackboard.connect();
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
@@ -717,22 +695,6 @@ function renderSpectators(){
  output.textContent=watchers.length?(watchers.length===1?'Assiste':'Assistono')+' · '+watchers.map(u=>u.name+(u.id===identity?.id?' (tu)':'')).join(', '):'Nessuno spettatore';
 }
 installSwipe({selectPage,beforeShow:page=>{if(page==='games')renderCatalog();if(page==='settings')renderThemePreview()},haptic:()=>tg?.HapticFeedback?.selectionChanged?.()});
-// Box height: exactly the first 20 messages; older ones are reached by scrolling inside it.
-function limitChat(){
- const list=$('chat-messages'),rows=[...list.children];
- if(rows.length<=20||list.offsetParent===null){if(rows.length<=20)list.style.maxHeight='';return}
- const top=list.getBoundingClientRect().top-list.scrollTop,bottom=rows[19].getBoundingClientRect().bottom;
- list.style.maxHeight=Math.ceil(bottom-top+4)+'px';
-}
-addEventListener('resize',limitChat);
-function scrollChatToLatest(){
- limitChat();
- requestAnimationFrame(()=>{
-  const list=$('chat-messages');
-  limitChat();
-  list.scrollTop=0;
- });
-}
 function renderSocial(){
  renderSpectators();
  const connected=lobbyWS?.readyState===1&&!document.hidden;
@@ -751,29 +713,9 @@ function renderSocial(){
   else{const dot=document.createElement('i');dot.className='presence-dot';row.append(dot)}
   $('online-users').append(row);
  }
- const list=$('chat-messages');
- const signature=chatMessages.map(m=>m.id).join(',');
- if(list.dataset.signature!==signature){
-  list.dataset.signature=signature;list.replaceChildren();
-  if(!chatMessages.length){const p=document.createElement('p');p.className='hint';p.textContent='Il posto per due parole tra una partita e l’altra.';list.append(p)}
-  // Newest first under the input; the box shows 20 messages and scrolls for the older ones.
-  for(const message of chatMessages.slice().reverse()){
-   const row=document.createElement('article');row.className='chat-message'+(message.userId===identity?.id?' mine':'');
-   row.append(makeAvatar(message));
-   const copy=document.createElement('div');copy.className='chat-copy';
-   const header=document.createElement('small');header.textContent=message.name+' · '+new Date(message.at).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
-   const text=document.createElement('p');text.textContent=message.text;copy.append(header,text);row.append(copy);list.append(row);
-  }
-  scrollChatToLatest();
- }
- $('chat-send').disabled=chatSending||!identity||!connected;
+ chat.render(connected);
 }
 
-$('chat-form').onsubmit=async event=>{
- event.preventDefault();if(chatSending)return;const input=$('chat-input'),text=input.value.trim();if(!text)return;chatSending=true;
- $('chat-send').disabled=true;
- try{const result=await request('/api/chat',{text});if(result.message&&!chatMessages.some(m=>m.id===result.message.id))chatMessages=[...chatMessages,result.message].slice(-100);if(input.value.trim()===text)input.value='';err('');renderSocial();$('chat-messages').scrollTop=$('chat-messages').scrollHeight}catch(e){err(e.message)}finally{chatSending=false;renderSocial()}
-};
 setInterval(()=>{if(!document.hidden)sendPresence()},25000);
 window.addEventListener('pagehide',event=>{if(!event.persisted)discardResult(true);sendPresence(true);lobbyWS?.close()});
 
