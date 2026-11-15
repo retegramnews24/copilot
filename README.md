@@ -33,7 +33,7 @@ npm run dev     # Worker locale con wrangler
 npm test        # motori dei giochi, rendering, radio, cinema, simulatore
 ```
 
-Altri controlli: `npm run test:simulator`, `npm run test:access`, `npm run test:table-runtime`, `npm run test:multiplayer-runtime`, `npm run test:ui`.
+Altri controlli: `npm run test:simulator`, `npm run test:access`, `npm run test:table-runtime`, `npm run test:multiplayer-runtime`, `npm run test:ui`. Formattazione: `npm run format:simulator` e `npm run format:check`.
 
 Controlli locali eseguiti con API Durable Object e DOM simulati: identità firmata, autorizzazioni, partite, patta, archivio/replay, presenza/chat, accesso automatico con Telegram e navigazione/radio. La verifica degli stream e della resa audio nel client Telegram richiede dispositivi reali.
 

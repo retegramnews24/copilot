@@ -1,0 +1,4 @@
+# Dati dei circuiti (coordinate), non codice: restano compatti.
+public/simulator/geometry.js
+node_modules/
+.test-bundle/

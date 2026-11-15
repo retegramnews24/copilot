@@ -1,76 +1,837 @@
-import {approvalState,resetApproval,calendarAction} from './calendar-approval.js';
-import {incidentPlan,applyIncidents,progressionReward} from './race-events.js';
-import {engineering} from './engineering.js';
-import {standings,archiveChampionship,TEAM_PRIZES,DRIVER_PRIZES} from './championship.js';
-import {advanceSessions,sessionPresence,sessionAction,sessionView,sessionAlarm,qualifyingOrder,qualifyingLocked} from './sessions.js';
+import { approvalState, resetApproval, calendarAction } from './calendar-approval.js';
+import { incidentPlan, applyIncidents, progressionReward } from './race-events.js';
+import { engineering } from './engineering.js';
+import { standings, archiveChampionship, TEAM_PRIZES, DRIVER_PRIZES } from './championship.js';
+import {
+  advanceSessions,
+  sessionPresence,
+  sessionAction,
+  sessionView,
+  sessionAlarm,
+  qualifyingOrder,
+  qualifyingLocked
+} from './sessions.js';
 // Pure authoritative rules. The browser submits intentions, never money or race positions.
-import {TRACKS,PROFILES,lapsFor,weatherAt,metrics,deltaFor,consume,stopPlan,pitService} from './physics.js';
-export {TRACKS};
-export const ROLES=['driver','motor','aero','mechanic','engine'];
-export const LAPS=24;
-const MINUTE=60000, DAY=86400000;
-export const level=t=>1+Math.floor(t.xp/300);
-export const payroll=t=>[...t.drivers,...Object.values(t.crew)].reduce((n,p)=>n+(p?.salary||0),0);
-export const ready=t=>!!t&&t.drivers.every(Boolean)&&Object.values(t.crew).every(Boolean)&&!!t.engine;
-const fail=m=>{throw Error(m)};
-const number=(v,a,b)=>{if(typeof v!=='number'||!Number.isFinite(v)||v<a||v>b)fail('Valore fuori intervallo.');return v};
-const integer=(v,a,b)=>{number(v,a,b);if(!Number.isInteger(v))fail('Serve un numero intero.');return v};
-const text=(v,n)=>{if(typeof v!=='string'||!v.trim()||v.length>n)fail('Testo non valido.');return v.trim()};
-export function strategy(v={}){return {wing:50,brake:56,compound:'medium',pitLap:12,wearAt:30,fuel:65,refuel:40,pace:'normal',...v}}
-function checkedStrategy(v){const r={};for(const [k,a,b] of [['wing',0,100],['brake',45,65],['pitLap',1,60],['wearAt',10,80],['fuel',10,110],['refuel',0,110]])r[k]=number(v[k],a,b);if(!['soft','medium','hard','inter','wet'].includes(v.compound)||!['save','normal','push'].includes(v.pace))fail('Strategia non valida.');if(!Number.isInteger(r.pitLap))fail('Il giro pit deve essere intero.');r.compound=v.compound;r.pace=v.pace;if(v.stops!==undefined){if(!Array.isArray(v.stops)||v.stops.length>3)fail('Massimo tre soste programmate.');let previous=0;r.stops=v.stops.map(p=>{const lap=integer(p.lap,1,60);if(lap<=previous||!['soft','medium','hard','inter','wet'].includes(p.compound))fail('Ordina i giri delle soste.');previous=lap;return {lap,compound:p.compound,refuel:number(p.refuel,0,110)}})}return r}
-export function initial(now){return {schema:1,season:1,round:0,teams:{},offers:[],marketDay:-1,proposals:[],votes:{},schedule:null,chat:[],events:[],race:null,results:[],revision:0,created:now}}
-export function newTeam(u){return {id:u.id,principal:u.name,name:'Scuderia '+u.name.slice(0,22),cash:10000000,xp:0,points:0,colors:['#f14e58','#ffd475','#e9f5ff'],count:2,drivers:[null,null],crew:{motor:null,aero:null,mechanic:null},engine:null,aero:1,chassis:1,strategies:[strategy(),strategy()],enrolled:false,seen:0}}
-function rng(seed){return()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296}}
-function hash(s){let h=2166136261;for(const c of s)h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0}
-export function refreshMarket(s,now){const day=Math.floor(now/DAY);const sameDay=s.marketDay===day;const tiers=Math.min(10,Math.max(2,...Object.values(s.teams).map(t=>level(t)+1)));if(sameDay&&Math.max(0,...s.offers.map(o=>o.tier))>=tiers)return;const existing=new Map((sameDay?s.offers:[]).map(o=>[o.id,o]));s.marketDay=day;s.offers=[];const random=rng(day);const first=['Luca','Nico','Hugo','Enzo','Marco','Alex','Daniel','Oscar','Leo','Matteo','Elena','Sofia','Tom','Andrea','Maya','Clara'];const last=['Venturi','Serra','Costa','Moretti','Riva','Weber','Silva','Ferri','Conti','Bianchi','Martin','Rossi'];for(let tier=1;tier<=tiers;tier++)for(const role of ROLES)for(let i=0;i<10;i++){const skill=Math.min(99,42+tier*4+Math.floor(random()*15));s.offers.push({id:`${day}-${tier}-${role}-${i}`,role,tier,name:role==='engine'?`${['Vortex','Aurora','Tempesta'][i%3]} PU ${tier}.${i+1}`:first[Math.floor(random()*first.length)]+' '+last[Math.floor(random()*last.length)],skill,consistency:Math.min(99,skill+Math.floor(random()*12)-6),tyres:Math.min(99,skill+Math.floor(random()*12)-6),fee:Math.round((role==='engine'?550000:role==='driver'?350000:220000)*(1+tier*.35+random()*.6)),salary:role==='engine'?0:Math.round((role==='driver'?26000:18000)*(1+tier*.3)),sold:null})}s.offers=s.offers.map(o=>existing.get(o.id)||o)}
-function event(s,message,now){s.events.unshift({text:message,at:now});s.events=s.events.slice(0,40)}
+import {
+  TRACKS,
+  PROFILES,
+  lapsFor,
+  weatherAt,
+  metrics,
+  deltaFor,
+  consume,
+  stopPlan,
+  pitService
+} from './physics.js';
+export { TRACKS };
+export const ROLES = ['driver', 'motor', 'aero', 'mechanic', 'engine'];
+export const LAPS = 24;
+const MINUTE = 60000,
+  DAY = 86400000;
+export const level = t => 1 + Math.floor(t.xp / 300);
+export const payroll = t =>
+  [...t.drivers, ...Object.values(t.crew)].reduce((n, p) => n + (p?.salary || 0), 0);
+export const ready = t =>
+  !!t && t.drivers.every(Boolean) && Object.values(t.crew).every(Boolean) && !!t.engine;
+const fail = m => {
+  throw Error(m);
+};
+const number = (v, a, b) => {
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < a || v > b) fail('Valore fuori intervallo.');
+  return v;
+};
+const integer = (v, a, b) => {
+  number(v, a, b);
+  if (!Number.isInteger(v)) fail('Serve un numero intero.');
+  return v;
+};
+const text = (v, n) => {
+  if (typeof v !== 'string' || !v.trim() || v.length > n) fail('Testo non valido.');
+  return v.trim();
+};
+export function strategy(v = {}) {
+  return {
+    wing: 50,
+    brake: 56,
+    compound: 'medium',
+    pitLap: 12,
+    wearAt: 30,
+    fuel: 65,
+    refuel: 40,
+    pace: 'normal',
+    ...v
+  };
+}
+function checkedStrategy(v) {
+  const r = {};
+  for (const [k, a, b] of [
+    ['wing', 0, 100],
+    ['brake', 45, 65],
+    ['pitLap', 1, 60],
+    ['wearAt', 10, 80],
+    ['fuel', 10, 110],
+    ['refuel', 0, 110]
+  ])
+    r[k] = number(v[k], a, b);
+  if (
+    !['soft', 'medium', 'hard', 'inter', 'wet'].includes(v.compound) ||
+    !['save', 'normal', 'push'].includes(v.pace)
+  )
+    fail('Strategia non valida.');
+  if (!Number.isInteger(r.pitLap)) fail('Il giro pit deve essere intero.');
+  r.compound = v.compound;
+  r.pace = v.pace;
+  if (v.stops !== undefined) {
+    if (!Array.isArray(v.stops) || v.stops.length > 3) fail('Massimo tre soste programmate.');
+    let previous = 0;
+    r.stops = v.stops.map(p => {
+      const lap = integer(p.lap, 1, 60);
+      if (lap <= previous || !['soft', 'medium', 'hard', 'inter', 'wet'].includes(p.compound))
+        fail('Ordina i giri delle soste.');
+      previous = lap;
+      return { lap, compound: p.compound, refuel: number(p.refuel, 0, 110) };
+    });
+  }
+  return r;
+}
+export function initial(now) {
+  return {
+    schema: 1,
+    season: 1,
+    round: 0,
+    teams: {},
+    offers: [],
+    marketDay: -1,
+    proposals: [],
+    votes: {},
+    schedule: null,
+    chat: [],
+    events: [],
+    race: null,
+    results: [],
+    revision: 0,
+    created: now
+  };
+}
+export function newTeam(u) {
+  return {
+    id: u.id,
+    principal: u.name,
+    name: 'Scuderia ' + u.name.slice(0, 22),
+    cash: 10000000,
+    xp: 0,
+    points: 0,
+    colors: ['#f14e58', '#ffd475', '#e9f5ff'],
+    count: 2,
+    drivers: [null, null],
+    crew: { motor: null, aero: null, mechanic: null },
+    engine: null,
+    aero: 1,
+    chassis: 1,
+    strategies: [strategy(), strategy()],
+    enrolled: false,
+    seen: 0
+  };
+}
+function rng(seed) {
+  return () => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+}
+function hash(s) {
+  let h = 2166136261;
+  for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+  return h >>> 0;
+}
+export function refreshMarket(s, now) {
+  const day = Math.floor(now / DAY);
+  const sameDay = s.marketDay === day;
+  const tiers = Math.min(10, Math.max(2, ...Object.values(s.teams).map(t => level(t) + 1)));
+  if (sameDay && Math.max(0, ...s.offers.map(o => o.tier)) >= tiers) return;
+  const existing = new Map((sameDay ? s.offers : []).map(o => [o.id, o]));
+  s.marketDay = day;
+  s.offers = [];
+  const random = rng(day);
+  const first = [
+    'Luca',
+    'Nico',
+    'Hugo',
+    'Enzo',
+    'Marco',
+    'Alex',
+    'Daniel',
+    'Oscar',
+    'Leo',
+    'Matteo',
+    'Elena',
+    'Sofia',
+    'Tom',
+    'Andrea',
+    'Maya',
+    'Clara'
+  ];
+  const last = [
+    'Venturi',
+    'Serra',
+    'Costa',
+    'Moretti',
+    'Riva',
+    'Weber',
+    'Silva',
+    'Ferri',
+    'Conti',
+    'Bianchi',
+    'Martin',
+    'Rossi'
+  ];
+  for (let tier = 1; tier <= tiers; tier++)
+    for (const role of ROLES)
+      for (let i = 0; i < 10; i++) {
+        const skill = Math.min(99, 42 + tier * 4 + Math.floor(random() * 15));
+        s.offers.push({
+          id: `${day}-${tier}-${role}-${i}`,
+          role,
+          tier,
+          name:
+            role === 'engine'
+              ? `${['Vortex', 'Aurora', 'Tempesta'][i % 3]} PU ${tier}.${i + 1}`
+              : first[Math.floor(random() * first.length)] + ' ' + last[Math.floor(random() * last.length)],
+          skill,
+          consistency: Math.min(99, skill + Math.floor(random() * 12) - 6),
+          tyres: Math.min(99, skill + Math.floor(random() * 12) - 6),
+          fee: Math.round(
+            (role === 'engine' ? 550000 : role === 'driver' ? 350000 : 220000) *
+              (1 + tier * 0.35 + random() * 0.6)
+          ),
+          salary: role === 'engine' ? 0 : Math.round((role === 'driver' ? 26000 : 18000) * (1 + tier * 0.3)),
+          sold: null
+        });
+      }
+  s.offers = s.offers.map(o => existing.get(o.id) || o);
+}
+function event(s, message, now) {
+  s.events.unshift({ text: message, at: now });
+  s.events = s.events.slice(0, 40);
+}
 // Europe/Rome civil times, including DST. A nonexistent spring-forward time is rejected.
-export function localTime(date,time){const formatter=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});let stamp=Date.parse(`${date}T${time}:00Z`);if(!Number.isFinite(stamp))fail('Data non valida.');const target=stamp;for(let n=0;n<3;n++){const p=Object.fromEntries(formatter.formatToParts(stamp).map(x=>[x.type,x.value]));const shown=Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);const delta=target-shown;if(delta===0)return stamp;stamp+=delta}fail('Orario inesistente per il cambio dell’ora.');}
-export function calendar(p,now){
- const raw=Array.isArray(p.slots)?p.slots:(Array.isArray(p.days)?p.days.map(day=>({day,times:p.times})):[]);
- if(!raw.length||raw.length>7)fail('Scegli almeno un giorno.');const slots=raw.map(slot=>{const day=integer(slot.day,0,6);if(!Array.isArray(slot.times)||![1,2].includes(slot.times.length))fail('Scegli una o due gare al giorno.');const times=[...slot.times].sort();if(times.some(t=>typeof t!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(t)))fail('Orario non valido.');if(new Set(times).size!==times.length)fail('Orari duplicati.');return {day,times}}).sort((a,b)=>a.day-b.day);
- const days=slots.map(s=>s.day);if(new Set(days).size!==days.length)fail('Giorno duplicato.');
- if(typeof p.start!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(p.start))fail('Data non valida.');const start=Date.parse(p.start+'T12:00Z');if(!Number.isFinite(start)||new Date(start).toISOString().slice(0,10)!==p.start||start<now-DAY||start>now+90*DAY)fail('Scegli una data entro 90 giorni.');
- const dates=[];for(let d=0;d<100&&dates.length<13;d++){const dt=new Date(start+d*DAY),slot=slots.find(s=>s.day===(dt.getUTCDay()+6)%7);if(!slot)continue;for(const time of slot.times){const stamp=localTime(dt.toISOString().slice(0,10),time);if(stamp<now+30*MINUTE)fail('La prima gara deve iniziare tra almeno 30 minuti.');if(dates.length&&stamp-dates.at(-1)<90*MINUTE)fail('Lascia almeno 90 minuti tra le gare.');dates.push(stamp);if(dates.length===13)break}}
- if(dates.length!==13)fail('Calendario incompleto.');return {slots,days,times:[...new Set(slots.flatMap(s=>s.times))].sort(),daily:Math.max(...slots.map(s=>s.times.length)),start:p.start,dates,timeZone:'Europe/Rome'};
+export function localTime(date, time) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Rome',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23'
+  });
+  let stamp = Date.parse(`${date}T${time}:00Z`);
+  if (!Number.isFinite(stamp)) fail('Data non valida.');
+  const target = stamp;
+  for (let n = 0; n < 3; n++) {
+    const p = Object.fromEntries(formatter.formatToParts(stamp).map(x => [x.type, x.value]));
+    const shown = Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`);
+    const delta = target - shown;
+    if (delta === 0) return stamp;
+    stamp += delta;
+  }
+  fail('Orario inesistente per il cambio dell’ora.');
 }
-function locked(s,t){return !!s.race?.active&&s.race.cars.some(c=>c.team===t.id)}
-export function act(s,u,b,now){let t=s.teams[u.id];if(b.action==='create'){if(t)return;if(Object.keys(s.teams).length>=64)fail('Campionato al completo (64 scuderie).');t=s.teams[u.id]=newTeam(u);event(s,t.name+' entra nel paddock.',now);return} if(b.action==='chat'){const requestId=typeof b.requestId==='string'&&/^[a-zA-Z0-9-]{1,64}$/.test(b.requestId)?b.requestId:null;if(requestId&&s.chat.some(m=>m.sender===u.id&&m.requestId===requestId))return;s.chatRate??={};if(now-(s.chatRate[u.id]||t?.lastChat||0)<2000)fail('Attendi un momento prima di scrivere.');s.chat.push({id:crypto.randomUUID(),sender:u.id,requestId,name:t?.principal||u.name||'Utente Telegram',team:t?.name||'Community',text:text(b.text,500),at:now});s.chat=s.chat.slice(-100);s.chatRate[u.id]=now;if(t)t.lastChat=now;return}
- if(!t)fail('Crea prima la tua scuderia.');
- if(b.action==='presence'){t.seen=b.visible?now:0;sessionPresence(s,t,!!b.visible,now);return}
- if(b.action.startsWith('session-'))return sessionAction(s,t,b,now);
+export function calendar(p, now) {
+  const raw = Array.isArray(p.slots)
+    ? p.slots
+    : Array.isArray(p.days)
+      ? p.days.map(day => ({ day, times: p.times }))
+      : [];
+  if (!raw.length || raw.length > 7) fail('Scegli almeno un giorno.');
+  const slots = raw
+    .map(slot => {
+      const day = integer(slot.day, 0, 6);
+      if (!Array.isArray(slot.times) || ![1, 2].includes(slot.times.length))
+        fail('Scegli una o due gare al giorno.');
+      const times = [...slot.times].sort();
+      if (times.some(t => typeof t !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(t)))
+        fail('Orario non valido.');
+      if (new Set(times).size !== times.length) fail('Orari duplicati.');
+      return { day, times };
+    })
+    .sort((a, b) => a.day - b.day);
+  const days = slots.map(s => s.day);
+  if (new Set(days).size !== days.length) fail('Giorno duplicato.');
+  if (typeof p.start !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(p.start)) fail('Data non valida.');
+  const start = Date.parse(p.start + 'T12:00Z');
+  if (
+    !Number.isFinite(start) ||
+    new Date(start).toISOString().slice(0, 10) !== p.start ||
+    start < now - DAY ||
+    start > now + 90 * DAY
+  )
+    fail('Scegli una data entro 90 giorni.');
+  const dates = [];
+  for (let d = 0; d < 100 && dates.length < 13; d++) {
+    const dt = new Date(start + d * DAY),
+      slot = slots.find(s => s.day === (dt.getUTCDay() + 6) % 7);
+    if (!slot) continue;
+    for (const time of slot.times) {
+      const stamp = localTime(dt.toISOString().slice(0, 10), time);
+      if (stamp < now + 30 * MINUTE) fail('La prima gara deve iniziare tra almeno 30 minuti.');
+      if (dates.length && stamp - dates.at(-1) < 90 * MINUTE) fail('Lascia almeno 90 minuti tra le gare.');
+      dates.push(stamp);
+      if (dates.length === 13) break;
+    }
+  }
+  if (dates.length !== 13) fail('Calendario incompleto.');
+  return {
+    slots,
+    days,
+    times: [...new Set(slots.flatMap(s => s.times))].sort(),
+    daily: Math.max(...slots.map(s => s.times.length)),
+    start: p.start,
+    dates,
+    timeZone: 'Europe/Rome'
+  };
+}
+function locked(s, t) {
+  return !!s.race?.active && s.race.cars.some(c => c.team === t.id);
+}
+export function act(s, u, b, now) {
+  let t = s.teams[u.id];
+  if (b.action === 'create') {
+    if (t) return;
+    if (Object.keys(s.teams).length >= 64) fail('Campionato al completo (64 scuderie).');
+    t = s.teams[u.id] = newTeam(u);
+    event(s, t.name + ' entra nel paddock.', now);
+    return;
+  }
+  if (b.action === 'chat') {
+    const requestId =
+      typeof b.requestId === 'string' && /^[a-zA-Z0-9-]{1,64}$/.test(b.requestId) ? b.requestId : null;
+    if (requestId && s.chat.some(m => m.sender === u.id && m.requestId === requestId)) return;
+    s.chatRate ??= {};
+    if (now - (s.chatRate[u.id] || t?.lastChat || 0) < 2000) fail('Attendi un momento prima di scrivere.');
+    s.chat.push({
+      id: crypto.randomUUID(),
+      sender: u.id,
+      requestId,
+      name: t?.principal || u.name || 'Utente Telegram',
+      team: t?.name || 'Community',
+      text: text(b.text, 500),
+      at: now
+    });
+    s.chat = s.chat.slice(-100);
+    s.chatRate[u.id] = now;
+    if (t) t.lastChat = now;
+    return;
+  }
+  if (!t) fail('Crea prima la tua scuderia.');
+  if (b.action === 'presence') {
+    t.seen = b.visible ? now : 0;
+    sessionPresence(s, t, !!b.visible, now);
+    return;
+  }
+  if (b.action.startsWith('session-')) return sessionAction(s, t, b, now);
 
- if(b.action==='live'){const r=s.race;if(!r?.active)fail('Nessuna gara in corso.');const c=r.cars.find(c=>c.team===t.id&&c.slot===b.slot);if(!c||c.finished||c.dnf)fail('Vettura non disponibile.');const plan=checkedStrategy(b.strategy);c.appliedWing??=c.strategy.wing;c.strategy=plan;if(typeof b.pit==='boolean')c.pitRequested=b.pit;t.seen=now;return}
- if(qualifyingLocked(s,t,now)&&['hire','upgrade','identity'].includes(b.action))fail('Organico e vettura bloccati dalle qualifiche alla gara.');
- if(locked(s,t))fail('Attendi la fine della gara per modificare la scuderia.');
- if(b.action==='identity'){t.name=text(b.name,32);if(!Array.isArray(b.colors)||b.colors.length!==3||b.colors.some(c=>!/^#[0-9a-f]{6}$/i.test(c)))fail('Colori non validi.');t.colors=b.colors;t.count=integer(b.count,1,3);return}
- if(b.action==='hire'){refreshMarket(s,now);const o=s.offers.find(o=>o.id===b.offer);if(!o||o.sold)fail('Contratto già assegnato o scaduto.');if(o.tier>level(t))fail('Livello insufficiente.');if(t.cash<o.fee+payroll(t)+o.salary)fail('Budget insufficiente, inclusi gli stipendi.');if(o.role==='driver')t.drivers[integer(b.slot,0,1)]={...o,points:0};else if(o.role==='engine')t.engine={...o};else t.crew[o.role]={...o};t.cash-=o.fee;o.sold=t.id;event(s,t.name+' ingaggia '+o.name+'.',now);return}
- if(b.action==='upgrade'){if(!['aero','chassis'].includes(b.part))fail('Reparto non valido.');const cost=t[b.part]*350000;if(t[b.part]>=20||t.cash<cost+payroll(t))fail('Sviluppo non disponibile con questo budget.');t.cash-=cost;t[b.part]++;return}
- if(b.action==='strategy'){t.strategies[integer(b.slot,0,1)]=checkedStrategy(b.strategy);return}
- if(['enroll','proposal'].includes(b.action)&&approvalState(s,t.id).allReady&&!s.schedule)fail('Tutti pronti: conferma Si parte!!');
- if(b.action==='enroll'){if(s.schedule)fail('Iscrizioni chiuse: la stagione è stata approvata.');if(!ready(t)||t.cash<payroll(t))fail('Completa i cinque incarichi, acquista un motore e copri gli stipendi.');t.enrolled=!!b.enrolled;resetApproval(s);delete s.votes[t.id];s.proposals=s.proposals.filter(p=>p.author!==t.id);return}
- if(b.action==='proposal'){if(s.schedule||!t.enrolled)fail('Iscriviti prima della votazione.');resetApproval(s);const p={...calendar(b,now),id:crypto.randomUUID(),author:t.id,name:t.name};const old=s.proposals.find(p=>p.author===t.id);if(old)for(const [v,id] of Object.entries(s.votes))if(id===old.id)delete s.votes[v];s.proposals=s.proposals.filter(p=>p.author!==t.id);s.proposals.push(p);event(s,t.name+' propone un calendario.',now);return}
- if(['vote','calendar-ready','calendar-start'].includes(b.action)){calendarAction(s,t,b,now,calendar,()=>TRACKS.map((_,i)=>lapsFor(i)),event);return}
- if(b.action==='next-season'){if(s.round<13||s.race?.active)fail('La stagione non è terminata.');archiveChampionship(s,now);s.season++;s.round=0;s.schedule=null;s.proposals=[];s.votes={};resetApproval(s);s.race=null;s.sessions=null;for(const t of Object.values(s.teams)){t.points=0;t.enrolled=false;for(const d of t.drivers)if(d)d.points=0}event(s,'Aperte le iscrizioni alla stagione '+s.season+'.',now);return}
- fail('Comando sconosciuto.');
+  if (b.action === 'live') {
+    const r = s.race;
+    if (!r?.active) fail('Nessuna gara in corso.');
+    const c = r.cars.find(c => c.team === t.id && c.slot === b.slot);
+    if (!c || c.finished || c.dnf) fail('Vettura non disponibile.');
+    const plan = checkedStrategy(b.strategy);
+    c.appliedWing ??= c.strategy.wing;
+    c.strategy = plan;
+    if (typeof b.pit === 'boolean') c.pitRequested = b.pit;
+    t.seen = now;
+    return;
+  }
+  if (qualifyingLocked(s, t, now) && ['hire', 'upgrade', 'identity'].includes(b.action))
+    fail('Organico e vettura bloccati dalle qualifiche alla gara.');
+  if (locked(s, t)) fail('Attendi la fine della gara per modificare la scuderia.');
+  if (b.action === 'identity') {
+    t.name = text(b.name, 32);
+    if (!Array.isArray(b.colors) || b.colors.length !== 3 || b.colors.some(c => !/^#[0-9a-f]{6}$/i.test(c)))
+      fail('Colori non validi.');
+    t.colors = b.colors;
+    t.count = integer(b.count, 1, 3);
+    return;
+  }
+  if (b.action === 'hire') {
+    refreshMarket(s, now);
+    const o = s.offers.find(o => o.id === b.offer);
+    if (!o || o.sold) fail('Contratto già assegnato o scaduto.');
+    if (o.tier > level(t)) fail('Livello insufficiente.');
+    if (t.cash < o.fee + payroll(t) + o.salary) fail('Budget insufficiente, inclusi gli stipendi.');
+    if (o.role === 'driver') t.drivers[integer(b.slot, 0, 1)] = { ...o, points: 0 };
+    else if (o.role === 'engine') t.engine = { ...o };
+    else t.crew[o.role] = { ...o };
+    t.cash -= o.fee;
+    o.sold = t.id;
+    event(s, t.name + ' ingaggia ' + o.name + '.', now);
+    return;
+  }
+  if (b.action === 'upgrade') {
+    if (!['aero', 'chassis'].includes(b.part)) fail('Reparto non valido.');
+    const cost = t[b.part] * 350000;
+    if (t[b.part] >= 20 || t.cash < cost + payroll(t)) fail('Sviluppo non disponibile con questo budget.');
+    t.cash -= cost;
+    t[b.part]++;
+    return;
+  }
+  if (b.action === 'strategy') {
+    t.strategies[integer(b.slot, 0, 1)] = checkedStrategy(b.strategy);
+    return;
+  }
+  if (['enroll', 'proposal'].includes(b.action) && approvalState(s, t.id).allReady && !s.schedule)
+    fail('Tutti pronti: conferma Si parte!!');
+  if (b.action === 'enroll') {
+    if (s.schedule) fail('Iscrizioni chiuse: la stagione è stata approvata.');
+    if (!ready(t) || t.cash < payroll(t))
+      fail('Completa i cinque incarichi, acquista un motore e copri gli stipendi.');
+    t.enrolled = !!b.enrolled;
+    resetApproval(s);
+    delete s.votes[t.id];
+    s.proposals = s.proposals.filter(p => p.author !== t.id);
+    return;
+  }
+  if (b.action === 'proposal') {
+    if (s.schedule || !t.enrolled) fail('Iscriviti prima della votazione.');
+    resetApproval(s);
+    const p = { ...calendar(b, now), id: crypto.randomUUID(), author: t.id, name: t.name };
+    const old = s.proposals.find(p => p.author === t.id);
+    if (old) for (const [v, id] of Object.entries(s.votes)) if (id === old.id) delete s.votes[v];
+    s.proposals = s.proposals.filter(p => p.author !== t.id);
+    s.proposals.push(p);
+    event(s, t.name + ' propone un calendario.', now);
+    return;
+  }
+  if (['vote', 'calendar-ready', 'calendar-start'].includes(b.action)) {
+    calendarAction(s, t, b, now, calendar, () => TRACKS.map((_, i) => lapsFor(i)), event);
+    return;
+  }
+  if (b.action === 'next-season') {
+    if (s.round < 13 || s.race?.active) fail('La stagione non è terminata.');
+    archiveChampionship(s, now);
+    s.season++;
+    s.round = 0;
+    s.schedule = null;
+    s.proposals = [];
+    s.votes = {};
+    resetApproval(s);
+    s.race = null;
+    s.sessions = null;
+    for (const t of Object.values(s.teams)) {
+      t.points = 0;
+      t.enrolled = false;
+      for (const d of t.drivers) if (d) d.points = 0;
+    }
+    event(s, 'Aperte le iscrizioni alla stagione ' + s.season + '.', now);
+    return;
+  }
+  fail('Comando sconosciuto.');
 }
-function startRace(s,at){const round=s.round;const r={id:`${s.season}-${round}`,round,laps:s.schedule.laps?.[round]??lapsFor(round),active:true,start:at,last:at,wet:weatherAt(round,0,s.season).wet,cars:[],classification:[],events:[],onlineSeconds:{}};for(const id of s.schedule.participants){const t=s.teams[id];if(!ready(t)||t.cash<payroll(t)){event(s,t.name+': non parte (organico o fondi insufficienti).',at);continue}t.cash-=payroll(t);for(let slot=0;slot<2;slot++){const st={...t.strategies[slot]},d=t.drivers[slot];r.cars.push({id:id+':'+slot,team:id,teamName:t.name,slot,name:d.name,driverId:d.id||d.name,colors:t.colors.slice(0,t.count),skill:d.skill,consistency:d.consistency,tyres:d.tyres,motor:t.crew.motor.skill,engine:t.engine.skill,aerodynamic:t.crew.aero.skill,mechanic:t.crew.mechanic.skill,aero:t.aero,chassis:t.chassis,strategy:st,appliedWing:st.wing,compound:st.compound,progress:0,fuel:st.fuel,wear:100,pits:0,pitTime:0,pitRequested:false,lastPlanned:0,lapStarted:at,lastLap:null,best:null,finished:null,dnf:false,speed:0,offline:true,incidents:incidentPlan(rng(hash(r.id+':'+id+':'+slot+':incidents-v1')),r.laps)})}}r.cars=qualifyingOrder(s,r.cars);s.race=r;event(s,TRACKS[round][0]+': semaforo verde.',at)}
-function pit(c,r,now){c.appliedWing=c.strategy.wing;const service=pitService(c,r.round);const repair=c.damage?8:0;service.seconds+=repair;c.damage=false;c.puncture=false;const queue=Math.max(0,...r.cars.filter(x=>x!==c&&x.team===c.team).map(x=>Math.max(0,(x.pitTime||0)-PROFILES[r.round].pitLoss)));c.pitTime=service.seconds+queue;c.pitTotal=c.pitTime;c.pits++;c.pitRequested=false;c.wear=100;c.temperature=65;c.compound=service.plan.compound;c.fuel+=service.added;c.lastPlanned=Math.floor(c.progress);r.events.unshift({text:c.name+' ai box · '+c.compound+' · '+service.added.toFixed(1)+' kg'+(queue?' · attesa compagno':'')+(repair?' · danno riparato (+8 s)':''),at:now});r.events=r.events.slice(0,20)}
-export const sessionDelta=deltaFor;
-function step(s,r,at,dt){const track=TRACKS[r.round],weather=weatherAt(r.round,(at-r.start)/1000,s.season);r.conditions=weather;r.wet=weather.wet;r.onlineSeconds??={};for(const id of new Set(r.cars.map(c=>c.team)))if(s.teams[id].seen>=at-25000&&s.teams[id].seen<=at+1000)r.onlineSeconds[id]=(r.onlineSeconds[id]||0)+dt;for(const c of r.cars)applyIncidents(c,r,at);const snapshots=r.cars.map(c=>({...c,offline:!(s.teams[c.team].seen>=at-25000)}));const positions=new Map(snapshots.map(c=>[c.id,c.progress]));for(const c of r.cars){if(c.finished||c.dnf)continue;let activeDt=dt;if(c.startDelay>0){activeDt=Math.max(0,dt-c.startDelay);c.startDelay=Math.max(0,c.startDelay-dt);if(!activeDt){c.speed=0;continue}}const start=c.progress;c.offline=!(s.teams[c.team].seen>=at-25000);if(c.pitTime>0){const wait=Math.min(activeDt,c.pitTime);c.pitTime-=wait;activeDt-=wait;c.speed=0;if(activeDt<=0)continue}
- const m=metrics(c,track,weather),lap=Math.floor(c.progress);let delta=deltaFor(c,track,weather,activeDt)*(c.offline?.95:1);c.traffic=false;
- // Interaction uses the positions at the start of the tick, never array update order.
- const ahead=snapshots.filter(x=>x.id!==c.id&&!x.dnf&&!x.finished&&!x.pitTime&&positions.get(x.id)>start&&positions.get(x.id)-start<.025).sort((a,b)=>positions.get(a.id)-positions.get(b.id))[0];
- if(ahead&&start>.1){const gap=positions.get(ahead.id)-start,sector=m.profile.sectors[Math.floor((start%1)*120)];c.traffic=true;const straight=sector<.9,advantage=(m.profile.passing*(straight?1:.12))+(c.skill-ahead.skill)*.003;const canPass=straight&&advantage>.08&&m.lap<metrics(ahead,track,weather).lap-(.3+(1-m.profile.passing)*2);if(!canPass)delta=Math.min(delta,Math.max(0,gap-.001)+deltaFor(ahead,track,weather,activeDt)*(ahead.offline?.95:1));c.temperature=(c.temperature??90)+activeDt*.035;}
- const toLine=lap+1-start;const expectedWear=c.wear-toLine*m.wearPerLap,expectedFuel=c.fuel-toLine*m.consumption;const entersPit=lap+1<(r.laps??LAPS)&&(c.pitRequested||lap+1>=stopPlan(c).lap||expectedWear<=c.strategy.wearAt||expectedFuel<m.consumption*1.7);if(entersPit)delta=Math.min(delta,toLine);
- delta=Math.min(delta,(r.laps??LAPS)-start);const fuelDistance=c.fuel/m.consumption;const exhausted=delta>fuelDistance+1e-10;if(exhausted)delta=Math.max(0,fuelDistance);const movedTime=delta>0?activeDt*Math.min(1,delta/(deltaFor(c,track,weather,activeDt)*(c.offline?.95:1))):0;
- consume(c,track,weather,delta,activeDt);c.progress+=delta;c.speed=track[1]*3600*delta/dt;
- if(exhausted){c.dnf=true;c.speed=0;r.events.unshift({text:c.name+' si ritira: carburante esaurito.',at});continue}
- if(c.progress>=(r.laps??LAPS)-1e-9){c.progress=r.laps??LAPS;c.finished=at+(dt-activeDt+movedTime)*1000;r.classification.push(c.id);continue}
- if(Math.floor(c.progress)>lap){const crossing=at+(dt-activeDt+movedTime*(lap+1-start)/Math.max(delta,1e-9))*1000;const elapsed=(crossing-c.lapStarted)/1000;c.lastLap=elapsed;if(!c.lapHadPit)c.best=Math.min(c.best||Infinity,elapsed);c.lapHadPit=false;c.lapStarted=crossing;const planned=Math.floor(c.progress)>=stopPlan(c).lap;const safety=c.wear<=c.strategy.wearAt||c.fuel<c.consumption*1.7;if(c.pitRequested||planned||safety){pit(c,r,crossing);c.pitTime=Math.max(0,c.pitTime-(dt-activeDt+movedTime<dt?dt-(dt-activeDt+movedTime):0));c.lapHadPit=true}}
- }r.events=r.events.slice(0,20);}
-function finish(s,r,now){r.active=false;r.ended=now;const order=[...r.cars].sort((a,b)=>(a.dnf-b.dnf)||(a.finished&&b.finished?a.finished-b.finished:b.progress-a.progress));const points=[25,18,15,12,10,8,6,4,2,1];const paid=new Set();const rows=order.map((c,i)=>{const p=c.dnf?0:points[i]||0;const t=s.teams[c.team];t.points+=p;t.drivers[c.slot].points+=p;if(!paid.has(t.id)){t.cash+=350000;const reward=progressionReward(r,t.id);t.xp+=reward.xp;t.completedRaces=(t.completedRaces||0)+1;t.attendedRaces=(t.attendedRaces||0)+(reward.attended?1:0);paid.add(t.id)}t.cash+=p*6000;return {name:c.name,driverId:c.driverId,teamName:c.teamName,team:c.team,position:i+1,points:p,dnf:c.dnf,dnfReason:c.dnfReason||null,progression:progressionReward(r,c.team),time:c.finished?Math.round((c.finished-r.start)/100)/10:null}});s.results.unshift({id:r.id,season:s.season,round:r.round,at:now,rows});s.results=s.results.slice(0,26);s.round++;event(s,TRACKS[r.round][0]+': gara conclusa, classifica e premi salvati.',now);archiveChampionship(s,now);refreshMarket(s,now)}
-export function advance(s,now){if(!s.schedule&&approvalState(s,'').allReady){const p=s.proposals.find(p=>p.id===approvalState(s,'').proposal);if(p.dates[0]<now+30*MINUTE){resetApproval(s);s.revision++;event(s,'Orario di partenza superato: riformulate la proposta e confermate nuovamente.',now)}}refreshMarket(s,now);advanceSessions(s,now,TRACKS,sessionDelta);archiveChampionship(s,now);let budget=Math.min(3600,Math.max(30,Math.floor(12000/Math.max(1,s.race?.cars.length||Object.keys(s.teams).length*2))));while(s.schedule&&s.round<13){if(!s.race?.active){const date=s.schedule.dates[s.round];if(!Number.isFinite(date)||date>now)break;startRace(s,date)}const r=s.race;while(r.last+1000<=now&&budget-->0&&r.active){step(s,r,r.last,1);r.last+=1000;if(r.cars.every(c=>c.finished||c.dnf)||r.last-r.start>=70*MINUTE)finish(s,r,r.last)}if(r.active||budget<=0)break}}
-function raceAlarm(s,now){if(s.race?.active)return Math.min(now+10000,Math.max(now+1000,s.race.last+10000));if(s.schedule&&s.round<13)return Math.max(now+1000,s.schedule.dates[s.round]);return null}
-export function nextAlarm(s,now){const times=[raceAlarm(s,now),sessionAlarm(s,now)].filter(t=>t!==null);return times.length?Math.min(...times):null}
-export function view(s,u,now){const me=s.teams[u.id]||null;return {viewer:{id:u.id,name:u.name},championship:standings(s,true),archives:s.championships||[],prizes:{teams:TEAM_PRIZES,drivers:DRIVER_PRIZES},online:Object.values(s.visitors||{}).filter(v=>v.seen>now-25000),engineering:engineering(s,me,TRACKS,sessionDelta,s.schedule?.laps?.[s.round]??lapsFor(s.round)),sessions:sessionView(s,me,now),now,revision:s.revision,season:s.season,round:s.round,me,tracks:TRACKS,laps:s.race?.active?s.race.laps:(s.schedule?.laps?.[s.round]??lapsFor(s.round)),trackLaps:s.schedule?.laps??TRACKS.map((_,i)=>lapsFor(i)),conditions:weatherAt(Math.min(s.round,12),0,s.season),teams:Object.values(s.teams).map(t=>({id:t.id,name:t.name,principal:t.principal,points:t.points,level:level(t),colors:t.colors,count:t.count,enrolled:t.enrolled,ready:ready(t),drivers:t.drivers.map(d=>d?{name:d.name,points:d.points}:null)})),market:s.offers.filter(o=>o.tier<=(me?level(me)+1:1)).map(o=>({...o,sold:!!o.sold})),marketRefresh:(s.marketDay+1)*DAY,proposals:s.proposals.map(p=>({...p,votes:Object.entries(s.votes).filter(([id,v])=>s.teams[id]?.enrolled&&v===p.id).length,myVote:s.votes[u.id]===p.id})),approval:approvalState(s,u.id),schedule:s.schedule,chat:s.chat,events:s.events,results:s.results,race:s.race?{id:s.race.id,round:s.race.round,laps:s.race.laps,active:s.race.active,start:s.race.start,last:s.race.last,ended:s.race.ended,wet:s.race.wet,conditions:s.race.conditions,classification:s.race.classification,events:s.race.events,cars:s.race.cars.map(c=>{const own=c.team===u.id;return {id:c.id,team:c.team,teamName:c.teamName,slot:c.slot,name:c.name,grid:c.grid,qualifyingTime:c.qualifyingTime,colors:c.colors,progress:c.progress,compound:c.compound,pits:c.pits,pitTime:c.pitTime,pitTotal:c.pitTotal,finished:c.finished,dnf:c.dnf,dnfReason:c.dnfReason||null,damage:!!c.damage,puncture:!!c.puncture,best:c.best,lastLap:c.lastLap,offline:c.offline,speed:c.speed,own,...(own?{fuel:c.fuel,wear:c.wear,consumption:c.consumption,temperature:c.temperature,grip:c.grip,traffic:c.traffic,fuelAtFinish:c.fuel-(s.race.laps-c.progress)*(c.consumption||0),strategy:c.strategy,appliedWing:c.appliedWing??c.strategy.wing,pitRequested:c.pitRequested}:{})}})}:null}}
+function startRace(s, at) {
+  const round = s.round;
+  const r = {
+    id: `${s.season}-${round}`,
+    round,
+    laps: s.schedule.laps?.[round] ?? lapsFor(round),
+    active: true,
+    start: at,
+    last: at,
+    wet: weatherAt(round, 0, s.season).wet,
+    cars: [],
+    classification: [],
+    events: [],
+    onlineSeconds: {}
+  };
+  for (const id of s.schedule.participants) {
+    const t = s.teams[id];
+    if (!ready(t) || t.cash < payroll(t)) {
+      event(s, t.name + ': non parte (organico o fondi insufficienti).', at);
+      continue;
+    }
+    t.cash -= payroll(t);
+    for (let slot = 0; slot < 2; slot++) {
+      const st = { ...t.strategies[slot] },
+        d = t.drivers[slot];
+      r.cars.push({
+        id: id + ':' + slot,
+        team: id,
+        teamName: t.name,
+        slot,
+        name: d.name,
+        driverId: d.id || d.name,
+        colors: t.colors.slice(0, t.count),
+        skill: d.skill,
+        consistency: d.consistency,
+        tyres: d.tyres,
+        motor: t.crew.motor.skill,
+        engine: t.engine.skill,
+        aerodynamic: t.crew.aero.skill,
+        mechanic: t.crew.mechanic.skill,
+        aero: t.aero,
+        chassis: t.chassis,
+        strategy: st,
+        appliedWing: st.wing,
+        compound: st.compound,
+        progress: 0,
+        fuel: st.fuel,
+        wear: 100,
+        pits: 0,
+        pitTime: 0,
+        pitRequested: false,
+        lastPlanned: 0,
+        lapStarted: at,
+        lastLap: null,
+        best: null,
+        finished: null,
+        dnf: false,
+        speed: 0,
+        offline: true,
+        incidents: incidentPlan(rng(hash(r.id + ':' + id + ':' + slot + ':incidents-v1')), r.laps)
+      });
+    }
+  }
+  r.cars = qualifyingOrder(s, r.cars);
+  s.race = r;
+  event(s, TRACKS[round][0] + ': semaforo verde.', at);
+}
+function pit(c, r, now) {
+  c.appliedWing = c.strategy.wing;
+  const service = pitService(c, r.round);
+  const repair = c.damage ? 8 : 0;
+  service.seconds += repair;
+  c.damage = false;
+  c.puncture = false;
+  const queue = Math.max(
+    0,
+    ...r.cars
+      .filter(x => x !== c && x.team === c.team)
+      .map(x => Math.max(0, (x.pitTime || 0) - PROFILES[r.round].pitLoss))
+  );
+  c.pitTime = service.seconds + queue;
+  c.pitTotal = c.pitTime;
+  c.pits++;
+  c.pitRequested = false;
+  c.wear = 100;
+  c.temperature = 65;
+  c.compound = service.plan.compound;
+  c.fuel += service.added;
+  c.lastPlanned = Math.floor(c.progress);
+  r.events.unshift({
+    text:
+      c.name +
+      ' ai box · ' +
+      c.compound +
+      ' · ' +
+      service.added.toFixed(1) +
+      ' kg' +
+      (queue ? ' · attesa compagno' : '') +
+      (repair ? ' · danno riparato (+8 s)' : ''),
+    at: now
+  });
+  r.events = r.events.slice(0, 20);
+}
+export const sessionDelta = deltaFor;
+function step(s, r, at, dt) {
+  const track = TRACKS[r.round],
+    weather = weatherAt(r.round, (at - r.start) / 1000, s.season);
+  r.conditions = weather;
+  r.wet = weather.wet;
+  r.onlineSeconds ??= {};
+  for (const id of new Set(r.cars.map(c => c.team)))
+    if (s.teams[id].seen >= at - 25000 && s.teams[id].seen <= at + 1000)
+      r.onlineSeconds[id] = (r.onlineSeconds[id] || 0) + dt;
+  for (const c of r.cars) applyIncidents(c, r, at);
+  const snapshots = r.cars.map(c => ({ ...c, offline: !(s.teams[c.team].seen >= at - 25000) }));
+  const positions = new Map(snapshots.map(c => [c.id, c.progress]));
+  for (const c of r.cars) {
+    if (c.finished || c.dnf) continue;
+    let activeDt = dt;
+    if (c.startDelay > 0) {
+      activeDt = Math.max(0, dt - c.startDelay);
+      c.startDelay = Math.max(0, c.startDelay - dt);
+      if (!activeDt) {
+        c.speed = 0;
+        continue;
+      }
+    }
+    const start = c.progress;
+    c.offline = !(s.teams[c.team].seen >= at - 25000);
+    if (c.pitTime > 0) {
+      const wait = Math.min(activeDt, c.pitTime);
+      c.pitTime -= wait;
+      activeDt -= wait;
+      c.speed = 0;
+      if (activeDt <= 0) continue;
+    }
+    const m = metrics(c, track, weather),
+      lap = Math.floor(c.progress);
+    let delta = deltaFor(c, track, weather, activeDt) * (c.offline ? 0.95 : 1);
+    c.traffic = false;
+    // Interaction uses the positions at the start of the tick, never array update order.
+    const ahead = snapshots
+      .filter(
+        x =>
+          x.id !== c.id &&
+          !x.dnf &&
+          !x.finished &&
+          !x.pitTime &&
+          positions.get(x.id) > start &&
+          positions.get(x.id) - start < 0.025
+      )
+      .sort((a, b) => positions.get(a.id) - positions.get(b.id))[0];
+    if (ahead && start > 0.1) {
+      const gap = positions.get(ahead.id) - start,
+        sector = m.profile.sectors[Math.floor((start % 1) * 120)];
+      c.traffic = true;
+      const straight = sector < 0.9,
+        advantage = m.profile.passing * (straight ? 1 : 0.12) + (c.skill - ahead.skill) * 0.003;
+      const canPass =
+        straight &&
+        advantage > 0.08 &&
+        m.lap < metrics(ahead, track, weather).lap - (0.3 + (1 - m.profile.passing) * 2);
+      if (!canPass)
+        delta = Math.min(
+          delta,
+          Math.max(0, gap - 0.001) + deltaFor(ahead, track, weather, activeDt) * (ahead.offline ? 0.95 : 1)
+        );
+      c.temperature = (c.temperature ?? 90) + activeDt * 0.035;
+    }
+    const toLine = lap + 1 - start;
+    const expectedWear = c.wear - toLine * m.wearPerLap,
+      expectedFuel = c.fuel - toLine * m.consumption;
+    const entersPit =
+      lap + 1 < (r.laps ?? LAPS) &&
+      (c.pitRequested ||
+        lap + 1 >= stopPlan(c).lap ||
+        expectedWear <= c.strategy.wearAt ||
+        expectedFuel < m.consumption * 1.7);
+    if (entersPit) delta = Math.min(delta, toLine);
+    delta = Math.min(delta, (r.laps ?? LAPS) - start);
+    const fuelDistance = c.fuel / m.consumption;
+    const exhausted = delta > fuelDistance + 1e-10;
+    if (exhausted) delta = Math.max(0, fuelDistance);
+    const movedTime =
+      delta > 0
+        ? activeDt * Math.min(1, delta / (deltaFor(c, track, weather, activeDt) * (c.offline ? 0.95 : 1)))
+        : 0;
+    consume(c, track, weather, delta, activeDt);
+    c.progress += delta;
+    c.speed = (track[1] * 3600 * delta) / dt;
+    if (exhausted) {
+      c.dnf = true;
+      c.speed = 0;
+      r.events.unshift({ text: c.name + ' si ritira: carburante esaurito.', at });
+      continue;
+    }
+    if (c.progress >= (r.laps ?? LAPS) - 1e-9) {
+      c.progress = r.laps ?? LAPS;
+      c.finished = at + (dt - activeDt + movedTime) * 1000;
+      r.classification.push(c.id);
+      continue;
+    }
+    if (Math.floor(c.progress) > lap) {
+      const crossing = at + (dt - activeDt + (movedTime * (lap + 1 - start)) / Math.max(delta, 1e-9)) * 1000;
+      const elapsed = (crossing - c.lapStarted) / 1000;
+      c.lastLap = elapsed;
+      if (!c.lapHadPit) c.best = Math.min(c.best || Infinity, elapsed);
+      c.lapHadPit = false;
+      c.lapStarted = crossing;
+      const planned = Math.floor(c.progress) >= stopPlan(c).lap;
+      const safety = c.wear <= c.strategy.wearAt || c.fuel < c.consumption * 1.7;
+      if (c.pitRequested || planned || safety) {
+        pit(c, r, crossing);
+        c.pitTime = Math.max(
+          0,
+          c.pitTime - (dt - activeDt + movedTime < dt ? dt - (dt - activeDt + movedTime) : 0)
+        );
+        c.lapHadPit = true;
+      }
+    }
+  }
+  r.events = r.events.slice(0, 20);
+}
+function finish(s, r, now) {
+  r.active = false;
+  r.ended = now;
+  const order = [...r.cars].sort(
+    (a, b) => a.dnf - b.dnf || (a.finished && b.finished ? a.finished - b.finished : b.progress - a.progress)
+  );
+  const points = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
+  const paid = new Set();
+  const rows = order.map((c, i) => {
+    const p = c.dnf ? 0 : points[i] || 0;
+    const t = s.teams[c.team];
+    t.points += p;
+    t.drivers[c.slot].points += p;
+    if (!paid.has(t.id)) {
+      t.cash += 350000;
+      const reward = progressionReward(r, t.id);
+      t.xp += reward.xp;
+      t.completedRaces = (t.completedRaces || 0) + 1;
+      t.attendedRaces = (t.attendedRaces || 0) + (reward.attended ? 1 : 0);
+      paid.add(t.id);
+    }
+    t.cash += p * 6000;
+    return {
+      name: c.name,
+      driverId: c.driverId,
+      teamName: c.teamName,
+      team: c.team,
+      position: i + 1,
+      points: p,
+      dnf: c.dnf,
+      dnfReason: c.dnfReason || null,
+      progression: progressionReward(r, c.team),
+      time: c.finished ? Math.round((c.finished - r.start) / 100) / 10 : null
+    };
+  });
+  s.results.unshift({ id: r.id, season: s.season, round: r.round, at: now, rows });
+  s.results = s.results.slice(0, 26);
+  s.round++;
+  event(s, TRACKS[r.round][0] + ': gara conclusa, classifica e premi salvati.', now);
+  archiveChampionship(s, now);
+  refreshMarket(s, now);
+}
+export function advance(s, now) {
+  if (!s.schedule && approvalState(s, '').allReady) {
+    const p = s.proposals.find(p => p.id === approvalState(s, '').proposal);
+    if (p.dates[0] < now + 30 * MINUTE) {
+      resetApproval(s);
+      s.revision++;
+      event(s, 'Orario di partenza superato: riformulate la proposta e confermate nuovamente.', now);
+    }
+  }
+  refreshMarket(s, now);
+  advanceSessions(s, now, TRACKS, sessionDelta);
+  archiveChampionship(s, now);
+  let budget = Math.min(
+    3600,
+    Math.max(30, Math.floor(12000 / Math.max(1, s.race?.cars.length || Object.keys(s.teams).length * 2)))
+  );
+  while (s.schedule && s.round < 13) {
+    if (!s.race?.active) {
+      const date = s.schedule.dates[s.round];
+      if (!Number.isFinite(date) || date > now) break;
+      startRace(s, date);
+    }
+    const r = s.race;
+    while (r.last + 1000 <= now && budget-- > 0 && r.active) {
+      step(s, r, r.last, 1);
+      r.last += 1000;
+      if (r.cars.every(c => c.finished || c.dnf) || r.last - r.start >= 70 * MINUTE) finish(s, r, r.last);
+    }
+    if (r.active || budget <= 0) break;
+  }
+}
+function raceAlarm(s, now) {
+  if (s.race?.active) return Math.min(now + 10000, Math.max(now + 1000, s.race.last + 10000));
+  if (s.schedule && s.round < 13) return Math.max(now + 1000, s.schedule.dates[s.round]);
+  return null;
+}
+export function nextAlarm(s, now) {
+  const times = [raceAlarm(s, now), sessionAlarm(s, now)].filter(t => t !== null);
+  return times.length ? Math.min(...times) : null;
+}
+export function view(s, u, now) {
+  const me = s.teams[u.id] || null;
+  return {
+    viewer: { id: u.id, name: u.name },
+    championship: standings(s, true),
+    archives: s.championships || [],
+    prizes: { teams: TEAM_PRIZES, drivers: DRIVER_PRIZES },
+    online: Object.values(s.visitors || {}).filter(v => v.seen > now - 25000),
+    engineering: engineering(s, me, TRACKS, sessionDelta, s.schedule?.laps?.[s.round] ?? lapsFor(s.round)),
+    sessions: sessionView(s, me, now),
+    now,
+    revision: s.revision,
+    season: s.season,
+    round: s.round,
+    me,
+    tracks: TRACKS,
+    laps: s.race?.active ? s.race.laps : (s.schedule?.laps?.[s.round] ?? lapsFor(s.round)),
+    trackLaps: s.schedule?.laps ?? TRACKS.map((_, i) => lapsFor(i)),
+    conditions: weatherAt(Math.min(s.round, 12), 0, s.season),
+    teams: Object.values(s.teams).map(t => ({
+      id: t.id,
+      name: t.name,
+      principal: t.principal,
+      points: t.points,
+      level: level(t),
+      colors: t.colors,
+      count: t.count,
+      enrolled: t.enrolled,
+      ready: ready(t),
+      drivers: t.drivers.map(d => (d ? { name: d.name, points: d.points } : null))
+    })),
+    market: s.offers.filter(o => o.tier <= (me ? level(me) + 1 : 1)).map(o => ({ ...o, sold: !!o.sold })),
+    marketRefresh: (s.marketDay + 1) * DAY,
+    proposals: s.proposals.map(p => ({
+      ...p,
+      votes: Object.entries(s.votes).filter(([id, v]) => s.teams[id]?.enrolled && v === p.id).length,
+      myVote: s.votes[u.id] === p.id
+    })),
+    approval: approvalState(s, u.id),
+    schedule: s.schedule,
+    chat: s.chat,
+    events: s.events,
+    results: s.results,
+    race: s.race
+      ? {
+          id: s.race.id,
+          round: s.race.round,
+          laps: s.race.laps,
+          active: s.race.active,
+          start: s.race.start,
+          last: s.race.last,
+          ended: s.race.ended,
+          wet: s.race.wet,
+          conditions: s.race.conditions,
+          classification: s.race.classification,
+          events: s.race.events,
+          cars: s.race.cars.map(c => {
+            const own = c.team === u.id;
+            return {
+              id: c.id,
+              team: c.team,
+              teamName: c.teamName,
+              slot: c.slot,
+              name: c.name,
+              grid: c.grid,
+              qualifyingTime: c.qualifyingTime,
+              colors: c.colors,
+              progress: c.progress,
+              compound: c.compound,
+              pits: c.pits,
+              pitTime: c.pitTime,
+              pitTotal: c.pitTotal,
+              finished: c.finished,
+              dnf: c.dnf,
+              dnfReason: c.dnfReason || null,
+              damage: !!c.damage,
+              puncture: !!c.puncture,
+              best: c.best,
+              lastLap: c.lastLap,
+              offline: c.offline,
+              speed: c.speed,
+              own,
+              ...(own
+                ? {
+                    fuel: c.fuel,
+                    wear: c.wear,
+                    consumption: c.consumption,
+                    temperature: c.temperature,
+                    grip: c.grip,
+                    traffic: c.traffic,
+                    fuelAtFinish: c.fuel - (s.race.laps - c.progress) * (c.consumption || 0),
+                    strategy: c.strategy,
+                    appliedWing: c.appliedWing ?? c.strategy.wing,
+                    pitRequested: c.pitRequested
+                  }
+                : {})
+            };
+          })
+        }
+      : null
+  };
+}

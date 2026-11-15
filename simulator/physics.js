@@ -1,20 +1,20 @@
 // Tunable game model, not a reconstruction of any current F1 technical regulation.
-import { shapes, position } from "../public/simulator/geometry.js";
-import { pitLayout } from "../public/simulator/pit-layout.js";
+import { shapes, position } from '../public/simulator/geometry.js';
+import { pitLayout } from '../public/simulator/pit-layout.js';
 export const TRACKS = [
-  ["Spa", 7.004, 65, 55],
-  ["Monza", 5.793, 18, 59],
-  ["Imola", 4.909, 70, 57],
-  ["Suzuka", 5.807, 78, 56],
-  ["Canada", 4.361, 45, 60],
-  ["Melbourne", 5.278, 58, 57],
-  ["Barcellona", 4.657, 75, 54],
-  ["Silverstone", 5.891, 73, 55],
-  ["Hockenheim", 4.574, 55, 59],
-  ["Nürburgring", 5.148, 67, 56],
-  ["Interlagos", 4.309, 65, 57],
-  ["Red Bull Ring", 4.318, 40, 60],
-  ["Monaco", 3.337, 95, 53],
+  ['Spa', 7.004, 65, 55],
+  ['Monza', 5.793, 18, 59],
+  ['Imola', 4.909, 70, 57],
+  ['Suzuka', 5.807, 78, 56],
+  ['Canada', 4.361, 45, 60],
+  ['Melbourne', 5.278, 58, 57],
+  ['Barcellona', 4.657, 75, 54],
+  ['Silverstone', 5.891, 73, 55],
+  ['Hockenheim', 4.574, 55, 59],
+  ['Nürburgring', 5.148, 67, 56],
+  ['Interlagos', 4.309, 65, 57],
+  ['Red Bull Ring', 4.318, 40, 60],
+  ['Monaco', 3.337, 95, 53]
 ];
 // Baseline seconds, abrasion, full-throttle proportion, pit transit loss, overtaking opportunity.
 const specs = [
@@ -30,7 +30,7 @@ const specs = [
   [94, 1.02, 0.6, 22, 0.6],
   [76, 1.04, 0.65, 20, 0.8],
   [69, 0.9, 0.78, 20, 0.9],
-  [78, 0.72, 0.38, 19, 0.12],
+  [78, 0.72, 0.38, 19, 0.12]
 ];
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export const PROFILES = specs.map((s, i) => {
@@ -40,73 +40,62 @@ export const PROFILES = specs.map((s, i) => {
     throttle: s[2],
     pitLoss: s[3],
     passing: s[4],
-    laps: Math.round(2280 / (s[0] + 5)),
+    laps: Math.round(2280 / (s[0] + 5))
   };
   const offset = pitLayout(i).phase;
   const raw = Array.from({ length: 120 }, (_, j) => {
     const a = position(offset + (j - 0.8) / 120, shapes[i]),
       b = position(offset + (j + 0.8) / 120, shapes[i]);
-    const angle = Math.abs(
-      Math.atan2(Math.sin(b[2] - a[2]), Math.cos(b[2] - a[2])),
-    );
+    const angle = Math.abs(Math.atan2(Math.sin(b[2] - a[2]), Math.cos(b[2] - a[2])));
     return 0.7 + Math.min(1.8, angle * 1.35);
   });
   const mean = raw.reduce((a, b) => a + b) / raw.length;
-  p.sectors = raw.map((x) => x / mean);
+  p.sectors = raw.map(x => x / mean);
   return p;
 });
-export const lapsFor = (round) => PROFILES[Math.min(round, 12)].laps;
+export const lapsFor = round => PROFILES[Math.min(round, 12)].laps;
 export const tyreTypes = {
   soft: { offset: -1, wear: 1.2, opt: 94 },
   medium: { offset: 0, wear: 0.8, opt: 91 },
   hard: { offset: 0.7, wear: 0.43, opt: 88 },
   inter: { offset: 2, wear: 0.88, opt: 75 },
-  wet: { offset: 4, wear: 0.8, opt: 65 },
+  wet: { offset: 4, wear: 0.8, opt: 65 }
 };
 export function weatherAt(round, seconds = 0, season = 1) {
   const seed = (round * 7 + season * 3) % 13,
     base = 25 + ((round * 3 + season) % 13);
   const phase = clamp(seconds / 2400, 0, 1);
   const water =
-    seed === 4
-      ? clamp(phase * 1.6, 0, 1)
-      : seed === 9
-        ? clamp(0.85 - phase, 0, 1)
-        : seed === 1
-          ? 0.65
-          : 0;
+    seed === 4 ? clamp(phase * 1.6, 0, 1) : seed === 9 ? clamp(0.85 - phase, 0, 1) : seed === 1 ? 0.65 : 0;
   return {
     water,
     wet: water > 0.18,
     trackTemp: base - water * 12,
     rain:
       seed === 4
-        ? "Pioggia in aumento"
+        ? 'Pioggia in aumento'
         : seed === 9
-          ? "Pista in asciugatura"
+          ? 'Pista in asciugatura'
           : seed === 1
-            ? "Pioggia stabile"
-            : "Asciutto",
+            ? 'Pioggia stabile'
+            : 'Asciutto',
     forecast:
       seed === 4
-        ? "Pioggia crescente nella seconda parte"
+        ? 'Pioggia crescente nella seconda parte'
         : seed === 9
-          ? "Pioggia iniziale, progressiva asciugatura"
+          ? 'Pioggia iniziale, progressiva asciugatura'
           : seed === 1
-            ? "Pioggia per la gara"
-            : "Asciutto previsto",
+            ? 'Pioggia per la gara'
+            : 'Asciutto previsto'
   };
 }
 export function metrics(c, track, weather) {
-  const i = TRACKS.findIndex((t) => t[0] === track[0]),
+  const i = TRACKS.findIndex(t => t[0] === track[0]),
     p = PROFILES[Math.max(0, i)],
-    w =
-      typeof weather === "boolean"
-        ? { water: weather ? 0.7 : 0, trackTemp: 30 }
-        : weather;
-  const st = {...c.strategy,wing:c.appliedWing??c.strategy.wing},
+    w = typeof weather === 'boolean' ? { water: weather ? 0.7 : 0, trackTemp: 30 } : weather;
+  const st = { ...c.strategy, wing: c.appliedWing ?? c.strategy.wing },
     tyre = tyreTypes[c.compound] || tyreTypes.medium,
-    pace = st.pace || "normal",
+    pace = st.pace || 'normal',
     load = st.wing / 100,
     water = w.water || 0;
   const target =
@@ -129,11 +118,11 @@ export function metrics(c, track, weather) {
     (1 + (70 - c.motor) * 0.0007) *
     { save: 0.87, normal: 1, push: 1.13 }[pace] *
     (1 - water * 0.13);
-  const wetTyre = c.compound === "wet" || c.compound === "inter";
+  const wetTyre = c.compound === 'wet' || c.compound === 'inter';
   const mismatch =
-    c.compound === "wet"
+    c.compound === 'wet'
       ? Math.max(0, 0.55 - water) * 20
-      : c.compound === "inter"
+      : c.compound === 'inter'
         ? Math.max(0, 0.18 - water) * 18 + Math.max(0, water - 0.65) * 18
         : water * 30;
   const wearPerLap =
@@ -176,16 +165,14 @@ export function metrics(c, track, weather) {
     grip: clamp(100 - deg * 5 - heat * 1.2 - cold * 0.5 - mismatch * 2, 5, 100),
     profile: p,
     load,
-    ideal,
+    ideal
   };
 }
 export function deltaFor(c, track, weather, dt) {
   const m = metrics(c, track, weather);
   let h = 0;
-  for (const ch of String(c.id) + ":" + Math.floor(c.progress))
-    h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
-  const variation =
-    (((h >>> 0) % 1000) / 1000 - 0.5) * (100 - c.consistency) * 0.025;
+  for (const ch of String(c.id) + ':' + Math.floor(c.progress)) h = (Math.imul(h, 31) + ch.charCodeAt(0)) | 0;
+  const variation = (((h >>> 0) % 1000) / 1000 - 0.5) * (100 - c.consistency) * 0.025;
   const lap = Math.max(45, m.lap + variation);
   let progress = c.progress,
     left = dt;
@@ -194,10 +181,7 @@ export function deltaFor(c, track, weather, dt) {
     const phase = ((progress % 1) + 1) % 1,
       index = Math.min(119, Math.floor((phase + 1e-10) * 120)),
       sector = m.profile.sectors[index],
-      factor =
-        sector > 1
-          ? 1 - (m.load - m.ideal) * 0.09
-          : 1 + (m.load - m.ideal) * 0.09;
+      factor = sector > 1 ? 1 - (m.load - m.ideal) * 0.09 : 1 + (m.load - m.ideal) * 0.09;
     const distance = Math.max(1e-9, (index + 1) / 120 - phase),
       seconds = distance * lap * sector * factor;
     if (left < seconds) {
@@ -215,8 +199,7 @@ export function consume(c, track, weather, delta, dt) {
   c.wearPerLap = m.wearPerLap;
   c.temperature =
     (c.temperature ?? tyreTypes[c.compound].opt) +
-    (m.target - (c.temperature ?? tyreTypes[c.compound].opt)) *
-      (1 - Math.exp(-dt / 65));
+    (m.target - (c.temperature ?? tyreTypes[c.compound].opt)) * (1 - Math.exp(-dt / 65));
   c.fuel = Math.max(0, c.fuel - delta * m.consumption);
   c.wear = Math.max(0, c.wear - delta * m.wearPerLap);
   c.grip = m.grip;
@@ -228,7 +211,7 @@ export function stopPlan(c) {
     next || {
       lap: c.pits || 0 ? Infinity : c.strategy.pitLap,
       compound: c.strategy.compound,
-      refuel: c.strategy.refuel,
+      refuel: c.strategy.refuel
     }
   );
 }
@@ -259,7 +242,7 @@ export function estimate(c, round, laps, season = 1) {
         stops,
         fuelNeeded: used,
         finishFuel: 0,
-        dnf: true,
+        dnf: true
       };
     used += d * m.consumption;
     consume(c, TRACKS[round], weather, d, dt);
@@ -267,11 +250,7 @@ export function estimate(c, round, laps, season = 1) {
     elapsed += dt;
     if (Math.floor(c.progress) > last && c.progress < laps) {
       last = Math.floor(c.progress);
-      if (
-        last >= stopPlan(c).lap ||
-        c.wear <= c.strategy.wearAt ||
-        c.fuel < m.consumption * 1.7
-      ) {
+      if (last >= stopPlan(c).lap || c.wear <= c.strategy.wearAt || c.fuel < m.consumption * 1.7) {
         const service = pitService(c, round);
         elapsed += service.seconds;
         c.fuel += service.added;
@@ -288,6 +267,6 @@ export function estimate(c, round, laps, season = 1) {
     stops,
     fuelNeeded: used,
     finishFuel: c.fuel,
-    dnf: c.progress < laps,
+    dnf: c.progress < laps
   };
 }

@@ -32,6 +32,7 @@ Le cartelle sotto `public/` sono già il confine principale per l’interfaccia 
 - Modificare i file condivisi solo quando la funzione li richiede davvero. La lobby in `public/app.js` deve contenere solo i collegamenti necessari fra lobby e moduli.
 - Quando una funzione ha più responsabilità, estrarla in un modulo dedicato vicino alla funzione che la usa, evitando una riscrittura generale.
 - Ogni riorganizzazione dei moduli deve essere un cambiamento separato dal lavoro funzionale: prima si spostano i file e si aggiornano gli import, poi si modifica il comportamento.
+- Il codice va scritto leggibile, una istruzione per riga, non compattato su righe lunghe. `auth.js`, `simulator/` e `public/simulator/` sono formattati con Prettier (`.prettierrc.json`): dopo una modifica eseguire `npm run format:simulator`, e `npm run format:check` deve passare. `public/simulator/geometry.js` contiene solo coordinate dei circuiti ed è escluso. Gli altri moduli si formattano allo stesso modo quando vengono toccati, in un commit separato.
 
 ## Struttura server da adottare gradualmente
 
