@@ -6,6 +6,7 @@ Questa guida descrive dove intervenire quando lavoriamo su una singola funzione 
 
 ```text
 worker.js                  ingresso Worker, routing API e Durable Object
+auth.js                    accesso: firma Telegram, sessioni, appartenenza al gruppo
 cinema-*.js                server e integrazioni del Cinema
 *-server.js                runtime dei giochi multiplayer
 *.(js)                     regole e modelli condivisi dei giochi da tavolo
@@ -27,6 +28,7 @@ Le cartelle sotto `public/` sono già il confine principale per l’interfaccia 
 - Per un gioco, partire dalla sua cartella `public/<gioco>/` e dal relativo modulo server o regole.
 - Per il Cinema, mantenere separati interfaccia (`public/cinema/`), coordinamento del Worker (`worker.js`) e moduli server `cinema-*.js`.
 - Lasciare a `worker.js` il ruolo di ingresso e instradamento; non accorpare lì logica di interfaccia o regole di gioco.
+- Ogni controllo su chi può entrare (firma `initData`, sessione, membri del gruppo `TELEGRAM_ALLOWED_GROUP_ID`) sta in `auth.js`. Un modulo di gioco non deve definire o duplicare questi controlli: riceve l’utente già verificato nell’header `X-Checkmate-User`.
 - Modificare i file condivisi solo quando la funzione li richiede davvero. La lobby in `public/app.js` deve contenere solo i collegamenti necessari fra lobby e moduli.
 - Quando una funzione ha più responsabilità, estrarla in un modulo dedicato vicino alla funzione che la usa, evitando una riscrittura generale.
 - Ogni riorganizzazione dei moduli deve essere un cambiamento separato dal lavoro funzionale: prima si spostano i file e si aggiornano gli import, poi si modifica il comportamento.

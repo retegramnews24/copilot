@@ -1,4 +1,5 @@
-import {SimulatorLeague,memberAccess} from './simulator/server.js';
+import {SimulatorLeague} from './simulator/server.js';
+import {secureEqual,memberAccess,requireMember,telegramAccessTag,login,issueSession,sessionUser} from './auth.js';
 import {Blackboard} from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
 import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
@@ -28,8 +29,6 @@ const id=()=>crypto.randomUUID();
 const bad=(message)=>{throw new Error(message)};
 const BOT_USERNAME='checkmategame_bot';
 const name=x=>{if(typeof x!=='string'||!x.trim())bad('Inserisci un nome.');return x.trim().slice(0,30)};
-function secureEqual(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let diff=0;for(let i=0;i<a.length;i++)diff|=a.charCodeAt(i)^b.charCodeAt(i);return diff===0;}
-async function requireMember(user,env){const allowed=await memberAccess(user,env);return allowed===true?null:json({error:allowed===false?'Binottoland è riservato ai membri del gruppo.':'Verifica del gruppo temporaneamente non disponibile.'},allowed===false?403:503);}
 async function webhookSecret(token){
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
  return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
@@ -87,50 +86,6 @@ async function telegramWebhook(req,env){
 }
 
 
-const encoder=new TextEncoder();
-async function mac(key,text){
- const k=await crypto.subtle.importKey('raw',typeof key==='string'?encoder.encode(key):key,{name:'HMAC',hash:'SHA-256'},false,['sign']);
- return new Uint8Array(await crypto.subtle.sign('HMAC',k,encoder.encode(text)));
-}
-const hex=bytes=>[...bytes].map(b=>b.toString(16).padStart(2,'0')).join('');
-const telegramAccessTag=async env=>env.BOT_TOKEN?hex(await mac(env.BOT_TOKEN,'telegram-session-v1')):null;
-async function login(req,env){
- try{
-  if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN mancante.'},503);
-  const body=await req.json();if(typeof body.initData!=='string'||body.initData.length>16384)throw Error();
-  const p=new URLSearchParams(body.initData);if(p.getAll('hash').length!==1)throw Error();const hash=p.get('hash');p.delete('hash');
-  const keys=[...p.keys()];if(new Set(keys).size!==keys.length)throw Error();
-  const checked=[...p.entries()].sort(([a],[b])=>a<b?-1:a>b?1:0).map(([k,v])=>k+'='+v).join('\n');
-  const secret=await mac('WebAppData',env.BOT_TOKEN);
-  if(!hash||!secureEqual(hex(await mac(secret,checked)),hash))throw Error();
-  const age=Date.now()/1000-Number(p.get('auth_date'));
-  if(!Number.isFinite(age)||age< -60||age>300)throw Error();
-  const u=JSON.parse(p.get('user')||'null');if(!u||!Number.isSafeInteger(u.id)||u.id<=0)throw Error();
-  const user={id:String(u.id),player:'tg:'+u.id,name:[u.first_name,u.last_name].filter(Boolean).join(' ').slice(0,60)||'Utente Telegram',username:typeof u.username==='string'?u.username.slice(0,40):'',photo:typeof u.photo_url==='string'&&u.photo_url.startsWith('https://')&&u.photo_url.length<=512?u.photo_url:''};
-  return issueSession(user,env);
- }catch{return json({error:'Accesso Telegram non valido o scaduto. Chiudi e riapri la Mini App dal bot.'},401)}
-}
-async function issueSession(user,env){
- const denied=await requireMember(user,env);if(denied)return denied;
-  const accessTag=await telegramAccessTag(env);
-  const payload=btoa(String.fromCharCode(...encoder.encode(JSON.stringify({user,accessTag,expires:Date.now()+12*3600000})))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
-  const token='session.'+payload+'.'+hex(await mac(env.BOT_TOKEN,'session.'+payload));
-  const response=json({user,token});
-  response.headers.append('Set-Cookie','binottoland_cinema='+token+'; Max-Age=43200; Path=/api/cinema/; HttpOnly; Secure; SameSite=None; Partitioned');
-  return response;
-}
-async function sessionUser(req,env){
- try{
-  const offered=(req.headers.get('Sec-WebSocket-Protocol')||'').split(',').map(x=>x.trim());
-  const token=(req.headers.get('Authorization')||'').replace(/^Bearer /,'')||offered.find(x=>x.startsWith('session.'));
-  const m=String(token||'').match(/^session\.([A-Za-z0-9_-]+)\.([a-f0-9]{64})$/);
-  if(!m||!env.BOT_TOKEN||!secureEqual(hex(await mac(env.BOT_TOKEN,'session.'+m[1])),m[2]))return null;
-  const payload=JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(m[1].replaceAll('-','+').replaceAll('_','/')),c=>c.charCodeAt(0))));
-  if(payload.accessTag!==await telegramAccessTag(env))return null;
-  if(!Number.isFinite(payload.expires)||payload.expires<=Date.now()||!/^\d{1,20}$/.test(payload.user?.id)||payload.user?.player!=='tg:'+payload.user.id)return null;
-  return {...payload.user,sessionExpires:payload.expires};
- }catch{return null}
-}
 
 const cinemaHub=env=>env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1'));
 function telegramCinemaDirectory(env,origin,op,params={},user=null,body){
