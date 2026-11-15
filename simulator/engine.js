@@ -3,6 +3,7 @@ import { incidentPlan, applyIncidents, progressionReward } from './race-events.j
 import { engineering } from './engineering.js';
 import { trackRace } from './commentary.js';
 import { debrief } from './debrief.js';
+import { objectiveFor, objectiveMet } from './sponsor.js';
 import { standings, archiveChampionship, TEAM_PRIZES, DRIVER_PRIZES } from './championship.js';
 import {
   advanceSessions,
@@ -452,6 +453,9 @@ function startRace(s, at) {
       continue;
     }
     t.cash -= payroll(t);
+    // The sponsor goal shown before the race is frozen at the start.
+    r.objectives ??= {};
+    r.objectives[id] = objectiveFor(s, id, round);
     for (let slot = 0; slot < 2; slot++) {
       const st = { ...t.strategies[slot] },
         d = t.drivers[slot];
@@ -701,14 +705,27 @@ function finish(s, r, now) {
   s.results.unshift({ id: r.id, season: s.season, round: r.round, at: now, rows });
   s.results = s.results.slice(0, 26);
   // Private report for every team that raced (stored on the team, so only its owner receives it).
-  for (const id of new Set(r.cars.map(c => c.team)))
-    s.teams[id].lastDebrief = {
+  for (const id of new Set(r.cars.map(c => c.team))) {
+    const t = s.teams[id],
+      goal = r.objectives?.[id],
+      met = !!goal && objectiveMet(goal, order, id);
+    if (met) {
+      t.cash += goal.reward;
+      event(
+        s,
+        `${TRACKS[r.round][0]}: ${t.name} centra l’obiettivo sponsor (+${goal.reward.toLocaleString('it-IT')} €).`,
+        now
+      );
+    }
+    t.lastDebrief = {
       race: r.id,
       round: r.round,
       track: TRACKS[r.round][0],
       at: now,
+      objective: goal ? { text: goal.text, reward: goal.reward, met } : null,
       cars: debrief(r, order, TRACKS[r.round], id)
     };
+  }
   s.round++;
   const podium = rows.filter(x => !x.dnf).slice(0, 3);
   event(
@@ -780,6 +797,7 @@ export function view(s, u, now) {
     season: s.season,
     round: s.round,
     me,
+    objective: me ? (s.race?.active && s.race.objectives?.[me.id]) || objectiveFor(s, me.id, s.round) : null,
     tracks: TRACKS,
     laps: s.race?.active ? s.race.laps : (s.schedule?.laps?.[s.round] ?? lapsFor(s.round)),
     trackLaps: s.schedule?.laps ?? TRACKS.map((_, i) => lapsFor(i)),

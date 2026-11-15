@@ -1929,3 +1929,31 @@ main[data-page='Team'] {
   text-overflow: ellipsis;
   padding: 3px 0;
 }
+
+/* Obiettivo sponsor. */
+.sponsor-goal {
+  margin: 6px 0;
+  padding: 6px 10px;
+  border: 1px solid #ffd23655;
+  border-radius: 8px;
+  background: #ffd2360d;
+  font-size: 12.5px;
+  color: inherit;
+}
+.sponsor-goal b {
+  color: var(--gold);
+  margin-right: 4px;
+}
+.sponsor-goal span {
+  color: var(--teal);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.sponsor-goal.missed {
+  border-color: var(--line);
+  background: transparent;
+}
+.sponsor-goal.missed b,
+.sponsor-goal.missed span {
+  color: var(--muted);
+}
