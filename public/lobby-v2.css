@@ -266,3 +266,77 @@
   overflow: visible;
   overscroll-behavior: auto;
 }
+/* I tuoi giochi: icone piccole in Lobby e in Giochi; toccando si arriva alla scheda. */
+.lobby-favourites {
+  margin: 0 0 12px;
+}
+.lobby-favourites h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tile-row,
+#recent-games {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+.game-tile {
+  flex: none;
+  width: 72px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--cover, var(--accent));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--cover, var(--accent)) 14%, var(--panel));
+  color: var(--ink);
+}
+.game-tile .catalog-icon {
+  width: 34px;
+  height: 34px;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--cover, var(--accent)) 35%, transparent);
+  font-size: 18px;
+  overflow: hidden;
+}
+.game-tile .catalog-icon :is(svg, img) {
+  max-width: 24px;
+  max-height: 24px;
+}
+.game-tile > span:last-child {
+  width: 100%;
+  font-size: 10.5px;
+  line-height: 1.2;
+  font-weight: 650;
+  text-align: center;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.catalog-card.flash {
+  animation: card-flash 1.4s ease-out;
+}
+@keyframes card-flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px var(--cover, var(--accent));
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+/* Chat: campo in alto, messaggi sotto (il più recente per primo). */
+#chat-form {
+  margin: 0 0 8px;
+}

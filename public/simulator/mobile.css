@@ -311,3 +311,32 @@ html.compact #main .event-panels > * {
 html.compact #main table :is(td, th, small, b, span) {
   font-size: 13px;
 }
+
+/* "?" stays a small circle: the generic phone button size must not stretch it. */
+html.compact #app .help-btn {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 50%;
+  flex: none;
+}
+html.compact #app .help-caption {
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+/* Track fills the remaining height (set from app.js); touch pans and pinches the map. */
+html.compact #main .track-wrap canvas {
+  touch-action: none;
+}
+
+html.compact #app .subnav button[aria-selected='true'],
+html.compact #app .subnav button[aria-selected='true']:is(:hover, :focus, :focus-visible, :active) {
+  background: var(--teal) !important;
+  border-color: var(--teal) !important;
+  color: var(--bg) !important;
+  font-weight: 800;
+}

@@ -6,7 +6,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=12';
 import {golfColors,readAppearance} from './appearance.js?v=9';
 import './labyrinth/avatar.js?v=8';
-import {initCatalog,renderCatalog} from './games-catalog.js?v=1';
+import {initCatalog,renderCatalog} from './games-catalog.js?v=2';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
@@ -797,7 +797,7 @@ function renderSpectators(){
 function scrollChatToLatest(){
  requestAnimationFrame(()=>{
   const list=$('chat-messages');
-  list.scrollTop=list.scrollHeight;
+  list.scrollTop=0;
  });
 }
 function renderSocial(){
@@ -823,8 +823,8 @@ function renderSocial(){
  if(list.dataset.signature!==signature){
   list.dataset.signature=signature;list.replaceChildren();
   if(!chatMessages.length){const p=document.createElement('p');p.className='hint';p.textContent='Il posto per due parole tra una partita e l’altra.';list.append(p)}
-  // The chat grows with the page (no inner scroll): show the latest 30 messages.
-  for(const message of chatMessages.slice(-30)){
+  // The chat grows with the page (no inner scroll): latest 30 messages, newest first under the input.
+  for(const message of chatMessages.slice(-30).reverse()){
    const row=document.createElement('article');row.className='chat-message'+(message.userId===identity?.id?' mine':'');
    row.append(makeAvatar(message));
    const copy=document.createElement('div');copy.className='chat-copy';

@@ -28,17 +28,55 @@ export function attachCanvas(el) {
     },
     { passive: false }
   );
+  // One finger pans, two fingers pinch-zoom, a double tap zooms in (or back to fit).
+  const touches = new Map();
+  let pinch = null,
+    lastTap = 0;
+  const zoomAt = (zoom, cx, cy) => {
+    const r = el.getBoundingClientRect(),
+      next = Math.max(1, Math.min(4, zoom)),
+      k = next / camera.zoom,
+      px = cx - r.left - r.width / 2,
+      py = cy - r.top - r.height / 2;
+    camera.x = px - (px - camera.x) * k;
+    camera.y = py - (py - camera.y) * k;
+    camera.zoom = next;
+  };
   el.onpointerdown = e => {
-    pointer = { x: e.clientX, y: e.clientY };
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
     el.setPointerCapture(e.pointerId);
+    if (touches.size === 2) {
+      const [a, b] = [...touches.values()];
+      pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: camera.zoom };
+      pointer = null;
+      return;
+    }
+    const now = performance.now();
+    if (now - lastTap < 300) {
+      zoomAt(camera.zoom > 1.5 ? 1 : 2.5, e.clientX, e.clientY);
+      if (camera.zoom === 1) camera.x = camera.y = 0;
+      lastTap = 0;
+    } else lastTap = now;
+    pointer = { x: e.clientX, y: e.clientY };
   };
   el.onpointermove = e => {
+    if (!touches.has(e.pointerId)) return;
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch && touches.size >= 2) {
+      const [a, b] = [...touches.values()];
+      zoomAt((pinch.zoom * Math.hypot(a.x - b.x, a.y - b.y)) / pinch.dist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      return;
+    }
     if (!pointer) return;
     camera.x += e.clientX - pointer.x;
     camera.y += e.clientY - pointer.y;
     pointer = { x: e.clientX, y: e.clientY };
   };
-  el.onpointerup = el.onpointercancel = () => (pointer = null);
+  el.onpointerup = el.onpointercancel = e => {
+    touches.delete(e.pointerId);
+    if (touches.size < 2) pinch = null;
+    pointer = null;
+  };
 }
 function landscape(idx) {
   const pts = shapes[idx],
@@ -298,6 +336,11 @@ export function draw(data, follow, followCamera, received) {
   x.fillStyle = '#13271f';
   x.fillRect(0, 0, w, h);
   const scale = Math.min(w / 1000, h / 650) * 1.04;
+  // Keep the map on screen: at zoom 1 it stays centred and whole, zoomed in it can pan to its edges.
+  const maxX = (1000 * scale * camera.zoom - w) / 2 + 12,
+    maxY = (650 * scale * camera.zoom - h) / 2 + 12;
+  camera.x = Math.max(-Math.max(12, maxX), Math.min(Math.max(12, maxX), camera.x));
+  camera.y = Math.max(-Math.max(12, maxY), Math.min(Math.max(12, maxY), camera.y));
   const dt = Math.min(3.3, Math.max(0, (performance.now() - received) / 1000));
   const progress = c =>
     c.progress +

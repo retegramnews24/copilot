@@ -79,6 +79,7 @@ export function initCatalog() {
       const state = read();
       state.recent[key] = Date.now();
       write(state);
+      renderCatalog();
     });
   }
   // Developer shortcuts stay out of sight unless enabled from the Debug page.
@@ -87,21 +88,55 @@ export function initCatalog() {
   renderCatalog();
 }
 
+// Bring a game card into view and make it flash, switching to the Giochi tab if needed.
+export function showGame(key) {
+  const card = cards.find(c => c.dataset.game === key);
+  if (!card) return;
+  const tab = document.getElementById('tab-games');
+  if (tab?.getAttribute('aria-selected') !== 'true') tab?.click();
+  requestAnimationFrame(() => {
+    card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    card.classList.remove('flash');
+    void card.offsetWidth;
+    card.classList.add('flash');
+  });
+}
+// Small icon tiles (favourites first, then recently played), used in Giochi and in the Lobby.
+function tiles(picks) {
+  return picks
+    .map(key => cards.find(c => c.dataset.game === key))
+    .filter(Boolean)
+    .map(card => {
+      const tile = document.createElement('button');
+      tile.type = 'button';
+      tile.className = 'game-tile';
+      tile.style.setProperty('--cover', card.style.getPropertyValue('--cover'));
+      const icon = card.querySelector('.catalog-icon')?.cloneNode(true) || document.createElement('span');
+      icon.removeAttribute('id');
+      const name = document.createElement('span');
+      name.textContent = card.querySelector('.catalog-card-title h3')?.textContent || '';
+      tile.append(icon, name);
+      tile.onclick = () => showGame(card.dataset.game);
+      return tile;
+    });
+}
 export function renderCatalog() {
   if (!cards.length) return;
   const state = read();
-  // Put every card back where it belongs, in the original order.
-  for (const card of cards) homes.get(card).append(card);
+  // Cards never move: "I tuoi giochi" and the Lobby show icon tiles that lead to them.
+  for (const card of cards) if (card.parentElement !== homes.get(card)) homes.get(card).append(card);
   const recent = Object.entries(state.recent)
     .sort((a, b) => b[1] - a[1])
     .map(([key]) => key);
-  const picks = [...new Set([...state.fav, ...recent])].slice(0, 6);
+  const picks = [...new Set([...state.fav, ...recent])].slice(0, 8);
   const box = document.getElementById('recent-games');
-  for (const key of picks) {
-    const card = cards.find(c => c.dataset.game === key);
-    if (card) box.append(card);
-  }
+  box.replaceChildren(...tiles(picks));
   document.getElementById('recent-games-section').hidden = !box.children.length;
+  const lobby = document.getElementById('lobby-favourites-list');
+  if (lobby) {
+    lobby.replaceChildren(...tiles(picks));
+    document.getElementById('lobby-favourites').hidden = !lobby.children.length;
+  }
   for (const card of cards) {
     const on = state.fav.includes(card.dataset.game);
     const star = card.querySelector('.fav-toggle');

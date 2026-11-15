@@ -611,8 +611,8 @@ function installSubnav(page) {
     for (const [name, el] of panels) el.classList.toggle('sub-hidden', name !== label);
     for (const b of nav.children) b.setAttribute('aria-selected', String(b.dataset.sub === label));
     $('main').dataset.sub = label;
-    // The track canvas measures its box: let it re-measure once visible.
-    if (label === 'Pista') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    // The track fills the space left on screen, then the canvas re-measures itself.
+    if (label === 'Pista') requestAnimationFrame(fitTrack);
   };
   for (const [label] of panels) {
     const b = document.createElement('button');
@@ -626,6 +626,19 @@ function installSubnav(page) {
   $('main').prepend(nav);
   show(current);
 }
+function fitTrack() {
+  const main = $('main'),
+    wrap = main?.querySelector('.track-wrap');
+  if (!isCompact() || !wrap || wrap.closest('.sub-hidden')) return;
+  main.scrollTop = 0;
+  wrap.style.height = '';
+  const top = wrap.getBoundingClientRect().top - main.getBoundingClientRect().top,
+    bottom = parseFloat(getComputedStyle(main).paddingBottom) || 16;
+  wrap.style.height = Math.max(240, Math.floor(main.clientHeight - top - bottom)) + 'px';
+}
+window.addEventListener('resize', () => {
+  if ($('main')?.dataset.sub === 'Pista') fitTrack();
+});
 let wasCompact = isCompact();
 window.addEventListener('resize', () => {
   if (isCompact() !== wasCompact && opened) {
