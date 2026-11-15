@@ -6,9 +6,11 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=12';
 import {golfColors,readAppearance} from './appearance.js?v=9';
 import './labyrinth/avatar.js?v=8';
+import {initCatalog,renderCatalog} from './games-catalog.js?v=1';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
+initCatalog();
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
 let pongRoom=null,pongSocket=null,pongRetry=0,pongEpoch=0,pongOpening=false;
@@ -16,6 +18,7 @@ let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastSt
 let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
 let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
 let cinemaLookup=null;
+let blackboardLobbyRooms=[];
 let sessionRefresh=null;
 async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return sessionRefresh;const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.expires>Date.now()+3600000)return;sessionRefresh=(async()=>{const r=await fetch('/api/session/refresh',{method:'POST',headers:{Authorization:'Bearer '+sessionToken}});const value=await r.json();if(!r.ok)throw Error(value.error);sessionToken=value.token;})().finally(()=>sessionRefresh=null);return sessionRefresh;}
 setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
@@ -140,7 +143,28 @@ function renderLobby(){
   button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(own||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room,staged(game)&&game.players.length>=gameLimits(game).max);if(game.series)note.textContent+=' · Torneo: '+game.series.target+' vittorie';card.append(title,names,note,button);$('games').append(card);
  }
- renderArchive();refreshDebug();renderSocial();
+ renderArchive();refreshDebug();renderSocial();renderNow();
+}
+// "Adesso": the few things worth doing right now, built from data the Lobby already has.
+function renderNow(){
+ const items=[],own=ownedGame(),me=id=>seat(id).player;
+ for(const game of games.filter(ongoing)){
+  if(['golf','pong','moto-trial','labyrinth'].includes(game.game))continue;
+  const mine=game.players.some(p=>p.id===me(game.room)),full=staged(game)&&game.players.length>=gameLimits(game).max;
+  if(mine&&game.phase==='playing'&&game.players[game.turn]?.id===me(game.room))items.push({rank:0,text:'Tocca a te · Tavolo '+game.number+' · '+gameTitle(game),label:'Gioca',action:()=>openRoom(game.room,false)});
+  else if(mine&&game.phase==='waiting')items.push({rank:2,text:'Il tuo tavolo '+game.number+' · '+gameTitle(game)+' aspetta giocatori',label:'Apri',action:()=>openRoom(game.room,false)});
+  else if(!mine&&!own&&game.phase==='waiting'&&!full&&game.players.length)items.push({rank:1,text:game.players[0].name+' ti aspetta a '+gameTitle(game)+' · Tavolo '+game.number,label:'Gioca',action:()=>openRoom(game.room,false)});
+ }
+ for(const entry of cinemaRooms.rooms)if(entry.viewers.length)items.push({rank:3,text:'Cinema · Sala '+entry.number+(entry.channel?' · '+entry.channel:'')+' · '+entry.viewers.length+(entry.viewers.length===1?' spettatore':' spettatori'),label:'Entra',action:()=>openCinema(entry.id)});
+ for(const entry of blackboardLobbyRooms)if(entry.people.length)items.push({rank:3,text:'Lavagna · Sala '+entry.number+' · '+entry.people.map(p=>p.name).join(', '),label:'Entra',action:button=>openBlackboard(button,entry.id)});
+ items.sort((a,b)=>a.rank-b.rank);
+ $('now-panel').hidden=!identity||!items.length;
+ $('now-items').replaceChildren(...items.slice(0,4).map(item=>{
+  const row=document.createElement('div');row.className='now-item'+(item.rank===0?' urgent':'');
+  const text=document.createElement('span');text.textContent=item.text;
+  const button=document.createElement('button');button.type='button';button.className=item.rank===0?'':'alt';button.textContent=item.label;button.disabled=!identity;button.onclick=()=>item.action(button);
+  row.append(text,button);return row;
+ }));
 }
 
 function stopRoom(){
@@ -370,7 +394,7 @@ function selectPage(page){
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===activeTab;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1});
  document.querySelectorAll('.page').forEach(section=>section.hidden=section.id!=='page-'+page);
  if(page!=='game')stopReplay();trace('UI','Pagina '+page);
- if(page==='games')loadLeaders();if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
+ if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
 }
 function navigate(page){
  if(busy)return;
@@ -730,6 +754,7 @@ function renderSocial(){
   const own=ownedGame();users.unshift({...identity,status:own?'In partita '+own.number:'In Lobby',game:own?.room||null});
  }
  $('online-count').textContent=connected?users.length+' online':identity?'Collegamento…':'Accedi da Telegram';$('online-users').replaceChildren();
+ $('people-faces').replaceChildren(...users.slice(0,6).map(makeAvatar));
  for(const user of users){
   const row=document.createElement('div');row.className='online-user';row.append(makeAvatar(user));
   const copy=document.createElement('div');copy.className='online-person';
@@ -911,6 +936,8 @@ function renderBlackboardRooms(rooms, state){
  const list=$('blackboard-rooms'),status=$('blackboard-lobby-status');
  const online=state==='online',focused=document.activeElement?.dataset.blackboardRoom;
  status.hidden=online&&rooms.length>0;
+ $('blackboard-lobby').hidden=online&&!rooms.length;
+ blackboardLobbyRooms=online?rooms:[];
  status.textContent=online?'Nessuna sala aperta.':state==='expired'?'Riapri Binottoland da Telegram.':'Collegamento alle lavagne…';
  list.replaceChildren(...rooms.map(entry=>{
   const button=document.createElement('button');
@@ -924,6 +951,7 @@ function renderBlackboardRooms(rooms, state){
   return button;
  }));
  if(focused)Array.from(list.children).find(el=>el.dataset.blackboardRoom===focused)?.focus();
+ renderNow();
 }
 function openBlackboard(button,id){
  if(!arcadeOverlay.hidden)return;
@@ -1255,6 +1283,8 @@ function renderCinemaLobby(){
  const status=$('cinema-lobby-status');
  status.textContent=cinemaLobbyMessage||(connected?'Nessuna sala aperta.':'Collegamento al cinema…');
  status.hidden=connected&&cinemaRooms.rooms.length>0&&!cinemaLobbyMessage;
+ // An empty, connected cinema says nothing: the section appears when a room opens.
+ $('cinema-lobby').hidden=connected&&!cinemaRooms.rooms.length&&!cinemaLobbyMessage;
  const focused=document.activeElement?.dataset.cinemaRoom;
  list.replaceChildren(...cinemaRooms.rooms.map(entry=>{
   const button=document.createElement('button');
@@ -1266,6 +1296,7 @@ function renderCinemaLobby(){
   return button;
  }));
  if(focused)Array.from(list.children).find(el=>el.dataset.cinemaRoom===focused)?.focus();
+ renderNow();
 }
 function cinemaSend(action){
  const raw=JSON.stringify(action);

@@ -1,0 +1,130 @@
+/* Lobby, Giochi e Settings: revisione novembre 2026. Caricato dopo gli stili in index.html. */
+
+/* Adesso */
+.now-panel {
+  margin: 0 0 14px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel));
+}
+.now-panel .section-heading {
+  margin-bottom: 8px;
+}
+.now-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.now-item:first-child {
+  border-top: 0;
+}
+.now-item span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.now-item.urgent span {
+  font-weight: 700;
+  color: var(--ink);
+}
+.now-item button {
+  width: auto;
+  flex: none;
+  min-height: 34px;
+  padding: 6px 14px;
+}
+
+/* Chat: niente spazio vuoto sopra pochi messaggi. */
+#chat-messages {
+  height: auto;
+  min-height: 90px;
+  max-height: 340px;
+}
+@media (min-width: 620px) {
+  #chat-messages {
+    height: auto;
+    max-height: 460px;
+  }
+}
+
+/* Persone compatto: fila di avatar, lista con un tocco. */
+.people-card > summary {
+  cursor: pointer;
+  list-style: none;
+  margin-bottom: 0;
+}
+.people-card > summary::-webkit-details-marker {
+  display: none;
+}
+.people-card[open] > summary {
+  margin-bottom: 10px;
+}
+.people-faces {
+  display: flex;
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.people-faces .avatar {
+  width: 26px;
+  height: 26px;
+  margin-left: -7px;
+  font-size: 10px;
+  box-shadow: 0 0 0 2px var(--panel);
+}
+
+/* Giochi: copertine colorate, preferiti, podio. */
+.catalog-card {
+  position: relative;
+  border-top: 4px solid var(--cover, var(--accent));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--cover, var(--accent)) 22%, var(--panel)) 0%, var(--panel) 55%);
+}
+.catalog-card .catalog-icon {
+  background: color-mix(in srgb, var(--cover, var(--accent)) 35%, transparent);
+  color: var(--ink);
+}
+.catalog-card-title {
+  padding-right: 30px;
+}
+.fav-toggle {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+}
+.fav-toggle[aria-pressed='true'] {
+  color: var(--cover, var(--accent));
+}
+#recent-games-section .catalog-heading::after {
+  content: ' · tocca ☆ per tenerne uno fisso';
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+#leaderboard-solo li:nth-child(-n + 3),
+#leaderboard-multi li:nth-child(-n + 3),
+#leaderboard-number li:nth-child(-n + 3) {
+  border-left: 3px solid #c9a227;
+  padding-left: 6px;
+}
+#leaderboard-solo li:nth-child(2),
+#leaderboard-multi li:nth-child(2),
+#leaderboard-number li:nth-child(2) {
+  border-left-color: #a7b1ba;
+}
+#leaderboard-solo li:nth-child(3),
+#leaderboard-multi li:nth-child(3),
+#leaderboard-number li:nth-child(3) {
+  border-left-color: #b0744a;
+}
