@@ -1,0 +1,19 @@
+# Dipendenze
+node_modules/
+
+# Build di prova dei test runtime (npm run test:*-runtime)
+.test-bundle/
+
+# Wrangler / Cloudflare locale
+.wrangler/
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# Log e file di sistema
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
