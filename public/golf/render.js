@@ -1,6 +1,6 @@
-import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWalls } from './courses.js?v=9';
+import { WIDTH, DEPTH, RADIUS, CUP, ballColors, rotorWalls } from './courses.js?v=428ae8745f';
 
-import { estimateRoll } from './physics.js?v=9';
+import { estimateRoll } from './physics.js?v=e10f1eb034';
 import { rotateVector } from './roll.js';
 
 const NEAR=.35, ORBIT_DISTANCE=Math.hypot(7.3,2.95), ORBIT_OFFSET=Math.atan2(2.95,7.3)-.18;

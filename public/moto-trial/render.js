@@ -1,6 +1,6 @@
-import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=9';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=46a86e1ffe';
 
-import {riderPose, HEAD_RADIUS, SUSPENSION} from './rider.js?v=6';
+import {riderPose, HEAD_RADIUS, SUSPENSION} from './rider.js?v=e8606b9830';
 
 const THEMES = [
   {sky: ['#193345', '#eaa46d', '#f6d399'], haze: '#96736d', far: '#615c68', near: '#43515a', rock: '#573c37', face: '#724b3d', top: '#d49a66', rim: '#f2c183', dust: '#f4c893'},

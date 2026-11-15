@@ -22,7 +22,7 @@ const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,ca
 const importLines=/^import .+;$/gm;
 const root=process.cwd()+'/public';
 const imports=await build({stdin:{
- contents:source.match(importLines).join('\n')+'\nObject.assign(window,{renderScopa,renderNaval,renderBriscola,renderScarabeo,safeInsets,applyInsets,viewportHeight,CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN,golfColors,readAppearance,blackboardLink,initCatalog,renderCatalog});',
+ contents:source.match(importLines).join('\n')+'\nObject.assign(window,{renderScopa,renderNaval,renderBriscola,renderScarabeo,safeInsets,applyInsets,viewportHeight,CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN,golfColors,readAppearance,blackboardLink,initCatalog,renderCatalog,installSwipe,initWindowMode});',
  resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
 
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;

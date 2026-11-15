@@ -1,5 +1,5 @@
-import {fixedCourse} from './courses.js?v=9';
-import {HEAD_RADIUS, helmetPosition} from './rider.js?v=6';
+import {fixedCourse} from './courses.js?v=bc44963acc';
+import {HEAD_RADIUS, helmetPosition} from './rider.js?v=e8606b9830';
 
 export const WHEEL = .38;
 export const AXLE = .86;

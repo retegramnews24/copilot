@@ -1,0 +1,41 @@
+# Runs every test on each push and pull request. A red cross on the commit in GitHub means something broke:
+# Cloudflare publishes main anyway, so fix it (or revert) straight away.
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Versione e timbri ?v=
+        run: npm run release:check
+      - name: Formattazione
+        run: npm run format:check
+      - name: Test principali
+        run: npm test
+      - name: Interfaccia
+        run: npm run test:ui
+      - name: Binotto Simulator
+        run: npm run test:simulator
+      - name: Accesso
+        run: npm run test:access
+      - name: Tavoli e multiplayer (worker compilato)
+        run: npm run test:table-runtime && npm run test:multiplayer-runtime

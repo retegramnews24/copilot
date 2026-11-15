@@ -1,4 +1,4 @@
-import {rows,cols,row,col,validLevel,createNumberGame,replayNumberGame,canMerge,mergeNumbers,hasMove,maxMoves} from './number-connect-rules.js?v=1';
+import {rows,cols,row,col,validLevel,createNumberGame,replayNumberGame,canMerge,mergeNumbers,hasMove,maxMoves} from './number-connect-rules.js?v=d5be82d1a1';
 
 const grid=document.getElementById('grid'),difficulty=document.getElementById('difficulty');
 const scoreLabel=document.getElementById('score'),recordLabel=document.getElementById('record');

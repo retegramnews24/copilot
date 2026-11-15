@@ -1,6 +1,6 @@
-import { installCockpit } from './cockpit.js?v=13';
+import { installCockpit } from './cockpit.js?v=931ac51e4d';
 import { attachCanvas, draw, resetCamera, getCamera, setCamera } from './renderer.js';
-import { installPanelLayouts, saveView, readView, replacePanelContent } from './layout.js?v=12';
+import { installPanelLayouts, saveView, readView, replacePanelContent } from './layout.js?v=d4df0bf7f8';
 const $ = id => document.getElementById(id),
   esc = v =>
     String(v ?? '').replace(

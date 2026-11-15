@@ -1,4 +1,4 @@
-import {CLOTHES, OUTFIT_KEY, BALL_STYLE_KEY, BALL_KEY, readAppearance,normalizeAppearance, readGolfStyle, golfColors} from '../appearance.js?v=9';
+import {CLOTHES, OUTFIT_KEY, BALL_STYLE_KEY, BALL_KEY, readAppearance,normalizeAppearance, readGolfStyle, golfColors} from '../appearance.js?v=3bf8d2e2ca';
 export {readAppearance};
 
 const styles=`

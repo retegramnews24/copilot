@@ -1,6 +1,6 @@
-import {positionAt} from './media.js?v=5';
-import {WindowShare} from './screen-share.js?v=2';
-import {embedYouTube} from './youtube.js?v=3';
+import {positionAt} from './media.js?v=65b3956eb7';
+import {WindowShare} from './screen-share.js?v=95fe42416c';
+import {embedYouTube} from './youtube.js?v=c237aa9fc5';
 
 export class CinemaMosaic {
   constructor(list,enter,signal,localStream){

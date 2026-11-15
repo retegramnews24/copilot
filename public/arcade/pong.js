@@ -1,5 +1,5 @@
 import {soundAllowed} from '../sound-pref.js';
-import {width,height,radius,paddleWidth,modes,paddlePositions,newMatch,movePaddle,moveOpponent,stepMatch} from './pong-physics.js?v=3';
+import {width,height,radius,paddleWidth,modes,paddlePositions,newMatch,movePaddle,moveOpponent,stepMatch} from './pong-physics.js?v=9b8b5172ae';
 
 const $=id=>document.getElementById(id);
 const canvas=$('field'),context=canvas.getContext('2d'),field=$('tube');

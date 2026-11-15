@@ -1,10 +1,10 @@
-import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=2';
-import {avatarSVG} from '../labyrinth/avatar.js?v=9';
-import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=5';
-import {embedYouTube} from './youtube.js?v=3';
+import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=e83d11a028';
+import {avatarSVG} from '../labyrinth/avatar.js?v=5318415024';
+import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=65b3956eb7';
+import {embedYouTube} from './youtube.js?v=c237aa9fc5';
 import {applyInsets} from '../safe-area.js';
-import {WindowShare} from './screen-share.js?v=2';
-import {CinemaMosaic} from './mosaic.js?v=4';
+import {WindowShare} from './screen-share.js?v=95fe42416c';
+import {CinemaMosaic} from './mosaic.js?v=749919ff0d';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar'),inboxImage=$('inbox-image');

@@ -1,16 +1,18 @@
-import {blackboardLink} from './blackboard/link.js?v=3';
+import {blackboardLink} from './blackboard/link.js?v=ed710cda29';
 import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=12';
-import {golfColors,readAppearance} from './appearance.js?v=9';
-import './labyrinth/avatar.js?v=8';
-import {initCatalog,renderCatalog} from './games-catalog.js?v=4';
+import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=428ae8745f';
+import {golfColors,readAppearance} from './appearance.js?v=3bf8d2e2ca';
+import './labyrinth/avatar.js?v=5318415024';
+import {initCatalog,renderCatalog} from './games-catalog.js?v=450d7363f6';
+import {installSwipe} from './swipe.js?v=1e6e396f97';
+import {initWindowMode} from './window-mode.js?v=4861da0434';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.10',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.11',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
 const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};
@@ -769,19 +771,8 @@ trace('BOOT',APP_NAME+' · registro sessione attivo');
 
 
 
-// PC (Telegram Desktop, macOS, Web): a small Lobby button switches between full screen and window.
-// The choice is remembered: in window mode the app no longer goes full screen by itself.
-const desktopTelegram=['tdesktop','macos','web','weba','webk','unigram'].includes(tg?.platform)&&typeof tg?.requestFullscreen==='function';
-const windowMode=()=>desktopTelegram&&pref('binottoland-window-mode','0')==='1';
-function enterFullscreen(){try{if(tg?.requestFullscreen&&!tg.isFullscreen&&!windowMode())tg.requestFullscreen()}catch{}}
-{
- const button=$('window-mode');
- const paint=()=>{const full=!!tg?.isFullscreen,label=full?'Modalità finestra':'Schermo intero';button.textContent=full?'⤡':'⤢';button.title=label;button.setAttribute('aria-label',label)};
- if(button&&desktopTelegram){
-  button.hidden=false;paint();tg.onEvent?.('fullscreenChanged',paint);
-  button.onclick=()=>{try{if(tg.isFullscreen){setPref('binottoland-window-mode','1');tg.exitFullscreen()}else{setPref('binottoland-window-mode','0');tg.requestFullscreen()}}catch{}setTimeout(paint,300)};
- }
-}
+// Full screen, and on PC the Lobby button for window mode (see window-mode.js).
+const {enterFullscreen}=initWindowMode(tg,$('window-mode'));
 async function startSession(){
  enterFullscreen();
  $('access-retry').hidden=true;$('access-error').textContent='Collegamento a Telegram…';
@@ -809,75 +800,7 @@ function renderSpectators(){
  if(identity&&!document.hidden&&!seated.has(identity.player)&&!seen.has(identity.id))watchers.push(identity);
  output.textContent=watchers.length?(watchers.length===1?'Assiste':'Assistono')+' · '+watchers.map(u=>u.name+(u.id===identity?.id?' (tu)':'')).join(', '):'Nessuno spettatore';
 }
-// Swipe left/right to move between Lobby, Giochi and Settings.
-// Ignored inside a game table, on controls and on areas that scroll sideways.
-(()=>{
- const order=['game','games','settings'];let start=null;
- const current=()=>{const open=document.querySelector('.page:not([hidden])')?.id?.replace('page-','');return ['debug','archive','info'].includes(open)?'settings':open};
- // Swipe starts anywhere: a tap still presses buttons, a horizontal drag becomes a swipe.
- // Only controls that already use a horizontal drag keep it (volume slider, games, open dialogs).
- const blocked=el=>!!el.closest('input[type=range],[role=slider],canvas,iframe,dialog,#board,[data-no-swipe]');
- // A row that can still scroll sideways in that direction scrolls first; at its edge the page swipes.
- const scrollsSideways=(el,dx)=>{
-  for(let e=el;e&&e!==document.body;e=e.parentElement){
-   if(e.scrollWidth<=e.clientWidth+4||!/(auto|scroll)/.test(getComputedStyle(e).overflowX))continue;
-   if(dx<0?e.scrollLeft+e.clientWidth<e.scrollWidth-2:e.scrollLeft>2)return true;
-  }
-  return false;
- };
- // Like Android: the page follows the finger and the next one slides in beside it.
- let drag=null,busy=false;
- const pageEl=name=>$('page-'+name);
- const place=(el,x,animate)=>{el.style.transition=animate?'transform .26s cubic-bezier(.2,.8,.2,1)':'none';el.style.transform=x?`translate3d(${x}px,0,0)`:''};
- const showPeer=(peer,cur)=>{
-  if(peer.dataset.peer)return;
-  if(peer.id==='page-games')renderCatalog();if(peer.id==='page-settings')renderThemePreview();
-  peer.dataset.peer='1';peer.hidden=false;peer.classList.add('swipe-peer');
-  Object.assign(peer.style,{top:cur.offsetTop+'px',left:cur.offsetLeft+'px',width:cur.offsetWidth+'px',height:cur.offsetHeight+'px'});
- };
- const clearPeer=peer=>{if(!peer)return;delete peer.dataset.peer;peer.classList.remove('swipe-peer');Object.assign(peer.style,{top:'',left:'',width:'',height:'',transform:'',transition:''})};
- document.addEventListener('touchstart',e=>{
-  start=null;
-  if(busy||e.touches.length!==1||$('app-shell').hidden||!$('table').hidden||blocked(e.target))return;
-  const t=e.touches[0];start={x:t.clientX,y:t.clientY,at:Date.now()};drag=null;
- },{passive:true});
- document.addEventListener('touchmove',e=>{
-  if(!start||busy)return;
-  const t=e.touches[0],dx=t.clientX-start.x,dy=t.clientY-start.y;
-  if(!drag){
-   if(Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){start=null;return}
-   if(Math.abs(dx)<10||Math.abs(dx)<Math.abs(dy)*1.2)return;
-   if(scrollsSideways(e.target,dx)){start=null;return}
-   const name=current(),i=order.indexOf(name);if(i<0){start=null;return}
-   drag={cur:pageEl(document.querySelector('.page:not([hidden])').id.replace('page-','')),i,peer:null,dir:0};
-  }
-  e.preventDefault();
-  const w=drag.cur.offsetWidth,dir=dx<0?1:-1,nextName=order[drag.i+dir];
-  if(dir!==drag.dir){clearPeer(drag.peer);if(drag.peer)drag.peer.hidden=true;drag.peer=nextName?pageEl(nextName):null;drag.dir=dir;if(drag.peer)showPeer(drag.peer,drag.cur)}
-  // No page on that side: a little rubber-band resistance.
-  const x=drag.peer?dx:dx*0.25;
-  place(drag.cur,x,false);
-  if(drag.peer)place(drag.peer,x+dir*w,false);
-  drag.dx=x;drag.w=w;
- },{passive:false});
- // After a swipe that began on a button, swallow the click the browser may still send.
- let swallowUntil=0;
- document.addEventListener('click',e=>{if(Date.now()<swallowUntil){e.preventDefault();e.stopPropagation();swallowUntil=0}},true);
- document.addEventListener('touchend',()=>{
-  if(!drag){start=null;return}
-  swallowUntil=Date.now()+500;
-  const {cur,peer,dx,w,dir}=drag,speed=Math.abs(dx)/Math.max(1,Date.now()-start.at);drag=null;start=null;
-  const go=!!peer&&(Math.abs(dx)>w*0.3||(speed>0.45&&Math.abs(dx)>40));
-  busy=true;
-  place(cur,go?-dir*w:0,true);if(peer)place(peer,go?0:dir*w,true);
-  setTimeout(()=>{
-   place(cur,0,false);
-   if(go){clearPeer(peer);selectPage(peer.id.replace('page-',''));tg?.HapticFeedback?.selectionChanged?.()}
-   else if(peer){clearPeer(peer);peer.hidden=true}
-   busy=false;
-  },270);
- });
-})();
+installSwipe({selectPage,beforeShow:page=>{if(page==='games')renderCatalog();if(page==='settings')renderThemePreview()},haptic:()=>tg?.HapticFeedback?.selectionChanged?.()});
 // Box height: exactly the first 20 messages; older ones are reached by scrolling inside it.
 function limitChat(){
  const list=$('chat-messages'),rows=[...list.children];

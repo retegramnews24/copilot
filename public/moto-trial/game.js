@@ -1,8 +1,8 @@
-import {CAMPAIGN_LENGTH} from './courses.js?v=9';
+import {CAMPAIGN_LENGTH} from './courses.js?v=bc44963acc';
 import {applyInsets} from '../safe-area.js';
-import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=9';
-import {TrialAudio} from './audio.js?v=7';
-import {drawTrial} from './render.js?v=9';
+import {makeCourse, resetBike, stepBike, turnBike, FIXED_STEP} from './physics.js?v=46a86e1ffe';
+import {TrialAudio} from './audio.js?v=a502dd957f';
+import {drawTrial} from './render.js?v=ef369bfccd';
 
 const $ = id => document.getElementById(id);
 const canvas = $('trail'), ctx = canvas.getContext('2d', {alpha: false});
