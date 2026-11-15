@@ -138,3 +138,15 @@ Verifica: regressioni DOM su salvataggi concorrenti/livrea/strategie/chat e acce
 - In libere e qualifiche ritmo e freni si applicano subito; gli altri valori modificati in pista sono persistiti come assetto programmato e applicati al rientro. La telemetria del giro concluso resta riferita ai valori effettivi.
 - In gara il carico effettivo è separato da quello pianificato e cambia all’ingresso ai box. Mescola e rifornimento seguono il piano sosta. I comandi di rientro attendono il completamento dell’autosalvataggio, evitando di ripristinare un piano precedente.
 - Gli aggiornamenti live preservano i nodi dei campi e le modifiche in corso. Le impostazioni private non sono esposte agli spettatori.
+
+## Guida, strategie pronte, resoconto, sponsor e AI (15 novembre 2026)
+
+- **Percorso guidato** nel Paddock: "Primo campionato · passo N di 6", calcolato dallo stato già inviato dal server; sparisce alla pubblicazione del calendario.
+- **Spiegazioni "?"** su ogni parametro di strategia (aggiunte automaticamente per nome del campo) e **Regolamento** dal pulsante "?" in alto. Nel mercato "GOMMA RESIDUA" diventa "GESTIONE GOMME".
+- **Strategie pronte** (`simulator/engineering.js`): Prudente, Bilanciata (consiglio dei tecnici), Aggressiva. Carico e freni ideali della pista, benzina dai consumi reali, gomma di ogni stint secondo il meteo previsto; ogni piano è verificato con una simulazione completa e riceve più benzina finché arriva al traguardo. I campi manuali sono in "Impostazioni avanzate".
+- **Cronaca** (`simulator/commentary.js`): sorpassi (esclusi gli scambi dovuti ai pit, pausa di 30 s per coppia), cambi in testa, giro più veloce, metà gara, ultimo giro, bandiera a scacchi, pioggia. Ogni evento ha il numero di giro; il podio va in bacheca.
+- **Resoconto privato** (`simulator/debrief.js`): griglia/arrivo, distacco, soste rispetto al vincitore, secondi persi bloccati nel traffico (misurati nello step), gomme sotto il 40% (curva di degrado della fisica), benzina non usata e costo del peso, assenza dal muretto, incidenti. Il punto chiave è la perdita di strategia più grande sopra 3 s. Salvato in `team.lastDebrief`: lo riceve solo il proprietario.
+- **Obiettivo sponsor** (`simulator/sponsor.js`): uno per scuderia e GP, deterministico, visibile prima della gara, congelato alla partenza, +400.000 € una sola volta se centrato. Circa 50% di successo nella stagione di prova.
+- **Scuderie AI** (`simulator/ai-teams.js`): alla pubblicazione del calendario completano la griglia fino a 10 vetture, con forza pari alla media degli iscritti. Sono in `schedule.ai`, separate da `participants` (chi ha approvato); non votano, non comprano, non ricevono resoconto né obiettivo, usano una strategia pronta a ogni GP e lasciano il campionato alla stagione successiva. I calendari già approvati non ricevono AI.
+
+Test: `simulator-presets`, `simulator-commentary`, `simulator-sponsor` (stagione completa), `simulator-ai`, più i controlli DOM in `simulator-ui`.

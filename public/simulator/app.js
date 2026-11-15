@@ -1113,7 +1113,8 @@ function rulesHtml() {
       'Crea la scuderia: ricevi 10 milioni.',
       'Ingaggia 2 piloti, 3 tecnici (motorista, ingegnere aerodinamico, capo meccanico) e compra la power unit.',
       'Iscriviti nella scheda Campionato.',
-      'Il calendario si decide insieme: ogni iscritto accetta la stessa proposta, preme Pronto! e poi Si parte!!. Servono almeno due scuderie.'
+      'Il calendario si decide insieme: ogni iscritto accetta la stessa proposta, preme Pronto! e poi Si parte!!. Servono almeno due scuderie.',
+      'Se siete in pochi, alla pubblicazione del calendario entrano scuderie AI (nome con “AI”) fino a 10 vetture. Non votano, non comprano e lasciano il campionato a fine stagione.'
     ]
   )}${section('Il weekend di gara', [
     'Libere: 30 minuti per GP per provare assetti e consumi, senza costi.',

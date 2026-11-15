@@ -4,6 +4,7 @@ import { engineering } from './engineering.js';
 import { trackRace } from './commentary.js';
 import { debrief } from './debrief.js';
 import { objectiveFor, objectiveMet } from './sponsor.js';
+import { addAiTeams, removeAiTeams, isAi } from './ai-teams.js';
 import { standings, archiveChampionship, TEAM_PRIZES, DRIVER_PRIZES } from './championship.js';
 import {
   advanceSessions,
@@ -408,6 +409,15 @@ export function act(s, u, b, now) {
   }
   if (['vote', 'calendar-ready', 'calendar-start'].includes(b.action)) {
     calendarAction(s, t, b, now, calendar, () => TRACKS.map((_, i) => lapsFor(i)), event);
+    if (s.schedule && !s.schedule.aiAdded) {
+      const added = addAiTeams(s);
+      if (added)
+        event(
+          s,
+          `In griglia anche ${added} ${added === 1 ? 'scuderia' : 'scuderie'} AI: ${(s.schedule.participants.length + added) * 2} vetture al via.`,
+          now
+        );
+    }
     return;
   }
   if (b.action === 'next-season') {
@@ -426,6 +436,7 @@ export function act(s, u, b, now) {
       t.enrolled = false;
       for (const d of t.drivers) if (d) d.points = 0;
     }
+    removeAiTeams(s);
     event(s, 'Aperte le iscrizioni alla stagione ' + s.season + '.', now);
     return;
   }
@@ -446,7 +457,7 @@ function startRace(s, at) {
     events: [],
     onlineSeconds: {}
   };
-  for (const id of s.schedule.participants) {
+  for (const id of [...s.schedule.participants, ...(s.schedule.ai || [])]) {
     const t = s.teams[id];
     if (!ready(t) || t.cash < payroll(t)) {
       event(s, t.name + ': non parte (organico o fondi insufficienti).', at);
@@ -455,7 +466,14 @@ function startRace(s, at) {
     t.cash -= payroll(t);
     // The sponsor goal shown before the race is frozen at the start.
     r.objectives ??= {};
-    r.objectives[id] = objectiveFor(s, id, round);
+    r.objectives[id] = isAi(t) ? null : objectiveFor(s, id, round);
+    // AI teams pick one of the ready-made plans for this track, varied by team and round.
+    if (isAi(t)) {
+      const report = engineering(s, t, TRACKS, deltaFor, r.laps);
+      t.strategies = report.drivers.map(
+        (d, slot) => d.presets[hash(`${s.season}:${round}:${id}:${slot}`) % 3].strategy
+      );
+    }
     for (let slot = 0; slot < 2; slot++) {
       const st = { ...t.strategies[slot] },
         d = t.drivers[slot];
@@ -706,6 +724,7 @@ function finish(s, r, now) {
   s.results = s.results.slice(0, 26);
   // Private report for every team that raced (stored on the team, so only its owner receives it).
   for (const id of new Set(r.cars.map(c => c.team))) {
+    if (isAi(s.teams[id])) continue;
     const t = s.teams[id],
       goal = r.objectives?.[id],
       met = !!goal && objectiveMet(goal, order, id);
@@ -804,6 +823,7 @@ export function view(s, u, now) {
     conditions: weatherAt(Math.min(s.round, 12), 0, s.season),
     teams: Object.values(s.teams).map(t => ({
       id: t.id,
+      ai: isAi(t),
       name: t.name,
       principal: t.principal,
       points: t.points,

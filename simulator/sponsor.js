@@ -9,9 +9,9 @@ const hash = text => {
 };
 
 export function objectiveFor(s, teamId, round) {
-  const participants = s.schedule?.participants || [];
-  if (!participants.includes(teamId) || round >= 13) return null;
-  const cars = participants.length * 2,
+  if (!s.schedule?.participants.includes(teamId) || round >= 13) return null;
+  const participants = [...s.schedule.participants, ...(s.schedule.ai || [])],
+    cars = participants.length * 2,
     me = s.teams[teamId],
     others = participants.filter(id => id !== teamId && s.teams[id]),
     // Rival: the other team closest in the championship (ties by id, for a stable choice).

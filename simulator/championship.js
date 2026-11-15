@@ -40,10 +40,11 @@ export function standings(s, live = false) {
       });
     return drivers.get(id);
   };
-  for (const id of s.schedule?.participants ||
-    Object.values(s.teams)
-      .filter(t => t.enrolled)
-      .map(t => t.id)) {
+  for (const id of s.schedule
+    ? [...s.schedule.participants, ...(s.schedule.ai || [])]
+    : Object.values(s.teams)
+        .filter(t => t.enrolled)
+        .map(t => t.id)) {
     const t = s.teams[id];
     if (!t) continue;
     addTeam(id);
