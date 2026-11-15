@@ -550,6 +550,26 @@ $('screen-full').onclick=async()=>{
   document.body.classList.add('video-full');
 };
 window.addEventListener('keydown',event=>{if(event.key==='Escape')document.body.classList.remove('video-full');});
+// Picture in picture: the video in a small always-on-top window (TV channels, files and shared windows).
+// YouTube's embedded player cannot be detached from outside: Chrome offers it on a double right-click.
+const pipButton=$('screen-pip'),shareVideo=$('share-video');
+const pipVideo=()=>room?.screen?shareVideo:video;
+if(document.pictureInPictureEnabled||typeof video.webkitSetPresentationMode==='function')pipButton.hidden=false;
+pipButton.onclick=async()=>{
+  try{
+    if(document.pictureInPictureElement){await document.exitPictureInPicture();return;}
+    if(!$('youtube').hidden){notice('YouTube: tasto destro due volte sul video, poi “Picture in picture”.');return;}
+    const target=pipVideo();
+    if(target.hidden||target.readyState<1){notice('Avvia prima un video.');return;}
+    if(document.pictureInPictureEnabled&&target.requestPictureInPicture)await target.requestPictureInPicture();
+    else target.webkitSetPresentationMode(target.webkitPresentationMode==='picture-in-picture'?'inline':'picture-in-picture');
+  }catch{notice('Picture in picture non disponibile su questo dispositivo.');}
+};
+for(const el of [video,shareVideo]){
+  el.addEventListener('enterpictureinpicture',()=>pipButton.setAttribute('aria-pressed','true'));
+  el.addEventListener('leavepictureinpicture',()=>pipButton.setAttribute('aria-pressed','false'));
+  el.addEventListener('webkitpresentationmodechanged',()=>pipButton.setAttribute('aria-pressed',String(el.webkitPresentationMode==='picture-in-picture')));
+}
 
 const ranges={seats:[16,62],sidebar:[20,82],favorites:[20,72]};
 function resizePanel(key,value){

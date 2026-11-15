@@ -114,3 +114,5 @@ calc(8px + max(env(safe-area-inset-left),var(--system-safe-left,0px)))}
 #screen-message{overflow-wrap:anywhere;white-space:pre-wrap;max-height:55vh;overflow:auto}
 #group-bot{color:var(--gold);padding:5px 7px}
 #inbox-queue{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+/* Picture in picture: accanto al tasto schermo intero. */
+#screen-pip{position:absolute;right:48px;top:6px;font-size:18px;padding:3px 8px;background:#15121bdf}#screen-pip[hidden]{display:none}#screen-pip[aria-pressed=true]{color:var(--gold)}#screen:has(#youtube:not([hidden])) #screen-pip{right:6px}
