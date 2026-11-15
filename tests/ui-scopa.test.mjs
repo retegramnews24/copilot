@@ -22,7 +22,8 @@ const exposed='\nwindow.__qa={render,createGame,showLobby,openRoom,selectPage,ca
 const importLines=/^import .+;$/gm;
 const root=process.cwd()+'/public';
 const imports=await build({stdin:{
- contents:source.match(importLines).join('\n')+'\nObject.assign(window,{renderScopa,renderNaval,renderBriscola,renderScarabeo,safeInsets,applyInsets,viewportHeight,CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN,golfColors,readAppearance,blackboardLink,initCatalog,renderCatalog,installSwipe,initWindowMode});',
+ // Every name app.js imports is exposed to the evaluated script, so new modules need no change here.
+ contents:source.match(importLines).join('\n')+'\nObject.assign(window,{'+[...source.matchAll(/^import\s*\{([^}]*)\}\s*from/gm)].flatMap(m=>m[1].split(',').map(s=>s.trim().split(/\s+as\s+/).pop()).filter(Boolean)).join(',')+'});',
  resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
 
 const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));const dom=new JSDOM(await fs.readFile('public/index.html','utf8'),{url:'https://unit.test',runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc}),w=dom.window;

@@ -9,22 +9,26 @@ import './labyrinth/avatar.js?v=5318415024';
 import {initCatalog,renderCatalog} from './games-catalog.js?v=450d7363f6';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
+import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
+import {events,trace,initDebugLog} from './debug-log.js?v=938d711947';
+import {gameTitle,staged,gameLimits,ongoing} from './game-info.js?v=2f8dbeba94';
+import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
+import {initThemes} from './themes.js?v=b6682dff0c';
+import {initSettings} from './settings.js?v=64a501b9f0';
+import {renderLeaders,renderNumberLeaders,createLeaderboardLoader} from './leaderboard.js?v=6ae06cf3ca';
+import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.14',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.15',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
-let cinemaMinimized=false; // Cinema reduced behind picture in picture (see minimizeCinema).
-const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
-const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};
+// Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
+const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
 initCatalog();
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
 let pongRoom=null,pongSocket=null,pongRetry=0,pongEpoch=0,pongOpening=false;
 let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastState=null,labyrinthRetry=0,labyrinthBeat=0,labyrinthOpening=false;
-let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
-let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
-let cinemaLookup=null;
 let blackboardLobbyRooms=[],simSummary=null,simSummaryAt=0;
 // Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
 async function loadSimSummary(force=false){
@@ -40,16 +44,7 @@ let sessionToken='',identity=null,onlineUsers=[],chatMessages=[],chatSending=fal
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
 let replayFrames=[],replayPly=null,replayTimer=null,replayRevision=null,replayLoading=false;
-const events=[];
-function trace(level,message){
- const safe=String(message).replace(/\b\d{6,}:[A-Za-z0-9_-]{15,}\b/g,'[REDACTED]').replace(/(tgWebAppData|initData|Authorization|token)[=:]\s*[^\s]+/gi,'$1=[REDACTED]').slice(0,400);
- events.push(new Date().toLocaleTimeString('it-IT')+' ['+level+'] '+safe);
- if(events.length>160)events.splice(0,events.length-160);
- const output=$('terminal');if(output){const bottom=output.scrollHeight-output.scrollTop-output.clientHeight<35;output.textContent=events.join('\n');if(bottom)output.scrollTop=output.scrollHeight}
-}
 let room=null,state=null,ws=null,retry=null,busy=false,credentials={},games=[],lobbyWS=null,lobbyRetry=null,roomEpoch=0;
-function read(key,fallback){try{return JSON.parse(localStorage.getItem(key))||fallback}catch{return fallback}}
-function save(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{throw Error('Abilita la memoria locale per conservare il tuo posto.')} }
 $('name').textContent='Accesso Telegram…';
 history.replaceState(null,'',location.pathname);
 function err(s){$('error').textContent=s;if(s)trace('ERROR',s)}
@@ -64,11 +59,7 @@ async function request(path,data,keepalive=false){
  }catch(error){trace('ERROR',error.message);throw error}
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
-const gameTitle=g=>g?.game==='pong'?'Pong':g?.game==='golf'?'Golf with your gay friends':g?.game==='labyrinth'?'Labyrinth':g?.game==='moto-trial'?'Moto Trial':g?.game==='naval'?'Battaglia navale':g?.game==='briscola5'?'Briscola in cinque':g?.game==='briscola'?'Briscola':g?.game==='scarabeo'?'Scarabeo':g?.game==='scopa'?'Scopa':g?.game==='uno'?'UNO':g?.game==='connect4'?'Forza 4':g?.game==='checkers'?'Dama italiana':'Checkmate!';
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
-const staged=g=>['uno','scarabeo','scopa','naval','briscola','briscola5'].includes(g?.game);
-const gameLimits=g=>g?.limits||(g?.game==='briscola5'?{min:5,max:5}:['briscola','scarabeo','scopa'].includes(g?.game)?{min:2,max:4}:g?.game==='uno'?{min:2,max:10}:{min:2,max:2});
-const ongoing=g=>!g.archived&&(g.phase!=='finished'||g.series&&!g.series.done);
 function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 
 function renderProfile(){
@@ -170,9 +161,7 @@ function renderNow(){
   else if(mine&&game.phase==='waiting')items.push({rank:2,text:'Il tuo tavolo '+game.number+' · '+gameTitle(game)+' aspetta giocatori',label:'Apri',action:()=>openRoom(game.room,false)});
   else if(!mine&&!own&&game.phase==='waiting'&&!full&&game.players.length)items.push({rank:1,text:game.players[0].name+' ti aspetta a '+gameTitle(game)+' · Tavolo '+game.number,label:'Gioca',action:()=>openRoom(game.room,false)});
  }
- const watching=cinemaMinimized&&cinemaRooms.rooms.find(entry=>entry.id===cinemaRoom);
- if(cinemaMinimized)items.push({rank:-1,text:'Cinema · stai guardando'+(watching?' la Sala '+watching.number+(watching.channel?' · '+watching.channel:''):''),label:'Torna',action:restoreCinema});
- for(const entry of cinemaRooms.rooms)if(entry.viewers.length&&!(cinemaMinimized&&entry.id===cinemaRoom))items.push({rank:3,text:'Cinema · Sala '+entry.number+(entry.channel?' · '+entry.channel:'')+' · '+entry.viewers.length+(entry.viewers.length===1?' spettatore':' spettatori'),label:'Entra',action:()=>openCinema(entry.id)});
+ items.push(...cinema.nowItems());
  for(const entry of blackboardLobbyRooms)if(entry.people.length)items.push({rank:3,text:'Lavagna · Sala '+entry.number+' · '+entry.people.map(p=>p.name).join(', '),label:'Entra',action:button=>openBlackboard(button,entry.id)});
  // Binotto Simulator: what is still to do (server summary, read-only).
  const openSim=()=>$('play-binotto-simulator').click();
@@ -308,7 +297,7 @@ function connect(){
 }
 function connectLobby(){
  if(!sessionToken)return;
- connectCinema();
+ cinema.connect();
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
@@ -323,37 +312,7 @@ $('back-settings').onclick=()=>selectPage('settings');
 document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selectPage('settings'));
 $('open-archive').onclick=()=>{renderArchive();selectPage('archive')};
 $('open-info').onclick=()=>selectPage('info');
-function applyPreferences(){
- $('setting-sound').checked=pref('binottoland-sound','on')!=='off';
- $('setting-haptics').checked=pref('binottoland-haptics','on')!=='off';
- const scale=['1','1.12','1.25'].includes(pref('binottoland-text','1'))?pref('binottoland-text','1'):'1';
- $('setting-text').value=scale;document.documentElement.style.zoom=scale==='1'?'':scale;
-}
-$('setting-sound').onchange=e=>{setPref('binottoland-sound',e.target.checked?'on':'off');trace('UI','Suoni '+(e.target.checked?'attivi':'spenti'))};
-$('setting-haptics').onchange=e=>{setPref('binottoland-haptics',e.target.checked?'on':'off');if(e.target.checked)tg?.HapticFeedback?.impactOccurred?.('light')};
-$('setting-text').onchange=e=>{setPref('binottoland-text',e.target.value);applyPreferences()};
-applyPreferences();
-function renderThemePreview(){
- const pieces=['r','n','q','k','P','P','B','K'];
- $('theme-preview').replaceChildren(...pieces.map((piece,i)=>{const sq=document.createElement('span');sq.className='square'+((Math.floor(i/4)+i)%2?' dark':'');sq.innerHTML=pieceSvg(piece);return sq}));
-}
-document.addEventListener('click',e=>{if(e.target.closest('[data-theme-choice],[data-board-choice],[data-piece-choice]'))renderThemePreview()});
-const isDev=()=>pref('binottoland-dev','0')==='1';
-function applyDevMode(){$('open-debug').hidden=!isDev();if($('solo-labyrinth'))$('solo-labyrinth').hidden=!isDev()}
-applyDevMode();
-let versionTaps=0,versionTimer=null;
-$('app-version').onclick=()=>{
- versionTaps++;clearTimeout(versionTimer);versionTimer=setTimeout(()=>versionTaps=0,1500);
- if(versionTaps<5)return;versionTaps=0;setPref('binottoland-dev',isDev()?'0':'1');applyDevMode();
- $('app-version').textContent=APP_NAME+(isDev()?' · modalità sviluppatore':'');
-};
-$('report-problem').onclick=async()=>{
- const report=['Segnalazione '+APP_NAME,new Date().toLocaleString('it-IT'),'Pagina: '+(document.querySelector('.page:not([hidden])')?.id||'—'),'Schermo: '+innerWidth+'×'+innerHeight+' · '+(tg?.platform||'browser'),'',...events.slice(-40)].join('\n');
- let copied=false;try{await navigator.clipboard.writeText(report);copied=true}catch{}
- const link='https://t.me/share/url?url='+encodeURIComponent('https://t.me/checkmategame_bot?startapp')+'&text='+encodeURIComponent(report.slice(0,1500));
- if(tg?.openTelegramLink)tg.openTelegramLink(link);else window.open(link,'_blank','noopener');
- $('report-result').textContent=(copied?'Registro copiato. ':'')+'Scegli in Telegram a chi inviarlo (per esempio un amministratore del gruppo).';
-};
+const {renderThemePreview}=initSettings({appName:APP_NAME,tg,trace,events});
 async function createTable(game,target,mode,seats){
  const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});
  stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};
@@ -473,14 +432,7 @@ document.querySelectorAll('.tab').forEach((tab,index,tabs)=>{
   navigate(tabs[next].dataset.page);
  };
 });
-function applyTheme(theme){
- if(!['dark','light','slate','ocean','rose','sand'].includes(theme))theme='dark';
- document.documentElement.dataset.theme=theme;
- document.querySelectorAll('[data-theme-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.themeChoice===theme)));
- document.querySelector('meta[name="theme-color"]').content={dark:'#15231f',light:'#f2eee4',slate:'#18233c',ocean:'#102c35',rose:'#301d2a',sand:'#efe0bd'}[theme];
-}
-applyTheme(read('checkmate-theme','dark'));
-document.querySelectorAll('[data-theme-choice]').forEach(button=>button.onclick=()=>{applyTheme(button.dataset.themeChoice);try{save('checkmate-theme',button.dataset.themeChoice)}catch(e){err(e.message)}});
+initThemes({onError:err,trace});
 $('debug-refresh').onclick=async()=>{
  $('debug-result').textContent='Aggiornamento…';
  try{const health=await request('/api/health');trace('HEALTH','Server '+health.version);if(room){render(await api('state'));connect();$('debug-result').textContent='Stato aggiornato. Riconnessione avviata.'}else{connectLobby();$('debug-result').textContent='Riconnessione alla sala partite avviata.'}}catch(e){$('debug-result').textContent=e.message}refreshDebug();
@@ -492,29 +444,13 @@ function fitViewport(){
  sendMotoInsets(insets);
  sendArcadeInsets(insets);
  golfPost('insets',{insets});
- cinemaPost('insets',{insets});
+ cinema.post('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
 for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
 fitViewport();refreshDebug();
 
 
-const pieceNames={p:'pedone',r:'torre',n:'cavallo',b:'alfiere',q:'donna',k:'re'};
-function pieceSvg(piece){
- const type=piece.toLowerCase(),white=piece!==type;
- const shapes={
- p:'<circle cx="22.5" cy="12" r="6"/><path d="M18 18h9l-1 8 6 6H13l6-6z"/><path d="M12 33h21v5H12z"/>',
- r:'<path d="M10 7h6v5h4V7h5v5h4V7h6v12l-5 3 1 10H14l1-10-5-3z"/><path d="M11 33h23v5H11z"/>',
- n:'<path d="m13 30 4-7-6 1-3-5L20 7l9 3 5 9-1 13H13z"/><path d="m20 7-1-4 6 4m-9 13 8-3-4 8" fill="none"/><circle cx="22" cy="13" r="1.3" fill="currentColor" stroke="none"/><path d="M11 33h24v5H11z"/>',
- b:'<path d="M22.5 5c-4 4-9 9-9 13 0 4 4 7 9 7s9-3 9-7c0-4-5-9-9-13z"/><path d="m25 11-6 7" fill="none"/><path d="m18 25-4 7h17l-4-7zM11 33h23v5H11z"/>',
- q:'<path d="m10 12 5 18h15l5-18-8 8-4.5-12-4.5 12z"/><circle cx="10" cy="10" r="2.5"/><circle cx="22.5" cy="6" r="2.5"/><circle cx="35" cy="10" r="2.5"/><path d="M14 30h17v3H14zM11 34h23v4H11z"/>',
- k:'<path d="M20 4h5v5h5v4h-5v5h-5v-5h-5V9h5z"/><path d="M14 18c-8-3-9 7 0 10l2 4h13l2-4c9-3 8-13 0-10l-8.5 4z"/><path d="M12 33h21v5H12z"/>'
- };
- return '<svg viewBox="0 0 45 45" aria-hidden="true"><g fill="var(--'+(white?'white':'black')+'-piece)" stroke="var(--'+(white?'white':'black')+'-outline)" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round" color="var(--'+(white?'white':'black')+'-outline)">'+shapes[type]+'</g></svg>';
-}
-function position(fen){
- const result={};fen.split(' ')[0].split('/').forEach((row,index)=>{let file=0;for(const char of row){if(/\d/.test(char))file+=Number(char);else{result['abcdefgh'[file]+(8-index)]=char;file++}}});return result;
-}
 function canMove(){if(replayPly!==null||state?.archived||state?.phase!=='playing'||busy)return false;const me=state.players.findIndex(p=>p.id===credentials.player);if(me<0)return false;if(state.scarabeo?.pending)return state.scarabeo.pending.by!==me&&!Object.hasOwn(state.scarabeo.pending.votes,me);if(state.naval?.phase==='placement')return !state.naval.ready[me];return state.turn===me}
 function renderBoard(){
  $('naval-area').hidden=!state?.naval;$('briscola-area').hidden=!state?.briscola;
@@ -556,12 +492,6 @@ function renderMoveStrip(){
  if(atBottom)strip.scrollTop=strip.scrollHeight;
  updateReplayControls();requestAnimationFrame(fitBoard);
 }
-function checkerSvg(piece){
- const side=piece===piece.toUpperCase()?'white':'black',crown=piece.toLowerCase()==='k';
- return '<svg viewBox="0 0 45 45" aria-hidden="true"><g fill="var(--'+side+'-piece)" stroke="var(--'+side+'-outline)" stroke-width="1.7"><ellipse cx="22.5" cy="25" rx="16" ry="15"/><circle cx="22.5" cy="21" r="16"/><circle cx="22.5" cy="21" r="11.8" fill="none" opacity=".65"/>'+(crown?'<path d="m14 18 3 8h11l3-8-6 4-2.5-7-2.5 7z"/><path d="M17 29h11" fill="none"/>':'<circle cx="22.5" cy="21" r="7" fill="none" opacity=".4"/>')+'</g></svg>';
-}
-const unoNames={red:'Rosso',yellow:'Giallo',green:'Verde',blue:'Blu'},unoSymbols={skip:'⊘',reverse:'⇄',draw2:'+2',wild:'✦',wild4:'+4'};
-function unoCard(card,button=false){const el=document.createElement(button?'button':'div');el.className='uno-card '+(card.color||'wild');el.textContent=unoSymbols[card.value]||card.value;el.setAttribute('aria-label',(unoNames[card.color]||'Jolly')+' · '+(unoSymbols[card.value]||card.value));return el}
 function renderUno(){
  const u=state.uno,mine=state.players.findIndex(p=>p.id===credentials.player),waiting=state.phase==='waiting',active=canMove();
  $('uno-message').textContent=waiting?state.players.length+'/10 giocatori · '+(mine===0?'Avvia quando siete pronti.':'Attendi che il creatore avvii.'):u.lastEvent;
@@ -657,17 +587,7 @@ async function sendMove(move){
 $('flip-board').onclick=()=>{const mine=state.players.findIndex(p=>p.id===credentials.player);boardFlipped=!(boardFlipped===null?mine===1:boardFlipped);renderBoard()};
 document.querySelectorAll('[data-promotion]').forEach(button=>button.onclick=()=>{if(promotionMove)sendMove({...promotionMove,promotion:button.dataset.promotion})});
 $('cancel-promotion').onclick=()=>{promotionMove=null;$('promotion').hidden=true};
-function applyBoardTheme(theme){
- if(!['classic','forest','walnut','blue','plum','graphite'].includes(theme))theme='classic';
- document.documentElement.dataset.board=theme;
- document.querySelectorAll('[data-board-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.boardChoice===theme)));
-}
-applyBoardTheme(read('checkmate-board','classic'));
-document.querySelectorAll('[data-board-choice]').forEach(button=>button.onclick=()=>{applyBoardTheme(button.dataset.boardChoice);try{save('checkmate-board',button.dataset.boardChoice);trace('UI','Scacchiera '+button.dataset.boardChoice)}catch(e){err(e.message)}});
-$('clear-terminal').onclick=()=>{events.length=0;$('terminal').textContent='';trace('INFO','Registro pulito')};
-$('copy-terminal').onclick=async()=>{try{await navigator.clipboard.writeText(events.join('\n'));$('debug-result').textContent='Log copiato.'}catch{$('debug-result').textContent='Copia non disponibile: puoi selezionare il testo del registro.'}};
-window.addEventListener('error',event=>trace('ERROR',event.message||'Errore JavaScript'));
-window.addEventListener('unhandledrejection',event=>trace('ERROR',event.reason?.message||'Operazione non completata'));
+initDebugLog();
 
 function renderArchive(){
  $('archive-games').replaceChildren();
@@ -762,13 +682,6 @@ window.addEventListener('keydown',event=>{
  else if(!event.shiftKey&&(active===last||!modal.contains(active))){event.preventDefault();first.focus()}
 });
 
-function applyPieceTheme(theme){
- if(!['classic','forest','walnut','blue','plum','graphite'].includes(theme))theme='classic';
- document.documentElement.dataset.pieces=theme;
- document.querySelectorAll('[data-piece-choice]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.pieceChoice===theme)));
-}
-applyPieceTheme(read('checkmate-pieces','classic'));
-document.querySelectorAll('[data-piece-choice]').forEach(button=>button.onclick=()=>{applyPieceTheme(button.dataset.pieceChoice);try{save('checkmate-pieces',button.dataset.pieceChoice)}catch(e){err(e.message)}});
 
 trace('BOOT',APP_NAME+' · registro sessione attivo');
 
@@ -1175,7 +1088,7 @@ window.addEventListener('message',event=>{
 });
 tg?.onEvent('backButtonClicked',()=>{
  if(!arcadeOverlay.hidden){if(arcadeFrame.title==='Binotto Simulator'&&simulatorBackReady)arcadeFrame.contentWindow?.postMessage({type:'simulator:back'},location.origin);else closeArcade();}
- else if(!$('cinema-overlay').hidden)leaveCinema();
+ else if(cinema.visible())cinema.leave();
  else if(!$('golf-overlay').hidden)closeGolf();
  else if(!motoOverlay.hidden)closeMotoTrial();
  else closeLabyrinth();
@@ -1300,235 +1213,9 @@ window.addEventListener('message',async event=>{
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&labyrinthSocket?.readyState===1)labyrinthSocket.send(JSON.stringify({type:'heartbeat'}))});
 
 function renderTutorial(s){const box=$('tutorial-panel'),hint=s.tutorial;box.hidden=!hint;if(!hint)return;$('tutorial-title').textContent=hint.title;$('tutorial-text').textContent=hint.text;$('tutorial-reason').textContent=hint.reason;$('tutorial-move').hidden=!hint.action;$('tutorial-move').disabled=busy;$('tutorial-move').onclick=()=>sendMove({...hint.action,revision:state.revision});}
-let leaderBusy=false;
-function paintLeaders(kind,rows){
- const list=$('leaderboard-'+kind),top=rows.slice(0,5),signature=JSON.stringify(top);
- if(list.dataset.ranking===signature)return;
- const expanded=new Set([...list.querySelectorAll('details[open]')].map(entry=>entry.dataset.player));
- list.dataset.ranking=signature;
- list.replaceChildren();
- for(const [index,row] of top.entries()){
-  const item=document.createElement('li'),entry=document.createElement('details'),summary=document.createElement('summary');
-  const title=document.createElement('strong'),count=document.createElement('span'),detail=document.createElement('p');
-  entry.dataset.player=row.id;entry.open=expanded.has(row.id);
-  title.textContent=(index+1)+'. '+row.name;
-  count.textContent=String(row.wins);
-  count.setAttribute('aria-label',row.wins+' '+(row.wins===1?'vittoria':'vittorie'));
-  detail.className='hint';
-  detail.textContent=Object.entries(row.games).sort((a,b)=>b[1]-a[1]).map(([game,n])=>gameTitle({game})+' '+n).join(' · ');
-  summary.append(title,count);entry.append(summary,detail);item.append(entry);list.append(item);
- }
- $('leaderboard-'+kind+'-empty').hidden=rows.length>0;
-}
-function renderNumberLeaders(rows){
- const list=$('leaderboard-number'),levels={easy:'Facile',medium:'Media',hard:'Difficile'};
- list.replaceChildren(...rows.map((row,index)=>{
-  const item=document.createElement('li'),name=document.createElement('strong'),points=document.createElement('span');
-  name.textContent=(index+1)+'. '+row.name;
-  points.textContent=Number(row.points).toLocaleString('it-IT')+' punti · '+levels[row.level];
-  item.append(name,points);
-  return item;
- }));
- $('leaderboard-number-empty').hidden=rows.length>0;
-}
-function renderLeaders(data){
- paintLeaders('solo',data.aiLeaderboard||[]);
- paintLeaders('multi',data.leaderboard||[]);
- if(Array.isArray(data.numberConnectLeaders))renderNumberLeaders(data.numberConnectLeaders);
-}
-async function loadLeaders(){
- if(!sessionToken||leaderBusy)return;
- leaderBusy=true;
- try{
-  let data;
-  do{
-   data=await request('/api/leaderboard?mode=both');
-   renderLeaders(data);
-  }while(data.pending);
- }catch(e){err(e.message)}finally{leaderBusy=false}
-}
+const loadLeaders=createLeaderboardLoader({request,onError:err,ready:()=>!!sessionToken});
 $('solo-labyrinth').onclick=()=>{enterFullscreen();labyrinthOverlay.hidden=false;labyrinthFrame.src='/labyrinth/index.html?dev=1&v=dev3';tg?.BackButton?.show()};
 
 $('access-retry').onclick=startSession;
-function cinemaPost(type,payload={}){
- if(cinemaReady)$('cinema-frame').contentWindow?.postMessage({type:'cinema:'+type,...payload},location.origin);
-}
-function renderCinemaLobby(){
- const connected=cinemaSocket?.readyState===1,list=$('cinema-rooms');
- $('open-cinema').disabled=!connected;
- const status=$('cinema-lobby-status');
- status.textContent=cinemaLobbyMessage||(connected?'Nessuna sala aperta.':'Collegamento al cinema…');
- // Every open room is listed, empty or not, until it is closed.
- const occupied=cinemaRooms.rooms;
- status.hidden=connected&&occupied.length>0&&!cinemaLobbyMessage;
- $('cinema-lobby').hidden=connected&&!occupied.length&&!cinemaLobbyMessage;
- const focused=document.activeElement?.dataset.cinemaRoom;
- list.replaceChildren(...occupied.map(entry=>{
-  const button=document.createElement('button');
-  button.type='button';button.className='alt cinema-room-card';button.disabled=!connected;button.dataset.cinemaRoom=entry.id;
-  const title=document.createElement('strong'),channel=document.createElement('span'),people=document.createElement('small');
-  title.textContent='Sala '+entry.number;channel.textContent=entry.channel??'In attesa di un canale';
-  people.textContent=entry.viewers.length?entry.viewers.length+(entry.viewers.length===1?' spettatore · ':' spettatori · ')+entry.viewers.map(p=>p.name).join(', '):'Nessuno in sala';
-  button.append(title,channel,people);button.onclick=()=>openCinema(entry.id);
-  return button;
- }));
- if(focused)Array.from(list.children).find(el=>el.dataset.cinemaRoom===focused)?.focus();
- renderNow();
-}
-function cinemaSend(action){
- const raw=JSON.stringify(action);
- if(raw&&raw.length<=(action?.type==='screen-signal'?24576:4096)&&cinemaSocket?.readyState===1&&cinemaSocket.bufferedAmount<64000){
-  cinemaSocket.send(raw);return true;
- }
- cinemaPost('packet',{packet:{type:'error',message:'Comando non inviato. Riprova tra poco.'}});
- return false;
-}
-function enterCinema(){
- if(!cinemaReady||cinemaSocket?.readyState!==1)return;
- if(cinemaEntry){
-  cinemaSend({type:'appearance',appearance:readAppearance()});
-  if(cinemaSend(cinemaEntry))cinemaEntry=null;
- }else if(cinemaRoom&&!cinemaRooms.active)cinemaSend({type:'enter',room:cinemaRoom});
-}
-function retryCinema(){
- cinemaRetry=setTimeout(connectCinema,cinemaDelay);
- cinemaDelay=Math.min(10000,cinemaDelay*2);
-}
-function connectCinema(){
- if(cinemaSocket||!sessionToken)return;
- clearTimeout(cinemaRetry);
- let socket;
- try{socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/cinema/ws',['checkmate',sessionToken]);}
- catch{retryCinema();return;}
- cinemaSocket=socket;
- socket.onopen=()=>{
-  if(cinemaSocket!==socket)return;
-  cinemaDelay=700;renderCinemaLobby();cinemaPost('connection',{connected:true});
-  cinemaSend({type:'appearance',appearance:readAppearance()});
-  enterCinema();
- };
- socket.onmessage=event=>{
-  if(cinemaSocket!==socket)return;
-  try{
-   const packet=JSON.parse(event.data);
-   if(packet.type==='rooms'){
-    cinemaRooms=packet;
-    if(packet.active&&!cinemaOpen()){cinemaSend({type:'leave'});return;}
-    if(packet.active)cinemaRoom=packet.active.id;
-    renderCinemaLobby();
-   }
-   if(packet.type==='favorites')cinemaFavorites=packet;
-   if(packet.type==='room-closed'&&packet.id===cinemaRoom){closeCinema('La sala è stata chiusa.',false);return;}
-   if(packet.type==='error'&&cinemaOpen()&&!cinemaRooms.active){closeCinema(packet.message);return;}
-   cinemaPost('packet',{packet});
-  }catch{}
- };
- socket.onclose=event=>{
-  if(cinemaSocket!==socket)return;
-  cinemaSocket=null;cinemaRooms={...cinemaRooms,active:null};
-  const expired=event.code===4001;
-  if(expired)cinemaLobbyMessage='Riapri Binottoland da Telegram.';
-  renderCinemaLobby();cinemaPost('connection',{connected:false,message:expired?cinemaLobbyMessage:undefined});
-  if(!expired)retryCinema();
- };
-}
-// With picture in picture open, "← Lobby" only reduces the Cinema: the room stays connected out of sight,
-// the video keeps playing in its small window and "Adesso" offers the way back.
-const cinemaOpen=()=>!$('cinema-overlay').hidden||cinemaMinimized;
-let cinemaPip=false;
-const leaveCinema=()=>cinemaPip&&!cinemaMinimized?minimizeCinema():closeCinema();
-function minimizeCinema(){
- if($('cinema-overlay').hidden)return;
- cinemaMinimized=true;$('cinema-overlay').hidden=true;
- tg?.BackButton?.hide();
- try{tg?.enableVerticalSwipes?.()}catch{}
- leaveRoom();selectPage('game');renderCinemaLobby();
-}
-function restoreCinema(){
- if(!cinemaMinimized)return;
- cinemaMinimized=false;$('cinema-overlay').hidden=false;
- enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- tg?.BackButton?.show();renderNow();
-}
-function closeCinema(message='',leave=true){
- if(!cinemaOpen())return;
- // Closed while reduced (picture in picture shut, room closed): the rest of the app is left as it is.
- const reduced=cinemaMinimized;cinemaMinimized=false;cinemaPip=false;
- if(leave)cinemaSend({type:'leave'});
- cinemaLookup?.abort();cinemaLookup=null;
- cinemaRoom=null;cinemaEntry=null;cinemaReady=false;cinemaRooms={...cinemaRooms,active:null};
- $('cinema-overlay').hidden=true;$('cinema-frame').src='about:blank';
- if(reduced){cinemaLobbyMessage=message;renderCinemaLobby();return;}
- tg?.BackButton?.hide();
- try{tg?.enableVerticalSwipes?.()}catch{}
- leaveRoom();selectPage('game');cinemaLobbyMessage=message;renderCinemaLobby();
- ($('cinema-rooms').querySelector('button:not(:disabled)')||$('tab-game')).focus();
-}
-function openCinema(id){
- if(cinemaMinimized){if(!id||id===cinemaRoom){restoreCinema();return}closeCinema()}
- if(!$('cinema-overlay').hidden||cinemaSocket?.readyState!==1)return;
- cinemaLobbyMessage='';
- cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
- enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
- $('cinema-overlay').hidden=false;$('cinema-frame').src='/cinema/index.html?v=13';
- tg?.BackButton?.show();
-}
-$('open-cinema').onclick=()=>openCinema();
-async function lookupCinemaYouTube(id,params){
- if(!Number.isSafeInteger(id)||!params||typeof params!=='object')return;
- cinemaLookup?.abort();
- const controller=new AbortController();cinemaLookup=controller;
- const timeout=setTimeout(()=>controller.abort(),32000);
- const query=new URLSearchParams();
- for(const key of ['mode','q','type','id','handle'])if(typeof params[key]==='string')query.set(key,params[key].slice(0,200));
- let result,error;
- try{
-  const response=await fetch('/api/cinema/youtube?'+query,{
-   headers:{Authorization:'Bearer '+sessionToken},signal:controller.signal
-  });
-  result=await response.json().catch(()=>null);
-  if(response.status===401)error='La sessione è scaduta. Riapri Binottoland da Telegram.';
-  else if(!response.ok)error=result?.error||'Ricerca YouTube non disponibile (HTTP '+response.status+').';
-  else if(!Array.isArray(result?.items))error='Il server ha restituito una risposta YouTube incompleta.';
- }catch{error=controller.signal.aborted?'YouTube non ha risposto in tempo. Riprova.':'Collegamento al servizio YouTube interrotto. Riprova.';}
- finally{clearTimeout(timeout);}
- if(cinemaLookup===controller){cinemaLookup=null;cinemaPost('youtube-result',{id,result,error});}
-}
-async function armCinemaGroup(source,stop){
- const room=cinemaRoom;
- if(!room){cinemaPost('group-armed',{error:'Entra prima in una sala Cinema.'});return;}
- let result,error;
- try{
-  const query=new URLSearchParams({room});
-  const response=await fetch('/api/cinema/group/arm?'+query,{
-   method:stop?'DELETE':'POST',headers:{Authorization:'Bearer '+sessionToken},signal:AbortSignal.timeout(15000)
-  });
-  result=response.status===204?null:await response.json();
-  if(!response.ok&&!(stop&&response.status===404))error=result?.error||'Collegamento Telegram non riuscito.';
- }catch{error='Telegram non raggiungibile. Riprova.';}
- if(room===cinemaRoom&&source===$('cinema-frame').contentWindow)cinemaPost('group-armed',{result,error,stopped:stop&&!error});
-}
-window.addEventListener('message',event=>{
- if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||!cinemaOpen())return;
- const data=event.data;
- if(data?.type==='cinema:ready'){
-  cinemaReady=true;
-  cinemaPost('insets',{insets:safeInsets(tg)});
-  cinemaPost('connection',{connected:cinemaSocket?.readyState===1});
-  if(cinemaFavorites)cinemaPost('packet',{packet:cinemaFavorites});
-  enterCinema();return;
- }
- if(data?.type==='cinema:exit'){leaveCinema();return;}
- if(data?.type==='cinema:pip'){
-  cinemaPip=data.active===true;
-  // Small window shut while reduced: the X (video paused) leaves the room, "back to tab" returns to it.
-  if(!cinemaPip&&cinemaMinimized){if(data.paused)closeCinema();else restoreCinema()}
-  return;
- }
- if(data?.type==='cinema:action')cinemaSend(data.action);
- 
- if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);
- if(data?.type==='cinema:group-arm')armCinemaGroup(event.source,data.stop===true);
-});
 
 startSession();
