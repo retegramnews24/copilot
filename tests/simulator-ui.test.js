@@ -4,6 +4,7 @@ import {JSDOM} from 'jsdom';
 import {initial,act,view,advance,refreshMarket} from '../simulator/engine.js';
 const dom=new JSDOM(readFileSync('public/arcade/binotto-simulator.html','utf8'),{url:'https://test/arcade/binotto-simulator',runScripts:'outside-only',pretendToBeVisual:true});
 const w=dom.window,s=initial(Date.now()),u={id:'1',name:'Test'};act(s,u,{action:'create'},Date.now());s.revision=1;
+w.HTMLDialogElement.prototype.showModal??=function(){this.open=true};w.HTMLDialogElement.prototype.close??=function(){this.open=false};
 w.setInterval=()=>0;w.requestAnimationFrame=()=>0;w.fetch=async(url,opts)=>{if(opts.body){act(s,u,JSON.parse(opts.body),Date.now());s.revision++}return {ok:true,json:async()=>structuredClone(view(s,u,Date.now()))}};
 const source=readFileSync('public/simulator/app.js','utf8').replace(/^import .*\r?\n/gm,'').replace(/^/, 'const attachCanvas=()=>{},draw=()=>{},resetCamera=()=>{},getCamera=()=>({}),setCamera=()=>{},installPanelLayouts=()=>()=>{},installCockpit=()=>()=>{},saveView=()=>{},readView=()=>({}),replacePanelContent=(el,html)=>el.innerHTML=html;\n');
 w.eval(source+'\nwindow.qa={accept,render,poll,navigateBack,applySimulatorInsets,qualifyingClock,updateSessions,updateRace,updateCommunity,getData:()=>data,tab:value=>{tab=value;render()},start:next=>{token="test";opened=true;tab="Scuderia";accept(next);render()}};');
@@ -17,7 +18,11 @@ form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await n
 assert.equal(s.teams['1'].colors[0],'#123456');assert.equal(s.teams['1'].count,3);
 w.qa.accept(old);assert.equal(w.qa.getData().me.colors[0],'#123456','late response must not undo saved livery');w.qa.render();assert.equal(w.document.querySelector('[name="color0"]').value,'#123456');
 // Saving one driver's plan must preserve the other driver's edits.
-w.qa.tab('Box');assert(![...w.document.querySelectorAll('#navigation button')].some(b=>b.textContent==='Telemetria'));assert.match(w.document.getElementById('main').textContent,/Box · assetto, strategia e telemetria/);
+w.qa.tab('Box');await new Promise(r=>setTimeout(r,0));
+// Every strategy field gets a "?" next to its caption, and the rules open from the header.
+for(const name of ['wing','brake','compound','pace','fuel','refuel','stopLap0'])assert(w.document.querySelector(`[data-form="strategy"] label:has(> [name="${name}"]) .help-caption .help-btn[data-action="help"]`),'help for '+name);
+w.document.querySelector('[data-form="strategy"] .help-btn[data-help="wing"]').click();await new Promise(r=>setTimeout(r,0));assert.match(w.document.getElementById('modal').textContent,/Carico aerodinamico.*curva/);w.document.querySelector('#modal [data-action="rules"]').click();await new Promise(r=>setTimeout(r,0));assert.match(w.document.getElementById('modal').textContent,/Come funziona Binotto Simulator.*Il weekend di gara/);w.document.getElementById('modal').close();
+assert(![...w.document.querySelectorAll('#navigation button')].some(b=>b.textContent==='Telemetria'));assert.match(w.document.getElementById('main').textContent,/Box · assetto, strategia e telemetria/);
 let forms=[...w.document.querySelectorAll('[data-form="strategy"]')];
 for(const [i,f] of forms.entries()){f.elements.wing.value=String(61+i);f.elements.wing.dispatchEvent(new w.Event('input',{bubbles:true}));}
 forms[0].dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));await new Promise(r=>setTimeout(r,30));

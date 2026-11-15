@@ -1755,3 +1755,52 @@ main[data-page='Team'] {
     font-size: 12px;
   }
 }
+
+/* Spiegazioni "?" accanto ai parametri e regolamento. */
+.help-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  min-height: 0;
+  margin: 0 0 0 5px;
+  padding: 0;
+  border: 1px solid var(--teal);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--teal);
+  font:
+    700 10px/1 ui-monospace,
+    monospace;
+  vertical-align: 1px;
+  cursor: help;
+}
+.help-btn:hover {
+  background: var(--teal);
+  color: var(--bg);
+}
+.rules h3 {
+  margin: 16px 0 6px;
+  color: var(--gold);
+}
+.rules ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.rules li {
+  margin: 4px 0;
+  color: var(--muted);
+}
+.rules li b {
+  color: var(--teal);
+}
+
+.help-caption {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.help-caption .help-btn {
+  margin: 0;
+  flex: none;
+}

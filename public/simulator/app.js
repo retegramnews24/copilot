@@ -674,7 +674,7 @@ function market() {
     .map(([r, n]) => button('market-role', n, `data-role="${r}"`, r === marketRole ? 'active' : ''))
     .join(
       ''
-    )}</div><p class="muted subtle">Un livello ogni 4 gare, oppure 3 gare in presenza (almeno metà gara collegato). Progressione: ${t.xp % 300} / 300 XP. Ogni contratto è esclusivo; rinnovo giornaliero.</p><div class="grid market-grid" data-no-resize="true">${page.items.map(o => `<article class="card contract market-offer ${o.sold ? 'sold' : ''}"><div class="row"><span class="role">${roles[o.role]}</span><span class="tag">LV ${o.tier}</span></div><h3>${esc(o.name)}</h3><div class="stats"><div><small>COMPETENZA</small><b>${o.skill}</b></div>${o.role === 'driver' ? `<div><small>COSTANZA</small><b>${o.consistency}</b></div><div><small>GOMMA RESIDUA</small><b>${o.tyres}</b></div>` : ''}</div><p><b>${money(o.fee)}</b><br><small>${o.salary ? money(o.salary) + ' / GP' : 'Acquisto motore · nessuno stipendio'}</small></p>${button('hire', o.sold ? 'Contratto assegnato' : o.tier > level ? 'Sbloccato al livello ' + o.tier : 'Ingaggia →', `data-id="${o.id}" ${o.sold || o.tier > level || data.race?.active ? 'disabled' : ''}`, o.sold ? '' : 'primary')}</article>`).join('')}</div>${page.controls}`;
+    )}</div><p class="muted subtle">Un livello ogni 4 gare, oppure 3 gare in presenza (almeno metà gara collegato). Progressione: ${t.xp % 300} / 300 XP. Ogni contratto è esclusivo; rinnovo giornaliero.</p><div class="grid market-grid" data-no-resize="true">${page.items.map(o => `<article class="card contract market-offer ${o.sold ? 'sold' : ''}"><div class="row"><span class="role">${roles[o.role]}</span><span class="tag">LV ${o.tier}</span></div><h3>${esc(o.name)}</h3><div class="stats"><div title="${o.role === 'driver' ? 'Velocità del pilota.' : o.role === 'engine' ? 'Potenza: più alta, più veloce e meno consumi.' : 'Qualità del lavoro del tecnico e precisione dei suoi consigli.'}"><small>COMPETENZA</small><b>${o.skill}</b></div>${o.role === 'driver' ? `<div title="Regolarità: più alta, meno variazioni da un giro all’altro."><small>COSTANZA</small><b>${o.consistency}</b></div><div title="Quanto il pilota fa durare le gomme: più alto, meno usura."><small>GESTIONE GOMME</small><b>${o.tyres}</b></div>` : ''}</div><p><b>${money(o.fee)}</b><br><small>${o.salary ? money(o.salary) + ' / GP' : 'Acquisto motore · nessuno stipendio'}</small></p>${button('hire', o.sold ? 'Contratto assegnato' : o.tier > level ? 'Sbloccato al livello ' + o.tier : 'Ingaggia →', `data-id="${o.id}" ${o.sold || o.tier > level || data.race?.active ? 'disabled' : ''}`, o.sold ? '' : 'primary')}</article>`).join('')}</div>${page.controls}`;
 }
 function strategyFields(st) {
   return `<div class="form-grid"><label>Carico aerodinamico<input type="number" name="wing" min="0" max="100" value="${st.wing}" required></label><label>Ripartizione freno anteriore %<input type="number" name="brake" min="45" max="65" value="${st.brake}" required></label><label>Mescola iniziale / pit singolo<select name="compound">${options(compounds, st.compound)}</select></label><label>Ritmo<select name="pace">${options({ save: 'Conserva', normal: 'Normale', push: 'Spingi' }, st.pace)}</select></label><label>Pit singolo · giro (se piano vuoto)<input type="number" name="pitLap" min="1" max="${data.laps || 60}" value="${st.pitLap}" required></label><label>Pit di riserva · gomme residue %<input type="number" name="wearAt" min="10" max="80" value="${st.wearAt}" required></label><label>Carburante iniziale · kg<input type="number" name="fuel" min="10" max="110" value="${st.fuel}" required></label><label>Rifornimento al pit · kg<input type="number" name="refuel" min="0" max="110" value="${st.refuel}" required></label></div><details class="stint-plans" open><summary>Piano fino a 3 soste · giro 0 = non utilizzata</summary><small>Se compilato sostituisce il pit singolo. I rientri di sicurezza restano attivi; ogni sosta usa la prossima mescola e quantità del piano.</small>${[
@@ -923,6 +923,103 @@ function updateCommunity() {
   }
 }
 
+// One-line explanations for every strategy/setup field, keyed by the input name.
+const HELP = {
+  wing: [
+    'Carico aerodinamico',
+    'Da 0 a 100. Più carico: più veloce in curva, più lento sui rettilinei, consumi e usura un po’ più alti. Ogni pista ha un valore ideale (sale con la pioggia): i tecnici nel Box ti danno l’intervallo.'
+  ],
+  brake: [
+    'Ripartizione freno anteriore',
+    'Da 45 a 65%. Ogni pista ha un valore ideale: allontanarsene fa perdere tempo e consuma di più le gomme. L’intervallo consigliato è nei consigli dei tecnici.'
+  ],
+  compound: [
+    'Mescola',
+    'Soft: la più veloce, dura poco. Medium: equilibrio. Hard: più lenta, dura a lungo. Intermedie: pista umida. Wet: pioggia forte. La gomma sbagliata per il meteo costa molti secondi al giro.'
+  ],
+  pace: [
+    'Ritmo',
+    'Conserva: più lento, risparmia benzina e gomme. Normale: via di mezzo. Spingi: più veloce, ma consuma e scalda le gomme di più.'
+  ],
+  pitLap: [
+    'Pit singolo',
+    'Il giro in cui la vettura si ferma ai box, usato solo se il piano soste è vuoto. La sosta avviene al passaggio sul traguardo.'
+  ],
+  wearAt: [
+    'Rientro di sicurezza',
+    'Se la gomma scende sotto questa percentuale la vettura rientra da sola, anche prima del giro previsto. Più è alta, più sei prudente.'
+  ],
+  fuel: [
+    'Benzina alla partenza',
+    'In kg. Più benzina = più peso: più lento e più usura, ma meno soste. Sotto 1,7 giri di autonomia la vettura rientra da sola a fare benzina.'
+  ],
+  refuel: [
+    'Rifornimento al pit',
+    'Kg aggiunti al pit singolo. Si rifornisce a 3,5 kg al secondo, insieme al cambio gomme: più benzina = sosta più lunga.'
+  ],
+  stintLaps: [
+    'Giri lanciati',
+    'Quanti giri cronometrati fare in questa uscita prima di rientrare ai box. Il giro di uscita non conta.'
+  ],
+  stopLap: [
+    'Giro della sosta',
+    '0 = sosta non usata. Se compili almeno una sosta, il piano sostituisce il pit singolo. I giri devono essere in ordine crescente.'
+  ],
+  stopCompound: ['Gomma della sosta', 'La mescola montata a questa sosta.'],
+  stopFuel: ['Benzina della sosta', 'Kg aggiunti a questa sosta (3,5 kg al secondo).']
+};
+const helpKey = name => (HELP[name] ? name : (name || '').replace(/\d+$/, ''));
+function decorateHelp(root) {
+  for (const field of root.querySelectorAll('label > input[name], label > select[name]')) {
+    const key = helpKey(field.name),
+      label = field.parentElement;
+    if (!HELP[key] || label.querySelector('.help-btn')) continue;
+    label.title = HELP[key][1];
+    // Keep the label text and its "?" on one line, above the field.
+    const caption = document.createElement('span'),
+      help = Object.assign(document.createElement('button'), {
+        type: 'button',
+        className: 'help-btn',
+        textContent: '?',
+        title: 'Cos’è ' + HELP[key][0].toLowerCase() + '?'
+      });
+    help.dataset.action = 'help';
+    help.dataset.help = key;
+    caption.className = 'help-caption';
+    while (label.firstChild && label.firstChild !== field) caption.append(label.firstChild);
+    caption.append(help);
+    label.insertBefore(caption, field);
+  }
+}
+// Forms are rebuilt by render() and by the live session/race updates: decorate whatever appears.
+new MutationObserver(() => decorateHelp($('main'))).observe($('main'), { childList: true, subtree: true });
+function rulesHtml() {
+  const section = (title, items) => `<h3>${title}</h3><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
+  return `<div class="rules"><div class="eyebrow">REGOLAMENTO</div><h2>Come funziona Binotto Simulator</h2><p>Sei il Team Principal: non guidi, decidi. Costruisci la scuderia, prepari la strategia e la gara si corre da sola in tempo reale sul server, anche se chiudi l’app.</p>${section(
+    'Per partire',
+    [
+      'Crea la scuderia: ricevi 10 milioni.',
+      'Ingaggia 2 piloti, 3 tecnici (motorista, ingegnere aerodinamico, capo meccanico) e compra la power unit.',
+      'Iscriviti nella scheda Campionato.',
+      'Il calendario si decide insieme: ogni iscritto accetta la stessa proposta, preme Pronto! e poi Si parte!!. Servono almeno due scuderie.'
+    ]
+  )}${section('Il weekend di gara', [
+    'Libere: 30 minuti per GP per provare assetti e consumi, senza costi.',
+    'Qualifiche: da 30 a 10 minuti prima della gara. Fai uscire tu i piloti: il miglior giro decide la griglia.',
+    'Gara: 13 GP a stagione. Puoi cambiare ritmo, piano e chiamare il pit dal muretto. Se sei offline la vettura segue il piano, al 95% della velocità.'
+  ])}${section('Strategia', [
+    'Ogni parametro ha un pulsante <b>?</b> che spiega cosa cambia.',
+    'Gomme e benzina si consumano: decidi quante soste fare (fino a 3) e con quale mescola.',
+    'I consigli dei tecnici nel Box diventano più precisi con tecnici bravi e con più giri fatti in libere.'
+  ])}${section('Soldi, punti e livelli', [
+    'Stipendi addebitati a ogni GP. Sponsor: 350.000 € a gara più 6.000 € per punto.',
+    'Punti: 25-18-15-12-10-8-6-4-2-1. A fine stagione premi in denaro per piloti e scuderie.',
+    'Ogni GP dà esperienza: i livelli sbloccano contratti migliori nel mercato, che si rinnova ogni giorno.'
+  ])}${section('Imprevisti', [
+    'In ogni GP ogni vettura ha il 2% di probabilità di danno aerodinamico, 2% di foratura e 2% di incidente (ritiro).',
+    'Senza benzina la vettura si ferma: tieni d’occhio l’autonomia.'
+  ])}</div>`;
+}
 function openDialog(html) {
   $('modal').innerHTML = button('close', '×', '', 'close') + html;
   $('modal').showModal();
@@ -979,6 +1076,14 @@ document.addEventListener('click', async e => {
   if (a === 'exit') {
     await exitGame();
     return;
+  }
+  if (a === 'rules') return openDialog(rulesHtml());
+  if (a === 'help') {
+    e.preventDefault();
+    const [title, text] = HELP[b.dataset.help];
+    return openDialog(
+      `<div class="eyebrow">COME FUNZIONA</div><h2>${esc(title)}</h2><p>${esc(text)}</p>${button('rules', 'Apri il regolamento')}`
+    );
   }
   if (a === 'fullscreen') {
     if (document.fullscreenElement) document.exitFullscreen?.();
