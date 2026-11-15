@@ -94,7 +94,8 @@ function renderLobby(){
   await openRoom(own.room,true);
   if(room===own.room)selectPage('game');
  };
- const active=games.filter(ongoing);
+ // Tables against the AI (quick game or tutorial) are private: only their owner sees them in the Lobby.
+ const active=games.filter(ongoing).filter(g=>!['ai','tutorial'].includes(g.mode)||g.players.some(p=>p.id===seat(g.room).player));
  $('games').replaceChildren();
  $('empty-games').hidden=active.length>0;
  $('empty-games').textContent='Nessun tavolo attivo.';
@@ -448,7 +449,7 @@ function selectPage(page){
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===activeTab;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1});
  document.querySelectorAll('.page').forEach(section=>section.hidden=section.id!=='page-'+page);
  if(page!=='game')stopReplay();trace('UI','Pagina '+page);
- if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game')loadSimSummary(true);if(page==='game')requestAnimationFrame(fitBoard);
+ if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game'){loadSimSummary(true);limitChat()}if(page==='game')requestAnimationFrame(fitBoard);
 }
 function navigate(page){
  if(busy)return;
@@ -794,9 +795,19 @@ function renderSpectators(){
  if(identity&&!document.hidden&&!seated.has(identity.player)&&!seen.has(identity.id))watchers.push(identity);
  output.textContent=watchers.length?(watchers.length===1?'Assiste':'Assistono')+' · '+watchers.map(u=>u.name+(u.id===identity?.id?' (tu)':'')).join(', '):'Nessuno spettatore';
 }
+// Box height: exactly the first 20 messages; older ones are reached by scrolling inside it.
+function limitChat(){
+ const list=$('chat-messages'),rows=[...list.children];
+ if(rows.length<=20||list.offsetParent===null){if(rows.length<=20)list.style.maxHeight='';return}
+ const top=list.getBoundingClientRect().top-list.scrollTop,bottom=rows[19].getBoundingClientRect().bottom;
+ list.style.maxHeight=Math.ceil(bottom-top+4)+'px';
+}
+addEventListener('resize',limitChat);
 function scrollChatToLatest(){
+ limitChat();
  requestAnimationFrame(()=>{
   const list=$('chat-messages');
+  limitChat();
   list.scrollTop=0;
  });
 }
@@ -823,8 +834,8 @@ function renderSocial(){
  if(list.dataset.signature!==signature){
   list.dataset.signature=signature;list.replaceChildren();
   if(!chatMessages.length){const p=document.createElement('p');p.className='hint';p.textContent='Il posto per due parole tra una partita e l’altra.';list.append(p)}
-  // The chat grows with the page (no inner scroll): latest 30 messages, newest first under the input.
-  for(const message of chatMessages.slice(-30).reverse()){
+  // Newest first under the input; the box shows 20 messages and scrolls for the older ones.
+  for(const message of chatMessages.slice().reverse()){
    const row=document.createElement('article');row.className='chat-message'+(message.userId===identity?.id?' mine':'');
    row.append(makeAvatar(message));
    const copy=document.createElement('div');copy.className='chat-copy';

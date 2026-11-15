@@ -35,6 +35,8 @@
   const favorite=!!current&&favorites.some(s=>s.id===current.id);star.textContent=favorite?'★':'☆';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
   play.textContent=wantsPlay?'Ⅱ':'▶';play.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');play.setAttribute('aria-pressed',String(wantsPlay));play.setAttribute('aria-busy',String(pending));
   status.textContent=playbackMessage||directoryMessage;trackBox.hidden=!track||!wantsPlay;
+  // Equaliser animation: moves only while sound is actually playing (not while connecting or buffering).
+  document.documentElement.classList.toggle('radio-playing',wantsPlay&&!pending);
   if('mediaSession' in navigator){try{navigator.mediaSession.playbackState=wantsPlay&&!pending?'playing':current?'paused':'none'}catch{}}
  }
  function render(){
