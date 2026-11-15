@@ -559,12 +559,91 @@ function render() {
 function onboarding() {
   return `<div class="notice"><b>Il tuo primo campionato inizia qui.</b> Crea la scuderia con 10 milioni, ingaggia due piloti e tre tecnici, acquista il motore e iscriviti.${button('create', 'Crea la mia scuderia', '', 'primary')}</div>`;
 }
+// First-season path: one clear next step, derived only from the state the server already sends.
+function guideSteps() {
+  const t = data.me,
+    a = data.approval || {},
+    crewMissing = t ? Object.keys(t.crew).find(r => !t.crew[r]) : null,
+    members = a.members?.length || 0;
+  let calendarText =
+      'Proponete giorni e orari nella scheda Campionato, poi accettate tutti la stessa proposta.',
+    calendarButton = button('tab', 'Apri Campionato', 'data-tab="Campionato"', 'primary');
+  if (t?.enrolled) {
+    if (members < 2)
+      calendarText = 'Serve almeno un’altra scuderia iscritta: invita qualcuno del gruppo a iscriversi.';
+    else if (!data.proposals.length)
+      calendarText = 'Nessuna proposta: scegli giorni e orari delle gare e pubblicala.';
+    else if (!data.proposals.some(p => p.myVote))
+      calendarText = 'Leggi le proposte e premi Accetta proposta su quella che ti va bene.';
+    else if (!a.ready) calendarText = 'Hai accettato una proposta: premi Pronto! per confermare.';
+    else if (!a.allReady)
+      calendarText = `Sei pronto. Aspettiamo gli altri: ${a.readyCount || 0} / ${members} pronti sulla stessa proposta.`;
+    else if (!a.started) calendarText = 'Tutti pronti: premi Si parte!! per chiudere le iscrizioni.';
+    else
+      calendarText = `Hai confermato. Mancano gli altri: ${a.startCount || 0} / ${members} hanno premuto Si parte!!.`;
+  }
+  return [
+    {
+      title: 'Crea la scuderia',
+      text: 'Ricevi 10 milioni di budget. Sei il Team Principal: non guidi, decidi.',
+      done: !!t,
+      action: button('create', 'Crea la mia scuderia', '', 'primary')
+    },
+    {
+      title: 'Ingaggia due piloti',
+      text: 'Uno per vettura. Competenza = velocità, costanza = giri regolari, gomma = quanto le fa durare.',
+      done: !!t && t.drivers.every(Boolean),
+      action: button('market-role', 'Cerca piloti', 'data-role="driver"', 'primary')
+    },
+    {
+      title: 'Ingaggia tre tecnici',
+      text: 'Motorista (consumi), ingegnere aerodinamico (velocità e consigli di assetto), capo meccanico (soste).',
+      done: !!t && !crewMissing,
+      action: button(
+        'market-role',
+        'Cerca ' + (roles[crewMissing] || 'tecnici').toLowerCase(),
+        `data-role="${crewMissing || 'motor'}"`,
+        'primary'
+      )
+    },
+    {
+      title: 'Acquista la power unit',
+      text: 'Il motore: si paga una volta, nessuno stipendio. Più potente = più veloce e meno consumi.',
+      done: !!t?.engine,
+      action: button('market-role', 'Scegli il motore', 'data-role="engine"', 'primary')
+    },
+    {
+      title: 'Iscrivi la scuderia',
+      text:
+        t && ready(t) && t.cash < salary(t)
+          ? 'Budget insufficiente per gli stipendi del primo GP: sostituisci un contratto più caro.'
+          : 'Con cinque persone e il motore puoi iscriverti alla stagione.',
+      done: !!t?.enrolled || !!data.schedule?.participants?.includes(t?.id),
+      action: button('tab', 'Vai all’iscrizione', 'data-tab="Campionato"', 'primary')
+    },
+    {
+      title: 'Decidete il calendario',
+      text: calendarText,
+      done: !!data.schedule,
+      action: calendarButton
+    }
+  ];
+}
+function guide() {
+  if (data.schedule) return '';
+  const steps = guideSteps(),
+    current = steps.findIndex(s => !s.done);
+  if (current < 0) return '';
+  const step = steps[current];
+  return `<section class="guide" aria-label="Percorso del primo campionato"><div class="guide-head"><span class="eyebrow">Primo campionato · passo ${current + 1} di ${steps.length}</span><ol class="guide-steps">${steps.map((s, i) => `<li class="${s.done ? 'done' : i === current ? 'current' : ''}" title="${esc(s.title)}">${s.done ? '✓' : i + 1}</li>`).join('')}</ol></div><div class="guide-body"><div><b>${esc(step.title)}</b><p>${esc(step.text)}</p></div>${step.action}</div></section>`;
+}
 function paddock() {
   const t = data.me,
     i = Math.min(data.round, 12),
     track = data.tracks[i],
-    when = data.schedule?.dates[data.round];
-  return `${!t ? onboarding() : ''}<div class="paddock" ${!t ? 'style="height:calc(100% - 105px)"' : ''}><section class="hero-card"><img src="/simulator/assets/circuit-${i}.webp" alt="Panorama di ${track[0]}"><div class="hero-top"><span class="tag">STAGIONE ${data.season} / ROUND ${Math.min(data.round + 1, 13)}</span><span class="tag">${data.race?.active ? '● IN DIRETTA' : 'IL PROSSIMO GRAN PREMIO'}</span></div><div class="eyebrow">${data.round >= 13 ? 'Stagione conclusa' : when ? date(when) + ' · ORA ITALIANA' : 'Il calendario lo decidete voi'}</div><h2>${track[0]}</h2><p>${track[1].toFixed(3)} km &nbsp; / &nbsp; ${data.laps} giri &nbsp; / &nbsp; ${data.conditions?.forecast || 'Previsione in preparazione'}</p><div class="row">${button('tab', data.race?.active ? 'Vai al muretto →' : 'Prepara la tua gara →', `data-tab="${data.race?.active ? 'Gara' : 'Box'}"`, 'primary')}<span class="tag">${data.teams.filter(t => t.enrolled).length} SCUDERIE ISCRITTE</span></div></section><section class="card scroll-card community-panel"><div class="row"><h3>Bacheca eventi</h3>${button('tab', 'Calendario ↗', 'data-tab="Campionato"', 'quiet')}</div><div class="scroll-body" id="events"></div></section><section class="card team-summary fit-panel"><div class="eyebrow">TEAM PRINCIPAL · ${esc(t?.principal || 'Il tuo nome')}</div><h3>${esc(t?.name || 'Una scuderia da costruire')}</h3><div class="car-stage">${car(t || { colors: ['#f14e58', '#ffd475', '#fff'], count: 2 })}</div>${(t?.drivers || [null, null]).map((d, i) => `<div class="driver-mini"><span><small>VETTURA 0${i + 1}</small><br><b>${esc(d?.name || 'Pilota da ingaggiare')}</b></span><strong>${d?.points || 0} <small>PT</small></strong></div>`).join('')}<div class="subtle row"><small>${t ? `Stipendi / GP · ${money(salary(t))}` : 'Due piloti. Tre tecnici. Un obiettivo.'}</small>${button('tab', 'Gestisci', 'data-tab="Team"')}</div></section><section class="card scroll-card purple community-panel"><div class="row"><h3>Radio paddock</h3><span class="tag">CHAT DI GRUPPO</span></div><div class="scroll-body" id="chat"></div><form class="chat-form" data-form="chat"><input name="text" aria-label="Messaggio al paddock" maxlength="500" required placeholder="Scrivi alla community…"><button type="submit">Invia ↗</button></form></section></div>`;
+    when = data.schedule?.dates[data.round],
+    guideHtml = guide();
+  return `${guideHtml}<div class="paddock" ${guideHtml ? 'style="height:calc(100% - 112px)"' : ''}><section class="hero-card"><img src="/simulator/assets/circuit-${i}.webp" alt="Panorama di ${track[0]}"><div class="hero-top"><span class="tag">STAGIONE ${data.season} / ROUND ${Math.min(data.round + 1, 13)}</span><span class="tag">${data.race?.active ? '● IN DIRETTA' : 'IL PROSSIMO GRAN PREMIO'}</span></div><div class="eyebrow">${data.round >= 13 ? 'Stagione conclusa' : when ? date(when) + ' · ORA ITALIANA' : 'Il calendario lo decidete voi'}</div><h2>${track[0]}</h2><p>${track[1].toFixed(3)} km &nbsp; / &nbsp; ${data.laps} giri &nbsp; / &nbsp; ${data.conditions?.forecast || 'Previsione in preparazione'}</p><div class="row">${button('tab', data.race?.active ? 'Vai al muretto →' : 'Prepara la tua gara →', `data-tab="${data.race?.active ? 'Gara' : 'Box'}"`, 'primary')}<span class="tag">${data.teams.filter(t => t.enrolled).length} SCUDERIE ISCRITTE</span></div></section><section class="card scroll-card community-panel"><div class="row"><h3>Bacheca eventi</h3>${button('tab', 'Calendario ↗', 'data-tab="Campionato"', 'quiet')}</div><div class="scroll-body" id="events"></div></section><section class="card team-summary fit-panel"><div class="eyebrow">TEAM PRINCIPAL · ${esc(t?.principal || 'Il tuo nome')}</div><h3>${esc(t?.name || 'Una scuderia da costruire')}</h3><div class="car-stage">${car(t || { colors: ['#f14e58', '#ffd475', '#fff'], count: 2 })}</div>${(t?.drivers || [null, null]).map((d, i) => `<div class="driver-mini"><span><small>VETTURA 0${i + 1}</small><br><b>${esc(d?.name || 'Pilota da ingaggiare')}</b></span><strong>${d?.points || 0} <small>PT</small></strong></div>`).join('')}<div class="subtle row"><small>${t ? `Stipendi / GP · ${money(salary(t))}` : 'Due piloti. Tre tecnici. Un obiettivo.'}</small>${button('tab', 'Gestisci', 'data-tab="Team"')}</div></section><section class="card scroll-card purple community-panel"><div class="row"><h3>Radio paddock</h3><span class="tag">CHAT DI GRUPPO</span></div><div class="scroll-body" id="chat"></div><form class="chat-form" data-form="chat"><input name="text" aria-label="Messaggio al paddock" maxlength="500" required placeholder="Scrivi alla community…"><button type="submit">Invia ↗</button></form></section></div>`;
 }
 function teamPage() {
   if (!data.me) return onboarding();

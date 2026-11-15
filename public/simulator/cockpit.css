@@ -1673,3 +1673,85 @@ main[data-page='Team'] {
     margin: 3px 0;
   }
 }
+
+/* Percorso guidato del primo campionato (Paddock). */
+.guide {
+  height: 100px;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  border: 1px solid #ffd23655;
+  border-radius: 10px;
+  background: linear-gradient(130deg, #2a2a12, #0d2633 70%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+.guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.guide-head .eyebrow {
+  margin: 0;
+}
+.guide-steps {
+  display: flex;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.guide-steps li {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font:
+    11px ui-monospace,
+    monospace;
+  display: grid;
+  place-items: center;
+}
+.guide-steps li.done {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--bg);
+  font-weight: 800;
+}
+.guide-steps li.current {
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 0 2px #ffd23633;
+}
+.guide-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 0;
+}
+.guide-body p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.guide-body button {
+  flex: none;
+}
+@media (max-width: 700px) {
+  .guide {
+    height: auto;
+    padding: 8px 10px;
+  }
+  .guide-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .guide-body p {
+    font-size: 12px;
+  }
+}

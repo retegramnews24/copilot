@@ -8,6 +8,8 @@ w.setInterval=()=>0;w.requestAnimationFrame=()=>0;w.fetch=async(url,opts)=>{if(o
 const source=readFileSync('public/simulator/app.js','utf8').replace(/^import .*\r?\n/gm,'').replace(/^/, 'const attachCanvas=()=>{},draw=()=>{},resetCamera=()=>{},getCamera=()=>({}),setCamera=()=>{},installPanelLayouts=()=>()=>{},installCockpit=()=>()=>{},saveView=()=>{},readView=()=>({}),replacePanelContent=(el,html)=>el.innerHTML=html;\n');
 w.eval(source+'\nwindow.qa={accept,render,poll,navigateBack,applySimulatorInsets,qualifyingClock,updateSessions,updateRace,updateCommunity,getData:()=>data,tab:value=>{tab=value;render()},start:next=>{token="test";opened=true;tab="Scuderia";accept(next);render()}};');
 w.qa.start(structuredClone(view(s,u,Date.now())));
+// First-season guide: one next step, derived from the team state.
+w.qa.tab('Paddock');assert.match(w.document.querySelector('.guide').textContent,/passo 2 di 6.*Ingaggia due piloti/);assert.equal(w.document.querySelectorAll('.guide-steps li.done').length,1);assert(w.document.querySelector('.guide [data-action="market-role"][data-role="driver"]'));w.qa.tab('Scuderia');
 const form=w.document.querySelector('[data-form="identity"]');form.elements.color0.value='#123456';form.elements.count.value='3';form.elements.color0.dispatchEvent(new w.Event('input',{bubbles:true}));
 s.revision++;await w.qa.poll();assert.equal(w.document.querySelector('[name="color0"]').value,'#123456','poll must preserve unsaved livery');
 const old=structuredClone(view(s,u,Date.now()));
