@@ -637,13 +637,27 @@ function guide() {
   const step = steps[current];
   return `<section class="guide" aria-label="Percorso del primo campionato"><div class="guide-head"><span class="eyebrow">Primo campionato · passo ${current + 1} di ${steps.length}</span><ol class="guide-steps">${steps.map((s, i) => `<li class="${s.done ? 'done' : i === current ? 'current' : ''}" title="${esc(s.title)}">${s.done ? '✓' : i + 1}</li>`).join('')}</ol></div><div class="guide-body"><div><b>${esc(step.title)}</b><p>${esc(step.text)}</p></div>${step.action}</div></section>`;
 }
+function debriefButton() {
+  const d = data.me?.lastDebrief;
+  if (!d) return '';
+  let seen = '';
+  try {
+    seen = localStorage.getItem('simulator-debrief-seen:' + data.viewer.id) || '';
+  } catch {}
+  return button(
+    'debrief',
+    'Resoconto · ' + esc(d.track) + (seen === d.race ? '' : ' ●'),
+    '',
+    seen === d.race ? '' : 'primary'
+  );
+}
 function paddock() {
   const t = data.me,
     i = Math.min(data.round, 12),
     track = data.tracks[i],
     when = data.schedule?.dates[data.round],
     guideHtml = guide();
-  return `${guideHtml}<div class="paddock" ${guideHtml ? 'style="height:calc(100% - 112px)"' : ''}><section class="hero-card"><img src="/simulator/assets/circuit-${i}.webp" alt="Panorama di ${track[0]}"><div class="hero-top"><span class="tag">STAGIONE ${data.season} / ROUND ${Math.min(data.round + 1, 13)}</span><span class="tag">${data.race?.active ? '● IN DIRETTA' : 'IL PROSSIMO GRAN PREMIO'}</span></div><div class="eyebrow">${data.round >= 13 ? 'Stagione conclusa' : when ? date(when) + ' · ORA ITALIANA' : 'Il calendario lo decidete voi'}</div><h2>${track[0]}</h2><p>${track[1].toFixed(3)} km &nbsp; / &nbsp; ${data.laps} giri &nbsp; / &nbsp; ${data.conditions?.forecast || 'Previsione in preparazione'}</p><div class="row">${button('tab', data.race?.active ? 'Vai al muretto →' : 'Prepara la tua gara →', `data-tab="${data.race?.active ? 'Gara' : 'Box'}"`, 'primary')}<span class="tag">${data.teams.filter(t => t.enrolled).length} SCUDERIE ISCRITTE</span></div></section><section class="card scroll-card community-panel"><div class="row"><h3>Bacheca eventi</h3>${button('tab', 'Calendario ↗', 'data-tab="Campionato"', 'quiet')}</div><div class="scroll-body" id="events"></div></section><section class="card team-summary fit-panel"><div class="eyebrow">TEAM PRINCIPAL · ${esc(t?.principal || 'Il tuo nome')}</div><h3>${esc(t?.name || 'Una scuderia da costruire')}</h3><div class="car-stage">${car(t || { colors: ['#f14e58', '#ffd475', '#fff'], count: 2 })}</div>${(t?.drivers || [null, null]).map((d, i) => `<div class="driver-mini"><span><small>VETTURA 0${i + 1}</small><br><b>${esc(d?.name || 'Pilota da ingaggiare')}</b></span><strong>${d?.points || 0} <small>PT</small></strong></div>`).join('')}<div class="subtle row"><small>${t ? `Stipendi / GP · ${money(salary(t))}` : 'Due piloti. Tre tecnici. Un obiettivo.'}</small>${button('tab', 'Gestisci', 'data-tab="Team"')}</div></section><section class="card scroll-card purple community-panel"><div class="row"><h3>Radio paddock</h3><span class="tag">CHAT DI GRUPPO</span></div><div class="scroll-body" id="chat"></div><form class="chat-form" data-form="chat"><input name="text" aria-label="Messaggio al paddock" maxlength="500" required placeholder="Scrivi alla community…"><button type="submit">Invia ↗</button></form></section></div>`;
+  return `${guideHtml}<div class="paddock" ${guideHtml ? 'style="height:calc(100% - 112px)"' : ''}><section class="hero-card"><img src="/simulator/assets/circuit-${i}.webp" alt="Panorama di ${track[0]}"><div class="hero-top"><span class="tag">STAGIONE ${data.season} / ROUND ${Math.min(data.round + 1, 13)}</span><span class="tag">${data.race?.active ? '● IN DIRETTA' : 'IL PROSSIMO GRAN PREMIO'}</span></div><div class="eyebrow">${data.round >= 13 ? 'Stagione conclusa' : when ? date(when) + ' · ORA ITALIANA' : 'Il calendario lo decidete voi'}</div><h2>${track[0]}</h2><p>${track[1].toFixed(3)} km &nbsp; / &nbsp; ${data.laps} giri &nbsp; / &nbsp; ${data.conditions?.forecast || 'Previsione in preparazione'}</p><div class="row">${button('tab', data.race?.active ? 'Vai al muretto →' : 'Prepara la tua gara →', `data-tab="${data.race?.active ? 'Gara' : 'Box'}"`, 'primary')}${debriefButton()}<span class="tag">${data.teams.filter(t => t.enrolled).length} SCUDERIE ISCRITTE</span></div></section><section class="card scroll-card community-panel"><div class="row"><h3>Bacheca eventi</h3>${button('tab', 'Calendario ↗', 'data-tab="Campionato"', 'quiet')}</div><div class="scroll-body" id="events"></div></section><section class="card team-summary fit-panel"><div class="eyebrow">TEAM PRINCIPAL · ${esc(t?.principal || 'Il tuo nome')}</div><h3>${esc(t?.name || 'Una scuderia da costruire')}</h3><div class="car-stage">${car(t || { colors: ['#f14e58', '#ffd475', '#fff'], count: 2 })}</div>${(t?.drivers || [null, null]).map((d, i) => `<div class="driver-mini"><span><small>VETTURA 0${i + 1}</small><br><b>${esc(d?.name || 'Pilota da ingaggiare')}</b></span><strong>${d?.points || 0} <small>PT</small></strong></div>`).join('')}<div class="subtle row"><small>${t ? `Stipendi / GP · ${money(salary(t))}` : 'Due piloti. Tre tecnici. Un obiettivo.'}</small>${button('tab', 'Gestisci', 'data-tab="Team"')}</div></section><section class="card scroll-card purple community-panel"><div class="row"><h3>Radio paddock</h3><span class="tag">CHAT DI GRUPPO</span></div><div class="scroll-body" id="chat"></div><form class="chat-form" data-form="chat"><input name="text" aria-label="Messaggio al paddock" maxlength="500" required placeholder="Scrivi alla community…"><button type="submit">Invia ↗</button></form></section></div>`;
 }
 function teamPage() {
   if (!data.me) return onboarding();
@@ -856,10 +870,16 @@ function updateRace() {
         )
         .join('') + page.controls
     : '<p class="empty">La gara parte all’orario approvato.</p>';
-  $('race-events').innerHTML = (r?.events || [])
-    .slice(0, 2)
-    .map(e => `<div class="feed-item">${esc(e.text)}</div>`)
-    .join('');
+  const debriefReady = r && !r.active && data.me?.lastDebrief?.race === r.id;
+  $('race-events').innerHTML =
+    (debriefReady ? button('debrief', 'Il tuo resoconto della gara →', '', 'primary') : '') +
+    (r?.events || [])
+      .slice(0, debriefReady ? 1 : 4)
+      .map(
+        e =>
+          `<div class="feed-item race-line" title="${esc(e.text)}">${e.lap ? `<span class="lap-tag">G${e.lap}</span>` : ''}${esc(e.text)}</div>`
+      )
+      .join('');
   for (let slot = 0; slot < 2; slot++) {
     const c = r?.cars.find(c => c.own && c.slot === slot),
       el = $('live-' + slot),
@@ -1058,6 +1078,28 @@ function decorateHelp(root) {
 }
 // Forms are rebuilt by render() and by the live session/race updates: decorate whatever appears.
 new MutationObserver(() => decorateHelp($('main'))).observe($('main'), { childList: true, subtree: true });
+// Positions lap by lap as a tiny line chart (1st at the top).
+function positionChart(positions, cars) {
+  if (positions.length < 2) return '';
+  const w = 220,
+    h = 54,
+    max = Math.max(cars, ...positions),
+    x = i => (i / (positions.length - 1)) * (w - 8) + 4,
+    y = p => ((p - 1) / Math.max(1, max - 1)) * (h - 12) + 6;
+  const points = positions.map((p, i) => `${x(i).toFixed(1)},${y(p).toFixed(1)}`).join(' ');
+  return `<svg class="pos-chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Posizione giro per giro: dal ${positions[0]}° al ${positions.at(-1)}°"><line x1="4" x2="${w - 4}" y1="6" y2="6" class="pos-first"/><polyline points="${points}"/><circle cx="${x(positions.length - 1)}" cy="${y(positions.at(-1))}" r="3"/><text x="${w - 4}" y="${h - 1}" text-anchor="end">giro ${positions.length}</text><text x="4" y="${h - 1}">P${positions[0]}</text></svg>`;
+}
+function debriefHtml(d) {
+  const cars = data.results?.find(x => x.id === d.race)?.rows.length || 0;
+  return `<div class="debrief"><div class="eyebrow">RESOCONTO · ${esc(d.track)}</div><h2>Com’è andata la tua gara</h2>${d.cars
+    .map(
+      c =>
+        `<section class="debrief-car"><div class="row"><h3>Vettura ${c.slot + 1} · ${esc(c.name)}</h3><span class="tag">${c.dnf ? 'RITIRATO' : 'P' + c.position} · DAL ${c.grid}°</span></div><p class="debrief-key"><b>Il punto chiave:</b> ${esc(c.key)}</p>${positionChart(c.positions, cars)}<ul>${c.notes.map(n => `<li>${esc(n)}</li>`).join('')}</ul></section>`
+    )
+    .join(
+      ''
+    )}<p class="muted">Stime calcolate con lo stesso modello della gara. Solo tu vedi questo resoconto.</p></div>`;
+}
 function rulesHtml() {
   const section = (title, items) => `<h3>${title}</h3><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul>`;
   return `<div class="rules"><div class="eyebrow">REGOLAMENTO</div><h2>Come funziona Binotto Simulator</h2><p>Sei il Team Principal: non guidi, decidi. Costruisci la scuderia, prepari la strategia e la gara si corre da sola in tempo reale sul server, anche se chiudi l’app.</p>${section(
@@ -1143,6 +1185,13 @@ document.addEventListener('click', async e => {
     return;
   }
   if (a === 'rules') return openDialog(rulesHtml());
+  if (a === 'debrief' && data.me?.lastDebrief) {
+    try {
+      localStorage.setItem('simulator-debrief-seen:' + data.viewer.id, data.me.lastDebrief.race);
+    } catch {}
+    b.classList.remove('primary');
+    return openDialog(debriefHtml(data.me.lastDebrief));
+  }
   if (a === 'preset') return applyPreset(Number(b.dataset.slot), b.dataset.key);
   if (a === 'help') {
     e.preventDefault();

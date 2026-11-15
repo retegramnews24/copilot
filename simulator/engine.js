@@ -1,6 +1,8 @@
 import { approvalState, resetApproval, calendarAction } from './calendar-approval.js';
 import { incidentPlan, applyIncidents, progressionReward } from './race-events.js';
 import { engineering } from './engineering.js';
+import { trackRace } from './commentary.js';
+import { debrief } from './debrief.js';
 import { standings, archiveChampionship, TEAM_PRIZES, DRIVER_PRIZES } from './championship.js';
 import {
   advanceSessions,
@@ -492,6 +494,7 @@ function startRace(s, at) {
     }
   }
   r.cars = qualifyingOrder(s, r.cars);
+  r.cars.forEach((c, i) => (c.grid ??= i + 1));
   s.race = r;
   event(s, TRACKS[round][0] + ': semaforo verde.', at);
 }
@@ -510,6 +513,7 @@ function pit(c, r, now) {
   );
   c.pitTime = service.seconds + queue;
   c.pitTotal = c.pitTime;
+  c.pitSum = (c.pitSum || 0) + c.pitTime;
   c.pits++;
   c.pitRequested = false;
   c.wear = 100;
@@ -527,7 +531,8 @@ function pit(c, r, now) {
       ' kg' +
       (queue ? ' · attesa compagno' : '') +
       (repair ? ' · danno riparato (+8 s)' : ''),
-    at: now
+    at: now,
+    lap: Math.min(r.laps, Math.floor(Math.max(...r.cars.map(x => x.progress))) + 1)
   });
   r.events = r.events.slice(0, 20);
 }
@@ -568,6 +573,8 @@ function step(s, r, at, dt) {
       lap = Math.floor(c.progress);
     let delta = deltaFor(c, track, weather, activeDt) * (c.offline ? 0.95 : 1);
     c.traffic = false;
+    c.blocked = false;
+    const free = delta;
     // Interaction uses the positions at the start of the tick, never array update order.
     const ahead = snapshots
       .filter(
@@ -595,6 +602,11 @@ function step(s, r, at, dt) {
           delta,
           Math.max(0, gap - 0.001) + deltaFor(ahead, track, weather, activeDt) * (ahead.offline ? 0.95 : 1)
         );
+      // Report only: seconds lost behind a slower car (distance not covered × lap time).
+      if (delta < free - 1e-9) {
+        c.blocked = true;
+        c.trafficLoss = (c.trafficLoss || 0) + (free - delta) * m.lap;
+      }
       c.temperature = (c.temperature ?? 90) + activeDt * 0.035;
     }
     const toLine = lap + 1 - start;
@@ -649,7 +661,7 @@ function step(s, r, at, dt) {
       }
     }
   }
-  r.events = r.events.slice(0, 20);
+  trackRace(r, at, dt);
 }
 function finish(s, r, now) {
   r.active = false;
@@ -688,8 +700,28 @@ function finish(s, r, now) {
   });
   s.results.unshift({ id: r.id, season: s.season, round: r.round, at: now, rows });
   s.results = s.results.slice(0, 26);
+  // Private report for every team that raced (stored on the team, so only its owner receives it).
+  for (const id of new Set(r.cars.map(c => c.team)))
+    s.teams[id].lastDebrief = {
+      race: r.id,
+      round: r.round,
+      track: TRACKS[r.round][0],
+      at: now,
+      cars: debrief(r, order, TRACKS[r.round], id)
+    };
   s.round++;
-  event(s, TRACKS[r.round][0] + ': gara conclusa, classifica e premi salvati.', now);
+  const podium = rows.filter(x => !x.dnf).slice(0, 3);
+  event(
+    s,
+    TRACKS[r.round][0] +
+      (podium.length
+        ? `: vince ${podium[0].name} (${podium[0].teamName})` +
+          (podium[1] ? `, 2° ${podium[1].name}` : '') +
+          (podium[2] ? `, 3° ${podium[2].name}` : '') +
+          '.'
+        : ': gara conclusa senza arrivati.'),
+    now
+  );
   archiveChampionship(s, now);
   refreshMarket(s, now);
 }
@@ -789,6 +821,7 @@ export function view(s, u, now) {
           conditions: s.race.conditions,
           classification: s.race.classification,
           events: s.race.events,
+          fastest: s.race.fastest || null,
           cars: s.race.cars.map(c => {
             const own = c.team === u.id;
             return {

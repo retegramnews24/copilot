@@ -1854,3 +1854,78 @@ main[data-page='Team'] {
 .advanced-fields > summary span {
   color: var(--muted);
 }
+
+/* Cronaca con numero di giro e resoconto di fine gara. */
+.lap-tag {
+  display: inline-block;
+  min-width: 30px;
+  margin-right: 6px;
+  color: var(--gold);
+  font:
+    700 10px ui-monospace,
+    monospace;
+}
+#race-events > button {
+  width: 100%;
+  margin: 6px 0;
+}
+.debrief-car {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0d263355;
+}
+.debrief-car h3 {
+  margin: 0;
+}
+.debrief-key {
+  margin: 10px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--gold);
+  background: #ffd2360f;
+  color: inherit;
+}
+.debrief-key b {
+  color: var(--gold);
+}
+.debrief-car ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+.debrief-car li {
+  margin: 3px 0;
+  color: var(--muted);
+}
+.pos-chart {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+}
+.pos-chart polyline {
+  fill: none;
+  stroke: var(--teal);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.pos-chart circle {
+  fill: var(--gold);
+}
+.pos-chart .pos-first {
+  stroke: var(--line);
+  stroke-dasharray: 3 3;
+}
+.pos-chart text {
+  fill: var(--muted);
+  font:
+    9px ui-monospace,
+    monospace;
+}
+
+.race-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 3px 0;
+}
