@@ -1,19 +1,19 @@
 {
   "name": "binottoland-motore",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node tests/scopa-ai.test.js && node tests/sea-cards.test.js && node tests/new-table-games.test.js && node tests/uno.test.js && node tests/connect4.test.js && node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js && node tests/labyrinth-graphics.test.js && node tests/moto-trial.test.js && node tests/golf.test.js && node tests/cinema-search.test.js && node tests/simulator.test.js && node tests/radio-dns.test.js && node tests/simulator-ui.test.js && node tests/giulio-autosave.test.js",
+    "test": "node tests/scopa-ai.test.js && node tests/sea-cards.test.js && node tests/new-table-games.test.js && node tests/uno.test.js && node tests/connect4.test.js && node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js && node tests/labyrinth-graphics.test.js && node tests/moto-trial.test.js && node tests/golf.test.js && node tests/cinema-search.test.js && node tests/simulator.test.js && node tests/radio-dns.test.js && node tests/simulator-ui.test.js && node tests/giulio-autosave.test.js && node tests/encoding.test.js",
     "test:multiplayer-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/expedition-runtime.test.js .test-bundle/worker.js",
     "test:table-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/table-ai-runtime.test.js .test-bundle/worker.js",
     "test:ui": "node tests/ui-scopa.test.mjs",
     "test:simulator": "node tests/simulator-physics.test.js && node tests/simulator.test.js && node tests/simulator-sessions.test.js && node tests/simulator-pitwall.test.js && node tests/simulator-progression.test.js && node tests/simulator-championship.test.js && node tests/simulator-calendar-approval.test.js && node tests/simulator-layout.test.js && node tests/simulator-cockpit.test.js && node tests/simulator-presets.test.js && node tests/simulator-commentary.test.js && node tests/simulator-sponsor.test.js && node tests/simulator-ai.test.js && node tests/simulator-notify.test.js && node tests/simulator-summary.test.js && node tests/simulator-ui.test.js && node tests/simulator-runtime.test.js",
     "test:access": "node tests/access-runtime.test.js",
-    "format:simulator": "prettier --write \"simulator/*.js\" \"public/simulator/*.{js,css}\"",
-    "format:check": "prettier --check auth.js \"simulator/*.js\" \"public/simulator/*.{js,css}\""
+    "format:simulator": "prettier --write \"simulator/*.js\" \"public/simulator/*.{js,css}\" public/radio.js tests/encoding.test.js",
+    "format:check": "prettier --check auth.js \"simulator/*.js\" \"public/simulator/*.{js,css}\" public/radio.js tests/encoding.test.js"
   },
   "devDependencies": {
     "esbuild": "0.28.2",
