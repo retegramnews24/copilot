@@ -976,9 +976,11 @@ const blackboard = blackboardLink(arcadeFrame, () => sessionToken, readAppearanc
 function renderBlackboardRooms(rooms, state){
  const list=$('blackboard-rooms'),status=$('blackboard-lobby-status');
  const online=state==='online',focused=document.activeElement?.dataset.blackboardRoom;
+ blackboardLobbyRooms=online?rooms:[];
+ // Only boards with someone drawing; empty ones stay reachable from "Apri una sala".
+ rooms=rooms.filter(entry=>entry.people.length);
  status.hidden=online&&rooms.length>0;
  $('blackboard-lobby').hidden=online&&!rooms.length;
- blackboardLobbyRooms=online?rooms:[];
  status.textContent=online?'Nessuna sala aperta.':state==='expired'?'Riapri Binottoland da Telegram.':'Collegamento alle lavagne…';
  list.replaceChildren(...rooms.map(entry=>{
   const button=document.createElement('button');
@@ -1323,11 +1325,12 @@ function renderCinemaLobby(){
  $('open-cinema').disabled=!connected;
  const status=$('cinema-lobby-status');
  status.textContent=cinemaLobbyMessage||(connected?'Nessuna sala aperta.':'Collegamento al cinema…');
- status.hidden=connected&&cinemaRooms.rooms.length>0&&!cinemaLobbyMessage;
- // An empty, connected cinema says nothing: the section appears when a room opens.
- $('cinema-lobby').hidden=connected&&!cinemaRooms.rooms.length&&!cinemaLobbyMessage;
+ // Only rooms with someone inside: empty rooms are reachable from the cinema's Multisala.
+ const occupied=cinemaRooms.rooms.filter(entry=>entry.viewers.length);
+ status.hidden=connected&&occupied.length>0&&!cinemaLobbyMessage;
+ $('cinema-lobby').hidden=connected&&!occupied.length&&!cinemaLobbyMessage;
  const focused=document.activeElement?.dataset.cinemaRoom;
- list.replaceChildren(...cinemaRooms.rooms.map(entry=>{
+ list.replaceChildren(...occupied.map(entry=>{
   const button=document.createElement('button');
   button.type='button';button.className='alt cinema-room-card';button.disabled=!connected;button.dataset.cinemaRoom=entry.id;
   const title=document.createElement('strong'),channel=document.createElement('span'),people=document.createElement('small');
