@@ -1,7 +1,7 @@
 import {soundAllowed} from '../sound-pref.js';
-import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=428ae8745f';
-import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=bb0cb96d5f';
-import { drawCourse } from './render.js?v=6457f49e04';
+import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=4b40a70e69';
+import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=139f3cba98';
+import { drawCourse } from './render.js?v=7300500888';
 import { upright, rollBy } from './roll.js';
 import {golfColors,validBallColors} from '../appearance.js?v=3bf8d2e2ca';
 import { applyInsets } from '../safe-area.js';

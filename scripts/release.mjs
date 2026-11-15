@@ -75,7 +75,7 @@ export function stamps() {
     const hash = createHash('sha256').update(text.replace(/\r\n/g, '\n').replace(REF, '$1'));
     for (const [, ref] of text.matchAll(REF)) {
       const dep = target(file, ref);
-      if (dep) hash.update(relative(pub, dep) + deep(dep));
+      if (dep) hash.update(relative(pub, dep).replaceAll('\\', '/') + deep(dep));
     }
     busy.delete(file);
     const value = hash.digest('hex').slice(0, 10);

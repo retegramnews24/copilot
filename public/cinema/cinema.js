@@ -4,7 +4,7 @@ import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=65b3956eb7';
 import {embedYouTube} from './youtube.js?v=c237aa9fc5';
 import {applyInsets} from '../safe-area.js';
 import {WindowShare} from './screen-share.js?v=95fe42416c';
-import {CinemaMosaic} from './mosaic.js?v=749919ff0d';
+import {CinemaMosaic} from './mosaic.js?v=dfef356856';
 
 const $=id=>document.getElementById(id);
 const cinema=$('cinema'),video=$('video'),screen=$('screen'),sidebar=$('sidebar'),inboxImage=$('inbox-image');

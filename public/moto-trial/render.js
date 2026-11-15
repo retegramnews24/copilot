@@ -1,4 +1,4 @@
-import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=46a86e1ffe';
+import {AXLE, WHEEL, HELMET, ground} from './physics.js?v=4fa60552c2';
 
 import {riderPose, HEAD_RADIUS, SUSPENSION} from './rider.js?v=e8606b9830';
 

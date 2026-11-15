@@ -3,7 +3,7 @@ import {applyInsets} from '../safe-area.js';
 import {move,free,restoreProgress,beginJump,crossedDoor,forwardVector,CELL,RADIUS} from './core.js';
 import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction} from './adventure.js?v=ceb47a4141';
 import {framePose,struckFrame,frameSupport,settledFrames,triggerFrames} from './traps.js';
-import {projectPoint,Renderer} from './render.js?v=43a0605e00';
+import {projectPoint,Renderer} from './render.js?v=95fd0f4206';
 import {readAppearance} from './avatar.js?v=5318415024';
 import {avatarSprite} from './visuals.js';
 import {Atmosphere} from './audio.js';

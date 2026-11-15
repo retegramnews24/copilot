@@ -3,7 +3,7 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=428ae8745f';
+import {CAMPAIGNS,campaignInfo,DEFAULT_CAMPAIGN} from './golf/courses.js?v=4b40a70e69';
 import {golfColors,readAppearance} from './appearance.js?v=3bf8d2e2ca';
 import './labyrinth/avatar.js?v=5318415024';
 import {initCatalog,renderCatalog} from './games-catalog.js?v=450d7363f6';
@@ -12,7 +12,7 @@ import {initWindowMode} from './window-mode.js?v=4861da0434';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.11',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.12',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
 const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};

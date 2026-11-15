@@ -1,5 +1,5 @@
-import { COURSE_VERSION, DEFAULT_CAMPAIGN, CAMPAIGNS, coursesFor, courseFor, validBallColors } from './courses.js?v=428ae8745f';
-import { motionAt, shotVelocity, simulateBalls, simulateShot } from './physics.js?v=e10f1eb034';
+import { COURSE_VERSION, DEFAULT_CAMPAIGN, CAMPAIGNS, coursesFor, courseFor, validBallColors } from './courses.js?v=4b40a70e69';
+import { motionAt, shotVelocity, simulateBalls, simulateShot } from './physics.js?v=39e0543012';
 
 export const CAPACITY=8, LIMIT=10, HOLE_TIME=105000, BREAK=3500;
 const fail=message=>{throw Error(message)};
