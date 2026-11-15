@@ -31,7 +31,7 @@
  let loading=false,streamIndex=0,attempt=0,watchdog,wantsPlay=false,pending=false,playbackMessage='',directoryMessage='';
  const saved=Number(readLocal('binottoland-radio-volume',.7)),startVolume=Number.isFinite(saved)?Math.min(1,Math.max(0,saved)):.7;
  plain.volume=fx.volume=startVolume;volume.value=String(startVolume);
- let track='',metadataEpoch=0,metadataTimer=null,metadataPending=false;
+ let track='',metadataEpoch=0,metadataTimer=null,metadataPending=false,metadataMisses=0;
  const trackBox=$('radio-now-playing'),trackLabel=$('radio-track'),nowName=$('radio-now-name'),nowTrack=$('radio-now-track');
  // Radio bar: one scrolling line with station · song · description · genre (whatever the stream sends).
  let streamInfo=null;
@@ -44,7 +44,9 @@
  }
  function renderMarquee(){
   const seen=new Set(),parts=[];
-  for(const part of [current?.name||'Radio',wantsPlay?track:'',wantsPlay?streamInfo?.name:'',wantsPlay?streamInfo?.description:'',wantsPlay&&streamInfo?.genre?'Genere: '+streamInfo.genre:''])
+  // Catalogue info (country, genres) is always there, so the line has content even without a song.
+  const catalogue=current?[current.country,(current.tags||[]).join(', ')].filter(Boolean).join(' · '):'';
+  for(const part of [current?.name||'Radio',wantsPlay?track:'',wantsPlay?streamInfo?.name:'',wantsPlay?streamInfo?.description:'',wantsPlay&&streamInfo?.genre?'Genere: '+streamInfo.genre:'',catalogue])
    if(part&&!seen.has(part.toLowerCase())){seen.add(part.toLowerCase());parts.push(part)}
   const text=parts.join('   •   ');
   if(label.dataset.text===text)return;label.dataset.text=text;
@@ -57,13 +59,14 @@
   };
   fit();requestAnimationFrame(fit);
  }
- function stopMetadata(clear=true){metadataEpoch++;clearTimeout(metadataTimer);metadataTimer=null;metadataPending=false;if(clear)showTrack('')}
+ function stopMetadata(clear=true){metadataEpoch++;metadataMisses=0;clearTimeout(metadataTimer);metadataTimer=null;metadataPending=false;if(clear)showTrack('')}
  async function loadMetadata(){
   clearTimeout(metadataTimer);metadataTimer=null;
   if(!wantsPlay||document.hidden||!allowed()||!current||metadataPending||typeof window.binottolandRadioMetadata!=='function')return;
   const epoch=metadataEpoch,station=current.id;metadataPending=true;
   try{const data=await window.binottolandRadioMetadata(station);if(epoch===metadataEpoch&&current?.id===station&&wantsPlay)showTrack(data)}catch{if(epoch===metadataEpoch)showTrack('')}
-  finally{if(epoch===metadataEpoch){metadataPending=false;if(wantsPlay&&!document.hidden)metadataTimer=setTimeout(loadMetadata,60000)}}
+  // No song yet (just connected, or a request too close to the previous one): retry soon, then every minute.
+  finally{if(epoch===metadataEpoch){metadataPending=false;metadataMisses=track?0:metadataMisses+1;if(wantsPlay&&!document.hidden)metadataTimer=setTimeout(loadMetadata,!track&&metadataMisses<=4?15000:60000)}}
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMetadata(false);else if(wantsPlay){loadMetadata();startViz()}});
  const allowed=()=>!$('app-shell').hidden;
