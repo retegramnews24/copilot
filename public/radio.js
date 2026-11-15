@@ -19,15 +19,13 @@
  }
  function dropHls(){if(hls){try{hls.destroy()}catch{}hls=null}}
  const CENTERS=[31,63,125,250,500,1000,2000,4000,8000,16000];
- // Music has less energy up high: lift the treble so all ten bands move.
- const WEIGHT=[.95,1,1,1,1.05,1.12,1.25,1.4,1.6,1.9];
  const hosts=['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info','https://at1.api.radio-browser.info'];
  function readLocal(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback}catch{return fallback}}
  function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
  function normalize(raw){
   if(!raw||typeof raw.name!=='string'||!raw.name.trim())return null;
   // The page is HTTPS, so only HTTPS audio can play. Stations listed as http:// are tried as https://
-  // on the same address: many servers answer both (Rai, 105, R101â€¦). Real https URLs come first.
+  // on the same address: many servers answer both (Rai, 105, R101…). Real https URLs come first.
   const candidates=[...(Array.isArray(raw.urls)?raw.urls:[]),raw.url_resolved,raw.url].filter(x=>typeof x==='string'&&x.length<=2048);
   const secure=x=>{try{const u=new URL(x);if(u.protocol==='https:')return u.href;if(u.protocol==='http:'){u.protocol='https:';return u.href}}catch{}return null};
   const urls=[...new Set([...candidates.filter(x=>/^https:/i.test(x)),...candidates.filter(x=>/^http:/i.test(x))].map(secure).filter(Boolean))];
@@ -47,29 +45,29 @@
  plain.volume=fx.volume=startVolume;volume.value=String(startVolume);
  let track='',metadataEpoch=0,metadataTimer=null,metadataPending=false,metadataMisses=0;
  const trackBox=$('radio-now-playing'),trackLabel=$('radio-track'),nowName=$('radio-now-name'),nowTrack=$('radio-now-track');
- // Radio bar: one scrolling line with station Â· song Â· description Â· genre (whatever the stream sends).
+ // Radio bar: one scrolling line with station · song · description · genre (whatever the stream sends).
  let streamInfo=null;
  function showTrack(data){
   const title=typeof data==='string'?data:data?.title;
   track=typeof title==='string'?title.trim().slice(0,240):'';trackLabel.textContent=track;
   streamInfo=data&&typeof data==='object'?data:null;
-  nowTrack.textContent=[track,streamInfo?.description,streamInfo?.genre].filter(Boolean).join(' Â· ');
+  nowTrack.textContent=[track,streamInfo?.description,streamInfo?.genre].filter(Boolean).join(' · ');
   trackBox.hidden=true;renderMarquee();
  }
  function renderMarquee(){
   const seen=new Set(),parts=[];
   // Catalogue info (country, genres) is always there, so the line has content even without a song.
-  const catalogue=current?[current.country,(current.tags||[]).join(', ')].filter(Boolean).join(' Â· '):'';
+  const catalogue=current?[current.country,(current.tags||[]).join(', ')].filter(Boolean).join(' · '):'';
   for(const part of [current?.name||'Radio',wantsPlay?track:'',wantsPlay?streamInfo?.name:'',wantsPlay?streamInfo?.description:'',wantsPlay&&streamInfo?.genre?'Genere: '+streamInfo.genre:'',catalogue])
    if(part&&!seen.has(part.toLowerCase())){seen.add(part.toLowerCase());parts.push(part)}
-  const text=parts.join('   â€¢   ');
+  const text=parts.join('   •   ');
   if(label.dataset.text===text)return;label.dataset.text=text;
   const inner=document.createElement('span');inner.className='marquee-inner';inner.textContent=text;label.replaceChildren(inner);
   // Scroll only when it does not fit; the text is doubled so the loop is seamless.
   const fit=()=>{
    label.classList.remove('marquee');inner.textContent=text;
    const overflow=inner.scrollWidth>label.clientWidth+2;label.classList.toggle('marquee',overflow);
-   if(overflow){inner.textContent=text+'   â€¢   '+text+'   â€¢   ';label.style.setProperty('--marquee-duration',Math.max(10,text.length*.28)+'s')}
+   if(overflow){inner.textContent=text+'   •   '+text+'   •   ';label.style.setProperty('--marquee-duration',Math.max(10,text.length*.28)+'s')}
   };
   fit();requestAnimationFrame(fit);
  }
@@ -93,6 +91,7 @@
  }
  applyColors();addEventListener('storage',applyColors);
  let frame=0,tick=0,silentFrames=0;
+ const peaks=CENTERS.map(()=>.12),floors=CENTERS.map(()=>0);
  const setBars=values=>{for(const set of bars)set.forEach((bar,i)=>bar.style.transform=`scaleY(${values[i]})`)};
  // When the sound cannot be analysed: a simulated spectrum shaped like music, a kick every beat (~120 bpm)
  // in the bass, a snare on the off-beat in the mids, lively treble; fast rise and slow fall like a real meter.
@@ -117,7 +116,14 @@
    silentFrames=any?0:silentFrames+1;
   }
   if(live&&audio===fx&&analyser&&silentFrames<45){
-   setBars(bands.map(([a,b],i)=>{let sum=0;for(let k=a;k<=b;k++)sum+=bins[k];const v=(sum/(b-a+1))/255*WEIGHT[i];return Math.max(.18,Math.min(1,v*v*1.15)).toFixed(3)}));
+   // Each band is scaled to its own recent range (slow-falling peak, slow-rising floor), so mids and
+   // treble move as much as the bass even on stations with little high-frequency energy.
+   setBars(bands.map(([a,b],i)=>{
+    let sum=0;for(let k=a;k<=b;k++)sum+=bins[k];const v=(sum/(b-a+1))/255;
+    peaks[i]=Math.max(v,peaks[i]*.996,.12);floors[i]=v<floors[i]?v:floors[i]+(v-floors[i])*.003;
+    const level=Math.max(0,Math.min(1,(v-floors[i])/Math.max(.08,peaks[i]-floors[i])));
+    return (.18+.82*Math.pow(level,1.3)).toFixed(3);
+   }));
    for(const v of vizzes)v.dataset.mode='live';
   }else if(live){
    setBars(fakeBars(performance.now()));
@@ -155,15 +161,15 @@
    const row=document.createElement('div');row.className='radio-row'+(current?.id===station.id?' playing':'');row.setAttribute('role','listitem');
    const pick=document.createElement('button');pick.type='button';pick.className='radio-pick';
    const name=document.createElement('strong');name.textContent=station.name;
-   const info=document.createElement('small');info.textContent=(station.down?'âš  ultimo controllo non riuscito Â· ':'')+([station.country,...(station.tags||[])].filter(Boolean).join(' Â· ')||'Radio');if(station.down)row.classList.add('down');
+   const info=document.createElement('small');info.textContent=(station.down?'⚠ ultimo controllo non riuscito · ':'')+([station.country,...(station.tags||[])].filter(Boolean).join(' · ')||'Radio');if(station.down)row.classList.add('down');
    pick.append(name,info);pick.onclick=()=>{current=station;saveLocal('binottoland-radio-last',current);streamIndex=0;startStream();renderList()};
-   const fav=document.createElement('button');fav.type='button';fav.className='radio-star';fav.textContent=isFav(station)?'â˜…':'â˜†';fav.setAttribute('aria-label',(isFav(station)?'Rimuovi dai':'Aggiungi ai')+' preferiti: '+station.name);fav.onclick=()=>toggleFav(station);
+   const fav=document.createElement('button');fav.type='button';fav.className='radio-star';fav.textContent=isFav(station)?'★':'☆';fav.setAttribute('aria-label',(isFav(station)?'Rimuovi dai':'Aggiungi ai')+' preferiti: '+station.name);fav.onclick=()=>toggleFav(station);
    row.append(pick,fav);return row;
   }));
   // More is available while there are unseen stations loaded, or further pages on Radio Browser.
   const morePages=results?!searchDone:tab!=='fav'&&!!paging[tab]&&!paging[tab].done&&loadedList[tab];
   more.hidden=all.length<=shown&&!morePages;
-  if(!all.length&&!loading){const p=document.createElement('p');p.className='hint';p.textContent=results?'Nessuna radio trovata.':tab==='fav'?'Nessun preferito: tocca â˜† accanto a una radio.':'Elenco vuoto: tocca Aggiorna elenco.';list.append(p)}
+  if(!all.length&&!loading){const p=document.createElement('p');p.className='hint';p.textContent=results?'Nessuna radio trovata.':tab==='fav'?'Nessun preferito: tocca ☆ accanto a una radio.':'Elenco vuoto: tocca Aggiorna elenco.';list.append(p)}
  }
  async function query(path){
   for(const host of hosts){
@@ -189,7 +195,7 @@
  }
  async function nextPage(which){
   const p=paging[which];if(!p||p.done||loading)return;
-  loading=true;directoryMessage='Caricamento radioâ€¦';update();renderList();
+  loading=true;directoryMessage='Caricamento radio…';update();renderList();
   try{
    const page=await query(QUERY[which](p.offset));p.offset+=PAGE;p.done=page.length===0;
    addUnique(lists[which],page);directoryMessage=lists[which].length+' radio';
@@ -212,7 +218,7 @@
   const serial=++searchSerial,q=text.trim();
   if(q.length<2){results=null;directoryMessage='';shown=60;update();renderList();return}
   searchQuery=q;searchOffset=0;searchDone=false;results=[];shown=60;
-  directoryMessage='Ricercaâ€¦';update();renderList();
+  directoryMessage='Ricerca…';update();renderList();
   try{await searchPage(serial)}catch{if(serial===searchSerial)directoryMessage='Ricerca non riuscita. Riprova.'}
   if(serial===searchSerial){directoryMessage=results.length?results.length+(searchDone?'':'+')+' radio trovate':'Nessuna radio trovata.';update();renderList()}
  }
@@ -225,7 +231,7 @@
  more.onclick=async()=>{
   const all=stationsInView();
   if(shown>=all.length){
-   if(results&&!searchDone){const serial=searchSerial;directoryMessage='Ricercaâ€¦';update();await searchPage(serial);directoryMessage=results.length+(searchDone?'':'+')+' radio trovate'}
+   if(results&&!searchDone){const serial=searchSerial;directoryMessage='Ricerca…';update();await searchPage(serial);directoryMessage=results.length+(searchDone?'':'+')+' radio trovate'}
    else if(!results&&paging[tab])await nextPage(tab);
   }
   shown+=60;renderList();update();
@@ -239,8 +245,8 @@
 
  function update(){
   renderMarquee();nowName.textContent=current?current.name:'Scegli una radio';
-  const favorite=isFav(current);star.textContent=favorite?'â˜…':'â˜†';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
-  for(const b of [play,bigPlay]){b.textContent=wantsPlay?'â…¡':'â–¶';b.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');b.setAttribute('aria-pressed',String(wantsPlay));b.setAttribute('aria-busy',String(pending))}
+  const favorite=isFav(current);star.textContent=favorite?'★':'☆';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
+  for(const b of [play,bigPlay]){b.textContent=wantsPlay?'Ⅱ':'▶';b.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');b.setAttribute('aria-pressed',String(wantsPlay));b.setAttribute('aria-busy',String(pending))}
   status.textContent=playbackMessage||directoryMessage;trackBox.hidden=true;
   document.documentElement.classList.toggle('radio-playing',wantsPlay&&!pending);
   if(wantsPlay&&!pending)startViz();else if(!frame)drawViz();
@@ -256,7 +262,7 @@
   const url=current?.urls[streamIndex];
   if(audio===fx&&url&&!fxFailed.has(url)){fxFailed.add(url);startStream();return}
   if(current&&streamIndex+1<current.urls.length){streamIndex++;startStream();return}
-  stop('Radio non raggiungibile. Scegli unâ€™altra stazione.');
+  stop('Radio non raggiungibile. Scegli un’altra stazione.');
  }
  function armWatchdog(serial){
   clearTimeout(watchdog);watchdog=setTimeout(()=>{if(serial===attempt&&wantsPlay&&pending)nextStream(serial)},12000);
@@ -265,9 +271,9 @@
   if(!current||!allowed())return;
   stopMetadata();const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;
   dropHls();silentFrames=0;
-  const url=current.urls[streamIndex];let useFx=!fxFailed.has(url)&&ensureGraph(),Hls=null;
+  const url=current.urls[streamIndex];let useFx=!fxFailed.has(url)&&ensureGraph(),Hls=null;peaks.fill(.12);floors.fill(0);
   if(useFx)ctx.resume?.().catch(()=>{});
-  playbackMessage='Connessioneâ€¦';update();armWatchdog(serial);
+  playbackMessage='Connessione…';update();armWatchdog(serial);
   // HLS on the analysable player only through hls.js; otherwise the browser's own player.
   if(useFx&&isHls(url)){try{Hls=await loadHls();if(!Hls.isSupported())Hls=null}catch{Hls=null}if(serial!==attempt)return;if(!Hls)useFx=false}
   const next=useFx?fx:plain,other=useFx?plain:fx;
@@ -277,7 +283,7 @@
    hls.on(Hls.Events.ERROR,(_,data)=>{if(data?.fatal&&serial===attempt&&wantsPlay)nextStream(serial)});
    hls.loadSource(url);hls.attachMedia(fx);
   }else{audio.src=url;audio.load()}
-  if('mediaSession' in navigator&&window.MediaMetadata){try{navigator.mediaSession.metadata=new MediaMetadata({title:current.name,artist:'Binottoland Â· Radio'})}catch{}}
+  if('mediaSession' in navigator&&window.MediaMetadata){try{navigator.mediaSession.metadata=new MediaMetadata({title:current.name,artist:'Binottoland · Radio'})}catch{}}
   try{await audio.play();if(serial!==attempt)return;update()}
   catch(error){if(serial!==attempt||!wantsPlay)return;if(error.name==='NotAllowedError')stop('Tocca Play per avviare la radio.');else nextStream(serial)}
  }
@@ -294,9 +300,9 @@
  // Events from the player that is not in use are ignored.
  for(const el of [plain,fx]){
   const mine=fn=>event=>{if(event.target===audio)fn(event)};
-  el.addEventListener('playing',mine(()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto Â· '+current.name;update();renderList();if(!metadataTimer&&!metadataPending)loadMetadata()}));
+  el.addEventListener('playing',mine(()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto · '+current.name;update();renderList();if(!metadataTimer&&!metadataPending)loadMetadata()}));
   el.addEventListener('pause',mine(()=>{if(!pending&&wantsPlay){wantsPlay=false;stopMetadata();playbackMessage='Radio in pausa.';clearTimeout(watchdog)}update()}));
-  const buffering=mine(()=>{if(!wantsPlay)return;pending=true;playbackMessage='Bufferingâ€¦';update();armWatchdog(attempt)});
+  const buffering=mine(()=>{if(!wantsPlay)return;pending=true;playbackMessage='Buffering…';update();armWatchdog(attempt)});
   el.addEventListener('waiting',buffering);el.addEventListener('stalled',buffering);
   el.addEventListener('error',mine(()=>{if(audio.getAttribute('src')&&wantsPlay)nextStream()}));
   el.addEventListener('ended',mine(()=>{if(wantsPlay)nextStream()}));
