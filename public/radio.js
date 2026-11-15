@@ -35,7 +35,7 @@
     if (!window.MediaSource) return Promise.reject(Error('no MSE'));
     hlsLoader ??= new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'vendor/hls.light.min.js?v=4a582e5e99';
+      s.src = 'vendor/hls.min.js?v=7c47cd97d7';
       s.async = true;
       s.onload = () => (window.Hls ? resolve(window.Hls) : reject(Error()));
       s.onerror = () => {
