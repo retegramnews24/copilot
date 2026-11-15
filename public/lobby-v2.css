@@ -653,3 +653,7 @@
 .radio-screen > * {
   flex: none;
 }
+
+.radio-row.down .radio-pick {
+  opacity: 0.7;
+}

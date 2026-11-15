@@ -12,10 +12,16 @@
  function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
  function normalize(raw){
   if(!raw||typeof raw.name!=='string'||!raw.name.trim())return null;
-  const urls=[...new Set([...(Array.isArray(raw.urls)?raw.urls:[]),raw.url_resolved,raw.url].filter(x=>{try{return typeof x==='string'&&x.length<=2048&&new URL(x).protocol==='https:'}catch{return false}}))];
+  // The page is HTTPS, so only HTTPS audio can play. Stations listed as http:// are tried as https://
+  // on the same address: many servers answer both (Rai, 105, R101…). Real https URLs come first.
+  const candidates=[...(Array.isArray(raw.urls)?raw.urls:[]),raw.url_resolved,raw.url].filter(x=>typeof x==='string'&&x.length<=2048);
+  const secure=x=>{try{const u=new URL(x);if(u.protocol==='https:')return u.href;if(u.protocol==='http:'){u.protocol='https:';return u.href}}catch{}return null};
+  const urls=[...new Set([...candidates.filter(x=>/^https:/i.test(x)),...candidates.filter(x=>/^http:/i.test(x))].map(secure).filter(Boolean))];
   if(!urls.length)return null;
   const tags=(typeof raw.tags==='string'?raw.tags.split(','):Array.isArray(raw.tags)?raw.tags:[]).map(t=>String(t).trim()).filter(Boolean).slice(0,3);
-  return {id:String(raw.id||raw.stationuuid||urls[0]),name:raw.name.trim().slice(0,80),urls,country:String(raw.country||raw.countrycode||'').slice(0,40),tags};
+  return {id:String(raw.id||raw.stationuuid||urls[0]),name:raw.name.trim().slice(0,80),urls,country:String(raw.country||raw.countrycode||'').slice(0,40),tags,
+   // Radio Browser's last check failed: still listed (it may be back), marked in the list.
+   down:raw.down===true||raw.lastcheckok===0};
  }
  const stored=readLocal('binottoland-radio-favorites',[]);
  let favorites=(Array.isArray(stored)?stored:[]).map(normalize).filter(Boolean),current=normalize(readLocal('binottoland-radio-last',null));
@@ -98,7 +104,7 @@
    const row=document.createElement('div');row.className='radio-row'+(current?.id===station.id?' playing':'');row.setAttribute('role','listitem');
    const pick=document.createElement('button');pick.type='button';pick.className='radio-pick';
    const name=document.createElement('strong');name.textContent=station.name;
-   const info=document.createElement('small');info.textContent=[station.country,...(station.tags||[])].filter(Boolean).join(' · ')||'Radio';
+   const info=document.createElement('small');info.textContent=(station.down?'⚠ ultimo controllo non riuscito · ':'')+([station.country,...(station.tags||[])].filter(Boolean).join(' · ')||'Radio');if(station.down)row.classList.add('down');
    pick.append(name,info);pick.onclick=()=>{current=station;saveLocal('binottoland-radio-last',current);streamIndex=0;startStream();renderList()};
    const fav=document.createElement('button');fav.type='button';fav.className='radio-star';fav.textContent=isFav(station)?'★':'☆';fav.setAttribute('aria-label',(isFav(station)?'Rimuovi dai':'Aggiungi ai')+' preferiti: '+station.name);fav.onclick=()=>toggleFav(station);
    row.append(pick,fav);return row;
@@ -120,7 +126,8 @@
   throw Error('Elenco non raggiungibile.');
  }
  // Pages of 500 from Radio Browser, most listened first; "Mostra altre" fetches the next page at the end.
- const PAGE=500,base='hidebroken=true&is_https=true&order=clickcount&reverse=true&limit='+PAGE;
+ // Every station of the catalogue: http ones are upgraded to https, those failing the last check are marked.
+ const PAGE=500,base='order=clickcount&reverse=true&limit='+PAGE;
  const QUERY={it:offset=>`/json/stations/search?countrycode=IT&${base}&offset=${offset}`,world:offset=>`/json/stations/search?${base}&offset=${offset}`};
  const paging={it:{offset:0,done:false},world:{offset:0,done:false}};
  const addUnique=(into,items)=>{const seen=new Set(into.map(s=>s.id));for(const s of items)if(!seen.has(s.id)){seen.add(s.id);into.push(s)}return into};
