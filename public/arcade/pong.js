@@ -1,3 +1,4 @@
+import {soundAllowed} from '../sound-pref.js';
 import {width,height,radius,paddleWidth,modes,paddlePositions,newMatch,movePaddle,moveOpponent,stepMatch} from './pong-physics.js?v=3';
 
 const $=id=>document.getElementById(id);
@@ -13,7 +14,7 @@ try{const pref=JSON.parse(localStorage.getItem('binottoland-pong-settings')||'{}
 function savePreferences(){try{localStorage.setItem('binottoland-pong-settings',JSON.stringify({sound,mode:match.mode}))}catch{}}
 
 function unlockAudio(){
-  if(!sound)return;
+  if(!sound||!soundAllowed())return;
   try{
     audio??=new AudioContext();
     return audio.resume().catch(()=>{});

@@ -20,9 +20,10 @@ Gira su Cloudflare Workers (Worker `binottoland-motore`, Durable Objects con SQL
 
 ## Interfaccia
 
-- Lobby: tavoli, presenti e ultimi 100 messaggi della chat comune.
-- Giochi: il pulsante per creare tavoli è nella pagina Giochi. La Lobby conserva elenco, presenti e chat.
-- Settings: palette indipendenti per interfaccia, scacchiera e pezzi. Il pulsante Debug apre stato, archivio, replay e registro diagnostico.
+- Lobby: in cima "Adesso" (tocca a te, chi ti aspetta, sale Cinema/Blackboard attive), poi tavoli, chat comune (ultimi 100 messaggi) e persone online in una riga di avatar. Le sezioni Cinema e Blackboard compaiono solo con sale aperte.
+- Giochi: "I tuoi giochi" (preferiti ☆ e recenti, salvati sul dispositivo), classifica storica, poi Giochi da tavolo, Arcade e sport, Simulatori e sfide, Guarda e crea insieme. Ogni gioco ha un colore proprio (`public/games-catalog.js`).
+- Settings: Aspetto con anteprima dal vivo di interfaccia, scacchiera e pezzi; Profilo (personaggio e pallina); Preferenze (suoni nei giochi, vibrazione quando tocca a te, dimensione del testo); Le mie partite archiviate; Informazioni (privacy e regolamenti); Segnala un problema (condivide in Telegram il registro degli ultimi eventi, senza token).
+- Modalità sviluppatore: cinque tocchi sulla versione in Informazioni. Mostra la pagina Debug (stato, storico, terminale eventi) e il Dev Mode di Labyrinth.
 - Radio: controllo compatto con stazioni, preferiti e volume personali. L'audio resta nello stesso documento durante la navigazione; gli stream sono caricati direttamente dal dispositivo. La selezione radio viene caricata su richiesta da Radio Browser, con host alternativi, riprendendo il funzionamento del progetto DABradio.
 
 ## Sviluppo

@@ -1,10 +1,11 @@
+import {soundAllowed} from '../sound-pref.js';
 export class TrialAudio {
   constructor() {
     this.enabled = true;
   }
 
   resume() {
-    if (!this.enabled) return;
+    if (!this.enabled || !soundAllowed()) return;
     const Audio = window.AudioContext || window.webkitAudioContext;
     if (!Audio) return;
     try {

@@ -526,7 +526,7 @@ const trialDom=new JSDOM(trialHtml,{...trialOptions,url:'https://unit.test/moto-
 const trial=trialDom.window, trialGet=id=>trial.document.getElementById(id);
 Object.assign(trial,trialPhysics,{CAMPAIGN_LENGTH,drawTrial,applyInsets(){}});
 trial.AudioContext=class{constructor(){throw Error('Audio blocked by the webview')}};
-const trialAudioScript=(await fs.readFile('public/moto-trial/audio.js','utf8')).replace('export class','class')+'\nwindow.TrialAudio=TrialAudio;';
+const trialAudioScript='const soundAllowed=()=>true;\n'+(await fs.readFile('public/moto-trial/audio.js','utf8')).replace(/^import .*\r?\n/m,'').replace('export class','class')+'\nwindow.TrialAudio=TrialAudio;';
 trial.eval(trialAudioScript);
 trial.matchMedia=()=>({matches:true});
 let signs=0;

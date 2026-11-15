@@ -128,3 +128,103 @@
 #leaderboard-number li:nth-child(3) {
   border-left-color: #b0744a;
 }
+/* Settings: gruppi, anteprima dal vivo, preferenze. */
+.settings-group {
+  margin-bottom: 12px;
+}
+.settings-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+.settings-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+.board-preview {
+  display: grid;
+  grid-template-columns: repeat(4, 34px);
+  grid-auto-rows: 34px;
+  flex: none;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--line);
+}
+.board-preview .square {
+  width: 34px;
+  height: 34px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+.board-preview .square svg {
+  width: 30px;
+  height: 30px;
+}
+.settings-preview .hint {
+  margin: 0;
+}
+/* Scelte più compatte: tre per riga anche su telefono, senza blocchi alti. */
+.settings-group .themes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.settings-group .themes button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+.settings-group .themes .swatch {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: none;
+}
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 14px;
+}
+.toggle-row:last-child {
+  border-bottom: 0;
+}
+.toggle-row input[type='checkbox'] {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.toggle-row select {
+  width: auto;
+  margin: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+}
+.version-tap {
+  width: auto;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-weight: 650;
+  cursor: default;
+}
+.setting:has(> button[hidden]:only-child) {
+  display: none;
+}

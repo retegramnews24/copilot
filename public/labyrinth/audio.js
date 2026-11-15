@@ -1,6 +1,7 @@
+import {soundAllowed} from '../sound-pref.js';
 export class Atmosphere{
  constructor(enabled=true){this.enabled=enabled;this.running=false;this.arena=false;this.ctx=null}
- init(){if(this.ctx)return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;try{
+ init(){if(this.ctx||!soundAllowed())return;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;try{
   const c=this.ctx=new AC(),master=this.master=c.createGain();master.gain.value=0;master.connect(c.destination);
   const maze=this.mazeAmbience=c.createGain();maze.gain.value=this.arena?0:1;maze.connect(master);
   const arena=this.arenaAmbience=c.createGain();arena.gain.value=this.arena?1:0;arena.connect(master);

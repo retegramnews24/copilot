@@ -129,6 +129,8 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='ru
 $('sound').onclick=async ()=>{
   try{
     const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
+    // Global "Suoni" setting of Binottoland (same key as public/sound-pref.js).
+    try{if(localStorage.getItem('binottoland-sound')==='off'&&!audio)return}catch{}
     if(!audio){
       const ac=new Audio(),osc=ac.createOscillator(),gain=ac.createGain(),filter=ac.createBiquadFilter();
       osc.type='triangle';gain.gain.value=0;filter.type='lowpass';filter.frequency.value=210;

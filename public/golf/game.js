@@ -1,3 +1,4 @@
+import {soundAllowed} from '../sound-pref.js';
 import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=12';
 import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=12';
 import { drawCourse } from './render.js?v=10';
@@ -47,6 +48,7 @@ function action(kind,payload={}){
 }
 function sound(type){
   try{
+    if(!soundAllowed())return;
     const Audio=window.AudioContext||window.webkitAudioContext;
     if(!Audio)return;
     if(!audio&&type!=='shot')return;

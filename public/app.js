@@ -10,6 +10,8 @@ import {initCatalog,renderCatalog} from './games-catalog.js?v=1';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 const $=id=>document.getElementById(id);
+const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
+const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};
 initCatalog();
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
@@ -158,6 +160,10 @@ function renderNow(){
  for(const entry of cinemaRooms.rooms)if(entry.viewers.length)items.push({rank:3,text:'Cinema · Sala '+entry.number+(entry.channel?' · '+entry.channel:'')+' · '+entry.viewers.length+(entry.viewers.length===1?' spettatore':' spettatori'),label:'Entra',action:()=>openCinema(entry.id)});
  for(const entry of blackboardLobbyRooms)if(entry.people.length)items.push({rank:3,text:'Lavagna · Sala '+entry.number+' · '+entry.people.map(p=>p.name).join(', '),label:'Entra',action:button=>openBlackboard(button,entry.id)});
  items.sort((a,b)=>a.rank-b.rank);
+ // A short vibration when a new "tocca a te" appears (Settings → Vibrazione).
+ const urgent=items.filter(i=>i.rank===0).length;
+ if(urgent>(renderNow.urgent||0)&&renderNow.urgent!==undefined&&pref('binottoland-haptics','on')!=='off')tg?.HapticFeedback?.notificationOccurred?.('success');
+ renderNow.urgent=urgent;
  $('now-panel').hidden=!identity||!items.length;
  $('now-items').replaceChildren(...items.slice(0,4).map(item=>{
   const row=document.createElement('div');row.className='now-item'+(item.rank===0?' urgent':'');
@@ -292,6 +298,41 @@ function connectLobby(){
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>selectPage('debug');
 $('back-settings').onclick=()=>selectPage('settings');
+// Settings: secondary pages, preferences, live preview, problem report, developer mode.
+document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selectPage('settings'));
+$('open-archive').onclick=()=>{renderArchive();selectPage('archive')};
+$('open-info').onclick=()=>selectPage('info');
+function applyPreferences(){
+ $('setting-sound').checked=pref('binottoland-sound','on')!=='off';
+ $('setting-haptics').checked=pref('binottoland-haptics','on')!=='off';
+ const scale=['1','1.12','1.25'].includes(pref('binottoland-text','1'))?pref('binottoland-text','1'):'1';
+ $('setting-text').value=scale;document.documentElement.style.zoom=scale==='1'?'':scale;
+}
+$('setting-sound').onchange=e=>{setPref('binottoland-sound',e.target.checked?'on':'off');trace('UI','Suoni '+(e.target.checked?'attivi':'spenti'))};
+$('setting-haptics').onchange=e=>{setPref('binottoland-haptics',e.target.checked?'on':'off');if(e.target.checked)tg?.HapticFeedback?.impactOccurred?.('light')};
+$('setting-text').onchange=e=>{setPref('binottoland-text',e.target.value);applyPreferences()};
+applyPreferences();
+function renderThemePreview(){
+ const pieces=['r','n','q','k','P','P','B','K'];
+ $('theme-preview').replaceChildren(...pieces.map((piece,i)=>{const sq=document.createElement('span');sq.className='square'+((Math.floor(i/4)+i)%2?' dark':'');sq.innerHTML=pieceSvg(piece);return sq}));
+}
+document.addEventListener('click',e=>{if(e.target.closest('[data-theme-choice],[data-board-choice],[data-piece-choice]'))renderThemePreview()});
+const isDev=()=>pref('binottoland-dev','0')==='1';
+function applyDevMode(){$('open-debug').hidden=!isDev();if($('solo-labyrinth'))$('solo-labyrinth').hidden=!isDev()}
+applyDevMode();
+let versionTaps=0,versionTimer=null;
+$('app-version').onclick=()=>{
+ versionTaps++;clearTimeout(versionTimer);versionTimer=setTimeout(()=>versionTaps=0,1500);
+ if(versionTaps<5)return;versionTaps=0;setPref('binottoland-dev',isDev()?'0':'1');applyDevMode();
+ $('app-version').textContent='Binottoland 1.1'+(isDev()?' · modalità sviluppatore':'');
+};
+$('report-problem').onclick=async()=>{
+ const report=['Segnalazione Binottoland 1.1',new Date().toLocaleString('it-IT'),'Pagina: '+(document.querySelector('.page:not([hidden])')?.id||'—'),'Schermo: '+innerWidth+'×'+innerHeight+' · '+(tg?.platform||'browser'),'',...events.slice(-40)].join('\n');
+ let copied=false;try{await navigator.clipboard.writeText(report);copied=true}catch{}
+ const link='https://t.me/share/url?url='+encodeURIComponent('https://t.me/checkmategame_bot?startapp')+'&text='+encodeURIComponent(report.slice(0,1500));
+ if(tg?.openTelegramLink)tg.openTelegramLink(link);else window.open(link,'_blank','noopener');
+ $('report-result').textContent=(copied?'Registro copiato. ':'')+'Scegli in Telegram a chi inviarlo (per esempio un amministratore del gruppo).';
+};
 async function createTable(game,target,mode,seats){
  const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});
  stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};
@@ -390,11 +431,11 @@ function refreshDebug(){
 }
 function selectPage(page){
  $('draw-dialog').hidden=true;
- const activeTab=page==='debug'?'settings':page;
+ const activeTab=['debug','archive','info'].includes(page)?'settings':page;
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===activeTab;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1});
  document.querySelectorAll('.page').forEach(section=>section.hidden=section.id!=='page-'+page);
  if(page!=='game')stopReplay();trace('UI','Pagina '+page);
- if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='game')requestAnimationFrame(fitBoard);
+ if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game')requestAnimationFrame(fitBoard);
 }
 function navigate(page){
  if(busy)return;
