@@ -642,3 +642,14 @@
   border: 1px solid var(--line);
   font-size: 13px;
 }
+
+/* Radio a schermo intero: sotto i pulsanti di Telegram e sopra la barra di Android. */
+.radio-screen {
+  padding-top: calc(max(var(--system-safe-top, 0px), env(safe-area-inset-top, 0px)) + var(--content-safe-top, 0px) + 10px);
+  padding-bottom: calc(max(var(--system-safe-bottom, 0px), env(safe-area-inset-bottom, 0px)) + var(--content-safe-bottom, 0px) + 12px);
+  padding-left: calc(var(--system-safe-left, 0px) + var(--content-safe-left, 0px) + 12px);
+  padding-right: calc(var(--system-safe-right, 0px) + var(--content-safe-right, 0px) + 12px);
+}
+.radio-screen > * {
+  flex: none;
+}
