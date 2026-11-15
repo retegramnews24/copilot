@@ -4,9 +4,100 @@ function projection(c, round, laps, season) {
   const key = JSON.stringify([c, round, laps, season]);
   if (cache.has(key)) return cache.get(key);
   const value = estimate(c, round, laps, season);
-  if (cache.size > 120) cache.clear();
+  if (cache.size > 600) cache.clear();
   cache.set(key, value);
   return value;
+}
+// Ready-made race plans: same model as the race, checked by a full simulation.
+const PRESETS = [
+  {
+    key: 'safe',
+    name: 'Prudente',
+    text: 'Ritmo Conserva, gomme dure, una sosta e più benzina di scorta. Difficile restare a secco.',
+    pace: 'save',
+    stops: 1,
+    dry: ['hard', 'medium'],
+    wearAt: 40,
+    margin: 4
+  },
+  {
+    key: 'balanced',
+    name: 'Bilanciata',
+    text: 'Il consiglio dei tecnici: ritmo Normale, una sosta, Medium poi Hard.',
+    pace: 'normal',
+    stops: 1,
+    dry: ['medium', 'hard'],
+    wearAt: 30,
+    margin: 3
+  },
+  {
+    key: 'attack',
+    name: 'Aggressiva',
+    text: 'Ritmo Spingi, gomme morbide e due soste: più veloce, ma consuma molto.',
+    pace: 'push',
+    stops: 2,
+    dry: ['soft', 'soft', 'medium'],
+    wearAt: 20,
+    margin: 2
+  }
+];
+const tyreFor = (water, dry) => (water > 0.55 ? 'wet' : water > 0.18 ? 'inter' : dry);
+function presets(c, track, round, laps, season, raceSeconds) {
+  const clampFuel = kg => Math.max(10, Math.min(110, Math.ceil(kg)));
+  const startWater = weatherAt(round, 0, season).water;
+  return PRESETS.map(p => {
+    const n = p.stops,
+      stopLaps = Array.from({ length: n }, (_, i) => Math.max(1, Math.round((laps * (i + 1)) / (n + 1)))),
+      starts = [0, ...stopLaps],
+      // Tyre for each stint follows the forecast at the moment the stint starts.
+      compounds = starts.map((lap, i) =>
+        tyreFor(weatherAt(round, (lap / laps) * raceSeconds, season).water, p.dry[i])
+      ),
+      wing = Math.round(Math.max(0, Math.min(100, track[2] + startWater * 12))),
+      brake = Math.max(45, Math.min(65, track[3]));
+    let plan, result;
+    for (let extra = 0; extra <= 9; extra += 3) {
+      const perLap = metrics(
+        { ...c, compound: compounds[0], strategy: { ...c.strategy, wing, brake, pace: p.pace } },
+        track,
+        weatherAt(round, 0, season)
+      ).consumption;
+      const stint = i => (i < n ? stopLaps[i] : laps) - starts[i];
+      const stops = stopLaps.map((lap, i) => ({
+        lap,
+        compound: compounds[i + 1],
+        refuel: Math.min(110, clampFuel(perLap * stint(i + 1) + p.margin + extra))
+      }));
+      plan = {
+        wing,
+        brake,
+        compound: compounds[0],
+        pace: p.pace,
+        pitLap: stops[0].lap,
+        wearAt: p.wearAt,
+        fuel: clampFuel(perLap * stint(0) + p.margin + extra),
+        refuel: stops[0].refuel,
+        stops
+      };
+      result = projection(
+        { ...c, fuel: plan.fuel, compound: plan.compound, strategy: plan },
+        round,
+        laps,
+        season
+      );
+      if (!result.dnf) break;
+    }
+    return {
+      key: p.key,
+      name: p.name,
+      text: p.text,
+      strategy: plan,
+      minutes: result.seconds / 60,
+      stops: result.stops,
+      finishFuel: result.finishFuel,
+      dnf: result.dnf
+    };
+  });
 }
 export function engineering(s, t, tracks, deltaFn, laps) {
   if (!t) return null;
@@ -74,6 +165,7 @@ export function engineering(s, t, tracks, deltaFn, laps) {
         finishFuel: sim.finishFuel,
         dnf: sim.dnf,
         alternatives,
+        presets: presets(c, track, round, laps, s.season, m.lap * laps),
         uncertainty: Math.max(
           0.015,
           (0.1 + (100 - t.crew.motor.skill) / 1000) / Math.sqrt(history.length + 1)

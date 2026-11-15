@@ -689,11 +689,76 @@ function strategyFields(st) {
 function boxPage() {
   return `<div class="box-workspace"><section class="fit-panel">${strategies()}</section><section class="fit-panel">${telemetryPage()}</section></div>`;
 }
+const PLAN_KEYS = ['wing', 'brake', 'compound', 'pace', 'pitLap', 'wearAt', 'fuel', 'refuel'];
+const samePlan = (a, b) =>
+  PLAN_KEYS.every(k => a?.[k] === b?.[k]) &&
+  JSON.stringify((a?.stops || []).map(x => [x.lap, x.compound, x.refuel])) ===
+    JSON.stringify((b?.stops || []).map(x => [x.lap, x.compound, x.refuel]));
+function planSummary(st) {
+  const stops = st.stops?.length ? st.stops : [{ lap: st.pitLap, compound: st.compound }];
+  const tyres = [st.compound, ...(st.stops || []).map(p => p.compound)].map(c => compounds[c]).join(' → ');
+  return `${tyres} · ${stops.length} ${stops.length === 1 ? 'sosta' : 'soste'} (giro ${stops.map(p => p.lap).join(', ')}) · ${st.fuel} kg · ${{ save: 'Conserva', normal: 'Normale', push: 'Spingi' }[st.pace]}`;
+}
+// Three ready-made plans computed by the server with the race model.
+function presetPicker(slot, st) {
+  const list = data.engineering?.drivers?.[slot]?.presets;
+  if (!list) return '';
+  return `<div class="presets" role="group" aria-label="Strategie pronte">${list
+    .map(
+      p =>
+        `<button type="button" class="preset ${samePlan(p.strategy, st) ? 'active' : ''}" data-action="preset" data-slot="${slot}" data-key="${p.key}" title="${esc(p.text)} Arrivo stimato con ${Math.round(p.finishFuel)} kg di benzina."><b>${esc(p.name)}${samePlan(p.strategy, st) ? ' ✓' : ''}</b><small>≈ ${p.minutes.toFixed(1).replace('.', ',')} min · ${p.stops} ${p.stops === 1 ? 'sosta' : 'soste'}</small></button>`
+    )
+    .join(
+      ''
+    )}</div><p class="preset-note">${esc(list.find(p => samePlan(p.strategy, st))?.text || 'Scegli una strategia pronta oppure apri le impostazioni avanzate.')}</p>`;
+}
+function applyPreset(slot, key) {
+  const p = data.engineering?.drivers?.[slot]?.presets?.find(x => x.key === key),
+    form = document.querySelector(`[data-form="strategy"][data-slot="${slot}"]`);
+  if (!p || !form) return;
+  const plan = p.strategy,
+    set = (name, value) => form.elements[name] && (form.elements[name].value = String(value));
+  for (const k of PLAN_KEYS) set(k, plan[k]);
+  for (let i = 0; i < 3; i++) {
+    const stop = plan.stops[i];
+    set('stopLap' + i, stop ? stop.lap : 0);
+    if (stop) {
+      set('stopCompound' + i, stop.compound);
+      set('stopFuel' + i, stop.refuel);
+    }
+  }
+  // Same path as a manual edit: local draft, then the serialized autosave.
+  form.elements.wing.dispatchEvent(new Event('input', { bubbles: true }));
+  toast(p.name + ' applicata a ' + (data.me?.drivers?.[slot]?.name || 'vettura ' + (slot + 1)) + '.');
+}
+// Keep the preset highlight, summary and note in step with the fields, without re-rendering the form.
+function refreshPresetState(form) {
+  const slot = Number(form.dataset.slot),
+    plan = getStrategy(form),
+    list = data.engineering?.drivers?.[slot]?.presets || [],
+    match = list.find(p => samePlan(p.strategy, plan));
+  for (const b of document.querySelectorAll(`.preset[data-slot="${slot}"]`)) {
+    const on = b.dataset.key === match?.key,
+      name = b.querySelector('b');
+    b.classList.toggle('active', on);
+    name.textContent = name.textContent.replace(/ ✓$/, '') + (on ? ' ✓' : '');
+  }
+  const summary = form.querySelector('.advanced-fields > summary span'),
+    note = form.closest('section')?.querySelector('.preset-note');
+  if (summary) summary.textContent = planSummary(plan);
+  if (note)
+    note.textContent =
+      match?.text || 'Piano personalizzato. Le strategie pronte sopra lo sostituiscono con un clic.';
+}
+document.addEventListener('input', e => {
+  const form = e.target.closest('[data-form="strategy"]');
+  if (form) refreshPresetState(form);
+});
 function strategies() {
   const t = data.me;
   if (!t) return onboarding();
   const track = data.tracks[Math.min(data.round, 12)];
-  return `<div class="eyebrow">PROSSIMO APPUNTAMENTO · ${track[0]}</div><h2>Box · assetto, strategia e telemetria.</h2><div class="notice">${track[1]} km · ${data.laps} giri · ${data.conditions?.forecast || 'Previsione in preparazione'}. Il piano offline usa giro pit, soglia gomme e riserva carburante. Se sei al muretto puoi cambiarlo durante la gara. Offline: velocità media −5%. Rischio per vettura e GP: danno 2%, foratura 2%, incidente 2% (estrazioni indipendenti).</div><div class="two">${t.strategies.map((st, i) => `<section class="card ${i ? 'purple' : 'accent'}"><div class="eyebrow">VETTURA 0${i + 1}</div><h3>${esc(t.drivers[i]?.name || 'Pilota da ingaggiare')}</h3><form class="strategy-form" data-form="strategy" data-slot="${i}">${strategyFields(st)}<small>Consumo iniziale stimato: ${(data.engineering?.drivers?.[i]?.consumption || 0).toFixed(2)} kg/giro. Peso, motore, carico e ritmo modificano consumo e gomme. Il pit avviene al passaggio del traguardo; la riserva automatica interviene sotto 1,7 giri di carburante.</small><output data-save-status role="status">Salvataggio automatico attivo</output></form></section>`).join('')}</div>`;
+  return `<div class="eyebrow">PROSSIMO APPUNTAMENTO · ${track[0]}</div><h2>Box · assetto, strategia e telemetria.</h2><div class="notice">${track[1]} km · ${data.laps} giri · ${data.conditions?.forecast || 'Previsione in preparazione'}. Il piano offline usa giro pit, soglia gomme e riserva carburante. Se sei al muretto puoi cambiarlo durante la gara. Offline: velocità media −5%. Rischio per vettura e GP: danno 2%, foratura 2%, incidente 2% (estrazioni indipendenti).</div><div class="two">${t.strategies.map((st, i) => `<section class="card ${i ? 'purple' : 'accent'}"><div class="eyebrow">VETTURA 0${i + 1}</div><h3>${esc(t.drivers[i]?.name || 'Pilota da ingaggiare')}</h3>${presetPicker(i, st)}<form class="strategy-form" data-form="strategy" data-slot="${i}"><details class="advanced-fields"><summary>Impostazioni avanzate · <span>${esc(planSummary(st))}</span></summary>${strategyFields(st)}<small>Consumo iniziale stimato: ${(data.engineering?.drivers?.[i]?.consumption || 0).toFixed(2)} kg/giro. Peso, motore, carico e ritmo modificano consumo e gomme. Il pit avviene al passaggio del traguardo; la riserva automatica interviene sotto 1,7 giri di carburante.</small></details><output data-save-status role="status">Salvataggio automatico attivo</output></form></section>`).join('')}</div>`;
 }
 const proposalSlots = p => p.slots || p.days.map(day => ({ day, times: p.times }));
 function qualifyingClock(time) {
@@ -1078,6 +1143,7 @@ document.addEventListener('click', async e => {
     return;
   }
   if (a === 'rules') return openDialog(rulesHtml());
+  if (a === 'preset') return applyPreset(Number(b.dataset.slot), b.dataset.key);
   if (a === 'help') {
     e.preventDefault();
     const [title, text] = HELP[b.dataset.help];
