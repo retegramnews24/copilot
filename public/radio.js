@@ -78,7 +78,7 @@
   for(const v of vizzes){v.style.setProperty('--viz-a',hex(outfit?.shirt)||'#66b8cf');v.style.setProperty('--viz-b',hex(outfit?.shorts)||'#3c62a3')}
  }
  applyColors();addEventListener('storage',applyColors);
- let frame=0,tick=0;
+ let frame=0,tick=0,silentFrames=0;
  const setBars=values=>{for(const set of bars)set.forEach((bar,i)=>bar.style.transform=`scaleY(${values[i]})`)};
  function drawViz(){
   frame=0;if(!vizzes.length)return;
@@ -86,13 +86,18 @@
   const live=wantsPlay&&!pending&&!document.hidden;
   if(live&&audio===fx&&analyser){
    analyser.getByteFrequencyData(bins);
-   setBars(bands.map(([a,b],i)=>{let sum=0;for(let k=a;k<=b;k++)sum+=bins[k];const v=(sum/(b-a+1))/255*WEIGHT[i];return Math.max(.06,Math.min(1,v*v*1.15)).toFixed(3)}));
+   // Some streams (e.g. HLS on desktop Chrome) reach Web Audio as pure zeros: after ~2 s switch to the beat animation.
+   let any=false;for(let k=1;k<bins.length;k+=8)if(bins[k]){any=true;break}
+   silentFrames=any?0:silentFrames+1;
+  }
+  if(live&&audio===fx&&analyser&&silentFrames<120){
+   setBars(bands.map(([a,b],i)=>{let sum=0;for(let k=a;k<=b;k++)sum+=bins[k];const v=(sum/(b-a+1))/255*WEIGHT[i];return Math.max(.18,Math.min(1,v*v*1.15)).toFixed(3)}));
    for(const v of vizzes)v.dataset.mode='live';
   }else if(live){
    const t=performance.now()/1000;
    setBars(CENTERS.map((_,i)=>Math.max(.1,Math.min(1,.35+.3*Math.sin(t*(3.1+i*.37)+i)+.25*Math.sin(t*(5.3+i*.21)+i*1.7))).toFixed(3)));
    for(const v of vizzes)v.dataset.mode='beat';
-  }else{setBars(CENTERS.map(()=>.15));for(const v of vizzes)v.dataset.mode='';return}
+  }else{setBars(CENTERS.map(()=>.25));for(const v of vizzes)v.dataset.mode='';return}
   frame=requestAnimationFrame(drawViz);
  }
  function startViz(){applyColors();if(!frame)frame=requestAnimationFrame(drawViz)}
@@ -234,7 +239,8 @@
  async function startStream(){
   if(!current||!allowed())return;
   stopMetadata();const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;
-  const url=current.urls[streamIndex],useFx=!fxFailed.has(url)&&ensureGraph();
+  // HLS playlists (.m3u8) go to the plain player: through Web Audio they can turn silent.
+  const url=current.urls[streamIndex],useFx=!fxFailed.has(url)&&!/\.m3u8?($|[?#])/i.test(url)&&ensureGraph();silentFrames=0;
   const next=useFx?fx:plain,other=useFx?plain:fx;
   silence(other);audio=next;
   if(useFx)ctx.resume?.().catch(()=>{});

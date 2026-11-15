@@ -438,15 +438,15 @@
 }
 /* Radio: 10 bande con i colori del personaggio (maglietta → pantaloncini), mosse da radio.js. */
 .radio-viz {
-  gap: 1.5px;
-  height: 16px;
+  gap: 2px;
+  height: 18px;
 }
 .radio-viz i {
-  width: 2.5px;
+  width: 3px;
   height: 100%;
   opacity: 1;
   background: linear-gradient(to top, var(--viz-a, var(--accent)), var(--viz-b, var(--accent)));
-  transform: scaleY(0.15);
+  transform: scaleY(0.25);
   transform-origin: bottom;
   transition: transform 0.07s linear;
 }
