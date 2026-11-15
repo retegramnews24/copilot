@@ -103,7 +103,9 @@
    const fav=document.createElement('button');fav.type='button';fav.className='radio-star';fav.textContent=isFav(station)?'★':'☆';fav.setAttribute('aria-label',(isFav(station)?'Rimuovi dai':'Aggiungi ai')+' preferiti: '+station.name);fav.onclick=()=>toggleFav(station);
    row.append(pick,fav);return row;
   }));
-  more.hidden=all.length<=shown;
+  // More is available while there are unseen stations loaded, or further pages on Radio Browser.
+  const morePages=results?!searchDone:tab!=='fav'&&!!paging[tab]&&!paging[tab].done&&loadedList[tab];
+  more.hidden=all.length<=shown&&!morePages;
   if(!all.length&&!loading){const p=document.createElement('p');p.className='hint';p.textContent=results?'Nessuna radio trovata.':tab==='fav'?'Nessun preferito: tocca ☆ accanto a una radio.':'Elenco vuoto: tocca Aggiorna elenco.';list.append(p)}
  }
  async function query(path){
@@ -117,34 +119,59 @@
   }
   throw Error('Elenco non raggiungibile.');
  }
- const QUERY={it:'/json/stations/search?countrycode=IT&hidebroken=true&order=clickcount&reverse=true&limit=500',world:'/json/stations/search?hidebroken=true&order=clickcount&reverse=true&limit=300'};
+ // Pages of 500 from Radio Browser, most listened first; "Mostra altre" fetches the next page at the end.
+ const PAGE=500,base='hidebroken=true&is_https=true&order=clickcount&reverse=true&limit='+PAGE;
+ const QUERY={it:offset=>`/json/stations/search?countrycode=IT&${base}&offset=${offset}`,world:offset=>`/json/stations/search?${base}&offset=${offset}`};
+ const paging={it:{offset:0,done:false},world:{offset:0,done:false}};
+ const addUnique=(into,items)=>{const seen=new Set(into.map(s=>s.id));for(const s of items)if(!seen.has(s.id)){seen.add(s.id);into.push(s)}return into};
  async function loadList(which,force=false){
   if(which==='fav'||(loadedList[which]&&!force)||loading||!allowed())return;
+  if(force){lists[which]=[];paging[which]={offset:0,done:false};shown=60}
+  await nextPage(which);loadedList[which]=true;
+ }
+ async function nextPage(which){
+  const p=paging[which];if(!p||p.done||loading)return;
   loading=true;directoryMessage='Caricamento radio…';update();renderList();
-  try{lists[which]=await query(QUERY[which]);loadedList[which]=true;directoryMessage=''}
-  catch(e){directoryMessage=e.message+' Riprova.'}
+  try{
+   const page=await query(QUERY[which](p.offset));p.offset+=PAGE;p.done=page.length===0;
+   addUnique(lists[which],page);directoryMessage=lists[which].length+' radio';
+  }catch(e){directoryMessage=e.message+' Riprova.'}
   finally{loading=false;update();renderList()}
+ }
+ // Search by name and by genre/tag, merged, also in pages.
+ let searchQuery='',searchOffset=0,searchDone=false;
+ async function searchPage(serial){
+  const enc=encodeURIComponent(searchQuery),off=searchOffset;
+  const [byName,byTag]=await Promise.all([
+   query(`/json/stations/search?name=${enc}&${base.replace('limit='+PAGE,'limit=300')}&offset=${off}`).catch(()=>[]),
+   query(`/json/stations/search?tag=${enc}&${base.replace('limit='+PAGE,'limit=300')}&offset=${off}`).catch(()=>[])
+  ]);
+  if(serial!==searchSerial)return;
+  searchOffset+=300;searchDone=byName.length<300&&byTag.length<300;
+  addUnique(results,[...byName,...byTag]);
  }
  async function runSearch(text){
   const serial=++searchSerial,q=text.trim();
   if(q.length<2){results=null;directoryMessage='';shown=60;update();renderList();return}
-  directoryMessage='Ricerca…';update();
-  const enc=encodeURIComponent(q);
-  try{
-   const [byName,byTag]=await Promise.all([
-    query(`/json/stations/search?name=${enc}&hidebroken=true&order=clickcount&reverse=true&limit=150`).catch(()=>[]),
-    query(`/json/stations/search?tag=${enc}&hidebroken=true&order=clickcount&reverse=true&limit=150`).catch(()=>[])
-   ]);
-   if(serial!==searchSerial)return;
-   const merged=new Map();for(const s of [...byName,...byTag])if(!merged.has(s.id))merged.set(s.id,s);
-   results=[...merged.values()];shown=60;directoryMessage=results.length?results.length+' radio trovate':'';
-  }catch{if(serial===searchSerial)directoryMessage='Ricerca non riuscita. Riprova.'}
-  if(serial===searchSerial){update();renderList()}
+  searchQuery=q;searchOffset=0;searchDone=false;results=[];shown=60;
+  directoryMessage='Ricerca…';update();renderList();
+  try{await searchPage(serial)}catch{if(serial===searchSerial)directoryMessage='Ricerca non riuscita. Riprova.'}
+  if(serial===searchSerial){directoryMessage=results.length?results.length+(searchDone?'':'+')+' radio trovate':'Nessuna radio trovata.';update();renderList()}
  }
+ // Quick genres: one tap searches by tag.
+ for(const b of document.querySelectorAll('[data-radio-genre]'))b.onclick=()=>{search.value=b.dataset.radioGenre;clearTimeout(searchTimer);runSearch(search.value)};
  search.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>runSearch(search.value),400)};
  search.onkeydown=e=>{if(e.key==='Enter'){clearTimeout(searchTimer);runSearch(search.value);search.blur()}};
  for(const b of document.querySelectorAll('[data-radio-tab]'))b.onclick=()=>{tab=b.dataset.radioTab;saveLocal('binottoland-radio-tab',tab);search.value='';results=null;shown=60;directoryMessage='';renderList();update();loadList(tab)};
- more.onclick=()=>{shown+=60;renderList()};
+ // Show 60 more; at the end of what is loaded, fetch the next page first.
+ more.onclick=async()=>{
+  const all=stationsInView();
+  if(shown>=all.length){
+   if(results&&!searchDone){const serial=searchSerial;directoryMessage='Ricerca…';update();await searchPage(serial);directoryMessage=results.length+(searchDone?'':'+')+' radio trovate'}
+   else if(!results&&paging[tab])await nextPage(tab);
+  }
+  shown+=60;renderList();update();
+ };
  $('radio-reload').onclick=()=>{if(results)runSearch(search.value);else loadList(tab,true)};
  function openScreen(){if(!allowed())return;screen.hidden=false;toggle.setAttribute('aria-expanded','true');document.documentElement.classList.add('radio-open');renderList();loadList(tab)}
  function closeScreen(){screen.hidden=true;toggle.setAttribute('aria-expanded','false');document.documentElement.classList.remove('radio-open')}
