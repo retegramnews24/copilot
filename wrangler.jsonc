@@ -1,6 +1,8 @@
 {
   "name": "binottoland-motore",
   "main": "worker.js",
+  // Before publishing, Cloudflare's build runs the tests (scripts/deploy-gate.mjs): a failure stops the deploy.
+  "build": { "command": "node scripts/deploy-gate.mjs" },
   "compatibility_date": "2026-11-04",
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
