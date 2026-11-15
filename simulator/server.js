@@ -1,4 +1,5 @@
 import { initial, act, advance, nextAlarm, view } from './engine.js';
+import { collectNotices } from './notify.js';
 const json = (data, status = 200) =>
   Response.json(data, {
     status,
@@ -6,8 +7,22 @@ const json = (data, status = 200) =>
   });
 // The existing Room namespace routes one dedicated object here. No changes to game-table storage.
 export class SimulatorLeague {
-  constructor(ctx) {
+  constructor(ctx, env = {}) {
     this.ctx = ctx;
+    this.env = env;
+  }
+  // Group notices are opt-in: secret/var SIMULATOR_NOTIFY=true on the Worker. Best effort, at most once:
+  // notices are always marked as produced, so switching it on later never replays old ones.
+  async notify(messages) {
+    if (!messages.length || this.env.SIMULATOR_NOTIFY !== 'true' || !this.env.BOT_TOKEN) return;
+    const chat = String(this.env.TELEGRAM_ALLOWED_GROUP_ID || '-1001803941686');
+    for (const text of messages)
+      await fetch('https://api.telegram.org/bot' + this.env.BOT_TOKEN + '/sendMessage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: chat, text, disable_web_page_preview: true }),
+        signal: AbortSignal.timeout(5000)
+      }).catch(() => null);
   }
   async load(tx, now) {
     const count = await tx.get('simulator:parts');
@@ -48,7 +63,8 @@ export class SimulatorLeague {
         body = JSON.parse(raw);
         if (!body || typeof body !== 'object') throw Error('Richiesta non valida.');
       }
-      return await this.ctx.storage.transaction(async tx => {
+      let notices = [];
+      const response = await this.ctx.storage.transaction(async tx => {
         const now = Date.now(),
           s = await this.load(tx, now);
         advance(s, now);
@@ -63,20 +79,26 @@ export class SimulatorLeague {
           act(s, u, body, now);
           if (body.action !== 'presence') s.revision++;
         }
+        notices = collectNotices(s, now);
         await this.save(tx, s, now);
         return json(view(s, u, now));
       });
+      if (notices.length) this.ctx.waitUntil?.(this.notify(notices));
+      return response;
     } catch (e) {
       return json({ error: e.message || 'Richiesta non valida.' }, 400);
     }
   }
   async alarm() {
+    let notices = [];
     await this.ctx.storage.transaction(async tx => {
       const now = Date.now(),
         s = await this.load(tx, now);
       advance(s, now);
       s.revision++;
+      notices = collectNotices(s, now);
       await this.save(tx, s, now);
     });
+    await this.notify(notices);
   }
 }

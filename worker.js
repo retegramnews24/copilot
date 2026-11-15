@@ -365,7 +365,7 @@ export class Room extends DurableObject {
   await this.guardSockets();
   const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
   const path=new URL(req.url).pathname;
-  if(path.startsWith('/simulator/'))return (this.simulator??=new SimulatorLeague(this.ctx)).fetch(req);
+  if(path.startsWith('/simulator/'))return (this.simulator??=new SimulatorLeague(this.ctx,this.env)).fetch(req);
   if(path==='/cinema/group-directory')return (this.telegramCinema??=new TelegramCinema(this.ctx,this.env.BOT_TOKEN)).fetch(req);
   if(path==='/cinema/group-file')return req.method==='POST'
    ?this.ctx.blockConcurrencyWhile(()=>cacheTelegramMedia(req,this.ctx,this.env.BOT_TOKEN)):readCinemaMedia(req,this.ctx.storage);
@@ -696,7 +696,7 @@ export class Room extends DurableObject {
  webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='blackboard')return this.blackboard.close(ws);if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
  async alarm(){
  await this.guardSockets();
- if(this.ctx.id.toString()===this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())return (this.simulator??=new SimulatorLeague(this.ctx)).alarm();
+ if(this.ctx.id.toString()===this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())return (this.simulator??=new SimulatorLeague(this.ctx,this.env)).alarm();
  if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
  if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
  if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
