@@ -12,8 +12,9 @@ import {initWindowMode} from './window-mode.js?v=4861da0434';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.13',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.14',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
+let cinemaMinimized=false; // Cinema reduced behind picture in picture (see minimizeCinema).
 const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
 const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};
 initCatalog();
@@ -169,7 +170,9 @@ function renderNow(){
   else if(mine&&game.phase==='waiting')items.push({rank:2,text:'Il tuo tavolo '+game.number+' · '+gameTitle(game)+' aspetta giocatori',label:'Apri',action:()=>openRoom(game.room,false)});
   else if(!mine&&!own&&game.phase==='waiting'&&!full&&game.players.length)items.push({rank:1,text:game.players[0].name+' ti aspetta a '+gameTitle(game)+' · Tavolo '+game.number,label:'Gioca',action:()=>openRoom(game.room,false)});
  }
- for(const entry of cinemaRooms.rooms)if(entry.viewers.length)items.push({rank:3,text:'Cinema · Sala '+entry.number+(entry.channel?' · '+entry.channel:'')+' · '+entry.viewers.length+(entry.viewers.length===1?' spettatore':' spettatori'),label:'Entra',action:()=>openCinema(entry.id)});
+ const watching=cinemaMinimized&&cinemaRooms.rooms.find(entry=>entry.id===cinemaRoom);
+ if(cinemaMinimized)items.push({rank:-1,text:'Cinema · stai guardando'+(watching?' la Sala '+watching.number+(watching.channel?' · '+watching.channel:''):''),label:'Torna',action:restoreCinema});
+ for(const entry of cinemaRooms.rooms)if(entry.viewers.length&&!(cinemaMinimized&&entry.id===cinemaRoom))items.push({rank:3,text:'Cinema · Sala '+entry.number+(entry.channel?' · '+entry.channel:'')+' · '+entry.viewers.length+(entry.viewers.length===1?' spettatore':' spettatori'),label:'Entra',action:()=>openCinema(entry.id)});
  for(const entry of blackboardLobbyRooms)if(entry.people.length)items.push({rank:3,text:'Lavagna · Sala '+entry.number+' · '+entry.people.map(p=>p.name).join(', '),label:'Entra',action:button=>openBlackboard(button,entry.id)});
  // Binotto Simulator: what is still to do (server summary, read-only).
  const openSim=()=>$('play-binotto-simulator').click();
@@ -1172,7 +1175,7 @@ window.addEventListener('message',event=>{
 });
 tg?.onEvent('backButtonClicked',()=>{
  if(!arcadeOverlay.hidden){if(arcadeFrame.title==='Binotto Simulator'&&simulatorBackReady)arcadeFrame.contentWindow?.postMessage({type:'simulator:back'},location.origin);else closeArcade();}
- else if(!$('cinema-overlay').hidden)closeCinema();
+ else if(!$('cinema-overlay').hidden)leaveCinema();
  else if(!$('golf-overlay').hidden)closeGolf();
  else if(!motoOverlay.hidden)closeMotoTrial();
  else closeLabyrinth();
@@ -1410,13 +1413,13 @@ function connectCinema(){
    const packet=JSON.parse(event.data);
    if(packet.type==='rooms'){
     cinemaRooms=packet;
-    if(packet.active&&$('cinema-overlay').hidden){cinemaSend({type:'leave'});return;}
+    if(packet.active&&!cinemaOpen()){cinemaSend({type:'leave'});return;}
     if(packet.active)cinemaRoom=packet.active.id;
     renderCinemaLobby();
    }
    if(packet.type==='favorites')cinemaFavorites=packet;
    if(packet.type==='room-closed'&&packet.id===cinemaRoom){closeCinema('La sala è stata chiusa.',false);return;}
-   if(packet.type==='error'&&!$('cinema-overlay').hidden&&!cinemaRooms.active){closeCinema(packet.message);return;}
+   if(packet.type==='error'&&cinemaOpen()&&!cinemaRooms.active){closeCinema(packet.message);return;}
    cinemaPost('packet',{packet});
   }catch{}
  };
@@ -1429,18 +1432,40 @@ function connectCinema(){
   if(!expired)retryCinema();
  };
 }
-function closeCinema(message='',leave=true){
+// With picture in picture open, "← Lobby" only reduces the Cinema: the room stays connected out of sight,
+// the video keeps playing in its small window and "Adesso" offers the way back.
+const cinemaOpen=()=>!$('cinema-overlay').hidden||cinemaMinimized;
+let cinemaPip=false;
+const leaveCinema=()=>cinemaPip&&!cinemaMinimized?minimizeCinema():closeCinema();
+function minimizeCinema(){
  if($('cinema-overlay').hidden)return;
+ cinemaMinimized=true;$('cinema-overlay').hidden=true;
+ tg?.BackButton?.hide();
+ try{tg?.enableVerticalSwipes?.()}catch{}
+ leaveRoom();selectPage('game');renderCinemaLobby();
+}
+function restoreCinema(){
+ if(!cinemaMinimized)return;
+ cinemaMinimized=false;$('cinema-overlay').hidden=false;
+ enterFullscreen();try{tg?.disableVerticalSwipes?.()}catch{}
+ tg?.BackButton?.show();renderNow();
+}
+function closeCinema(message='',leave=true){
+ if(!cinemaOpen())return;
+ // Closed while reduced (picture in picture shut, room closed): the rest of the app is left as it is.
+ const reduced=cinemaMinimized;cinemaMinimized=false;cinemaPip=false;
  if(leave)cinemaSend({type:'leave'});
  cinemaLookup?.abort();cinemaLookup=null;
  cinemaRoom=null;cinemaEntry=null;cinemaReady=false;cinemaRooms={...cinemaRooms,active:null};
  $('cinema-overlay').hidden=true;$('cinema-frame').src='about:blank';
+ if(reduced){cinemaLobbyMessage=message;renderCinemaLobby();return;}
  tg?.BackButton?.hide();
  try{tg?.enableVerticalSwipes?.()}catch{}
  leaveRoom();selectPage('game');cinemaLobbyMessage=message;renderCinemaLobby();
  ($('cinema-rooms').querySelector('button:not(:disabled)')||$('tab-game')).focus();
 }
 function openCinema(id){
+ if(cinemaMinimized){if(!id||id===cinemaRoom){restoreCinema();return}closeCinema()}
  if(!$('cinema-overlay').hidden||cinemaSocket?.readyState!==1)return;
  cinemaLobbyMessage='';
  cinemaEntry=id?{type:'enter',room:id}:{type:'create'};
@@ -1484,7 +1509,7 @@ async function armCinemaGroup(source,stop){
  if(room===cinemaRoom&&source===$('cinema-frame').contentWindow)cinemaPost('group-armed',{result,error,stopped:stop&&!error});
 }
 window.addEventListener('message',event=>{
- if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||$('cinema-overlay').hidden)return;
+ if(event.origin!==location.origin||event.source!==$('cinema-frame').contentWindow||!cinemaOpen())return;
  const data=event.data;
  if(data?.type==='cinema:ready'){
   cinemaReady=true;
@@ -1493,7 +1518,13 @@ window.addEventListener('message',event=>{
   if(cinemaFavorites)cinemaPost('packet',{packet:cinemaFavorites});
   enterCinema();return;
  }
- if(data?.type==='cinema:exit'){closeCinema();return;}
+ if(data?.type==='cinema:exit'){leaveCinema();return;}
+ if(data?.type==='cinema:pip'){
+  cinemaPip=data.active===true;
+  // Small window shut while reduced: the X (video paused) leaves the room, "back to tab" returns to it.
+  if(!cinemaPip&&cinemaMinimized){if(data.paused)closeCinema();else restoreCinema()}
+  return;
+ }
  if(data?.type==='cinema:action')cinemaSend(data.action);
  
  if(data?.type==='cinema:youtube-search')lookupCinemaYouTube(data.id,data.params);

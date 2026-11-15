@@ -565,10 +565,17 @@ pipButton.onclick=async()=>{
     else target.webkitSetPresentationMode(target.webkitPresentationMode==='picture-in-picture'?'inline':'picture-in-picture');
   }catch{notice('Picture in picture non disponibile su questo dispositivo.');}
 };
+// The app is told when the small window opens or closes: with it open, leaving the Cinema only reduces it.
+// On close, a paused video means the window's X (Chrome pauses it), otherwise "back to tab".
+function pipChanged(el,active){
+  pipButton.setAttribute('aria-pressed',String(active));
+  if(active)send('pip',{active:true});
+  else setTimeout(()=>send('pip',{active:false,paused:el.paused}),250);
+}
 for(const el of [video,shareVideo]){
-  el.addEventListener('enterpictureinpicture',()=>pipButton.setAttribute('aria-pressed','true'));
-  el.addEventListener('leavepictureinpicture',()=>pipButton.setAttribute('aria-pressed','false'));
-  el.addEventListener('webkitpresentationmodechanged',()=>pipButton.setAttribute('aria-pressed',String(el.webkitPresentationMode==='picture-in-picture')));
+  el.addEventListener('enterpictureinpicture',()=>pipChanged(el,true));
+  el.addEventListener('leavepictureinpicture',()=>pipChanged(el,false));
+  el.addEventListener('webkitpresentationmodechanged',()=>pipChanged(el,el.webkitPresentationMode==='picture-in-picture'));
 }
 
 const ranges={seats:[16,62],sidebar:[20,82],favorites:[20,72]};
