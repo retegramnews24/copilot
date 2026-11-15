@@ -127,9 +127,9 @@ export function renderCatalog() {
   for (const card of cards) if (card.parentElement !== homes.get(card)) homes.get(card).append(card);
   // Only the games marked ★: removing the star removes the tile, in Giochi and in the Lobby.
   const picks = state.fav.slice(0, 12);
-  const box = document.getElementById('recent-games');
-  box.replaceChildren(...tiles(picks));
-  document.getElementById('recent-games-section').hidden = !box.children.length;
+  // Favourites appear only in the Lobby; the Giochi page keeps its sections unchanged.
+  document.getElementById('recent-games').replaceChildren();
+  document.getElementById('recent-games-section').hidden = true;
   const lobby = document.getElementById('lobby-favourites-list');
   if (lobby) {
     lobby.replaceChildren(...tiles(picks));

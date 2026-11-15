@@ -1,5 +1,9 @@
 (()=>{
- const $=id=>document.getElementById(id),audio=$('radio-audio'),panel=$('radio-panel'),toggle=$('radio-toggle'),play=$('radio-play'),select=$('radio-stations'),label=$('radio-label'),status=$('radio-status'),star=$('radio-favorite'),volume=$('radio-volume');
+ const $=id=>document.getElementById(id),plain=$('radio-audio'),panel=$('radio-panel'),toggle=$('radio-toggle'),play=$('radio-play'),select=$('radio-stations'),label=$('radio-label'),status=$('radio-status'),star=$('radio-favorite'),volume=$('radio-volume');
+ // Second player for stations that allow analysis (CORS): its sound goes through Web Audio, so the
+ // equaliser can follow the music. Other stations keep the plain player: routing them would mute them.
+ const fx=document.createElement('audio');fx.preload='none';fx.setAttribute('playsinline','');fx.crossOrigin='anonymous';plain.after(fx);
+ let audio=plain,ctx=null,analyser=null,bins=null,fxFailed=new Set();
  const hosts=['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info','https://at1.api.radio-browser.info'];
  function readLocal(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback}catch{return fallback}}
  function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
@@ -11,7 +15,8 @@
  const stored=readLocal('binottoland-radio-favorites',[]);
  let favorites=(Array.isArray(stored)?stored:[]).map(normalize).filter(Boolean),stations=[],current=normalize(readLocal('binottoland-radio-last',null));
  let loaded=false,loading=false,streamIndex=0,attempt=0,watchdog,wantsPlay=false,pending=false,playbackMessage='',directoryMessage='';
- const saved=Number(readLocal('binottoland-radio-volume',.7));audio.volume=Number.isFinite(saved)?Math.min(1,Math.max(0,saved)):.7;volume.value=String(audio.volume);
+ const saved=Number(readLocal('binottoland-radio-volume',.7)),startVolume=Number.isFinite(saved)?Math.min(1,Math.max(0,saved)):.7;
+ plain.volume=fx.volume=startVolume;volume.value=String(startVolume);
  let track='',metadataEpoch=0,metadataTimer=null,metadataPending=false;
  const trackBox=$('radio-now-playing'),trackLabel=$('radio-track');
  function showTrack(title){
@@ -30,13 +35,48 @@
  }
  document.addEventListener('visibilitychange',()=>{if(document.hidden)stopMetadata(false);else if(wantsPlay)loadMetadata()});
  const allowed=()=>!$('app-shell').hidden;
+
+ // Equaliser: 10 bands, coloured with the character's shirt and shorts (Settings → Profilo).
+ const viz=$('radio-viz'),bars=viz?[...viz.children]:[];
+ function applyColors(){
+  const outfit=readLocal('labyrinth-appearance',null),hex=v=>typeof v==='string'&&/^#[0-9a-f]{6}$/i.test(v)?v:null;
+  viz?.style.setProperty('--viz-a',hex(outfit?.shirt)||'#66b8cf');viz?.style.setProperty('--viz-b',hex(outfit?.shorts)||'#3c62a3');
+ }
+ applyColors();addEventListener('storage',applyColors);
+ let frame=0,tick=0;
+ function drawViz(){
+  frame=0;if(!bars.length)return;
+  if(++tick%60===0)applyColors();
+  const live=wantsPlay&&!pending&&!document.hidden;
+  if(live&&audio===fx&&analyser){
+   analyser.getByteFrequencyData(bins);
+   // Logarithmic-ish groups: more detail in the lows, like a hi-fi equaliser.
+   const edges=[1,2,3,4,6,8,11,15,20,26,32];
+   bars.forEach((bar,i)=>{let sum=0,n=0;for(let k=edges[i];k<edges[i+1]&&k<bins.length;k++){sum+=bins[k];n++}bar.style.transform=`scaleY(${Math.max(.08,(n?sum/n:0)/255)})`});
+   viz.dataset.mode='live';
+  }else if(live){
+   const t=performance.now()/1000;
+   bars.forEach((bar,i)=>{const v=.35+.3*Math.sin(t*(3.1+i*.37)+i)+.25*Math.sin(t*(5.3+i*.21)+i*1.7);bar.style.transform=`scaleY(${Math.max(.1,Math.min(1,v))})`});
+   viz.dataset.mode='beat';
+  }else{bars.forEach(bar=>bar.style.transform='scaleY(.15)');viz.dataset.mode='';return}
+  frame=requestAnimationFrame(drawViz);
+ }
+ function startViz(){applyColors();if(!frame)frame=requestAnimationFrame(drawViz)}
+ // Diagnostics (Debug page / console): current frequency levels, or null on the plain player.
+ window.binottolandRadioLevels=()=>audio===fx&&analyser?(analyser.getByteFrequencyData(bins),[...bins]):null;
+ function ensureGraph(){
+  if(ctx)return true;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
+  try{ctx=new AC();const source=ctx.createMediaElementSource(fx);analyser=ctx.createAnalyser();analyser.fftSize=64;analyser.smoothingTimeConstant=.72;source.connect(analyser);analyser.connect(ctx.destination);bins=new Uint8Array(analyser.frequencyBinCount);return true}
+  catch{ctx=null;analyser=null;return false}
+ }
+
  function update(){
   label.textContent=current?current.name:'Radio';
   const favorite=!!current&&favorites.some(s=>s.id===current.id);star.textContent=favorite?'★':'☆';star.setAttribute('aria-pressed',String(favorite));star.setAttribute('aria-label',favorite?'Rimuovi dai preferiti':'Aggiungi ai preferiti');star.disabled=!current;
   play.textContent=wantsPlay?'Ⅱ':'▶';play.setAttribute('aria-label',wantsPlay?'Pausa radio':'Avvia radio');play.setAttribute('aria-pressed',String(wantsPlay));play.setAttribute('aria-busy',String(pending));
   status.textContent=playbackMessage||directoryMessage;trackBox.hidden=!track||!wantsPlay;
-  // Equaliser animation: moves only while sound is actually playing (not while connecting or buffering).
   document.documentElement.classList.toggle('radio-playing',wantsPlay&&!pending);
+  if(wantsPlay&&!pending)startViz();else if(!frame)drawViz();
   if('mediaSession' in navigator){try{navigator.mediaSession.playbackState=wantsPlay&&!pending?'playing':current?'paused':'none'}catch{}}
  }
  function render(){
@@ -63,11 +103,15 @@
    directoryMessage='Elenco non raggiungibile. Riprova.';
   }finally{loading=false;$('radio-reload').disabled=false;render()}
  }
+ function silence(el){el.pause();el.removeAttribute('src');el.load()}
  function stop(message='Radio in pausa.'){
   stopMetadata();wantsPlay=false;pending=false;attempt++;clearTimeout(watchdog);audio.pause();playbackMessage=message;update();
  }
  function nextStream(serial=attempt){
   if(serial!==attempt||!wantsPlay)return;clearTimeout(watchdog);
+  // The analysable player failed (often: no CORS). Retry the same stream on the plain player first.
+  const url=current?.urls[streamIndex];
+  if(audio===fx&&url&&!fxFailed.has(url)){fxFailed.add(url);startStream();return}
   if(current&&streamIndex+1<current.urls.length){streamIndex++;startStream();return}
   stop('Radio non raggiungibile. Scegli un’altra stazione.');
  }
@@ -76,7 +120,12 @@
  }
  async function startStream(){
   if(!current||!allowed())return;
-  stopMetadata();const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;audio.pause();audio.src=current.urls[streamIndex];audio.load();playbackMessage='Connessione…';update();armWatchdog(serial);
+  stopMetadata();const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;
+  const url=current.urls[streamIndex],useFx=!fxFailed.has(url)&&ensureGraph();
+  const next=useFx?fx:plain,other=useFx?plain:fx;
+  silence(other);audio=next;
+  if(useFx)ctx.resume?.().catch(()=>{});
+  audio.pause();audio.src=url;audio.load();playbackMessage='Connessione…';update();armWatchdog(serial);
   if('mediaSession' in navigator&&window.MediaMetadata){try{navigator.mediaSession.metadata=new MediaMetadata({title:current.name,artist:'Binottoland · Radio'})}catch{}}
   try{await audio.play();if(serial!==attempt)return;update()}
   catch(error){if(serial!==attempt||!wantsPlay)return;if(error.name==='NotAllowedError')stop('Tocca Play per avviare la radio.');else nextStream(serial)}
@@ -94,15 +143,19 @@
   current=selected;saveLocal('binottoland-radio-last',current);streamIndex=0;startStream();
  };
  star.onclick=()=>{if(!allowed()||!current)return;const found=favorites.some(s=>s.id===current.id);favorites=found?favorites.filter(s=>s.id!==current.id):[...favorites,current];saveLocal('binottoland-radio-favorites',favorites);render()};
- volume.oninput=()=>{const value=Number(volume.value);if(!Number.isFinite(value))return;audio.volume=Math.min(1,Math.max(0,value));saveLocal('binottoland-radio-volume',audio.volume)};
+ volume.oninput=()=>{const value=Number(volume.value);if(!Number.isFinite(value))return;plain.volume=fx.volume=Math.min(1,Math.max(0,value));saveLocal('binottoland-radio-volume',plain.volume)};
  $('radio-reload').onclick=loadStations;
- audio.addEventListener('playing',()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto · '+current.name;update();if(!metadataTimer&&!metadataPending)loadMetadata()});
- audio.addEventListener('pause',()=>{if(!pending&&wantsPlay){wantsPlay=false;stopMetadata();playbackMessage='Radio in pausa.';clearTimeout(watchdog)}update()});
- const buffering=()=>{if(!wantsPlay)return;pending=true;playbackMessage='Buffering…';update();armWatchdog(attempt)};
- audio.addEventListener('waiting',buffering);audio.addEventListener('stalled',buffering);
- audio.addEventListener('error',()=>{if(audio.getAttribute('src')&&wantsPlay)nextStream()});
- audio.addEventListener('ended',()=>{if(wantsPlay)nextStream()});
+ // Events from the player that is not in use are ignored.
+ for(const el of [plain,fx]){
+  const mine=fn=>event=>{if(event.target===audio)fn(event)};
+  el.addEventListener('playing',mine(()=>{if(!wantsPlay){audio.pause();return}pending=false;clearTimeout(watchdog);playbackMessage='In ascolto · '+current.name;update();if(!metadataTimer&&!metadataPending)loadMetadata()}));
+  el.addEventListener('pause',mine(()=>{if(!pending&&wantsPlay){wantsPlay=false;stopMetadata();playbackMessage='Radio in pausa.';clearTimeout(watchdog)}update()}));
+  const buffering=mine(()=>{if(!wantsPlay)return;pending=true;playbackMessage='Buffering…';update();armWatchdog(attempt)});
+  el.addEventListener('waiting',buffering);el.addEventListener('stalled',buffering);
+  el.addEventListener('error',mine(()=>{if(audio.getAttribute('src')&&wantsPlay)nextStream()}));
+  el.addEventListener('ended',mine(()=>{if(wantsPlay)nextStream()}));
+ }
  if('mediaSession' in navigator){try{navigator.mediaSession.setActionHandler('play',resume);navigator.mediaSession.setActionHandler('pause',()=>stop());navigator.mediaSession.setActionHandler('stop',()=>stop())}catch{}}
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden&&wantsPlay)startViz()});
  render();
 })();
-

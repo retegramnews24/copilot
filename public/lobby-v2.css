@@ -436,3 +436,22 @@
   pointer-events: none;
   background: var(--bg);
 }
+/* Radio: 10 bande con i colori del personaggio (maglietta → pantaloncini), mosse da radio.js. */
+.radio-viz {
+  gap: 1.5px;
+  height: 16px;
+}
+.radio-viz i {
+  width: 2.5px;
+  height: 100%;
+  opacity: 1;
+  background: linear-gradient(to top, var(--viz-a, var(--accent)), var(--viz-b, var(--accent)));
+  transform: scaleY(0.15);
+  transform-origin: bottom;
+  transition: transform 0.07s linear;
+}
+.radio-playing .radio-viz i,
+.radio-playing .radio-viz i:nth-child(n) {
+  animation: none;
+  height: 100%;
+}
