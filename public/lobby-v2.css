@@ -424,3 +424,15 @@
     animation: none;
   }
 }
+/* Swipe che segue il dito: la pagina accanto si affianca durante il trascinamento. */
+#app-shell {
+  position: relative;
+  overflow-x: clip;
+}
+.page.swipe-peer {
+  position: absolute;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--bg);
+}
