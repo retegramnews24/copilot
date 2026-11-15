@@ -28,6 +28,14 @@ async function loadSimSummary(force=false){
  try{simSummary=await request('/api/simulator/summary');renderNow()}catch{}
 }
 setInterval(()=>{if(!$('page-game')?.hidden)loadSimSummary()},15000);
+// Radio relay ticket (12 h, renewed every 3 h): lets the radio play through Binottoland so the
+// equaliser can follow the music of any station.
+let radioTicketAt=0;
+async function loadRadioTicket(){
+ if(!identity||!sessionToken||Date.now()-radioTicketAt<3*3600000)return;
+ radioTicketAt=Date.now();
+ try{window.binottolandRadioTicket=(await request('/api/radio/ticket')).ticket}catch{radioTicketAt=0}
+}
 let sessionRefresh=null;
 async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return sessionRefresh;const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.expires>Date.now()+3600000)return;sessionRefresh=(async()=>{const r=await fetch('/api/session/refresh',{method:'POST',headers:{Authorization:'Bearer '+sessionToken}});const value=await r.json();if(!r.ok)throw Error(value.error);sessionToken=value.token;})().finally(()=>sessionRefresh=null);return sessionRefresh;}
 setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
@@ -153,7 +161,7 @@ function renderLobby(){
   button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(own||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room,staged(game)&&game.players.length>=gameLimits(game).max);if(game.series)note.textContent+=' · Torneo: '+game.series.target+' vittorie';card.append(title,names,note,button);$('games').append(card);
  }
- renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();
+ renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();loadRadioTicket();
 }
 // "Adesso": the few things worth doing right now, built from data the Lobby already has.
 function renderNow(){

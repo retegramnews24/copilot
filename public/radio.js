@@ -3,7 +3,12 @@
  // Second player for stations that allow analysis (CORS): its sound goes through Web Audio, so the
  // equaliser can follow the music. Other stations keep the plain player: routing them would mute them.
  const fx=document.createElement('audio');fx.preload='none';fx.setAttribute('playsinline','');fx.crossOrigin='anonymous';plain.after(fx);
- let audio=plain,ctx=null,analyser=null,bins=null,fxFailed=new Set();
+ let audio=plain,ctx=null,analyser=null,bins=null,bands=[],fxFailed=new Set(),relayFailed=new Set();
+ const CENTERS=[31,63,125,250,500,1000,2000,4000,8000,16000];
+ // Music has less energy up high: lift the treble so all ten bands move.
+ const WEIGHT=[.95,1,1,1,1.05,1.12,1.25,1.4,1.6,1.9];
+ // Relay through Binottoland (same origin): every station can be analysed. Needs a UUID and a ticket.
+ const relayURL=station=>/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(station?.id||'')&&window.binottolandRadioTicket&&!relayFailed.has(station.id)?'/api/radio/stream?station='+encodeURIComponent(station.id)+'&t='+encodeURIComponent(window.binottolandRadioTicket):null;
  const hosts=['https://de1.api.radio-browser.info','https://nl1.api.radio-browser.info','https://at1.api.radio-browser.info'];
  function readLocal(key,fallback){try{const value=JSON.parse(localStorage.getItem(key));return value??fallback}catch{return fallback}}
  function saveLocal(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch{}}
@@ -50,9 +55,8 @@
   const live=wantsPlay&&!pending&&!document.hidden;
   if(live&&audio===fx&&analyser){
    analyser.getByteFrequencyData(bins);
-   // Logarithmic-ish groups: more detail in the lows, like a hi-fi equaliser.
-   const edges=[1,2,3,4,6,8,11,15,20,26,32];
-   bars.forEach((bar,i)=>{let sum=0,n=0;for(let k=edges[i];k<edges[i+1]&&k<bins.length;k++){sum+=bins[k];n++}bar.style.transform=`scaleY(${Math.max(.08,(n?sum/n:0)/255)})`});
+   // Octave bands like a hi-fi equaliser: bass on the left, mids in the centre, treble on the right.
+   bars.forEach((bar,i)=>{const [a,b]=bands[i];let sum=0;for(let k=a;k<=b;k++)sum+=bins[k];const v=(sum/(b-a+1))/255*WEIGHT[i];bar.style.transform=`scaleY(${Math.max(.06,Math.min(1,v*v*1.15))})`});
    viz.dataset.mode='live';
   }else if(live){
    const t=performance.now()/1000;
@@ -66,7 +70,14 @@
  window.binottolandRadioLevels=()=>audio===fx&&analyser?(analyser.getByteFrequencyData(bins),[...bins]):null;
  function ensureGraph(){
   if(ctx)return true;const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return false;
-  try{ctx=new AC();const source=ctx.createMediaElementSource(fx);analyser=ctx.createAnalyser();analyser.fftSize=64;analyser.smoothingTimeConstant=.72;source.connect(analyser);analyser.connect(ctx.destination);bins=new Uint8Array(analyser.frequencyBinCount);return true}
+  try{
+   ctx=new AC();const source=ctx.createMediaElementSource(fx);analyser=ctx.createAnalyser();analyser.fftSize=2048;analyser.smoothingTimeConstant=.78;
+   source.connect(analyser);analyser.connect(ctx.destination);bins=new Uint8Array(analyser.frequencyBinCount);
+   // Bin range of each octave band (31 Hz … 16 kHz) at this sample rate.
+   const hz=ctx.sampleRate/analyser.fftSize;
+   bands=CENTERS.map(c=>{const a=Math.max(1,Math.floor(c/Math.SQRT2/hz)),b=Math.min(bins.length-1,Math.max(a,Math.ceil(c*Math.SQRT2/hz)));return [a,b]});
+   return true;
+  }
   catch{ctx=null;analyser=null;return false}
  }
 
@@ -109,6 +120,8 @@
  }
  function nextStream(serial=attempt){
   if(serial!==attempt||!wantsPlay)return;clearTimeout(watchdog);
+  // The relay failed: go direct for this station.
+  if(audio===fx&&audio.getAttribute('src')?.startsWith('/api/radio/stream')){relayFailed.add(current.id);startStream();return}
   // The analysable player failed (often: no CORS). Retry the same stream on the plain player first.
   const url=current?.urls[streamIndex];
   if(audio===fx&&url&&!fxFailed.has(url)){fxFailed.add(url);startStream();return}
@@ -121,7 +134,8 @@
  async function startStream(){
   if(!current||!allowed())return;
   stopMetadata();const serial=++attempt;clearTimeout(watchdog);wantsPlay=true;pending=true;
-  const url=current.urls[streamIndex],useFx=!fxFailed.has(url)&&ensureGraph();
+  const relay=relayURL(current),direct=current.urls[streamIndex];
+  const url=relay&&ensureGraph()?relay:direct,useFx=url===relay||(!fxFailed.has(url)&&ensureGraph());
   const next=useFx?fx:plain,other=useFx?plain:fx;
   silence(other);audio=next;
   if(useFx)ctx.resume?.().catch(()=>{});

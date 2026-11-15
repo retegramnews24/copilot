@@ -129,6 +129,18 @@ export async function issueSession(user, env) {
   );
   return response;
 }
+// Radio stream ticket: an <audio> element cannot send the Authorization header, so the radio proxy
+// accepts a signed, user-bound ticket (12 h) in the URL instead of the session token.
+export async function radioTicket(user, env) {
+  const body = user.id + '.' + (Date.now() + 12 * 3600000);
+  return body + '.' + hex(await mac(env.BOT_TOKEN, 'radio-ticket-v1:' + body));
+}
+export async function radioTicketUser(ticket, env) {
+  const m = String(ticket || '').match(/^(\d{1,20})\.(\d{13})\.([a-f0-9]{64})$/);
+  if (!m || !env.BOT_TOKEN || Number(m[2]) <= Date.now()) return null;
+  const ok = secureEqual(hex(await mac(env.BOT_TOKEN, 'radio-ticket-v1:' + m[1] + '.' + m[2])), m[3]);
+  return ok ? { id: m[1], player: 'tg:' + m[1] } : null;
+}
 export async function sessionUser(req, env) {
   try {
     const offered = (req.headers.get('Sec-WebSocket-Protocol') || '').split(',').map(x => x.trim());

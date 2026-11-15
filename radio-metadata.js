@@ -67,6 +67,33 @@ async function probe(station){
  }catch{}
  return {title:null,checkedAt:Date.now()};
 }
+// Same-origin relay of a Radio Browser station, so the page can analyse the sound for the equaliser.
+// Only stations resolved by UUID, public HTTPS hosts (DNS checked at every redirect) and audio content.
+export async function radioStream(station){
+ if(typeof station!=='string'||!uuid.test(station))return null;
+ station=station.toLowerCase();
+ const connect=new AbortController(),timer=setTimeout(()=>connect.abort(),10000);
+ try{
+  for(const candidate of await stationURLs(station,connect.signal)){
+   let url=candidate;
+   for(let redirects=0;redirects<=3&&!connect.signal.aborted;redirects++){
+    if(!await publicDNS(new URL(url).hostname,connect.signal))break;
+    const response=await fetch(url,{signal:connect.signal,redirect:'manual',headers:{'User-Agent':'Binottoland/1.1','Accept':'audio/*'}});
+    if([301,302,303,307,308].includes(response.status)){
+     const location=response.headers.get('Location');await response.body?.cancel();if(!location)break;
+     url=publicStreamURL(new URL(location,url).href);if(!url)break;continue;
+    }
+    const type=(response.headers.get('Content-Type')||'').split(';')[0].trim().toLowerCase();
+    if(!response.ok||!response.body||!/^(audio\/[a-z0-9.+-]+|application\/ogg)$/.test(type)){await response.body?.cancel();break}
+    // Connected: from here the stream lasts as long as the listener stays (no timeout on the body).
+    clearTimeout(timer);
+    return new Response(response.body,{headers:{'Content-Type':type,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+   }
+  }
+ }catch{}
+ clearTimeout(timer);
+ return null;
+}
 export async function radioNowPlaying(station,userId){
  if(typeof station!=='string'||!uuid.test(station))return null;
  station=station.toLowerCase();const key='title:'+station,hit=cached(key);if(hit)return hit;
