@@ -21,14 +21,16 @@ import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=532b8aadbd';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
+import {createChessBoard} from './chess-board.js?v=f92d78d981';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.16',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.17',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
 const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
+const board=createChessBoard({get:()=>({state,mine:state.players.findIndex(p=>p.id===credentials.player),active:canMove(),replayPly,frame:replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:null}),send:move=>sendMove(move),rerender:()=>renderBoard()});
 initCatalog();
 let golfRoom=null,golfSnapshot=null,golfPending=false,golfPolling=false,golfSync=0;
 let motoRace=null,motoSocket=null,motoOpening=false,motoRetry=0,motoBeat=0;
@@ -47,7 +49,6 @@ async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return
 setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
 let sessionToken='',identity=null,onlineUsers=[];
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
-let capturePath=[],selectedSquare=null,boardFlipped=null,promotionMove=null;
 let replayFrames=[],replayPly=null,replayTimer=null,replayRevision=null,replayLoading=false;
 let room=null,state=null,ws=null,retry=null,busy=false,credentials={},games=[],lobbyWS=null,lobbyRetry=null,roomEpoch=0;
 $('name').textContent='Accesso Telegram…';
@@ -183,7 +184,7 @@ function stopRoom(){
  $('start-error').textContent='';
  stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false;
  $('manage-game').open=false;$('draw-dialog').hidden=true;$('draw-response').hidden=true;
- capturePath=[];selectedSquare=null;promotionMove=null;boardFlipped=null;$('promotion').hidden=true;roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close(1000,'Uscita dal tavolo');ws=null}
+ board.reset();roomEpoch++;clearTimeout(retry);if(ws){ws.onclose=null;ws.close(1000,'Uscita dal tavolo');ws=null}
 }
 function showLobby(){
  stopRoom();room=null;state=null;credentials={};$('table').hidden=true;$('lobby').hidden=false;
@@ -224,7 +225,7 @@ async function openRoom(nextRoom,watchOnly=false){
 }
 function render(s){
  if(!room||s.room!==room||(state&&s.revision<state.revision))return;
- if(!state||s.revision!==state.revision){capturePath=[];selectedSquare=null;promotionMove=null;$('promotion').hidden=true;trace('STATE','Partita '+s.number+' · '+s.phase+' · rev '+s.revision)}
+ if(!state||s.revision!==state.revision){board.clear();trace('STATE','Partita '+s.number+' · '+s.phase+' · rev '+s.revision)}
  if(state&&(state.matchId!==s.matchId||state.series?.round!==s.series?.round)){stopReplay();replayFrames=[];replayPly=null;replayRevision=null;replayLoading=false}
  state=s;$('lobby').hidden=true;$('table').hidden=false;
  const mine=s.players.findIndex(p=>p.id===credentials.player);
@@ -459,26 +460,8 @@ function renderBoard(){
  $('chess-area').hidden=!boardState();if(!boardState())return;
  if(state.connect4){renderConnect4();return;}
  $('board').setAttribute('aria-label',state.checkers?'Damiera italiana':'Scacchiera');
- if(state.checkers){renderCheckersBoard();return;}
- $('cancel-capture').hidden=true;
- const viewChess=replayPly!==null&&replayFrames[replayPly]?{...state.chess,...replayFrames[replayPly],legalMoves:[]}:state.chess;
- const mine=state.players.findIndex(p=>p.id===credentials.player);
- const flipped=boardFlipped===null?mine===1:boardFlipped;
- const files=flipped?'hgfedcba':'abcdefgh',ranks=flipped?'12345678':'87654321';
- const pieces=position(viewChess.fen),targets=(viewChess.legalMoves||[]).filter(m=>m.from===selectedSquare);
- $('board').replaceChildren();
- for(let ri=0;ri<8;ri++)for(let fi=0;fi<8;fi++){
-  const square=files[fi]+ranks[ri],piece=pieces[square],button=document.createElement('button');
-  const dark=('abcdefgh'.indexOf(square[0])+Number(square[1]))%2===1;
-  button.className='square'+(dark?' dark':'')+(piece?' occupied':'')+(selectedSquare===square?' selected':'')+(targets.some(m=>m.to===square)?' target':'')+([viewChess.lastMove?.from,viewChess.lastMove?.to].includes(square)?' last':'');
-  button.setAttribute('aria-label',square+(piece?' · '+pieceNames[piece.toLowerCase()]+' '+(piece===piece.toUpperCase()?'bianco':'nero'):' · vuota'));
-  button.setAttribute('aria-disabled',String(!canMove()));
-  if(piece)button.innerHTML=pieceSvg(piece);
-  if(fi===0){const rank=document.createElement('span');rank.className='coord rank';rank.textContent=ranks[ri];button.append(rank)}
-  if(ri===7){const file=document.createElement('span');file.className='coord file';file.textContent=files[fi];button.append(file)}
-  button.onclick=()=>selectSquare(square,pieces);$('board').append(button);
- }
- $('board-hint').textContent=replayPly!==null?'Revisione · posizione '+replayPly+' / '+state.moves.length:state.phase==='waiting'?'In attesa del Nero':state.phase==='finished'?'Partita conclusa':mine<0?'Vista spettatore':canMove()?'Tocca un pezzo, poi la destinazione':'Attendi la mossa avversaria';
+ if(state.checkers){board.renderCheckers();renderMoveStrip();return;}
+ board.renderChess();
  renderMoveStrip();
 }
 function renderMoveStrip(){
@@ -497,74 +480,19 @@ function renderConnect4(){
  drawConnect4($('board'),$('board-hint'),view,{phase:state.phase,replaying:replayPly!==null,active:canMove(),move:a=>sendMove({...a,revision:state.revision})});
  updateReplayControls();requestAnimationFrame(fitBoard);
 }
-function matchingCaptures(){return (state.checkers.legalMoves||[]).filter(m=>capturePath.every((s,i)=>m.path[i]===s))}
-function renderCheckersBoard(){
- const view=replayPly!==null&&replayFrames[replayPly]?{...state.checkers,...replayFrames[replayPly],legalMoves:[]}:state.checkers;
- const mine=state.players.findIndex(p=>p.id===credentials.player),flipped=boardFlipped===null?mine===1:boardFlipped;
- const files=flipped?'hgfedcba':'abcdefgh',ranks=flipped?'12345678':'87654321',pieces={...view.board};
- const matches=capturePath.length?matchingCaptures():[],targets=matches.map(m=>m.path[capturePath.length]).filter(Boolean);
- if(capturePath.length>1){
-  const mover=pieces[capturePath[0]];delete pieces[capturePath[0]];
-  for(let i=1;i<capturePath.length;i++){const a=capturePath[i-1],b=capturePath[i];if(Math.abs(Number(a[1])-Number(b[1]))===2){const x=('abcdefgh'.indexOf(a[0])+'abcdefgh'.indexOf(b[0]))/2;delete pieces['abcdefgh'[x]+((Number(a[1])+Number(b[1]))/2)]}}
-  pieces[capturePath.at(-1)]=mover;
- }
- $('board').replaceChildren();
- for(let ri=0;ri<8;ri++)for(let fi=0;fi<8;fi++){
-  const square=files[fi]+ranks[ri],piece=pieces[square],dark=('abcdefgh'.indexOf(square[0])+Number(square[1]))%2===0;
-  const button=document.createElement('button');button.className='square'+(dark?' dark':'')+(piece?' occupied':'')+(selectedSquare===square?' selected':'')+(targets.includes(square)?' target':'')+(capturePath.includes(square)?' path-step':'')+([view.lastMove?.from,view.lastMove?.to].includes(square)?' last':'');
-  const number=(8-Number(square[1]))*4+Math.floor('abcdefgh'.indexOf(square[0])/2)+1;
-  button.setAttribute('aria-label',(dark?'Casella '+number:square)+(piece?' · '+(piece.toLowerCase()==='k'?'dama':'pedina')+' '+(piece===piece.toUpperCase()?'bianca':'nera'):' · vuota'));
-  button.setAttribute('aria-disabled',String(!dark||!canMove()));
-  if(piece)button.innerHTML=checkerSvg(piece);
-  button.onclick=()=>selectChecker(square);$('board').append(button);
- }
- const capture=state.checkers.legalMoves?.some(m=>m.captures.length);
- $('cancel-capture').hidden=!canMove()||capturePath.length<2;
- $('board-hint').textContent=replayPly!==null?'Revisione · '+replayPly+' / '+state.moves.length:state.phase==='waiting'?'Dama italiana · in attesa del Nero':state.phase==='finished'?'Dama italiana · partita conclusa':mine<0?'Dama italiana · vista spettatore':!canMove()?'Attendi la mossa avversaria':capturePath.length>1?'Continua la presa: tocca il prossimo salto':capture?'Presa obbligatoria · segui le caselle evidenziate':'Tocca una pedina, poi la destinazione';
- renderMoveStrip();
-}
-function selectChecker(square){
- if(!canMove())return;
- if(capturePath.length){
-  const next=matchingCaptures().filter(m=>m.path[capturePath.length]===square);
-  if(next.length){
-   capturePath.push(square);selectedSquare=square;
-   const complete=next.find(m=>m.path.length===capturePath.length);
-   if(complete){sendMove({path:[...capturePath],revision:state.revision});return}
-   renderBoard();return;
-  }
-  if(capturePath.length>1)return;
- }
- const playable=state.checkers.legalMoves.some(m=>m.path[0]===square);
- capturePath=playable&&selectedSquare!==square?[square]:[];selectedSquare=capturePath[0]||null;renderBoard();
-}
-$('cancel-capture').onclick=()=>{capturePath=[];selectedSquare=null;renderBoard()};
 
 function fitBoard(){
  if($('board'))$('board').style.width='100%';
 }
-function selectSquare(square,pieces){
- if(!canMove()||promotionMove)return;
- const candidates=(state.chess.legalMoves||[]).filter(m=>m.from===selectedSquare&&m.to===square);
- if(candidates.length){
-  if(candidates.some(m=>m.promotion)){promotionMove={from:selectedSquare,to:square,revision:state.revision};$('promotion').hidden=false;return}
-  sendMove({from:selectedSquare,to:square,revision:state.revision});return;
- }
- const piece=pieces[square],white=piece&&piece===piece.toUpperCase();
- selectedSquare=piece&&white===(state.turn===0)&&square!==selectedSquare?square:null;renderBoard();
-}
 async function sendMove(move){
  const unoCall=state?.phase==='playing'&&!busy&&!state.archived&&replayPly===null&&(move.kind==='uno'&&state.uno?.canDeclare||move.kind==='catch-uno'&&state.uno?.canCatch);
  if(!canMove()&&!unoCall)return;
- busy=true;capturePath=[];selectedSquare=null;promotionMove=null;$('promotion').hidden=true;renderBoard();trace('MOVE',move.kind|| (move.path?move.path.join(' → '):move.from+' → '+move.to+(move.promotion?' = '+move.promotion:'')));
+ busy=true;board.clear();renderBoard();trace('MOVE',move.kind|| (move.path?move.path.join(' → '):move.from+' → '+move.to+(move.promotion?' = '+move.promotion:'')));
  const current=room;
  try{const result=await api('move',move);if(room===current)render(result)}
  catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch{}}
  finally{busy=false;if(room===current&&state)render(state)}
 }
-$('flip-board').onclick=()=>{const mine=state.players.findIndex(p=>p.id===credentials.player);boardFlipped=!(boardFlipped===null?mine===1:boardFlipped);renderBoard()};
-document.querySelectorAll('[data-promotion]').forEach(button=>button.onclick=()=>{if(promotionMove)sendMove({...promotionMove,promotion:button.dataset.promotion})});
-$('cancel-promotion').onclick=()=>{promotionMove=null;$('promotion').hidden=true};
 initDebugLog();
 
 function renderArchive(){
@@ -605,7 +533,7 @@ function updateReplayControls(){
 function seekReplay(ply,manual=true){
  if(!replayFrames.length)return;if(manual)stopReplay();
  replayPly=Math.max(0,Math.min(replayFrames.length-1,Number(ply)));
- capturePath=[];selectedSquare=null;renderBoard();
+ board.clearPath();renderBoard();
 }
 function replayStep(){
  if(replayPly>=replayFrames.length-1){stopReplay();return}
