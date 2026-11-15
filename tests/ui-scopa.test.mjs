@@ -177,7 +177,7 @@ assert.equal(get('arcade-overlay').hidden,true);
 assert.equal(get('tab-game').getAttribute('aria-selected'),'true');
 assert.equal(get('catalog-platform-title').textContent,'Simulatori e sfide');
 assert.equal(get('tab-games').textContent,'Giochi');
-assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['recent-games-title','catalog-board-title','catalog-3d-title','catalog-platform-title','catalog-app-title']);
+assert.deepEqual([...get('page-games').querySelectorAll('.catalog-heading')].map(h=>h.id),['catalog-app-title','recent-games-title','catalog-platform-title','catalog-3d-title','catalog-board-title']);
 assert.equal(get('cinema-lobby-create'),null);
 assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
 get('cinema-rooms').querySelector('button').click();

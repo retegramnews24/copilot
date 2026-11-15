@@ -1,5 +1,6 @@
 import { initial, act, advance, nextAlarm, view } from './engine.js';
 import { collectNotices } from './notify.js';
+import { lobbySummary } from './summary.js';
 const json = (data, status = 200) =>
   Response.json(data, {
     status,
@@ -48,6 +49,13 @@ export class SimulatorLeague {
     const u = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
     if (!u?.id) return json({ error: 'Accesso richiesto.' }, 401);
     const path = new URL(req.url).pathname;
+    // Lobby summary: read-only, no save, no presence update.
+    if (path === '/simulator/summary') {
+      if (req.method !== 'GET') return json({ error: 'Metodo non consentito.' }, 405);
+      const now = Date.now(),
+        s = await this.ctx.storage.transaction(tx => this.load(tx, now));
+      return json(lobbySummary(s, u.id, now));
+    }
     if (!['/simulator/state', '/simulator/action'].includes(path))
       return json({ error: 'Percorso non trovato.' }, 404);
     if (

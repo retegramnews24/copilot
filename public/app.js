@@ -20,7 +20,14 @@ let labyrinthRoom=null,labyrinthWatch=false,labyrinthSocket=null,labyrinthLastSt
 let cinemaSocket=null,cinemaRetry=0,cinemaDelay=700,cinemaReady=false;
 let cinemaRooms={rooms:[],active:null},cinemaFavorites=null,cinemaEntry=null,cinemaRoom=null,cinemaLobbyMessage='';
 let cinemaLookup=null;
-let blackboardLobbyRooms=[];
+let blackboardLobbyRooms=[],simSummary=null,simSummaryAt=0;
+// Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
+async function loadSimSummary(force=false){
+ if(!identity||!sessionToken||document.hidden||(!force&&Date.now()-simSummaryAt<60000))return;
+ simSummaryAt=Date.now();
+ try{simSummary=await request('/api/simulator/summary');renderNow()}catch{}
+}
+setInterval(()=>{if(!$('page-game')?.hidden)loadSimSummary()},15000);
 let sessionRefresh=null;
 async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return sessionRefresh;const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.expires>Date.now()+3600000)return;sessionRefresh=(async()=>{const r=await fetch('/api/session/refresh',{method:'POST',headers:{Authorization:'Bearer '+sessionToken}});const value=await r.json();if(!r.ok)throw Error(value.error);sessionToken=value.token;})().finally(()=>sessionRefresh=null);return sessionRefresh;}
 setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
@@ -145,7 +152,7 @@ function renderLobby(){
   button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(own||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room,staged(game)&&game.players.length>=gameLimits(game).max);if(game.series)note.textContent+=' · Torneo: '+game.series.target+' vittorie';card.append(title,names,note,button);$('games').append(card);
  }
- renderArchive();refreshDebug();renderSocial();renderNow();
+ renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();
 }
 // "Adesso": the few things worth doing right now, built from data the Lobby already has.
 function renderNow(){
@@ -159,13 +166,19 @@ function renderNow(){
  }
  for(const entry of cinemaRooms.rooms)if(entry.viewers.length)items.push({rank:3,text:'Cinema · Sala '+entry.number+(entry.channel?' · '+entry.channel:'')+' · '+entry.viewers.length+(entry.viewers.length===1?' spettatore':' spettatori'),label:'Entra',action:()=>openCinema(entry.id)});
  for(const entry of blackboardLobbyRooms)if(entry.people.length)items.push({rank:3,text:'Lavagna · Sala '+entry.number+' · '+entry.people.map(p=>p.name).join(', '),label:'Entra',action:button=>openBlackboard(button,entry.id)});
+ // Binotto Simulator: what is still to do (server summary, read-only).
+ const openSim=()=>$('play-binotto-simulator').click();
+ for(const item of simSummary?.items||[])items.push({rank:item.rank,text:item.text,label:'Apri',action:openSim});
+ const debrief=simSummary?.debrief;
+ if(debrief&&pref('simulator-debrief-seen:'+identity?.id,'')!==debrief.race)items.push({rank:2,text:'Binotto Simulator · resoconto della gara di '+debrief.track+' pronto.',label:'Leggi',action:openSim});
  items.sort((a,b)=>a.rank-b.rank);
  // A short vibration when a new "tocca a te" appears (Settings → Vibrazione).
  const urgent=items.filter(i=>i.rank===0).length;
  if(urgent>(renderNow.urgent||0)&&renderNow.urgent!==undefined&&pref('binottoland-haptics','on')!=='off')tg?.HapticFeedback?.notificationOccurred?.('success');
  renderNow.urgent=urgent;
- $('now-panel').hidden=!identity||!items.length;
- $('now-items').replaceChildren(...items.slice(0,4).map(item=>{
+ $('now-panel').hidden=!identity;
+ if(!items.length){const p=document.createElement('p');p.className='hint now-empty';p.textContent='Niente in sospeso. Apri un gioco dalla scheda Giochi o scrivi in chat.';$('now-items').replaceChildren(p);return}
+ $('now-items').replaceChildren(...items.slice(0,5).map(item=>{
   const row=document.createElement('div');row.className='now-item'+(item.rank===0?' urgent':'');
   const text=document.createElement('span');text.textContent=item.text;
   const button=document.createElement('button');button.type='button';button.className=item.rank===0?'':'alt';button.textContent=item.label;button.disabled=!identity;button.onclick=()=>item.action(button);
@@ -435,7 +448,7 @@ function selectPage(page){
  document.querySelectorAll('.tab').forEach(tab=>{const selected=tab.dataset.page===activeTab;tab.setAttribute('aria-selected',String(selected));tab.tabIndex=selected?0:-1});
  document.querySelectorAll('.page').forEach(section=>section.hidden=section.id!=='page-'+page);
  if(page!=='game')stopReplay();trace('UI','Pagina '+page);
- if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game')requestAnimationFrame(fitBoard);
+ if(page==='games'){loadLeaders();renderCatalog()}if(page==='debug')refreshDebug();if(page==='settings')renderThemePreview();if(page==='game')loadSimSummary(true);if(page==='game')requestAnimationFrame(fitBoard);
 }
 function navigate(page){
  if(busy)return;
@@ -810,7 +823,8 @@ function renderSocial(){
  if(list.dataset.signature!==signature){
   list.dataset.signature=signature;list.replaceChildren();
   if(!chatMessages.length){const p=document.createElement('p');p.className='hint';p.textContent='Il posto per due parole tra una partita e l’altra.';list.append(p)}
-  for(const message of chatMessages){
+  // The chat grows with the page (no inner scroll): show the latest 30 messages.
+  for(const message of chatMessages.slice(-30)){
    const row=document.createElement('article');row.className='chat-message'+(message.userId===identity?.id?' mine':'');
    row.append(makeAvatar(message));
    const copy=document.createElement('div');copy.className='chat-copy';
