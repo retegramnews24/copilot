@@ -455,3 +455,171 @@
   animation: none;
   height: 100%;
 }
+/* Radio a schermo intero (nessuna finestra a comparsa): margini sicuri di Telegram e Android. */
+.radio-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 760px;
+  max-height: none;
+  margin: 0 auto;
+  padding: max(10px, var(--tg-safe-top, 0px), env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  border: 0;
+  border-radius: 0;
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.radio-screen[hidden] {
+  display: none;
+}
+.radio-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.radio-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+}
+.radio-head button {
+  width: auto;
+  min-height: 40px;
+  padding: 6px 12px;
+}
+#radio-favorite {
+  width: 44px;
+  font-size: 20px;
+}
+.radio-now {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.radio-viz-big {
+  height: 44px;
+  gap: 3px;
+  margin: 0;
+  flex: none;
+}
+.radio-viz-big i {
+  width: 6px;
+}
+.radio-now-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.radio-now-copy strong {
+  font-size: 15px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.radio-now-copy small {
+  color: var(--muted);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+#radio-play-big {
+  width: 52px;
+  min-height: 52px;
+  border-radius: 50%;
+  font-size: 18px;
+  flex: none;
+}
+.radio-screen .radio-controls {
+  margin: 0;
+}
+#radio-search {
+  margin: 0;
+  font-size: 16px;
+}
+.radio-tabs {
+  display: flex;
+  gap: 6px;
+}
+.radio-tabs button {
+  flex: 1;
+  min-height: 38px;
+  padding: 6px;
+  border-radius: 20px;
+  background: var(--field);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-size: 13.5px;
+}
+.radio-tabs button.active {
+  background: var(--accent);
+  color: var(--onaccent);
+  border-color: var(--accent);
+}
+.radio-screen #radio-status {
+  margin: 0;
+  font-size: 12.5px;
+}
+.radio-list {
+  display: grid;
+  gap: 6px;
+}
+.radio-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.radio-pick {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px;
+  text-align: left;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.radio-pick strong {
+  font-size: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.radio-pick small {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.radio-row.playing .radio-pick {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.radio-star {
+  width: 46px;
+  flex: none;
+  padding: 0;
+  font-size: 20px;
+  background: var(--panel);
+  color: var(--accent);
+  border: 1px solid var(--line);
+}
+.radio-foot {
+  display: flex;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+.radio-foot button {
+  flex: 1;
+  min-height: 40px;
+}

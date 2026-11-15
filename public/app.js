@@ -9,6 +9,8 @@ import './labyrinth/avatar.js?v=8';
 import {initCatalog,renderCatalog} from './games-catalog.js?v=4';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
+// Version shown in Informazioni, Debug and problem reports. Increase it at every release.
+const APP_VERSION='1.0.1',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 const pref=(key,fallback)=>{try{return localStorage.getItem(key)??fallback}catch{return fallback}};
 const setPref=(key,value)=>{try{localStorage.setItem(key,value)}catch{}};
@@ -28,14 +30,6 @@ async function loadSimSummary(force=false){
  try{simSummary=await request('/api/simulator/summary');renderNow()}catch{}
 }
 setInterval(()=>{if(!$('page-game')?.hidden)loadSimSummary()},15000);
-// Radio relay ticket (12 h, renewed every 3 h): lets the radio play through Binottoland so the
-// equaliser can follow the music of any station.
-let radioTicketAt=0;
-async function loadRadioTicket(){
- if(!identity||!sessionToken||Date.now()-radioTicketAt<3*3600000)return;
- radioTicketAt=Date.now();
- try{window.binottolandRadioTicket=(await request('/api/radio/ticket')).ticket}catch{radioTicketAt=0}
-}
 let sessionRefresh=null;
 async function refreshSession(){if(!sessionToken)return;if(sessionRefresh)return sessionRefresh;const payload=JSON.parse(atob(sessionToken.split('.')[1].replaceAll('-','+').replaceAll('_','/')));if(payload.expires>Date.now()+3600000)return;sessionRefresh=(async()=>{const r=await fetch('/api/session/refresh',{method:'POST',headers:{Authorization:'Bearer '+sessionToken}});const value=await r.json();if(!r.ok)throw Error(value.error);sessionToken=value.token;})().finally(()=>sessionRefresh=null);return sessionRefresh;}
 setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
@@ -161,7 +155,7 @@ function renderLobby(){
   button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(own||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room,staged(game)&&game.players.length>=gameLimits(game).max);if(game.series)note.textContent+=' · Torneo: '+game.series.target+' vittorie';card.append(title,names,note,button);$('games').append(card);
  }
- renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();loadRadioTicket();
+ renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();
 }
 // "Adesso": the few things worth doing right now, built from data the Lobby already has.
 function renderNow(){
@@ -346,10 +340,10 @@ let versionTaps=0,versionTimer=null;
 $('app-version').onclick=()=>{
  versionTaps++;clearTimeout(versionTimer);versionTimer=setTimeout(()=>versionTaps=0,1500);
  if(versionTaps<5)return;versionTaps=0;setPref('binottoland-dev',isDev()?'0':'1');applyDevMode();
- $('app-version').textContent='Binottoland 1.1'+(isDev()?' · modalità sviluppatore':'');
+ $('app-version').textContent=APP_NAME+(isDev()?' · modalità sviluppatore':'');
 };
 $('report-problem').onclick=async()=>{
- const report=['Segnalazione Binottoland 1.1',new Date().toLocaleString('it-IT'),'Pagina: '+(document.querySelector('.page:not([hidden])')?.id||'—'),'Schermo: '+innerWidth+'×'+innerHeight+' · '+(tg?.platform||'browser'),'',...events.slice(-40)].join('\n');
+ const report=['Segnalazione '+APP_NAME,new Date().toLocaleString('it-IT'),'Pagina: '+(document.querySelector('.page:not([hidden])')?.id||'—'),'Schermo: '+innerWidth+'×'+innerHeight+' · '+(tg?.platform||'browser'),'',...events.slice(-40)].join('\n');
  let copied=false;try{await navigator.clipboard.writeText(report);copied=true}catch{}
  const link='https://t.me/share/url?url='+encodeURIComponent('https://t.me/checkmategame_bot?startapp')+'&text='+encodeURIComponent(report.slice(0,1500));
  if(tg?.openTelegramLink)tg.openTelegramLink(link);else window.open(link,'_blank','noopener');
@@ -447,7 +441,7 @@ action('newtable',async()=>{
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true)}if(!document.hidden){connectLobby();if(room&&(!ws||ws.readyState>1))connect()}});
 function refreshDebug(){
- const entries=[['Interfaccia','Binottoland 1.1'],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.naval?'Battaglia navale':state?.briscola?'Briscola':state?.scarabeo?'Scarabeo':state?.scopa?'Scopa':state?.uno?'UNO':state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
+ const entries=[['Interfaccia',APP_NAME],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.naval?'Battaglia navale':state?.briscola?'Briscola':state?.scarabeo?'Scarabeo':state?.scopa?'Scopa':state?.uno?'UNO':state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();
  for(const [label,value] of entries){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);$('debug-info').append(dt,dd)}
 }
@@ -771,7 +765,7 @@ function applyPieceTheme(theme){
 applyPieceTheme(read('checkmate-pieces','classic'));
 document.querySelectorAll('[data-piece-choice]').forEach(button=>button.onclick=()=>{applyPieceTheme(button.dataset.pieceChoice);try{save('checkmate-pieces',button.dataset.pieceChoice)}catch(e){err(e.message)}});
 
-trace('BOOT','Binottoland 1.1 · registro sessione attivo');
+trace('BOOT',APP_NAME+' · registro sessione attivo');
 
 
 
@@ -1079,8 +1073,7 @@ function renderBlackboardRooms(rooms, state){
  const list=$('blackboard-rooms'),status=$('blackboard-lobby-status');
  const online=state==='online',focused=document.activeElement?.dataset.blackboardRoom;
  blackboardLobbyRooms=online?rooms:[];
- // Only boards with someone drawing; empty ones stay reachable from "Apri una sala".
- rooms=rooms.filter(entry=>entry.people.length);
+ // Every open board is listed, empty or not, until it is deleted.
  status.hidden=online&&rooms.length>0;
  $('blackboard-lobby').hidden=online&&!rooms.length;
  status.textContent=online?'Nessuna sala aperta.':state==='expired'?'Riapri Binottoland da Telegram.':'Collegamento alle lavagne…';
@@ -1427,8 +1420,8 @@ function renderCinemaLobby(){
  $('open-cinema').disabled=!connected;
  const status=$('cinema-lobby-status');
  status.textContent=cinemaLobbyMessage||(connected?'Nessuna sala aperta.':'Collegamento al cinema…');
- // Only rooms with someone inside: empty rooms are reachable from the cinema's Multisala.
- const occupied=cinemaRooms.rooms.filter(entry=>entry.viewers.length);
+ // Every open room is listed, empty or not, until it is closed.
+ const occupied=cinemaRooms.rooms;
  status.hidden=connected&&occupied.length>0&&!cinemaLobbyMessage;
  $('cinema-lobby').hidden=connected&&!occupied.length&&!cinemaLobbyMessage;
  const focused=document.activeElement?.dataset.cinemaRoom;

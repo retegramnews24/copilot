@@ -1,5 +1,5 @@
 import {SimulatorLeague} from './simulator/server.js';
-import {secureEqual,memberAccess,requireMember,telegramAccessTag,login,issueSession,sessionUser,radioTicket,radioTicketUser} from './auth.js';
+import {secureEqual,memberAccess,requireMember,telegramAccessTag,login,issueSession,sessionUser} from './auth.js';
 import {Blackboard} from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
 import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
@@ -22,7 +22,7 @@ import {hasMove,replayNumberGame} from './public/arcade/number-connect-rules.js'
 import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
-import { radioNowPlaying, radioStream } from './radio-metadata.js';
+import { radioNowPlaying } from './radio-metadata.js';
 import { initialCheckers, playCheckers, checkersSnapshot, checkersKey } from './checkers.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 const id=()=>crypto.randomUUID();
@@ -159,15 +159,9 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'1.1.0'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.1'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
-  // Radio relay for the equaliser: <audio> cannot send Authorization, so it carries a signed ticket.
-  if(u.pathname==='/api/radio/stream'&&req.method==='GET'){
-   const listener=await radioTicketUser(u.searchParams.get('t'),env);if(!listener)return json({error:'Biglietto radio non valido.'},401);
-   const refused=await requireMember(listener,env);if(refused)return refused;
-   return (await radioStream(u.searchParams.get('station')))||json({error:'Stazione non raggiungibile.'},502);
-  }
   const groupMedia=/^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
   let authRequest=req;
   if(groupMedia&&!req.headers.has('Authorization')){
@@ -183,7 +177,6 @@ export default {
    return env.ROOMS.get(env.ROOMS.idFromName('binotto-simulator-league-v1')).fetch(new Request(u.origin+u.pathname.slice(4),{method:req.method,headers,...(req.method==='POST'?{body:req.body}:{} )}));
   }
   if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
-  if(u.pathname==='/api/radio/ticket'&&req.method==='GET')return json({ticket:await radioTicket(user,env)});
   if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
   const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));trustedHeaders.set('X-Session-Expires',String(user.sessionExpires));req=new Request(req,{headers:trustedHeaders});
   if((u.pathname==='/api/blackboard/ws'&&req.method==='GET')||(u.pathname==='/api/blackboard/create'&&req.method==='POST')){
