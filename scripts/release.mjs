@@ -23,7 +23,7 @@ const VERSION_PLACES = [
   ['package-lock.json', /("": \{\s*"name": "binottoland-motore",\s*"version": ")([^"]+)(")/],
   ['public/app.js', /(const APP_VERSION=')([^']+)(')/],
   ['public/index.html', /(id="app-version"[^>]*>Binottoland Playground )([^<]+)(<)/],
-  ['worker.js', /(\/api\/health'\)return json\(\{ok:true,version:')([^']+)(')/]
+  ['api.js', /(\/api\/health'\)\s*return json\(\{\s*ok:\s*true,\s*version:\s*')([^']+)(')/]
 ];
 export function versions() {
   return VERSION_PLACES.map(([file, re]) => {

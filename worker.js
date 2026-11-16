@@ -1,839 +1,723 @@
-import {SimulatorLeague} from './simulator/server.js';
-import {secureEqual,memberAccess,requireMember,telegramAccessTag,login,issueSession,sessionUser} from './auth.js';
-import {Blackboard} from './blackboard-server.js';
+import { SimulatorLeague } from './simulator/server.js';
+import { memberAccess, telegramAccessTag } from './auth.js';
+import { Blackboard } from './blackboard-server.js';
 import { Cinema } from './cinema-server.js';
-import {TelegramCinema,cinemaSubmission,cacheTelegramMedia,telegramCinemaId} from './cinema-telegram.js';
+import { TelegramCinema, cacheTelegramMedia } from './cinema-telegram.js';
 import { YouTubeCatalog } from './cinema-youtube.js';
-import {readCinemaMedia} from './cinema-media.js';
-import {chessSnapshot,claimChessDraw} from './chess-rules.js';
-import {initialNaval,playNaval,navalView} from './naval.js';
-import {initialBriscola,playBriscola,briscolaView} from './briscola.js';
-import {initialScarabeo,playScarabeo,scarabeoView} from './scarabeo.js';
-import {initialScopa,playScopa,scopaView} from './scopa.js';
-import {chooseAction,tutorial} from './table-ai.js';
-import {winningSeats,resultsFor,topFive} from './leaderboard.js';
-import {stagedGame,limits,activeTable,createSeries,settleSeries} from './match-series.js';
-import {initialUno,playUno,unoView} from './uno.js';
-import {initialConnect4,playConnect4} from './connect4.js';
+import { readCinemaMedia } from './cinema-media.js';
+import { chooseAction, tutorial } from './table-ai.js';
+import { resultsFor } from './leaderboard.js';
+import { stagedGame, limits, activeTable, settleSeries } from './match-series.js';
+import { initialConnect4, playConnect4 } from './connect4.js';
 import { GolfRoom } from './golf-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
-import {hasMove,replayNumberGame} from './public/arcade/number-connect-rules.js';
 import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
-import { radioNowPlaying } from './radio-metadata.js';
-import { initialCheckers, playCheckers, checkersSnapshot, checkersKey } from './checkers.js';
-import { TurnNotices, noticeRequest, reminderRequest, resultRequest, timeoutTable, turnTargets, turnKey, isLongTurn, LONG_LIMIT, LONG_IDLE, TURN_LIMIT } from './turn-notices.js';
-// Long-turn games: one queue of private bot messages ("tocca a te"), see turn-notices.js.
-const noticeHub=env=>env.ROOMS.get(env.ROOMS.idFromName('turn-notices-v1'));
-const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
-const id=()=>crypto.randomUUID();
-const bad=(message)=>{throw new Error(message)};
-const BOT_USERNAME='checkmategame_bot';
-const name=x=>{if(typeof x!=='string'||!x.trim())bad('Inserisci un nome.');return x.trim().slice(0,30)};
-async function webhookSecret(token){
- const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(token));
- return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,'0')).join('');
-}
-async function telegramCall(token,method,payload){
- const response=await fetch('https://api.telegram.org/bot'+token+'/'+method,{
-  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
- });
- const result=await response.json().catch(()=>null);
- return {ok:response.ok&&result?.ok===true,description:result?.description||'Telegram non ha confermato la richiesta.'};
-}
-async function setupTelegram(req,env,u){
- if(env.SETUP_ENABLED!=='true')return json({error:'Configurazione disattivata.'},404);
- if(!env.BOT_TOKEN)return json({error:'Secret BOT_TOKEN non configurato.'},503);
- if(Number(req.headers.get('Content-Length')||0)>4096)return json({error:'Richiesta troppo grande.'},413);
- try{
-  const body=await req.json();
-  if(typeof body.token!=='string'||!secureEqual(body.token,env.BOT_TOKEN))return json({error:'Token non valido.'},403);
-  const secret=await webhookSecret(env.BOT_TOKEN);
-  const hook=await telegramCall(env.BOT_TOKEN,'setWebhook',{
-   url:u.origin+'/api/telegram/webhook',
-   secret_token:secret,
-   allowed_updates:['message']
-  });
-  if(!hook.ok)return json({error:'Telegram non ha attivato il webhook: '+hook.description},502);
-  const commands=await telegramCall(env.BOT_TOKEN,'setMyCommands',{
-   commands:[{command:'start',description:'Avvia Binottoland'},{command:'gioca',description:'Apri una sfida Binottoland'}]
-  });
-  if(!commands.ok)return json({ok:true,webhook:true,warning:'Webhook attivo; comando non registrato: '+commands.description});
-  return json({ok:true,webhook:true,command:true});
- }catch{return json({error:'Richiesta di configurazione non valida.'},400)}
-}
-async function telegramWebhook(req,env){
- if(!env.BOT_TOKEN)return json({error:'BOT_TOKEN non configurato.'},503);
- const supplied=req.headers.get('X-Telegram-Bot-Api-Secret-Token')||'';
- if(!secureEqual(supplied,await webhookSecret(env.BOT_TOKEN)))return json({error:'Richiesta Telegram non autorizzata.'},403);
- if(Number(req.headers.get('Content-Length')||0)>32768)return json({ok:true});
- try{
-  const update=await req.json();
-  const message=update?.message;
-  const submission=cinemaSubmission(message);
-  if(submission){const denied=await requireMember({id:String(submission.user)},env);if(denied)return json({ok:true});return receiveCinemaSubmission(env,new URL(req.url).origin,submission);}
-  const text=typeof message?.text==='string'?message.text.trim():'';
-  if(!message||message.from?.is_bot||!text)return json({ok:true});
-  const match=text.match(/^\/(?:gioca|start)(?:@([A-Za-z0-9_]+))?(?:\s|$)/i);
-  if(!match||(match[1]&&match[1].toLowerCase()!==BOT_USERNAME))return json({ok:true});
-  // In the bot's private chat, /start also turns on the "tocca a te" messages (members of the group only).
-  let alerts=false;
-  if(message.chat?.type==='private'&&Number.isSafeInteger(message.from?.id)&&!(await requireMember({id:String(message.from.id)},env))){
-   await noticeHub(env).fetch(new Request('https://internal/notices/start',{method:'POST',body:JSON.stringify({userId:String(message.from.id)})}));
-   alerts=true;
-  }
-  const sent=await telegramCall(env.BOT_TOKEN,'sendMessage',{
-   chat_id:message.chat.id,
-   text:'Benvenuto nel circolo Binottoland. Lobby, amici e tavoli da gioco.'+(alerts?'\n\n🔔 Avvisi attivi: ti scrivo qui quando tocca a te in una partita a Scacchi, Dama, Forza 4 o Scarabeo (mai tra le 23 e le 8). Puoi spegnerli nelle Impostazioni di Binottoland.':''),
-   reply_markup:{inline_keyboard:[[{text:'Apri Binottoland',url:'https://t.me/'+BOT_USERNAME+'?startapp'}]]}
-  });
-  if(!sent.ok)return json({error:'Invio del pulsante non riuscito.'},502);
-  return json({ok:true});
- }catch{return json({ok:true})}
-}
+import { initialCheckers, playCheckers } from './checkers.js';
+import {
+  TurnNotices,
+  noticeRequest,
+  reminderRequest,
+  resultRequest,
+  timeoutTable,
+  turnTargets,
+  turnKey,
+  isLongTurn,
+  LONG_IDLE,
+  TURN_LIMIT
+} from './turn-notices.js';
+import { json, id, bad, name, noticeHub } from './worker-shared.js';
+import * as tables from './table-rules.js';
+import { concluded } from './table-rules.js';
+import { LobbyHub } from './lobby-hub.js';
+import { handleRequest } from './api.js';
 
-
-
-const cinemaHub=env=>env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1'));
-function telegramCinemaDirectory(env,origin,op,params={},user=null,body){
- const query=new URLSearchParams({op,...params});
- const target=env.ROOMS.get(env.ROOMS.idFromName('cinema-telegram-v1'));
- return target.fetch(origin+'/cinema/group-directory?'+query,{
-  method:body?'POST':'GET',headers:user?{'X-Checkmate-User':JSON.stringify(user)}:{},...(body?{body:JSON.stringify(body)}:{})
- });
-}
-function cinemaForwardHub(env,origin,action,user,body={}){
- return cinemaHub(env).fetch(origin+'/cinema/group-'+action,{
-  method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify(body)
- });
-}
-async function receiveCinemaSubmission(env,origin,submission){
- const user={id:submission.user,player:'tg:'+submission.user};
- try{
-  const queued=await cinemaForwardHub(env,origin,'enqueue',user,submission);
-  return queued.status>=500?json({error:'Coda Cinema non raggiungibile.'},503):json({ok:true});
- }catch{return json({error:'Ricezione Telegram interrotta.'},503);}
-}
-async function telegramMedia(req,env,u,asset,key,ready){
- if(!asset.ok)return asset;
- const {file,type,loading}=await asset.json();
- const target=env.ROOMS.get(env.ROOMS.idFromName(key));
- const address=u.origin+'/cinema/group-file';
- const prepared=await target.fetch(address,{method:'POST',body:JSON.stringify({file,type})});
- if(!prepared.ok)return prepared;
- if(loading&&ready){
-  const confirmed=await ready();
-  if(!confirmed.ok)return confirmed;
- }
- const headers=new Headers();
- if(req.headers.has('Range'))headers.set('Range',req.headers.get('Range'));
- const media=await target.fetch(address,{method:req.method,headers});
- const secured=new Headers(media.headers);secured.set('Cross-Origin-Resource-Policy','same-origin');
- return new Response(media.body,{status:media.status,headers:secured});
-}
-async function groupCinema(req,env,u,user){
- const match=u.pathname.match(/^\/api\/cinema\/group\/media\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/);
- if(match&&['GET','HEAD'].includes(req.method)){
-  const [,group,item]=match;
-  const asset=await telegramCinemaDirectory(env,u.origin,'asset',{group,item},user);
-  return telegramMedia(req,env,u,asset,'cinema-telegram-file:'+group+':'+item+':media');
- }
- const inbox=u.pathname.match(/^\/api\/cinema\/inbox\/media\/([a-f0-9-]{36})\/([a-f0-9-]{36})$/);
- if(inbox&&['GET','HEAD'].includes(req.method)){
-  const [,room,item]=inbox;
-  const asset=await cinemaForwardHub(env,u.origin,'asset',user,{room,item});
-  return telegramMedia(req,env,u,asset,'cinema-inbox-file:'+item,
-   ()=>cinemaForwardHub(env,u.origin,'asset-ready',user,{room,item}));
- }
- if(u.pathname==='/api/cinema/group/arm'&&['POST','DELETE'].includes(req.method)){
-  const room=u.searchParams.get('room');
-  if(!telegramCinemaId.test(room??''))return json({error:'Entra prima in una sala.'},400);
-  if(req.method==='DELETE')return cinemaForwardHub(env,u.origin,'disarm',user,{room});
-  const armed=await cinemaForwardHub(env,u.origin,'arm',user,{room});
-  if(!armed.ok)return armed;
-  return json({bot:BOT_USERNAME});
- }
- return json({error:'Percorso non trovato.'},404);
-}
-
-export default {
- async fetch(req,env){
-  const u=new URL(req.url);
-  if(u.pathname==='/api/telegram/setup'&&req.method==='POST'){
-   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-   return setupTelegram(req,env,u);
-  }
-  if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
-  if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
-  if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.23'});
-
-  if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
-  const groupMedia=/^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
-  let authRequest=req;
-  if(groupMedia&&!req.headers.has('Authorization')){
-   const cookie=req.headers.get('Cookie')?.match(/(?:^|;\s*)binottoland_cinema=([^;]+)/)?.[1];
-   if(cookie)authRequest=new Request(req,{headers:{Authorization:'Bearer '+cookie}});
-  }
-  const user=await sessionUser(authRequest,env);
-  if(!user)return json({error:'Apri Binottoland da Telegram per accedere.'},401);
-  const denied=await requireMember(user,env);if(denied)return denied;
-  if(u.pathname==='/api/session/refresh'&&req.method==='POST')return issueSession(user,env);
-  if(u.pathname.startsWith('/api/simulator/')){
-   const headers=new Headers({'X-Checkmate-User':JSON.stringify(user),'Content-Type':'application/json'});
-   return env.ROOMS.get(env.ROOMS.idFromName('binotto-simulator-league-v1')).fetch(new Request(u.origin+u.pathname.slice(4),{method:req.method,headers,...(req.method==='POST'?{body:req.body}:{} )}));
-  }
-  if(/^\/api\/cinema\/(?:group|inbox)\//.test(u.pathname))return groupCinema(req,env,u,user);
-  if(u.pathname==='/api/radio/now-playing'&&req.method==='GET'){const data=await radioNowPlaying(u.searchParams.get('station'),user.id);return data?json(data):json({error:'Stazione non valida.'},400)}
-  const trustedHeaders=new Headers(req.headers);trustedHeaders.set('X-Checkmate-User',JSON.stringify(user));trustedHeaders.set('X-Access-Tag',await telegramAccessTag(env));trustedHeaders.set('X-Session-Expires',String(user.sessionExpires));req=new Request(req,{headers:trustedHeaders});
-  if((u.pathname==='/api/blackboard/ws'&&req.method==='GET')||(u.pathname==='/api/blackboard/create'&&req.method==='POST')){
-   const board=env.ROOMS.get(env.ROOMS.idFromName('blackboard-spazio-libero-v1'));
-   return board.fetch(new Request(u.origin+u.pathname.slice(4)+u.search,req));
-  }
-  if(u.pathname==='/api/cinema/ws'&&req.method==='GET')return cinemaHub(env).fetch(new Request(u.origin+'/cinema/ws',req));
-  if(u.pathname==='/api/cinema/youtube'&&req.method==='GET')return env.ROOMS.get(env.ROOMS.idFromName('cinema-youtube-v1')).fetch(new Request(u.origin+'/cinema/youtube'+u.search,req));
-  
-  const golf=u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
-  if(golf)return env.ROOMS.get(env.ROOMS.idFromName('golf:'+golf[1])).fetch(new Request(u.origin+'/golf/'+golf[2]+u.search,req));
-  const pong=u.pathname.match(/^\/api\/pong\/([a-f0-9-]{36})\/(state|ws)$/);
-  if(pong)return env.ROOMS.get(env.ROOMS.idFromName('pong:'+pong[1])).fetch(new Request(u.origin+'/pong/'+pong[2],req));
-  const moto=u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
-  if(moto)return env.ROOMS.get(env.ROOMS.idFromName('moto:'+moto[1])).fetch(new Request(u.origin+'/moto-trial/'+moto[2],req));
-  const lab=u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
-  if(lab)return env.ROOMS.get(env.ROOMS.idFromName('lab:'+lab[1])).fetch(new Request(u.origin+'/labyrinth/'+lab[2]+u.search,req));
-  const lobby=env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
-  if(u.pathname==='/api/chat'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/chat',req));
-  if(u.pathname==='/api/notices'&&['GET','POST'].includes(req.method)){
-   const raw=req.method==='POST'?await req.text():undefined;if(raw&&raw.length>256)return json({error:'Richiesta troppo grande.'},413);
-   return noticeHub(env).fetch(new Request(u.origin+'/notices/status',{method:req.method,headers:{'X-Checkmate-User':JSON.stringify(user)},body:raw}));
-  }
-  if(u.pathname==='/api/number-connect/score'&&req.method==='POST'){
-   if(Number(req.headers.get('Content-Length'))>320000)return json({error:'Partita troppo lunga.'},413);
-   const raw=await req.text();
-   if(raw.length>320000)return json({error:'Partita troppo lunga.'},413);
-   return lobby.fetch(new Request(u.origin+'/lobby/number-connect-score',{method:'POST',body:raw,headers:trustedHeaders}));
-  }
-  if(u.pathname==='/api/leaderboard'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/leaderboard'+u.search));
-  if(u.pathname==='/api/lobby'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/list'));
-  if(u.pathname==='/api/lobby/ws'&&req.method==='GET')return lobby.fetch(new Request(u.origin+'/lobby/ws',req));
-  if(req.method==='POST'&&u.pathname==='/api/create'){
-   const raw=await req.text();
-   if(raw.length>4096)return json({error:'Richiesta troppo grande.'},413);
-   return lobby.fetch(new Request(u.origin+'/lobby/create',{method:'POST',body:raw,headers:{'X-Checkmate-User':JSON.stringify(user)}}));
-  }
-  const match=u.pathname.match(/^\/api\/room\/([a-f0-9-]{36})\/(state|claim|start|rematch|next-round|move|pass|finish|archive|dismiss|delete|replay|offer-draw|accept-draw|reject-draw|ws)$/);
-  if(!match)return json({error:'Percorso non trovato.'},404);
-
-  if(match[2]==='claim'&&req.method==='POST')return lobby.fetch(new Request(u.origin+'/lobby/join',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room:match[1]})}));
-  if(match[2]==='rematch'&&req.method==='POST'){
-   const {games}=await (await lobby.fetch(new Request(u.origin+'/lobby/list'))).json();
-   const limit=seatLimit(games,user.player,games.find(g=>g.room===match[1])||{room:match[1]});
-   if(limit)return json({error:limit==='long'?longLimitText:'Hai già un altro tavolo aperto.'},409);
-  }
-  const response=await env.ROOMS.get(env.ROOMS.idFromName(match[1])).fetch(req);
-  if(response.ok&&(req.method==='POST'||match[2]==='state')){
-   const result=await response.clone().json();
-   const s=result.state||result;
-   if(match[2]!=='dismiss'||s.deleted)await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,deadline:s.clock?.deadline??null})}));
-  }
-  return response;
- }
-};
-const isArcade=game=>game==='labyrinth'||game==='moto-trial'||game==='golf'||game==='pong';
-// One open table per person, except long-turn tables (Scacchi, Dama, Forza 4, Scarabeo between people):
-// up to LONG_LIMIT of those at once, alongside the one other table. Returns 'long', 'other' or null.
-function seatLimit(tables,player,target){
- const mine=tables.filter(g=>!isArcade(g.game)&&activeTable(g)&&g.room!==target.room&&g.players.some(p=>p.id===player));
- if(isLongTurn(target))return mine.filter(isLongTurn).length>=LONG_LIMIT?'long':null;
- return mine.some(g=>!isLongTurn(g))?'other':null;
-}
-const longLimitText='Hai già '+LONG_LIMIT+' partite a turni aperte: finiscine una prima di aprirne un’altra.';
-const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.archived;
+export default { fetch: handleRequest };
 
 export class Room extends DurableObject {
- constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.pong=new PongRoom(ctx,env);this.golf=new GolfRoom(ctx,env);this.cinema=new Cinema(ctx);}
- public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires,clock:s.clock?{since:s.clock.since,reminded:!!s.clock.reminded,deadline:s.clock.since+2*this.turnLimit()}:null}}
- newTable(room,b,token){
-  const game=b.game??'chess';
-  const s={
-   room,number:b.number||null,phase:'waiting',
-   players:[{id:b.playerId||id(),name:name(b.name),token}],
-   turn:0,revision:0,moves:[],series:createSeries(b.target),
-   game,mode:b.mode??'people',chess:null,created:Date.now(),expires:Date.now()+7*86400000
-  };
-  switch(game){
-   case 'naval':s.naval=initialNaval();break;
-   case 'briscola':
-   case 'briscola5':s.briscola=initialBriscola();break;
-   case 'scarabeo':s.scarabeo=initialScarabeo();break;
-   case 'scopa':s.scopa=initialScopa();break;
-   case 'uno':s.uno=initialUno();break;
-   case 'connect4':s.connect4=initialConnect4();break;
-   case 'checkers':{
-    const checkers=initialCheckers();
-    s.checkers=checkersSnapshot(checkers);
-    s.positions={[checkersKey(checkers)]:1};
-    break;
-   }
-   case 'chess':s.chess=chessSnapshot(new Chess());break;
-   default:throw Error('Gioco non disponibile.');
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.ctx = ctx;
+    this.env = env;
+    this.lab = new ExpeditionRoom(ctx, env, () => telegramAccessTag(env));
+    this.moto = new MotoTrialRoom(ctx, env);
+    this.pong = new PongRoom(ctx, env);
+    this.golf = new GolfRoom(ctx, env);
+    this.cinema = new Cinema(ctx);
   }
-  if(!['people','ai','tutorial'].includes(s.mode))throw Error('Modalità di gioco non valida.');
-  if(s.mode!=='people'){
-   if(b.target>1)throw Error('Il singolo è disponibile in partita veloce o tutorial.');
-   const {min,max}=limits(s.game),count=b.seats??min;
-   if(!Number.isInteger(count)||count<min||count>max)throw Error('Numero posti non valido.');
-   while(s.players.length<count)s.players.push({id:'bot:'+s.players.length,name:'AI '+s.players.length,bot:true});
-   this.resetRound(s);
+  public(s, viewer = null) {
+    return tables.publicTable(s, viewer, this.turnLimit());
   }
-  return s;
- }
- resetRound(s){s.moves=[];s.drawOffer=null;s.lastDrawOffer=null;s.turn=0;s.phase='playing';if(s.game==='uno'){s.uno=initialUno(s.players.length);s.turn=s.uno.turn}else if(s.game==='scarabeo'){s.scarabeo=initialScarabeo(s.players.length);s.turn=s.scarabeo.turn}else if(s.game==='scopa')s.scopa=initialScopa(s.players.length);else if(s.game==='naval')s.naval=initialNaval();else if(['briscola','briscola5'].includes(s.game)){s.briscola=initialBriscola(s.players.length,undefined,s.briscola?.hands.length?(s.briscola.dealer+1)%s.players.length:null);s.turn=s.briscola.turn}else if(s.game==='connect4')s.connect4=initialConnect4();else if(s.game==='checkers'){s.checkers=checkersSnapshot(initialCheckers());s.positions={[checkersKey(initialCheckers())]:1}}else s.chess=chessSnapshot(new Chess());}
- tutorialView(s){const seat=0,view=this.public({...s,mode:'ai'},s.players[0].id),g=view.naval||view.briscola||view[s.game]||view.chess;const can=s.scarabeo?.pending?s.scarabeo.pending.by!==0&&!Object.hasOwn(s.scarabeo.pending.votes,0):s.naval?.phase==='placement'?!s.naval.ready[0]:s.turn===0;return can?tutorial(s.game,g,seat,s.moves.length):{title:'Turno dell’AI',text:'Osserva la risposta dell’avversario. Poi potrai scegliere liberamente o provare la mossa suggerita.',reason:g.lastEvent||'',action:null};}
- botSeat(s){if(s.phase!=='playing'||!['ai','tutorial'].includes(s.mode))return -1;if(s.scarabeo?.pending)return s.players.findIndex((p,i)=>p.bot&&i!==s.scarabeo.pending.by&&!Object.hasOwn(s.scarabeo.pending.votes,i));if(s.naval?.phase==='placement')return s.players.findIndex((p,i)=>p.bot&&!s.naval.ready[i]);return s.players[s.turn]?.bot?s.turn:-1;}
- async record(s){for(const result of resultsFor(s))await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/result',{method:'POST',body:JSON.stringify(result)}));}
- async saveState(s){
-  if(concluded(s)){
-   s.expires=null;
-   delete s.finishedAt;
+  newTable(room, b, token) {
+    return tables.newTable(room, b, token);
   }
-  await this.ctx.storage.put('state',s);
-  await this.record(s);
-  if(s.archived||concluded(s))await this.ctx.storage.deleteAlarm();
-  else{
-   const nextBot=this.botSeat(s)>=0?Date.now()+650:Infinity;
-   await this.ctx.storage.setAlarm(Math.min(nextBot,s.expires,this.clockDue(s)));
+  resetRound(s) {
+    tables.resetRound(s);
   }
- }
- hasResultViewer(s,{socket,player}={}){
-  const seats=new Set(s.players.filter(p=>!p.bot).map(p=>p.id));
-  return this.ctx.getWebSockets().some(ws=>{
-   const viewer=ws.deserializeAttachment()?.player;
-   return ws!==socket&&ws.readyState===1&&viewer!==player&&seats.has(viewer);
-  });
- }
- async removeTable(s,reason){
-  const result={room:s.room,number:s.number,deleted:true,reason};
-  await this.ctx.storage.deleteAlarm();
-  await this.ctx.storage.deleteAll();
-  for(const ws of this.ctx.getWebSockets()){
-   try{ws.send(JSON.stringify(result));ws.close(1000,'Partita eliminata');}catch{}
+  tutorialView(s) {
+    return tables.tutorialView(s, this.turnLimit());
   }
-  return result;
- }
- notifyTableRemoved(room){
-  const lobby=this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
-  this.ctx.waitUntil(lobby.fetch(new Request('https://internal/lobby/remove',{method:'POST',body:JSON.stringify({room})})));
- }
- // Long-turn tables stay open 7 days after the last action, instead of a week after creation.
- keepAlive(s){
-  if(!isLongTurn(s)||!activeTable(s)){delete s.clock;return}
-  s.expires=Date.now()+LONG_IDLE;
-  // Turn clock: restarts whenever someone else has to act (new move, new vote); a draw offer does not reset it.
-  if(s.phase!=='playing'||!turnTargets(s).length){delete s.clock;return}
-  const key=turnKey(s);if(s.clock?.key!==key)s.clock={key,since:Date.now(),reminded:false};
- }
- // Time to move (TURN_LIMIT; the test-only TURN_LIMIT_MS shortens it): reminder after one limit, lost turn after two.
- turnLimit(){return /^\d+$/.test(this.env.TURN_LIMIT_MS||'')?Number(this.env.TURN_LIMIT_MS):TURN_LIMIT}
- clockDue(s){return s.clock?s.clock.since+this.turnLimit()*(s.clock.reminded?2:1):Infinity}
- // Called by the alarm: sends the reminder, or applies the timeout. Returns false when the table has no clock.
- async runClock(s){
-  const c=s.clock;
-  if(!c||!isLongTurn(s)||s.phase!=='playing')return false;
-  const now=Date.now(),limit=this.turnLimit();
-  if(now>=c.since+2*limit){
-   const key=turnKey(s),told=timeoutTable(s,now);
-   settleSeries(s);s.revision++;this.keepAlive(s);await this.saveState(s);await this.broadcast(s);await this.syncLobby(s);
-   this.sendNotice(resultRequest(s,key,told));
-   this.queueNotice(s);
-   return true;
+  botSeat(s) {
+    return tables.botSeat(s);
   }
-  if(!c.reminded&&now>=c.since+limit){c.reminded=true;this.sendNotice(reminderRequest(s))}
-  await this.saveState(s);
-  return true;
- }
- sendNotice(request){
-  if(request&&this.env.TURN_NOTIFY!=='false')this.ctx.waitUntil(noticeHub(this.env).fetch(new Request('https://internal/notices/queue',{method:'POST',body:JSON.stringify(request)})).catch(()=>{}));
- }
- // Long-turn games: tell the notice queue who must act now (it decides later whether a message is needed).
- queueNotice(s){
-  this.sendNotice(noticeRequest(s));
- }
- async syncLobby(s){await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(this.summary(this.public(s)))}));}
- applyMove(s,who,b){
-    if(s.naval||s.briscola){
-     const key=s.naval?'naval':'briscola',next=s.naval?playNaval(s.naval,who,b):playBriscola(s.briscola,who,b);s[key]=next;s.turn=next.turn;
-     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if((s.scarabeo||s.scopa)){
-     const key=s.scarabeo?'scarabeo':'scopa',next=s.scarabeo?playScarabeo(s.scarabeo,who,b):playScopa(s.scopa,who,b);s[key]=next;s.turn=next.turn;
-     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(s.uno){
-     const next=playUno(s.uno,who,b);s.uno=next;s.turn=next.turn;s.drawOffer=null;
-     s.moves.push({description:next.lastEvent,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(s.connect4){
-     if(who!==s.turn)throw Error('Non è il tuo turno.');
-     const next=playConnect4(s.connect4,b.column);s.connect4=next;s.turn=next.turn;s.drawOffer=null;
-     s.moves.push({column:b.column,row:next.lastMove.row,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});if(next.result)s.phase='finished';
-    }else if(s.checkers){
-     if(who!==s.turn)throw Error('Non è il tuo turno.');
-     const played=playCheckers(s.checkers,b.path),key=checkersKey(played.game);
-     s.positions=s.positions||{};s.positions[key]=(s.positions[key]||0)+1;
-     s.moves.push({...played.move,by:s.players[who].name,at:Date.now(),number:s.moves.length+1});
-     s.drawOffer=null;s.turn=played.game.turn;
-     s.checkers=checkersSnapshot(played.game,played.move,s.positions[key]);
-     if(s.checkers.result)s.phase='finished';
-    }else {
-     if(!s.chess)throw Error('Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.');
-     if(who!==s.turn)throw Error('Non è il tuo turno.');
-     const game=new Chess();
-     for(const move of s.moves)game.move(move.san);
-     if(b.kind==='claim-draw'){
-      const proposed=b.move;
-      if(proposed!==undefined&&(!proposed||typeof proposed.from!=='string'||typeof proposed.to!=='string'))throw Error('Mossa proposta non valida.');
-      s.chess=claimChessDraw(game,s.chess.lastMove,proposed);s.phase='finished';s.drawOffer=null;
+  async record(s) {
+    for (const result of resultsFor(s))
+      await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+        new Request('https://internal/lobby/result', { method: 'POST', body: JSON.stringify(result) })
+      );
+  }
+  async saveState(s) {
+    if (concluded(s)) {
+      s.expires = null;
+      delete s.finishedAt;
+    }
+    await this.ctx.storage.put('state', s);
+    await this.record(s);
+    if (s.archived || concluded(s)) await this.ctx.storage.deleteAlarm();
+    else {
+      const nextBot = this.botSeat(s) >= 0 ? Date.now() + 650 : Infinity;
+      await this.ctx.storage.setAlarm(Math.min(nextBot, s.expires, this.clockDue(s)));
+    }
+  }
+  hasResultViewer(s, { socket, player } = {}) {
+    const seats = new Set(s.players.filter(p => !p.bot).map(p => p.id));
+    return this.ctx.getWebSockets().some(ws => {
+      const viewer = ws.deserializeAttachment()?.player;
+      return ws !== socket && ws.readyState === 1 && viewer !== player && seats.has(viewer);
+    });
+  }
+  async removeTable(s, reason) {
+    const result = { room: s.room, number: s.number, deleted: true, reason };
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.send(JSON.stringify(result));
+        ws.close(1000, 'Partita eliminata');
+      } catch {}
+    }
+    return result;
+  }
+  notifyTableRemoved(room) {
+    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    this.ctx.waitUntil(
+      lobby.fetch(
+        new Request('https://internal/lobby/remove', { method: 'POST', body: JSON.stringify({ room }) })
+      )
+    );
+  }
+  // Long-turn tables stay open 7 days after the last action, instead of a week after creation.
+  keepAlive(s) {
+    if (!isLongTurn(s) || !activeTable(s)) {
+      delete s.clock;
       return;
-     }
-     if(typeof b.from!=='string'||typeof b.to!=='string')throw Error('Mossa non valida.');
-     let moved;try{moved=game.move({from:b.from,to:b.to,promotion:b.promotion||'q'})}catch{throw Error('Mossa non consentita.')}
-     s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1,san:moved.san,from:moved.from,to:moved.to,...(moved.promotion?{promotion:moved.promotion}:{})});
-     s.drawOffer=null;s.turn=game.turn()==='w'?0:1;
-     s.chess=chessSnapshot(game,{from:moved.from,to:moved.to});
-     if(s.chess.result)s.phase='finished';
-
     }
- }
- async broadcast(s){const tag=await telegramAccessTag(this.env);for(const ws of this.ctx.getWebSockets()){try{const a=ws.deserializeAttachment();if(!tag||a?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(JSON.stringify(this.public(s,a.player)))}catch{}}}
- async guardSockets(){
-  const sockets=this.ctx.getWebSockets();if(!sockets.length)return;
-  const tag=await telegramAccessTag(this.env);
-  await Promise.all(sockets.map(async ws=>{
-   const a=ws.deserializeAttachment();if(a?.authDenied)return;
-   const memberId=a?.memberId||a?.user?.id||(a?.player?.startsWith('tg:')?a.player.slice(3):null)||(typeof a?.id==='string'?a.id.replace(/^tg:/,''):null);
-   let reason=null;
-   if(!tag||a?.accessTag!==tag||!Number.isFinite(a?.expires)||a.expires<=Date.now())reason='Sessione scaduta: riapri la Mini App';
-   else if(!memberId||await memberAccess({id:memberId},this.env)!==true)reason='Accesso al gruppo richiesto';
-   if(reason){try{ws.serializeAttachment({...a,authDenied:true});ws.close(4003,reason)}catch{}}
-  }));
- }
- async fetch(req){
-  await this.guardSockets();
-  const viewer=JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.player||null;
-  const path=new URL(req.url).pathname;
-  if(path.startsWith('/simulator/'))return (this.simulator??=new SimulatorLeague(this.ctx,this.env)).fetch(req);
-  if(path.startsWith('/notices/'))return (this.notices??=new TurnNotices(this.ctx,this.env)).fetch(req);
-  if(path==='/cinema/group-directory')return (this.telegramCinema??=new TelegramCinema(this.ctx,this.env.BOT_TOKEN)).fetch(req);
-  if(path==='/cinema/group-file')return req.method==='POST'
-   ?this.ctx.blockConcurrencyWhile(()=>cacheTelegramMedia(req,this.ctx,this.env.BOT_TOKEN)):readCinemaMedia(req,this.ctx.storage);
-  if(path==='/cinema/ws'||['arm','disarm','enqueue','asset','asset-ready'].some(action=>path==='/cinema/group-'+action))return this.cinema.fetch(req);
-  if(path==='/cinema/youtube')return (this.youtube??=new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req,viewer);
-  if(path==='/blackboard/ws'||path==='/blackboard/create')return this.blackboard.fetch(req);
-  if(path.startsWith('/pong/'))return this.pong.fetch(req);
-  if(new URL(req.url).pathname.startsWith('/golf/'))return this.golf.fetch(req);
-  if(new URL(req.url).pathname.startsWith('/moto-trial/'))return this.moto.fetch(req);
-  if(new URL(req.url).pathname.startsWith('/labyrinth/'))return this.lab.fetch(req);
-  if(Number(req.headers.get('Content-Length')||0)>(path==='/lobby/number-connect-score'?320000:4096))return json({error:'Richiesta troppo grande.'},413);
-  return this.ctx.blockConcurrencyWhile(async()=>{
-   try{
-    const path=new URL(req.url).pathname;
-    if(path.startsWith('/lobby/'))return this.lobby(req,path);
-    let s=await this.ctx.storage.get('state');
-    if(path==='/results')return json(s?resultsFor(s):[]);
-    // Asked by the notice queue just before sending: is it still this player's turn, same turn as queued?
-    if(path==='/turn-check'){const q=new URL(req.url).searchParams;return json({due:!!s&&!(activeTable(s)&&s.expires<Date.now())&&turnKey(s)===q.get('key')&&turnTargets(s).includes(q.get('player'))})}
-    if(s?.game==='cluedo')return json({error:'Cluedo è stato rimosso. Crea un nuovo tavolo di Scopa.'},410);
-    if(path==='/init'){
-     if(s)return json({error:'Stanza già esistente.'},409);
-     const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw);const token=id();
-     s=this.newTable(req.headers.get('X-Room'),b,token);
-     await this.saveState(s);
-     return json({token,player:s.players[0].id,state:this.public(s,viewer)});
+    s.expires = Date.now() + LONG_IDLE;
+    // Turn clock: restarts whenever someone else has to act (new move, new vote); a draw offer does not reset it.
+    if (s.phase !== 'playing' || !turnTargets(s).length) {
+      delete s.clock;
+      return;
     }
-    if(!s){
-     if(path.endsWith('/dismiss')&&req.method==='POST')return json({left:true});
-     return json({error:'Stanza inesistente o scaduta.'},404);
-    }
-    if(activeTable(s)&&s.expires<Date.now())return json({error:'Stanza inesistente o scaduta.'},404);
-    if(path==='/tidy-result'&&req.method==='POST'){
-     if(concluded(s)&&s.expires!==null){
-      if(!this.hasResultViewer(s)){
-       await this.record(s);
-       return json(await this.removeTable(s,'dismissed'));
-      }
+    const key = turnKey(s);
+    if (s.clock?.key !== key) s.clock = { key, since: Date.now(), reminded: false };
+  }
+  // Time to move (TURN_LIMIT; the test-only TURN_LIMIT_MS shortens it): reminder after one limit, lost turn after two.
+  turnLimit() {
+    return /^\d+$/.test(this.env.TURN_LIMIT_MS || '') ? Number(this.env.TURN_LIMIT_MS) : TURN_LIMIT;
+  }
+  clockDue(s) {
+    return s.clock ? s.clock.since + this.turnLimit() * (s.clock.reminded ? 2 : 1) : Infinity;
+  }
+  // Called by the alarm: sends the reminder, or applies the timeout. Returns false when the table has no clock.
+  async runClock(s) {
+    const c = s.clock;
+    if (!c || !isLongTurn(s) || s.phase !== 'playing') return false;
+    const now = Date.now(),
+      limit = this.turnLimit();
+    if (now >= c.since + 2 * limit) {
+      const key = turnKey(s),
+        told = timeoutTable(s, now);
+      settleSeries(s);
       s.revision++;
-      await this.saveState(s);
-     }
-     return json(this.summary(this.public(s)));
-    }
-    if(path.endsWith('/ws')){
-     if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
-     if(this.ctx.getWebSockets().length>=60)return json({error:'Stanza piena (60 connessioni).'},429);
-     const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag'),expires:Number(req.headers.get('X-Session-Expires')),player:viewer});pair[1].send(JSON.stringify(this.public(s,viewer)));
-     return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
-    }
-    if(path.endsWith('/replay')&&req.method==='GET'){
-     if(stagedGame(s.game))return json({room:s.room,revision:s.revision,frames:[]});
-     if(s.connect4){let game=initialConnect4();const frames=[game];for(const entry of s.moves){game=playConnect4(game,entry.column);frames.push(game)}return json({room:s.room,revision:s.revision,frames})}
-     if(s.checkers){
-      let game=initialCheckers();const frames=[{board:game.board,lastMove:null}];
-      for(const entry of s.moves){const played=playCheckers(game,entry.path);game=played.game;frames.push({board:game.board,lastMove:played.move})}
-      return json({room:s.room,revision:s.revision,frames});
-     }
-     if(!s.chess)return json({frames:[]});
-     const game=new Chess(),frames=[{fen:game.fen(),lastMove:null}];
-     for(const entry of s.moves){const m=game.move(entry.san);frames.push({fen:game.fen(),lastMove:{from:m.from,to:m.to}})}
-     return json({room:s.room,revision:s.revision,frames});
-    }
-    if(path.endsWith('/state')&&req.method==='GET'){
-     if(concluded(s)&&s.expires!==null){
-      s.revision++;
+      this.keepAlive(s);
       await this.saveState(s);
       await this.broadcast(s);
-     }else{
-      await this.record(s);
-      if(this.botSeat(s)>=0&&await this.ctx.storage.getAlarm()===null)
-       await this.ctx.storage.setAlarm(Math.min(Date.now()+650,s.expires));
-     }
-     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null'),legacy=req.headers.get('X-Player-Token');
-     const old=s.players.find(p=>!p.id.startsWith('tg:')&&legacy&&p.token===legacy);
-     if(user&&old&&!s.players.some(p=>p.id===user.player)){
-      old.id=user.player;old.name=name(user.name);s.revision++;
-      await this.saveState(s);await this.broadcast(s);
-     }
-     return json(this.public(s,viewer));
+      await this.syncLobby(s);
+      this.sendNotice(resultRequest(s, key, told));
+      this.queueNotice(s);
+      return true;
     }
-    if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
-    const raw=await req.text();if(raw.length>4096)bad('Richiesta troppo grande.');const b=JSON.parse(raw||'{}');
-    if(path.endsWith('/claim')){
-     if(s.mode==='ai'||s.mode==='tutorial'||s.phase!=='waiting'||(stagedGame(s.game)&&s.players.length>=limits(s.game).max))return json({error:stagedGame(s.game)?'Tavolo pieno o partita già avviata. Puoi assistere.':'Il secondo posto è già occupato. Puoi assistere.'},409);
-     const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
-     if(s.players.some(p=>p.id===user?.player))return json({error:'Sei già un giocatore di questa partita.'},409);
-     const token=id(),p={id:user?.player||id(),name:name(user?.name||b.name),token};s.players.push(p);s.phase=stagedGame(s.game)?'waiting':'playing';s.revision++;this.keepAlive(s);
-     await this.saveState(s);await this.broadcast(s);this.queueNotice(s);return json({token,player:p.id,state:this.public(s,viewer)});
+    if (!c.reminded && now >= c.since + limit) {
+      c.reminded = true;
+      this.sendNotice(reminderRequest(s));
     }
-    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');const legacy=req.headers.get('X-Player-Token');const who=s.players.findIndex(p=>p.id===user?.player||(!p.id.startsWith('tg:')&&legacy&&p.token===legacy));
-    if(who<0)return json({error:'Solo i giocatori possono agire.'},403);
-    if(path.endsWith('/dismiss')){
-     if(!concluded(s)||(s.matchId||null)!==(b.matchId||null))return json({left:true});
-     if(this.hasResultViewer(s,{player:s.players[who].id}))return json({left:true});
-     return json(await this.removeTable(s,'dismissed'));
+    await this.saveState(s);
+    return true;
+  }
+  sendNotice(request) {
+    if (request && this.env.TURN_NOTIFY !== 'false')
+      this.ctx.waitUntil(
+        noticeHub(this.env)
+          .fetch(
+            new Request('https://internal/notices/queue', { method: 'POST', body: JSON.stringify(request) })
+          )
+          .catch(() => {})
+      );
+  }
+  // Long-turn games: tell the notice queue who must act now (it decides later whether a message is needed).
+  queueNotice(s) {
+    this.sendNotice(noticeRequest(s));
+  }
+  async syncLobby(s) {
+    await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+      new Request('https://internal/lobby/update', {
+        method: 'POST',
+        body: JSON.stringify(this.summary(this.public(s)))
+      })
+    );
+  }
+  applyMove(s, who, b) {
+    tables.applyMove(s, who, b);
+  }
+  async broadcast(s) {
+    const tag = await telegramAccessTag(this.env);
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        const a = ws.deserializeAttachment();
+        if (!tag || a?.accessTag !== tag) {
+          ws.close(4001, 'Riapri la Mini App');
+          continue;
+        }
+        ws.send(JSON.stringify(this.public(s, a.player)));
+      } catch {}
     }
-    if(path.endsWith('/rematch')){
-     if(s.phase!=='finished'||activeTable(s)||b.revision!==s.revision)
-      return json({error:'La partita è cambiata o deve ancora concludersi.'},409);
-     const token=id();
-     const next=this.newTable(s.room,{
-      number:s.number,game:s.game||'chess',mode:s.mode,target:s.series?.target,
-      seats:s.players.length,playerId:user.player,name:user.name
-     },token);
-     next.matchId=id();
-     next.revision=s.revision+1;
-     await this.record(s);
-     await this.saveState(next);
-     await this.broadcast(next);
-     return json({state:this.public(next,viewer),token,player:user.player});
-    }
-    if(path.endsWith('/archive')||path.endsWith('/delete')){
-     if(b.revision!==s.revision)return json({error:'La partita è cambiata. Aggiorna e riprova.'},409);
-     if(path.endsWith('/delete'))return json(await this.removeTable(s,'manual'));
-     if(s.series){s.series.done=true;s.series.cancelled=true}s.archived=true;s.phase='finished';s.expires=null;s.revision++;
-     if(s.chess)s.chess={...s.chess,legalMoves:[],reason:s.chess.reason||'Archiviata'};
-     if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:s.checkers.reason||'Archiviata'};
-     if(s.connect4)s.connect4={...s.connect4,legalMoves:[],reason:s.connect4.reason||'Archiviata'};
-     await this.ctx.storage.deleteAlarm();await this.saveState(s);await this.broadcast(s);
-     return json(this.public(s,viewer));
-    }
-    if(path.endsWith('/next-round')){
-     if(who!==0||s.archived||s.phase!=='finished'||!s.series||s.series.done||!s.series.recorded||b.revision!==s.revision)return json({error:'La prossima manche può essere avviata dal creatore.'},409);
-     s.series.round++;s.series.recorded=false;this.resetRound(s);s.revision++;this.keepAlive(s);await this.saveState(s);await this.broadcast(s);this.queueNotice(s);return json(this.public(s,viewer));
-    }
-    if(stagedGame(s.game)&&path.endsWith('/start')){
-     if(who!==0)return json({error:'Solo chi ha creato il tavolo può avviare la partita.'},403);
-     if(s.phase!=='waiting')return json({error:'Il tavolo non è più in attesa.'},409);
-     if(b.revision!==s.revision)return json({error:'I giocatori al tavolo sono cambiati. Controlla l’elenco e premi di nuovo Avvia partita.'},409);
-     if(s.players.length<limits(s.game).min)return json({error:'Servono almeno '+limits(s.game).min+' giocatori per iniziare.'},409);
-     this.resetRound(s);if(s.series)s.series.wins=Array(s.players.length).fill(0);s.revision++;this.keepAlive(s);await this.saveState(s);await this.broadcast(s);this.queueNotice(s);return json(this.public(s,viewer));
-    }
-    if(s.phase!=='playing'&&!(s.phase==='waiting'&&path.endsWith('/finish')))return json({error:'Partita non attiva.'},409);
-    if(b.revision!==s.revision)return json({error:'La partita è cambiata. Riprova dopo l’aggiornamento.'},409);
-    if(path.endsWith('/move')&&!(s.uno&&['uno','catch-uno'].includes(b.kind))&&!s.scarabeo&&!(s.naval?.phase==='placement')&&who!==s.turn)return json({error:'Non è il tuo turno.'},403);
-    if(path.endsWith('/offer-draw')){
-     if((!s.chess&&!s.checkers)||s.phase!=='playing')return json({error:'Patta disponibile solo durante una partita.'},409);
-     if(s.chess&&s.moves.length<2)return json({error:'Entrambi devono aver giocato almeno una mossa.'},409);
-     if(s.drawOffer)return json({error:'C’è già una proposta in attesa.'},409);
-     if(s.lastDrawOffer?.by===who&&s.lastDrawOffer?.ply===s.moves.length)return json({error:'Attendi una nuova mossa prima di proporre ancora la patta.'},409);
-     s.drawOffer={by:s.players[who].id,name:s.players[who].name};s.lastDrawOffer={by:who,ply:s.moves.length};
-    }else if(path.endsWith('/accept-draw')||path.endsWith('/reject-draw')){
-     if(!s.drawOffer||s.drawOffer.by===s.players[who].id)return json({error:'Non puoi rispondere a questa proposta.'},403);
-     if(path.endsWith('/accept-draw')){s.phase='finished';const key=s.connect4?'connect4':s.checkers?'checkers':'chess';s[key]={...s[key],legalMoves:[],reason:'Patta concordata',result:'1/2-1/2'}}
-     s.drawOffer=null;
-    }else if(path.endsWith('/move')){this.applyMove(s,who,b);    }else if(path.endsWith('/pass')){
-     if(s.chess||s.checkers||s.connect4||s.uno||s.scarabeo||s.scopa||s.naval||s.briscola)return json({error:'Devi effettuare una mossa.'},409);
-     if(who!==s.turn)return json({error:'Non è il tuo turno.'},403);
-     s.moves.push({by:s.players[who].name,at:Date.now(),number:s.moves.length+1});s.turn=1-s.turn;
-     if(s.moves.length>=500)s.phase='finished';
-    }else if(path.endsWith('/finish')){if(s.series){s.series.done=true;s.series.cancelled=true}s.phase='finished';if(s.chess)s.chess={...s.chess,legalMoves:[],reason:'Partita chiusa',result:null};if(s.checkers)s.checkers={...s.checkers,legalMoves:[],reason:'Partita chiusa',result:null};if(s.connect4)s.connect4={...s.connect4,legalMoves:[],reason:'Partita chiusa',result:null};if(s.uno)s.uno={...s.uno,result:'closed',reason:'Partita chiusa'};}else bad('Azione non valida.');
-    settleSeries(s);s.revision++;this.keepAlive(s);await this.saveState(s);await this.broadcast(s);this.queueNotice(s);return json(this.public(s,viewer));
-   }catch(e){return json({error:e instanceof SyntaxError?'Richiesta non valida.':e.message},400)}
-  });
- }
+  }
+  async guardSockets() {
+    const sockets = this.ctx.getWebSockets();
+    if (!sockets.length) return;
+    const tag = await telegramAccessTag(this.env);
+    await Promise.all(
+      sockets.map(async ws => {
+        const a = ws.deserializeAttachment();
+        if (a?.authDenied) return;
+        const memberId =
+          a?.memberId ||
+          a?.user?.id ||
+          (a?.player?.startsWith('tg:') ? a.player.slice(3) : null) ||
+          (typeof a?.id === 'string' ? a.id.replace(/^tg:/, '') : null);
+        let reason = null;
+        if (!tag || a?.accessTag !== tag || !Number.isFinite(a?.expires) || a.expires <= Date.now())
+          reason = 'Sessione scaduta: riapri la Mini App';
+        else if (!memberId || (await memberAccess({ id: memberId }, this.env)) !== true)
+          reason = 'Accesso al gruppo richiesto';
+        if (reason) {
+          try {
+            ws.serializeAttachment({ ...a, authDenied: true });
+            ws.close(4003, reason);
+          } catch {}
+        }
+      })
+    );
+  }
+  async fetch(req) {
+    await this.guardSockets();
+    const viewer = JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.player || null;
+    const path = new URL(req.url).pathname;
+    if (path.startsWith('/simulator/'))
+      return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).fetch(req);
+    if (path.startsWith('/notices/'))
+      return (this.notices ??= new TurnNotices(this.ctx, this.env)).fetch(req);
+    if (path === '/cinema/group-directory')
+      return (this.telegramCinema ??= new TelegramCinema(this.ctx, this.env.BOT_TOKEN)).fetch(req);
+    if (path === '/cinema/group-file')
+      return req.method === 'POST'
+        ? this.ctx.blockConcurrencyWhile(() => cacheTelegramMedia(req, this.ctx, this.env.BOT_TOKEN))
+        : readCinemaMedia(req, this.ctx.storage);
+    if (
+      path === '/cinema/ws' ||
+      ['arm', 'disarm', 'enqueue', 'asset', 'asset-ready'].some(action => path === '/cinema/group-' + action)
+    )
+      return this.cinema.fetch(req);
+    if (path === '/cinema/youtube')
+      return (this.youtube ??= new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req, viewer);
+    if (path === '/blackboard/ws' || path === '/blackboard/create') return this.blackboard.fetch(req);
+    if (path.startsWith('/pong/')) return this.pong.fetch(req);
+    if (new URL(req.url).pathname.startsWith('/golf/')) return this.golf.fetch(req);
+    if (new URL(req.url).pathname.startsWith('/moto-trial/')) return this.moto.fetch(req);
+    if (new URL(req.url).pathname.startsWith('/labyrinth/')) return this.lab.fetch(req);
+    if (
+      Number(req.headers.get('Content-Length') || 0) >
+      (path === '/lobby/number-connect-score' ? 320000 : 4096)
+    )
+      return json({ error: 'Richiesta troppo grande.' }, 413);
+    return this.ctx.blockConcurrencyWhile(async () => {
+      try {
+        const path = new URL(req.url).pathname;
+        if (path.startsWith('/lobby/')) return this.lobbyHub.lobby(req, path);
+        let s = await this.ctx.storage.get('state');
+        if (path === '/results') return json(s ? resultsFor(s) : []);
+        // Asked by the notice queue just before sending: is it still this player's turn, same turn as queued?
+        if (path === '/turn-check') {
+          const q = new URL(req.url).searchParams;
+          return json({
+            due:
+              !!s &&
+              !(activeTable(s) && s.expires < Date.now()) &&
+              turnKey(s) === q.get('key') &&
+              turnTargets(s).includes(q.get('player'))
+          });
+        }
+        if (s?.game === 'cluedo')
+          return json({ error: 'Cluedo è stato rimosso. Crea un nuovo tavolo di Scopa.' }, 410);
+        if (path === '/init') {
+          if (s) return json({ error: 'Stanza già esistente.' }, 409);
+          const raw = await req.text();
+          if (raw.length > 4096) bad('Richiesta troppo grande.');
+          const b = JSON.parse(raw);
+          const token = id();
+          s = this.newTable(req.headers.get('X-Room'), b, token);
+          await this.saveState(s);
+          return json({ token, player: s.players[0].id, state: this.public(s, viewer) });
+        }
+        if (!s) {
+          if (path.endsWith('/dismiss') && req.method === 'POST') return json({ left: true });
+          return json({ error: 'Stanza inesistente o scaduta.' }, 404);
+        }
+        if (activeTable(s) && s.expires < Date.now())
+          return json({ error: 'Stanza inesistente o scaduta.' }, 404);
+        if (path === '/tidy-result' && req.method === 'POST') {
+          if (concluded(s) && s.expires !== null) {
+            if (!this.hasResultViewer(s)) {
+              await this.record(s);
+              return json(await this.removeTable(s, 'dismissed'));
+            }
+            s.revision++;
+            await this.saveState(s);
+          }
+          return json(this.summary(this.public(s)));
+        }
+        if (path.endsWith('/ws')) {
+          if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
+            return json({ error: 'WebSocket richiesto.' }, 426);
+          if (this.ctx.getWebSockets().length >= 60)
+            return json({ error: 'Stanza piena (60 connessioni).' }, 429);
+          const pair = new WebSocketPair();
+          this.ctx.acceptWebSocket(pair[1]);
+          pair[1].serializeAttachment({
+            memberId: JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id,
+            accessTag: req.headers.get('X-Access-Tag'),
+            expires: Number(req.headers.get('X-Session-Expires')),
+            player: viewer
+          });
+          pair[1].send(JSON.stringify(this.public(s, viewer)));
+          return new Response(null, {
+            status: 101,
+            webSocket: pair[0],
+            headers: { 'Sec-WebSocket-Protocol': 'checkmate' }
+          });
+        }
+        if (path.endsWith('/replay') && req.method === 'GET') {
+          if (stagedGame(s.game)) return json({ room: s.room, revision: s.revision, frames: [] });
+          if (s.connect4) {
+            let game = initialConnect4();
+            const frames = [game];
+            for (const entry of s.moves) {
+              game = playConnect4(game, entry.column);
+              frames.push(game);
+            }
+            return json({ room: s.room, revision: s.revision, frames });
+          }
+          if (s.checkers) {
+            let game = initialCheckers();
+            const frames = [{ board: game.board, lastMove: null }];
+            for (const entry of s.moves) {
+              const played = playCheckers(game, entry.path);
+              game = played.game;
+              frames.push({ board: game.board, lastMove: played.move });
+            }
+            return json({ room: s.room, revision: s.revision, frames });
+          }
+          if (!s.chess) return json({ frames: [] });
+          const game = new Chess(),
+            frames = [{ fen: game.fen(), lastMove: null }];
+          for (const entry of s.moves) {
+            const m = game.move(entry.san);
+            frames.push({ fen: game.fen(), lastMove: { from: m.from, to: m.to } });
+          }
+          return json({ room: s.room, revision: s.revision, frames });
+        }
+        if (path.endsWith('/state') && req.method === 'GET') {
+          if (concluded(s) && s.expires !== null) {
+            s.revision++;
+            await this.saveState(s);
+            await this.broadcast(s);
+          } else {
+            await this.record(s);
+            if (this.botSeat(s) >= 0 && (await this.ctx.storage.getAlarm()) === null)
+              await this.ctx.storage.setAlarm(Math.min(Date.now() + 650, s.expires));
+          }
+          const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null'),
+            legacy = req.headers.get('X-Player-Token');
+          const old = s.players.find(p => !p.id.startsWith('tg:') && legacy && p.token === legacy);
+          if (user && old && !s.players.some(p => p.id === user.player)) {
+            old.id = user.player;
+            old.name = name(user.name);
+            s.revision++;
+            await this.saveState(s);
+            await this.broadcast(s);
+          }
+          return json(this.public(s, viewer));
+        }
+        if (req.method !== 'POST') return json({ error: 'Metodo non consentito.' }, 405);
+        const raw = await req.text();
+        if (raw.length > 4096) bad('Richiesta troppo grande.');
+        const b = JSON.parse(raw || '{}');
+        if (path.endsWith('/claim')) {
+          if (
+            s.mode === 'ai' ||
+            s.mode === 'tutorial' ||
+            s.phase !== 'waiting' ||
+            (stagedGame(s.game) && s.players.length >= limits(s.game).max)
+          )
+            return json(
+              {
+                error: stagedGame(s.game)
+                  ? 'Tavolo pieno o partita già avviata. Puoi assistere.'
+                  : 'Il secondo posto è già occupato. Puoi assistere.'
+              },
+              409
+            );
+          const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+          if (s.players.some(p => p.id === user?.player))
+            return json({ error: 'Sei già un giocatore di questa partita.' }, 409);
+          const token = id(),
+            p = { id: user?.player || id(), name: name(user?.name || b.name), token };
+          s.players.push(p);
+          s.phase = stagedGame(s.game) ? 'waiting' : 'playing';
+          s.revision++;
+          this.keepAlive(s);
+          await this.saveState(s);
+          await this.broadcast(s);
+          this.queueNotice(s);
+          return json({ token, player: p.id, state: this.public(s, viewer) });
+        }
+        const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+        const legacy = req.headers.get('X-Player-Token');
+        const who = s.players.findIndex(
+          p => p.id === user?.player || (!p.id.startsWith('tg:') && legacy && p.token === legacy)
+        );
+        if (who < 0) return json({ error: 'Solo i giocatori possono agire.' }, 403);
+        if (path.endsWith('/dismiss')) {
+          if (!concluded(s) || (s.matchId || null) !== (b.matchId || null)) return json({ left: true });
+          if (this.hasResultViewer(s, { player: s.players[who].id })) return json({ left: true });
+          return json(await this.removeTable(s, 'dismissed'));
+        }
+        if (path.endsWith('/rematch')) {
+          if (s.phase !== 'finished' || activeTable(s) || b.revision !== s.revision)
+            return json({ error: 'La partita è cambiata o deve ancora concludersi.' }, 409);
+          const token = id();
+          const next = this.newTable(
+            s.room,
+            {
+              number: s.number,
+              game: s.game || 'chess',
+              mode: s.mode,
+              target: s.series?.target,
+              seats: s.players.length,
+              playerId: user.player,
+              name: user.name
+            },
+            token
+          );
+          next.matchId = id();
+          next.revision = s.revision + 1;
+          await this.record(s);
+          await this.saveState(next);
+          await this.broadcast(next);
+          return json({ state: this.public(next, viewer), token, player: user.player });
+        }
+        if (path.endsWith('/archive') || path.endsWith('/delete')) {
+          if (b.revision !== s.revision)
+            return json({ error: 'La partita è cambiata. Aggiorna e riprova.' }, 409);
+          if (path.endsWith('/delete')) return json(await this.removeTable(s, 'manual'));
+          if (s.series) {
+            s.series.done = true;
+            s.series.cancelled = true;
+          }
+          s.archived = true;
+          s.phase = 'finished';
+          s.expires = null;
+          s.revision++;
+          if (s.chess) s.chess = { ...s.chess, legalMoves: [], reason: s.chess.reason || 'Archiviata' };
+          if (s.checkers)
+            s.checkers = { ...s.checkers, legalMoves: [], reason: s.checkers.reason || 'Archiviata' };
+          if (s.connect4)
+            s.connect4 = { ...s.connect4, legalMoves: [], reason: s.connect4.reason || 'Archiviata' };
+          await this.ctx.storage.deleteAlarm();
+          await this.saveState(s);
+          await this.broadcast(s);
+          return json(this.public(s, viewer));
+        }
+        if (path.endsWith('/next-round')) {
+          if (
+            who !== 0 ||
+            s.archived ||
+            s.phase !== 'finished' ||
+            !s.series ||
+            s.series.done ||
+            !s.series.recorded ||
+            b.revision !== s.revision
+          )
+            return json({ error: 'La prossima manche può essere avviata dal creatore.' }, 409);
+          s.series.round++;
+          s.series.recorded = false;
+          this.resetRound(s);
+          s.revision++;
+          this.keepAlive(s);
+          await this.saveState(s);
+          await this.broadcast(s);
+          this.queueNotice(s);
+          return json(this.public(s, viewer));
+        }
+        if (stagedGame(s.game) && path.endsWith('/start')) {
+          if (who !== 0) return json({ error: 'Solo chi ha creato il tavolo può avviare la partita.' }, 403);
+          if (s.phase !== 'waiting') return json({ error: 'Il tavolo non è più in attesa.' }, 409);
+          if (b.revision !== s.revision)
+            return json(
+              {
+                error:
+                  'I giocatori al tavolo sono cambiati. Controlla l’elenco e premi di nuovo Avvia partita.'
+              },
+              409
+            );
+          if (s.players.length < limits(s.game).min)
+            return json({ error: 'Servono almeno ' + limits(s.game).min + ' giocatori per iniziare.' }, 409);
+          this.resetRound(s);
+          if (s.series) s.series.wins = Array(s.players.length).fill(0);
+          s.revision++;
+          this.keepAlive(s);
+          await this.saveState(s);
+          await this.broadcast(s);
+          this.queueNotice(s);
+          return json(this.public(s, viewer));
+        }
+        if (s.phase !== 'playing' && !(s.phase === 'waiting' && path.endsWith('/finish')))
+          return json({ error: 'Partita non attiva.' }, 409);
+        if (b.revision !== s.revision)
+          return json({ error: 'La partita è cambiata. Riprova dopo l’aggiornamento.' }, 409);
+        if (
+          path.endsWith('/move') &&
+          !(s.uno && ['uno', 'catch-uno'].includes(b.kind)) &&
+          !s.scarabeo &&
+          !(s.naval?.phase === 'placement') &&
+          who !== s.turn
+        )
+          return json({ error: 'Non è il tuo turno.' }, 403);
+        if (path.endsWith('/offer-draw')) {
+          if ((!s.chess && !s.checkers) || s.phase !== 'playing')
+            return json({ error: 'Patta disponibile solo durante una partita.' }, 409);
+          if (s.chess && s.moves.length < 2)
+            return json({ error: 'Entrambi devono aver giocato almeno una mossa.' }, 409);
+          if (s.drawOffer) return json({ error: 'C’è già una proposta in attesa.' }, 409);
+          if (s.lastDrawOffer?.by === who && s.lastDrawOffer?.ply === s.moves.length)
+            return json({ error: 'Attendi una nuova mossa prima di proporre ancora la patta.' }, 409);
+          s.drawOffer = { by: s.players[who].id, name: s.players[who].name };
+          s.lastDrawOffer = { by: who, ply: s.moves.length };
+        } else if (path.endsWith('/accept-draw') || path.endsWith('/reject-draw')) {
+          if (!s.drawOffer || s.drawOffer.by === s.players[who].id)
+            return json({ error: 'Non puoi rispondere a questa proposta.' }, 403);
+          if (path.endsWith('/accept-draw')) {
+            s.phase = 'finished';
+            const key = s.connect4 ? 'connect4' : s.checkers ? 'checkers' : 'chess';
+            s[key] = { ...s[key], legalMoves: [], reason: 'Patta concordata', result: '1/2-1/2' };
+          }
+          s.drawOffer = null;
+        } else if (path.endsWith('/move')) {
+          this.applyMove(s, who, b);
+        } else if (path.endsWith('/pass')) {
+          if (s.chess || s.checkers || s.connect4 || s.uno || s.scarabeo || s.scopa || s.naval || s.briscola)
+            return json({ error: 'Devi effettuare una mossa.' }, 409);
+          if (who !== s.turn) return json({ error: 'Non è il tuo turno.' }, 403);
+          s.moves.push({ by: s.players[who].name, at: Date.now(), number: s.moves.length + 1 });
+          s.turn = 1 - s.turn;
+          if (s.moves.length >= 500) s.phase = 'finished';
+        } else if (path.endsWith('/finish')) {
+          if (s.series) {
+            s.series.done = true;
+            s.series.cancelled = true;
+          }
+          s.phase = 'finished';
+          if (s.chess) s.chess = { ...s.chess, legalMoves: [], reason: 'Partita chiusa', result: null };
+          if (s.checkers)
+            s.checkers = { ...s.checkers, legalMoves: [], reason: 'Partita chiusa', result: null };
+          if (s.connect4)
+            s.connect4 = { ...s.connect4, legalMoves: [], reason: 'Partita chiusa', result: null };
+          if (s.uno) s.uno = { ...s.uno, result: 'closed', reason: 'Partita chiusa' };
+        } else bad('Azione non valida.');
+        settleSeries(s);
+        s.revision++;
+        this.keepAlive(s);
+        await this.saveState(s);
+        await this.broadcast(s);
+        this.queueNotice(s);
+        return json(this.public(s, viewer));
+      } catch (e) {
+        return json({ error: e instanceof SyntaxError ? 'Richiesta non valida.' : e.message }, 400);
+      }
+    });
+  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,deadline:s.clock?.deadline??null,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:s.game==='golf'?{capacity:s.capacity,hole:s.hole,campaign:s.campaign,holes:s.holes,collisions:s.collisions===true}:{})};}
- async lobbyList(){
-  const entries=await this.ctx.storage.list({prefix:'game:'});
-  return [...entries.values()].filter(s=>s.game!=='cluedo'&&(isArcade(s.game)||!activeTable(s)||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
- }
+  summary(s) {
+    return tables.tableSummary(s);
+  }
+  get lobbyHub() {
+    return (this._lobbyHub ??= new LobbyHub(this.ctx, this.env));
+  }
+  get blackboard() {
+    return (this._blackboard ??= new Blackboard(this.ctx));
+  }
 
- async lobbyPayload(allGames){
-  const tables=allGames??await this.lobbyList();
-  const games=tables.filter(g=>g.archived||activeTable(g));
-  const unique=new Map(),tag=await telegramAccessTag(this.env);
-  for(const ws of this.ctx.getWebSockets()){
-   const a=ws.deserializeAttachment();if(!tag||!a||a.accessTag!==tag||a.kind!=='lobby'||a.closed||Date.now()-a.seen>65000)continue;
-   const prior=unique.get(a.user.id);if(!prior||a.room)unique.set(a.user.id,a);
-  }
-  const users=[...unique.values()].map(a=>{
-   const own=games.find(g=>!isArcade(g.game)&&activeTable(g)&&g.players.some(p=>p.id===a.user.player));
-   const watching=tables.find(g=>g.room===a.room);
-   return {...a.user,status:own?'In partita '+own.number:watching?(watching.game==='labyrinth'?'Labyrinth ':watching.game==='moto-trial'?'Moto Trial ':watching.game==='golf'?'Golf ':watching.game==='pong'?'Pong ':'Guarda ')+watching.number:'In Lobby',game:own?.room||null,viewingRoom:watching?.room||null};
-  }).sort((a,b)=>a.name.localeCompare(b.name));
-  const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()];return {games,users,messages:await this.ctx.storage.get('chat')||[],leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai')};
- }
- async lobbyBroadcast(force=true){
-  const payload=await this.lobbyPayload(),signature=JSON.stringify(payload.users);
-  if(!force&&signature===this.presenceSignature)return;
-  this.presenceSignature=signature;
-  const message=JSON.stringify(payload),tag=await telegramAccessTag(this.env);
-  for(const ws of this.ctx.getWebSockets()){try{if(!tag||ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}
- }
- async tidyLegacyResults(games){
-  if(this.tidyingResults)return;
-  this.tidyingResults=true;
-  try{
-   for(const game of games.slice(0,12)){
-    const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(game.room));
-    const result=await stub.fetch(new Request('https://internal/tidy-result',{method:'POST'}));
-    if(!result.ok)continue;
-    const summary=await result.json();
-    const lobby=this.env.ROOMS.get(this.ctx.id);
-    const action=summary.deleted?'remove':'update';
-    await lobby.fetch(new Request('https://internal/lobby/'+action,{method:'POST',body:JSON.stringify(summary)}));
-   }
-  }finally{this.tidyingResults=false;}
- }
- async numberConnectLeaders(){
-  return [...(await this.ctx.storage.list({prefix:'number-connect:'})).values()]
-   .sort((a,b)=>b.points-a.points||a.at-b.at||a.id.localeCompare(b.id)).slice(0,5);
- }
- async lobby(req,path){
-  if(path==='/lobby/leaderboard'){const games=await this.lobbyList(),pending=[];for(const g of games)if(g.phase==='finished'&&!isArcade(g.game)&&await this.ctx.storage.get('migrated:'+g.room)!==g.revision)pending.push(g);for(const g of pending.slice(0,8)){const res=await this.env.ROOMS.get(this.env.ROOMS.idFromName(g.room)).fetch(new Request('https://internal/results'));if(res.ok){for(const row of await res.json())await this.ctx.storage.put('result:'+row.key,row);await this.ctx.storage.put('migrated:'+g.room,g.revision)}}const records=[...(await this.ctx.storage.list({prefix:'result:'})).values()],u=new URL(req.url);if(u.searchParams.get('mode')==='both')return json({leaderboard:topFive(records),aiLeaderboard:topFive(records,'ai'),numberConnectLeaders:await this.numberConnectLeaders(),pending:pending.length>8});return json({leaders:topFive(records,u.searchParams.get('mode')==='ai'?'ai':'people',u.searchParams.get('game')||'all'),pending:pending.length>8});}
-  if(path==='/lobby/list'){
-   const games=await this.lobbyList();
-   const old=games.filter(game=>concluded(game)&&game.expires!==null);
-   if(old.length)this.ctx.waitUntil(this.tidyLegacyResults(old));
-   return json(await this.lobbyPayload(games));
-  }
-  if(path==='/lobby/ws'){
-   if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);
-   if(this.ctx.getWebSockets().length>=120)return json({error:'Troppe connessioni.'},429);
-   const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const pair=new WebSocketPair();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lobby',user,room:null,seen:Date.now(),closed:false,memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,accessTag:req.headers.get('X-Access-Tag'),expires:Number(req.headers.get('X-Session-Expires'))});
-   await this.lobbyBroadcast();
-   return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});
-  }
-  // Asked by the notice queue: is this player looking at that table right now (Lobby connected, app visible)?
-  if(path==='/lobby/presence'){
-   const q=new URL(req.url).searchParams,player=q.get('player'),room=q.get('room');
-   const present=this.ctx.getWebSockets().some(ws=>{const a=ws.deserializeAttachment();return a?.kind==='lobby'&&!a.closed&&a.user?.player===player&&a.room===room&&Date.now()-a.seen<65000});
-   return json({present});
-  }
-  if(req.method!=='POST')return json({error:'Metodo non consentito.'},405);
-  const body=await req.json();
-  if(path==='/lobby/number-connect-score'){
-   const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
-   if(!user?.player)return json({error:'Accesso richiesto.'},401);
-   const game=replayNumberGame(body);
-   if(!game||!Number.isSafeInteger(game.score)||game.score<=0||hasMove(game)){
-    return json({error:'Il punteggio richiede una partita completata.'},400);
-   }
-   const key='number-connect:'+user.player,previous=await this.ctx.storage.get(key);
-   if(!previous||game.score>previous.points){
-    await this.ctx.storage.put(key,{id:user.player,name:user.name,points:game.score,level:game.level,at:Date.now()});
-   }
-   return json({leaders:await this.numberConnectLeaders()});
-  }
-  if(path==='/lobby/result'){const old=await this.ctx.storage.get('result:'+body.key);if(!old)await this.ctx.storage.put('result:'+body.key,body);return json({ok:true});}
-  if(path==='/lobby/join'){
-   const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const tables=await this.lobbyList(),limit=seatLimit(tables,user.player,tables.find(g=>g.room===body.room)||{room:body.room});
-   if(limit)return json({error:limit==='long'?longLimitText:'Hai già una partita aperta. Puoi guardare le altre.'},409);
-   const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(body.room));
-   const response=await stub.fetch(new Request('https://internal/api/room/'+body.room+'/claim',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({name:user.name})}));
-   if(response.ok){const result=await response.clone().json();await this.ctx.storage.put('game:'+body.room,this.summary(result.state));await this.lobbyBroadcast()}
-   return response;
-  }
-  if(path==='/lobby/chat'){
-   const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
-   if(!user||(await this.lobbyPayload()).users.every(u=>u.id!==user.id))return json({error:'Collegati alla Lobby prima di scrivere.'},409);
-   const text=typeof body.text==='string'?body.text.trim():'';
-   if(!text||text.length>500)return json({error:'Scrivi da 1 a 500 caratteri.'},400);
-   const last=await this.ctx.storage.get('chatlimit:'+user.id)||0;
-   if(Date.now()-last<1500)return json({error:'Attendi un momento prima del prossimo messaggio.'},429);
-   const messages=await this.ctx.storage.get('chat')||[],message={id:id(),userId:user.id,name:user.name,photo:user.photo||'',text,at:Date.now()};
-   messages.push(message);await this.ctx.storage.put('chat',messages.slice(-100));await this.ctx.storage.put('chatlimit:'+user.id,Date.now());
-   await this.lobbyBroadcast();return json({ok:true,message});
-  }
-  if(path==='/lobby/create'){
-   const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');if(!user)return json({error:'Accesso richiesto.'},401);
-   const playerName=name(user.name);
-   if(body.game!==undefined&&!['chess','checkers','connect4','uno','scarabeo','scopa','naval','briscola','briscola5','labyrinth','moto-trial','golf','pong'].includes(body.game))return json({error:'Gioco non disponibile.'},400);
-   const active=(await this.lobbyList()).filter(activeTable);
-   if(body.game!=='moto-trial'&&body.game!=='golf'&&body.game!=='pong'){
-    const limit=seatLimit(active,user.player,{room:null,game:body.game||'chess',mode:body.mode||'people'});
-    if(limit)return json({error:limit==='long'?longLimitText:'Hai già una partita aperta.'},409);
-   }
-   createSeries(body.target);
-   const occupied=new Set(active.map(g=>g.number));
-   let number=1;
-   while(occupied.has(number))number++;
-   if(isArcade(body.game)){
-    const room=id(),prefix=body.game==='labyrinth'?'lab:':body.game==='golf'?'golf:':body.game==='pong'?'pong:':'moto:';
-    const stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix+room));
-    const response=await stub.fetch(new Request('https://internal/'+body.game+'/init',{method:'POST',headers:{'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({room,number,mode:body.game==='pong'?body.mode:undefined,appearance:body.game==='golf'?body.appearance:undefined,campaign:body.game==='golf'?body.campaign:undefined,collisions:body.game==='golf'?body.collisions===true:undefined,seed:body.game==='moto-trial'?1:crypto.getRandomValues(new Uint32Array(1))[0]})}));
-    if(!response.ok)return response;const result=await response.json();await this.ctx.storage.put('game:'+room,result.summary);await this.lobbyBroadcast();return json(result);
-   }
-   const room=id(),stub=this.env.ROOMS.get(this.env.ROOMS.idFromName(room));
-   const response=await stub.fetch(new Request('https://internal/init',{method:'POST',headers:{'X-Room':room,'X-Checkmate-User':JSON.stringify(user)},body:JSON.stringify({name:playerName,number,playerId:user.player,game:body.game||'chess',target:body.target,mode:body.mode,seats:body.seats})}));
-   if(!response.ok)return response;
-   const result=await response.json();
-   await this.ctx.storage.put('game:'+room,this.summary(result.state));
-   await this.ctx.storage.setAlarm(Date.now()+3600000);
-   await this.lobbyBroadcast();
-   return json(result);
-  }
-  if(path==='/lobby/remove'){
-   await this.ctx.storage.delete('game:'+body.room);await this.lobbyBroadcast();return json({ok:true});
-  }
-  if(path==='/lobby/update'){
-   const old=await this.ctx.storage.get('game:'+body.room);
-   if(old&&body.revision>old.revision){
-    await this.ctx.storage.put('game:'+body.room,this.summary({...body,number:old.number}));
-    await this.lobbyBroadcast();
-   }
-   return json({ok:true});
-  }
-  return json({error:'Percorso non trovato.'},404);
- }
-
- get blackboard(){return this._blackboard??=new Blackboard(this.ctx);}
-
- async webSocketMessage(ws,message){
-  await this.guardSockets();if(ws.deserializeAttachment()?.authDenied)return;
-  const a=ws.deserializeAttachment();const memberId=a?.memberId||a?.user?.id||(a?.player?.startsWith('tg:')?a.player.slice(3):null)||(typeof a?.id==='string'?a.id.replace(/^tg:/,''):null);if(!memberId||await memberAccess({id:memberId},this.env)!==true){ws.close(4003,'Accesso al gruppo richiesto');return}if(!this.env.BOT_TOKEN||a?.accessTag!==await telegramAccessTag(this.env)){ws.close(4001,'Riapri la Mini App');return}if(a?.kind==='blackboard')return this.blackboard.message(ws,message);if(a?.kind==='cinema')return this.cinema.message(ws,message);if(a?.kind==='lab')return this.lab.message(ws,message);if(a?.kind==='moto-trial')return this.moto.message(ws,message);if(a?.kind==='pong')return this.pong.message(ws,message);if(a?.kind!=='lobby'){ws.close(1008,'Sola lettura.');return}
-  try{
-   if(typeof message!=='string'||message.length>512)return;
-   const b=JSON.parse(message);if(b.type!=='presence')return;
-   a.room=typeof b.room==='string'&&/^[a-f0-9-]{36}$/.test(b.room)?b.room:null;
-   a.seen=Date.now();a.closed=!!b.away;ws.serializeAttachment(a);await this.lobbyBroadcast(false);
-  }catch{}
- }
- async webSocketClose(ws,code){
-  await this.guardSockets();
-  const attachment=ws.deserializeAttachment();
-  if(attachment?.kind==='blackboard')return this.blackboard.close(ws);
-  if(attachment?.kind==='cinema')return this.cinema.close(ws);
-  if(attachment?.kind==='lab'){
-   await this.lab.close(ws);
-  }else if(attachment?.kind==='moto-trial'){
-   await this.moto.close(ws);
-  }else if(attachment?.kind==='pong'){
-   await this.pong.close(ws);
-  }else if(attachment?.kind==='lobby'){
-   attachment.closed=true;ws.serializeAttachment(attachment);await this.lobbyBroadcast();
-  }else if(attachment?.player&&(code===1000||code===1001)){
-   await this.ctx.blockConcurrencyWhile(async()=>{
-    const s=await this.ctx.storage.get('state');
-    if(s&&concluded(s)&&s.players.some(p=>p.id===attachment.player)&&!this.hasResultViewer(s,{socket:ws})){
-     await this.removeTable(s,'dismissed');
-     this.notifyTableRemoved(s.room);
+  async webSocketMessage(ws, message) {
+    await this.guardSockets();
+    if (ws.deserializeAttachment()?.authDenied) return;
+    const a = ws.deserializeAttachment();
+    const memberId =
+      a?.memberId ||
+      a?.user?.id ||
+      (a?.player?.startsWith('tg:') ? a.player.slice(3) : null) ||
+      (typeof a?.id === 'string' ? a.id.replace(/^tg:/, '') : null);
+    if (!memberId || (await memberAccess({ id: memberId }, this.env)) !== true) {
+      ws.close(4003, 'Accesso al gruppo richiesto');
+      return;
     }
-   });
+    if (!this.env.BOT_TOKEN || a?.accessTag !== (await telegramAccessTag(this.env))) {
+      ws.close(4001, 'Riapri la Mini App');
+      return;
+    }
+    if (a?.kind === 'blackboard') return this.blackboard.message(ws, message);
+    if (a?.kind === 'cinema') return this.cinema.message(ws, message);
+    if (a?.kind === 'lab') return this.lab.message(ws, message);
+    if (a?.kind === 'moto-trial') return this.moto.message(ws, message);
+    if (a?.kind === 'pong') return this.pong.message(ws, message);
+    if (a?.kind !== 'lobby') {
+      ws.close(1008, 'Sola lettura.');
+      return;
+    }
+    try {
+      if (typeof message !== 'string' || message.length > 512) return;
+      const b = JSON.parse(message);
+      if (b.type !== 'presence') return;
+      a.room = typeof b.room === 'string' && /^[a-f0-9-]{36}$/.test(b.room) ? b.room : null;
+      a.seen = Date.now();
+      a.closed = !!b.away;
+      ws.serializeAttachment(a);
+      await this.lobbyHub.lobbyBroadcast(false);
+    } catch {}
   }
-  try{ws.close(code===1006?1000:code);}catch{}
- }
- webSocketError(ws){const kind=ws.deserializeAttachment()?.kind;if(kind==='blackboard')return this.blackboard.close(ws);if(kind==='cinema')return this.cinema.close(ws);if(kind==='lab')return this.lab.close(ws);if(kind==='moto-trial')return this.moto.close(ws);if(kind==='pong')return this.pong.close(ws);ws.close(1011,'Riconnettersi.');}
- async alarm(){
- await this.guardSockets();
- if(this.ctx.id.toString()===this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())return (this.simulator??=new SimulatorLeague(this.ctx,this.env)).alarm();
- if(this.ctx.id.toString()===this.env.ROOMS.idFromName('cinema-streamer-v1').toString())return this.cinema.alarm();
- if(this.ctx.id.toString()===this.env.ROOMS.idFromName('turn-notices-v1').toString())return (this.notices??=new TurnNotices(this.ctx,this.env)).alarm();
- if(await this.ctx.storage.get('cinema-upload'))return this.ctx.storage.deleteAll();
- if(await this.ctx.storage.get('expedition'))return this.lab.alarm();
- if(await this.ctx.storage.get('golf'))return this.golf.alarm();
- if(await this.ctx.storage.get('moto-trial'))return this.moto.alarm();
- if(await this.ctx.storage.get('pong'))return this.pong.alarm();
- if(this.ctx.id.toString()===this.env.ROOMS.idFromName('checkmate-lobby-v1').toString()){
-  return this.ctx.blockConcurrencyWhile(async()=>{
-   const entries=await this.ctx.storage.list({prefix:'game:'});
-   for(const [key,value] of entries){
-    if(!isArcade(value.game)&&activeTable(value)&&value.expires<=Date.now())await this.ctx.storage.delete(key);
-   }
-   await this.lobbyBroadcast();
-   const games=await this.lobbyList();
-   const old=games.filter(game=>concluded(game)&&game.expires!==null);
-   if(old.length)this.ctx.waitUntil(this.tidyLegacyResults(old));
-   if(games.some(g=>!g.archived))await this.ctx.storage.setAlarm(Date.now()+(old.length>12?30000:3600000));
-  });
- }
- return this.ctx.blockConcurrencyWhile(async()=>{
-  const current=await this.ctx.storage.get('state');
-  if(!current||current.archived)return;
-  if(concluded(current)){
-   if(!this.hasResultViewer(current)){
-    await this.removeTable(current,'dismissed');
-    this.notifyTableRemoved(current.room);
-   }else await this.saveState(current);
-   return;
+  async webSocketClose(ws, code) {
+    await this.guardSockets();
+    const attachment = ws.deserializeAttachment();
+    if (attachment?.kind === 'blackboard') return this.blackboard.close(ws);
+    if (attachment?.kind === 'cinema') return this.cinema.close(ws);
+    if (attachment?.kind === 'lab') {
+      await this.lab.close(ws);
+    } else if (attachment?.kind === 'moto-trial') {
+      await this.moto.close(ws);
+    } else if (attachment?.kind === 'pong') {
+      await this.pong.close(ws);
+    } else if (attachment?.kind === 'lobby') {
+      attachment.closed = true;
+      ws.serializeAttachment(attachment);
+      await this.lobbyHub.lobbyBroadcast();
+    } else if (attachment?.player && (code === 1000 || code === 1001)) {
+      await this.ctx.blockConcurrencyWhile(async () => {
+        const s = await this.ctx.storage.get('state');
+        if (
+          s &&
+          concluded(s) &&
+          s.players.some(p => p.id === attachment.player) &&
+          !this.hasResultViewer(s, { socket: ws })
+        ) {
+          await this.removeTable(s, 'dismissed');
+          this.notifyTableRemoved(s.room);
+        }
+      });
+    }
+    try {
+      ws.close(code === 1006 ? 1000 : code);
+    } catch {}
   }
-  if(current.expires<=Date.now()){
-   await this.removeTable(current,'expired');
-   this.notifyTableRemoved(current.room);
-   return;
+  webSocketError(ws) {
+    const kind = ws.deserializeAttachment()?.kind;
+    if (kind === 'blackboard') return this.blackboard.close(ws);
+    if (kind === 'cinema') return this.cinema.close(ws);
+    if (kind === 'lab') return this.lab.close(ws);
+    if (kind === 'moto-trial') return this.moto.close(ws);
+    if (kind === 'pong') return this.pong.close(ws);
+    ws.close(1011, 'Riconnettersi.');
   }
-  // Long-turn tables: reminder or timeout when the time to move runs out.
-  if(await this.runClock(current))return;
-  const who=this.botSeat(current);
-  if(who<0){
-   await this.ctx.storage.setAlarm(current.expires);
-   return;
-  }
-  const v=this.public(current,current.players[who].id);
-  const view=v.naval||v.briscola||v[current.game]||v.chess;
-  const strong=current.mode==='ai';
-  // Cards already captured were publicly played. The strategy receives no private opposing cards.
-  const captured=current.scopa?.captured||current.briscola?.captured;
-  let botView=view;
-  if(strong&&captured)botView={...view,seenCards:captured.flat()};
-  else if(strong&&current.chess)botView={...view,moves:current.moves};
-  else if(strong&&current.checkers)botView={...view,positions:current.positions};
+  async alarm() {
+    await this.guardSockets();
+    if (this.ctx.id.toString() === this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())
+      return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).alarm();
+    if (this.ctx.id.toString() === this.env.ROOMS.idFromName('cinema-streamer-v1').toString())
+      return this.cinema.alarm();
+    if (this.ctx.id.toString() === this.env.ROOMS.idFromName('turn-notices-v1').toString())
+      return (this.notices ??= new TurnNotices(this.ctx, this.env)).alarm();
+    if (await this.ctx.storage.get('cinema-upload')) return this.ctx.storage.deleteAll();
+    if (await this.ctx.storage.get('expedition')) return this.lab.alarm();
+    if (await this.ctx.storage.get('golf')) return this.golf.alarm();
+    if (await this.ctx.storage.get('moto-trial')) return this.moto.alarm();
+    if (await this.ctx.storage.get('pong')) return this.pong.alarm();
+    if (this.ctx.id.toString() === this.env.ROOMS.idFromName('checkmate-lobby-v1').toString())
+      return this.lobbyHub.alarm();
+    return this.ctx.blockConcurrencyWhile(async () => {
+      const current = await this.ctx.storage.get('state');
+      if (!current || current.archived) return;
+      if (concluded(current)) {
+        if (!this.hasResultViewer(current)) {
+          await this.removeTable(current, 'dismissed');
+          this.notifyTableRemoved(current.room);
+        } else await this.saveState(current);
+        return;
+      }
+      if (current.expires <= Date.now()) {
+        await this.removeTable(current, 'expired');
+        this.notifyTableRemoved(current.room);
+        return;
+      }
+      // Long-turn tables: reminder or timeout when the time to move runs out.
+      if (await this.runClock(current)) return;
+      const who = this.botSeat(current);
+      if (who < 0) {
+        await this.ctx.storage.setAlarm(current.expires);
+        return;
+      }
+      const v = this.public(current, current.players[who].id);
+      const view = v.naval || v.briscola || v[current.game] || v.chess;
+      const strong = current.mode === 'ai';
+      // Cards already captured were publicly played. The strategy receives no private opposing cards.
+      const captured = current.scopa?.captured || current.briscola?.captured;
+      let botView = view;
+      if (strong && captured) botView = { ...view, seenCards: captured.flat() };
+      else if (strong && current.chess) botView = { ...view, moves: current.moves };
+      else if (strong && current.checkers) botView = { ...view, positions: current.positions };
 
-  const action=chooseAction(current.game,botView,who,strong);
-  if(!action)throw Error('AI: nessuna azione disponibile');
-  this.applyMove(current,who,action);
-  settleSeries(current);
-  current.revision++;
-  await this.saveState(current);
-  if(concluded(current)&&!this.hasResultViewer(current)){
-   await this.removeTable(current,'dismissed');
-   this.notifyTableRemoved(current.room);
-   return;
+      const action = chooseAction(current.game, botView, who, strong);
+      if (!action) throw Error('AI: nessuna azione disponibile');
+      this.applyMove(current, who, action);
+      settleSeries(current);
+      current.revision++;
+      await this.saveState(current);
+      if (concluded(current) && !this.hasResultViewer(current)) {
+        await this.removeTable(current, 'dismissed');
+        this.notifyTableRemoved(current.room);
+        return;
+      }
+      await this.broadcast(current);
+      await this.syncLobby(current);
+    });
   }
-  await this.broadcast(current);
-  await this.syncLobby(current);
- });
- }
 }
-
-
-
