@@ -25,10 +25,11 @@ import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
 import {createArcadeLink} from './arcade-link.js?v=61cfe330e9';
+import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.20',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.21',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -37,6 +38,8 @@ const board=createChessBoard({get:()=>({state,mine:state.players.findIndex(p=>p.
 // Overlays with their own iframe and socket (see *-link.js). Dependencies are wrapped: some are defined further down.
 const linkBase={tg,token:()=>sessionToken,me:()=>identity,request,onError:err,enterFullscreen:()=>enterFullscreen(),sendPresence:()=>sendPresence(),safeInsets};
 const moto=createMotoLink(linkBase);
+// "Tocca a te" messages from the bot: Lobby invite, Settings switch, opening a table from the message (see turn-alerts.js).
+const alerts=initTurnAlerts({tg,request:(path,data)=>request(path,data),onError:msg=>err(msg)});
 const labyrinth=createLabyrinthLink({...linkBase,trace,leaveTable:()=>{stopRoom();room=null;state=null;$('draw-dialog').hidden=true;$('draw-response').hidden=true}});
 const golf=createGolfLink({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
 const arcade=createArcadeLink({...linkBase,readAppearance,refreshSession:()=>refreshSession(),renderNow:()=>renderNow(),selectPage:page=>selectPage(page)});
@@ -611,6 +614,9 @@ async function startSession(){
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);
   renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
+  alerts.refresh();
+  // Launched from a "tocca a te" message: straight to that table.
+  const startRoom=alerts.startRoom();if(startRoom){try{await openRoom(startRoom);if(room===startRoom)selectPage('game')}catch(e){err(e.message)}}
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){

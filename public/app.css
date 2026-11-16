@@ -3389,3 +3389,38 @@ button.uno-card:not(:disabled) {
 .window-mode[hidden] {
   display: none;
 }
+
+/* Avvisi del bot: invito in Lobby ad attivarli. */
+.alerts-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.alerts-card[hidden] {
+  display: none;
+}
+.alerts-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.alerts-copy span {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.alerts-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: none;
+}
+.alerts-actions button {
+  min-height: 34px;
+  padding: 4px 14px;
+}

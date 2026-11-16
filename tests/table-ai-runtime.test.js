@@ -10,7 +10,9 @@ import {Miniflare,convertV4MiniflareOptions} from 'miniflare';
 const directory=await mkdtemp(join(tmpdir(),'binottoland-test-')),bot='synthetic-test-bot';
 const mac=(k,v)=>createHmac('sha256',k).update(v).digest('hex');
 const token=id=>{const user={id:String(id),player:'tg:'+id,name:'Test '+id},payload=Buffer.from(JSON.stringify({user,expires:Date.now()+3600000,accessTag:mac(bot,'telegram-session-v1')})).toString('base64url');return 'session.'+payload+'.'+mac(bot,'session.'+payload)};
-const options=convertV4MiniflareOptions({rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot},outboundService:async req=>{assert(new URL(req.url).pathname.endsWith("/getChatMember"));return Response.json({ok:true,result:{status:"member"}})}});let mf=new Miniflare(options);const sockets=[];
+// Private "tocca a te" messages sent by the bot (Telegram is simulated here).
+const botMessages=[];const messageFor=async(chat,match)=>{for(let i=0;i<80;i++){const m=botMessages.find(x=>x.chat_id===chat&&match.test(x.text));if(m)return m;await new Promise(r=>setTimeout(r,100))}assert.fail("no bot message for "+chat+": "+JSON.stringify(botMessages))};
+const options=convertV4MiniflareOptions({rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modulesRoot:dirname(resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js')),modules:true,scriptPath:resolve(process.argv[2]||'/tmp/labyrinth-multi-bundle/worker.js'),compatibilityDate:'2026-11-04',durableObjects:{ROOMS:{className:'Room',useSQLite:true}},resourcePersistencePath:directory,bindings:{BOT_TOKEN:bot,TURN_NOTICE_DELAY_MS:"0",TURN_QUIET_HOURS:"off"},outboundService:async req=>{const path=new URL(req.url).pathname;if(path.endsWith("/sendMessage")){botMessages.push(await req.json());return Response.json({ok:true,result:{}})}assert(path.endsWith("/getChatMember"));return Response.json({ok:true,result:{status:"member"}})}});let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
 function until(client,predicate){const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet: '+JSON.stringify(client.packets.at(-1))))},20000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
 async function connect(id,room,watch=false){const res=await mf.dispatchFetch('https://unit.test/api/labyrinth/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
@@ -35,6 +37,22 @@ try{
   }
   console.log('PASS runtime solo',mode,game);
  }
+ // Long-turn game: when the opponent sits down and after each move, the bot writes privately to whoever must play.
+ {const made=await call(4000,'/api/create',{game:'chess'}),room=made.data.state.room;assert.equal(made.status,200);
+  let s=(await call(4001,'/api/room/'+room+'/claim',{})).data.state;assert.equal(s.phase,'playing');
+  const seated=await messageFor(4000,/si è seduto al tuo tavolo/);assert.match(seated.text,/Test 4001/);assert.equal(seated.reply_markup.inline_keyboard[0][0].url,'https://t.me/checkmategame_bot?startapp=t-'+room);
+  s=(await call(4000,'/api/room/'+room+'/move',{from:'e2',to:'e4',revision:s.revision})).data;
+  const turn=await messageFor(4001,/^Tocca a te contro Test 4000/);assert.match(turn.text,/Scacchi · Tavolo/);
+  assert.equal(botMessages.filter(m=>m.chat_id===4001).length,1,'one message per turn');
+  // The app reads and changes the setting; once the bot has written, messages count as active.
+  assert.deepEqual((await call(4001,'/api/notices')).data,{enabled:true,started:true,bot:'checkmategame_bot'});
+  assert.equal((await call(4001,'/api/notices',{enabled:false})).data.enabled,false);
+  s=(await call(4001,'/api/room/'+room+'/move',{from:'e7',to:'e5',revision:s.revision})).data;
+  await messageFor(4000,/^Tocca a te contro Test 4001/);
+  s=(await call(4000,'/api/room/'+room+'/move',{from:'g1',to:'f3',revision:s.revision})).data;
+  await new Promise(r=>setTimeout(r,1500));
+  assert.equal(botMessages.filter(m=>m.chat_id===4001).length,1,'switched off in Settings: no message');
+  console.log('PASS runtime long-turn messages: seated, move, one per turn, Settings switch');}
  // Four-seat human Scopa, atomic private projections and join bounds.
  const four=await call(3000,'/api/create',{game:'scopa'}),fourRoom=four.data.state.room;assert.equal(four.status,200);for(let i=1;i<4;i++)assert.equal((await call(3000+i,'/api/room/'+fourRoom+'/claim',{})).status,200);assert.equal((await call(3004,'/api/room/'+fourRoom+'/claim',{})).status,409);let fourState=(await call(3000,'/api/room/'+fourRoom+'/state')).data;fourState=(await call(3000,'/api/room/'+fourRoom+'/start',{revision:fourState.revision})).data;assert.equal(fourState.scopa.hand.length,3);assert.equal(fourState.scopa.table.length,4);assert.deepEqual((await call(3999,'/api/room/'+fourRoom+'/state')).data.scopa.hand,[]);const take=fourState.scopa.legalMoves[0];assert.equal((await call(3001,'/api/room/'+fourRoom+'/move',{...take,revision:fourState.revision})).status,403);assert.equal((await call(3000,'/api/room/'+fourRoom+'/move',{...take,revision:fourState.revision})).status,200);
  // Complete real two-player result, deduplication, deletion and persistence.

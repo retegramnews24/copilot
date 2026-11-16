@@ -197,6 +197,66 @@ assert.deepEqual(played, [{ kind: 'play', card: 'a', color: 'blue', uno: true }]
 renderUno(unoState, { mine: -1, active: false, busy: false, move: () => {} });
 assert.match(document.getElementById('uno-hand').textContent, /private/);
 
+// Turn alerts: Lobby invite, "later", Settings switch (needs the bot's chat first), table opened from the message.
+document.body.insertAdjacentHTML(
+  'beforeend',
+  `<section id="alerts-card" hidden><button id="alerts-enable"></button><button id="alerts-later"></button></section>
+   <input type="checkbox" id="setting-turn-alerts" disabled>`
+);
+const { initTurnAlerts } = await import('../public/turn-alerts.js');
+const opened = [],
+  requests = [];
+let serverState = { enabled: false, started: false, bot: 'checkmategame_bot' };
+const alertsUi = initTurnAlerts({
+  tg: {
+    openTelegramLink: link => opened.push(link),
+    initDataUnsafe: { start_param: 't-0f8fad5b-d9cb-469f-a165-70867728950e' }
+  },
+  request: async (path, data) => {
+    requests.push([path, data]);
+    if (data) serverState = { ...serverState, enabled: data.enabled && serverState.started };
+    return serverState;
+  }
+});
+await alertsUi.refresh();
+const card = document.getElementById('alerts-card'),
+  toggle = document.getElementById('setting-turn-alerts');
+assert.equal(card.hidden, false, 'invite shown while off');
+assert.equal(toggle.disabled, false);
+assert.equal(toggle.checked, false);
+document.getElementById('alerts-enable').click();
+assert.deepEqual(opened, ['https://t.me/checkmategame_bot?start=avvisi']);
+// Switch on without the bot's chat started: opens the bot instead, the switch stays off.
+toggle.checked = true;
+toggle.dispatchEvent(new window.Event('change'));
+await new Promise(r => setTimeout(r, 0));
+assert.equal(opened.length, 2);
+assert.equal(toggle.checked, false);
+assert.equal(requests.filter(([, data]) => data).length, 0);
+// After Start in the bot: on, invite gone; switching off asks the server.
+serverState = { enabled: true, started: true, bot: 'checkmategame_bot' };
+await alertsUi.refresh();
+assert.equal(card.hidden, true);
+assert.equal(toggle.checked, true);
+toggle.checked = false;
+toggle.dispatchEvent(new window.Event('change'));
+await new Promise(r => setTimeout(r, 0));
+assert.deepEqual(requests.at(-1), ['/api/notices', { enabled: false }]);
+assert.equal(toggle.checked, false);
+assert.equal(card.hidden, false);
+document.getElementById('alerts-later').click();
+assert.equal(card.hidden, true, '"Più tardi" hides the invite');
+// Opened from a message: that table, only once; anything else in the link is ignored.
+assert.equal(alertsUi.startRoom(), '0f8fad5b-d9cb-469f-a165-70867728950e');
+assert.equal(alertsUi.startRoom(), null);
+assert.equal(
+  initTurnAlerts({
+    tg: { initDataUnsafe: { start_param: 't-../../x' } },
+    request: async () => null
+  }).startRoom(),
+  null
+);
+
 console.log(
-  'PASS App modules: game info, pieces, preferences, debug log, themes, leaderboard, avatar, chat, Forza 4, UNO.'
+  'PASS App modules: game info, pieces, preferences, debug log, themes, leaderboard, avatar, chat, Forza 4, UNO, turn alerts.'
 );
