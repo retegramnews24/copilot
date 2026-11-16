@@ -3478,3 +3478,17 @@ button.uno-card:not(:disabled) {
   min-height: 34px;
   padding: 4px 14px;
 }
+
+/* Tavolo a turni: tempo rimasto per muovere. */
+.turn-clock {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.turn-clock[hidden] {
+  display: none;
+}
+.turn-clock.late {
+  color: var(--accent);
+  font-weight: 600;
+}

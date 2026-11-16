@@ -331,6 +331,15 @@ assert.match(rowsText[3], /Dama italiana · Tavolo 1Aspetta altri giocatori/);
 assert.equal(myGames.querySelector('.count-pill').textContent, '1 tocca a te');
 myGames.querySelector('.my-game button').click();
 assert.deepEqual(openedRooms, ['b']);
+// Time left to move, in the list and in short form.
+const { timeLeft } = await import('../public/my-games.js');
+assert.equal(timeLeft(3 * 86400000 + 20 * 3600000 + 5000), '3 g 20 h');
+assert.equal(timeLeft(5 * 3600000 + 10 * 60000), '5 h 10 min');
+assert.equal(timeLeft(12 * 60000 + 30000), '12 min');
+assert.equal(timeLeft(10000), '1 min');
+assert.equal(timeLeft(0), 'scaduto');
+renderMyGames(myGames, [{ ...lobbyGames[1], deadline: 1000 + 26 * 3600000 }], me, () => {}, 1000);
+assert.match(myGames.querySelector('.my-game small').textContent, /Tocca a te · ⏳ 1 g 2 h$/);
 assert.equal(
   renderMyGames(myGames, [], me, () => {}),
   0

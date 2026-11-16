@@ -2,6 +2,14 @@
 import { gameTitle, ongoing } from './game-info.js?v=5a31d49670';
 
 const ARCADE = ['golf', 'pong', 'moto-trial', 'labyrinth'];
+// Time left to move, short: "3 g 20 h", "5 h 10 min", "12 min".
+export function timeLeft(ms) {
+  if (!(ms > 0)) return 'scaduto';
+  const d = Math.floor(ms / 86400000),
+    h = Math.floor((ms % 86400000) / 3600000),
+    m = Math.floor((ms % 3600000) / 60000);
+  return d ? d + ' g ' + h + ' h' : h ? h + ' h ' + m + ' min' : Math.max(1, m) + ' min';
+}
 // me(room): your player id at that table; open(room): opens it.
 export function myTables(games, me) {
   return games.filter(
@@ -15,7 +23,7 @@ function status(g, mine) {
   if (turn?.id === mine) return { text: 'Tocca a te', rank: 0, urgent: true };
   return { text: turn?.bot ? 'Tocca all’AI' : 'Tocca a ' + (turn?.name || '…'), rank: 1 };
 }
-export function renderMyGames(section, games, me, open) {
+export function renderMyGames(section, games, me, open, now = Date.now()) {
   const list = section.querySelector('.my-games-list'),
     count = section.querySelector('.count-pill');
   const rows = myTables(games, me)
@@ -39,7 +47,8 @@ export function renderMyGames(section, games, me, open) {
       const detail = document.createElement('small');
       detail.textContent =
         (others.length ? 'contro ' + others.map(p => (p.bot ? 'AI' : p.name)).join(', ') + ' · ' : '') +
-        s.text;
+        s.text +
+        (g.phase === 'playing' && g.deadline ? ' · ⏳ ' + timeLeft(g.deadline - now) : '');
       copy.append(title, detail);
       const button = document.createElement('button');
       button.type = 'button';

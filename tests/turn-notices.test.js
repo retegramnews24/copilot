@@ -263,6 +263,144 @@ function harness() {
   assert.equal(h.alarm(), null);
 }
 
+// Time to move: what each game does when time runs out.
+{
+  const { timeoutTable, reminderRequest, resultRequest, penaltyFor } = await import('../turn-notices.js');
+  const { initialScarabeo, playScarabeo } = await import('../scarabeo.js');
+  for (const [game, key] of [
+    ['chess', 'chess'],
+    ['checkers', 'checkers'],
+    ['connect4', 'connect4']
+  ]) {
+    const s = chess({
+      game,
+      chess: null,
+      [key]: { legalMoves: [{}], result: null, reason: '' },
+      drawOffer: { by: 'tg:111' }
+    });
+    assert.equal(penaltyFor(s), 'lose');
+    const told = timeoutTable(s, 1000);
+    assert.equal(s.phase, 'finished');
+    assert.equal(s[key].result, '1-0', game + ': Bruno was on turn (seat 1), Ada wins');
+    assert.equal(s[key].reason, 'Tempo scaduto · Ada vince a tavolino');
+    assert.deepEqual(s[key].legalMoves, []);
+    assert.equal(s.drawOffer, null);
+    assert.deepEqual(told, [
+      { player: 'tg:222', outcome: 'lost', opponent: 'Ada' },
+      { player: 'tg:111', outcome: 'won', opponent: 'Bruno' }
+    ]);
+  }
+  // Scarabeo, two players: lost; three players: skipped turn, the game goes on.
+  const scarabeoTable = n => {
+    const players = ['Ada', 'Bruno', 'Carla']
+      .slice(0, n)
+      .map((name, i) => ({ id: 'tg:' + (i + 1) * 111, name }));
+    const g = initialScarabeo(n);
+    return {
+      room: ROOM,
+      number: 1,
+      game: 'scarabeo',
+      mode: 'people',
+      phase: 'playing',
+      players,
+      turn: g.turn,
+      moves: [],
+      scarabeo: g
+    };
+  };
+  const two = scarabeoTable(2),
+    onTurn = two.players[two.turn];
+  assert.equal(penaltyFor(two), 'lose');
+  const toldTwo = timeoutTable(two, 1000);
+  assert.equal(two.phase, 'finished');
+  assert.deepEqual(two.scarabeo.winners, [1 - two.turn]);
+  assert.equal(toldTwo[0].player, onTurn.id);
+  assert.equal(toldTwo[0].outcome, 'lost');
+  const three = scarabeoTable(3),
+    before = three.turn;
+  assert.equal(penaltyFor(three), 'skip');
+  assert.deepEqual(timeoutTable(three, 1000), [
+    { player: three.players[before].id, outcome: 'skipped', opponent: '' }
+  ]);
+  assert.equal(three.phase, 'playing');
+  assert.equal(three.turn, (before + 1) % 3);
+  assert.match(three.moves.at(-1).description, /salta il turno/);
+  // A word waiting for votes: missing votes count as accepted.
+  const voting = scarabeoTable(3);
+  const proposer = voting.turn,
+    letters = voting.scarabeo.racks[proposer].filter(t => t.letter !== '?').map(t => t.letter);
+  // Two letters from the rack over the centre (index 144 = row 8, column 8 on the 17×17 board).
+  voting.scarabeo = playScarabeo(voting.scarabeo, proposer, {
+    kind: 'place',
+    word: letters[0] + letters[1],
+    row: 8,
+    col: 7,
+    direction: 'horizontal'
+  });
+  assert.ok(voting.scarabeo.pending, 'the word waits for votes');
+  assert.equal(penaltyFor(voting), 'accept');
+  assert.equal(turnTargets(voting).length, 2);
+  const toldVotes = timeoutTable(voting, 1000);
+  assert.equal(voting.scarabeo.pending, null, 'missing votes counted as accepted');
+  assert.ok(voting.scarabeo.scores[proposer] > 0, 'the word scored');
+  assert.ok(
+    toldVotes.length >= 1 &&
+      toldVotes.every(t => t.outcome === 'accepted' && t.opponent === voting.players[proposer].name)
+  );
+  // Reminder and result requests for the queue.
+  const r = reminderRequest(chess());
+  assert.equal(r.kind, 'reminder');
+  assert.equal(r.checkKey, turnKey(chess()));
+  assert.equal(r.key, turnKey(chess()) + ':reminder');
+  assert.equal(r.penalty, 'lose');
+  assert.equal(reminderRequest(chess({ phase: 'finished' })), null);
+  assert.equal(resultRequest(chess(), 'k', []), null);
+  assert.equal(
+    resultRequest(chess(), 'k', [{ player: 'tg:1', outcome: 'won', opponent: 'X' }]).kind,
+    'result'
+  );
+  assert.equal(timeoutTable(chess({ phase: 'finished' })), null);
+}
+// Texts for reminder and results.
+assert.match(
+  noticeText({ game: 'chess', kind: 'reminder', opponent: 'Ada', penalty: 'lose' }),
+  /^⏳ Promemoria: tocca a te contro Ada da 2 giorni\. Se non muovi entro 2 giorni la partita è persa a tavolino\./
+);
+assert.match(noticeText({ game: 'scarabeo', kind: 'reminder', penalty: 'skip' }), /salti il turno/);
+assert.match(
+  noticeText({ game: 'scarabeo', kind: 'reminder', vote: true, opponent: 'Ada', penalty: 'accept' }),
+  /serve ancora il tuo voto su una parola di Ada.*viene accettata/
+);
+assert.match(
+  noticeText({ game: 'chess', outcome: 'lost', opponent: 'Ada' }),
+  /^⌛ Tempo scaduto: hai perso a tavolino contro Ada/
+);
+assert.match(
+  noticeText({ game: 'chess', outcome: 'won', opponent: 'Bruno' }),
+  /^🏆 Bruno non ha mosso in tempo/
+);
+// Queue: results are sent even though the turn moved on, and a later turn message does not replace them.
+{
+  const h = harness();
+  h.due = false;
+  await h.call('/notices/queue', {
+    room: ROOM,
+    key: 'x:timeout',
+    kind: 'result',
+    game: 'chess',
+    number: 3,
+    targets: [{ player: 'tg:222', outcome: 'lost', opponent: 'Ada' }]
+  });
+  await h.queue(chess({ moves: [{}, {}, { by: 'Ada' }] }));
+  assert.equal([...h.data.keys()].filter(k => k.startsWith('queue:')).length, 2);
+  await h.run(SEND_DELAY + 1000);
+  assert.deepEqual(
+    h.sent.map(m => m.payload.text.split('\n')[0]),
+    ['⌛ Tempo scaduto: hai perso a tavolino contro Ada.']
+  );
+}
+
+console.log('PASS Turn notices (time to move: loss, Scarabeo skip and votes, reminder and result messages):');
 console.log(
   'PASS Turn notices: who must act (chess, checkers, Forza 4, Scarabeo votes), quiet hours winter/summer, one message per turn, presence, replaced turns, Settings switch, blocked bot and /start.'
 );

@@ -11,7 +11,7 @@ import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
 import {events,trace,initDebugLog} from './debug-log.js?v=938d711947';
 import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=5a31d49670';
-import {renderMyGames,myTables} from './my-games.js?v=c4e1f7edc5';
+import {renderMyGames,myTables,timeLeft} from './my-games.js?v=55386c178a';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=64a501b9f0';
@@ -30,7 +30,7 @@ import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.22',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.23',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -75,6 +75,13 @@ async function request(path,data,keepalive=false){
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
+// Long-turn tables: time left to move (after half of it the bot has sent a reminder: shown highlighted).
+function renderTurnClock(){
+ const el=$('turn-clock'),c=state?.clock;
+ el.hidden=!c||state.phase!=='playing';if(el.hidden)return;
+ el.textContent='⏳ Tempo per muovere: '+timeLeft(c.deadline-Date.now());el.classList.toggle('late',!!c.reminded);
+}
+setInterval(()=>{if(!$('table').hidden&&state?.clock)renderTurnClock()},60000);
 // Your open table that is not a long-turn game: only one of those at a time.
 function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 // Can you take a seat at this table? Long-turn games: up to LONG_LIMIT at once; any other: only without another open table.
@@ -261,6 +268,7 @@ function render(s){
  start.textContent=s.players.length<minPlayers?'In attesa di almeno '+minPlayers+' giocatori':'Avvia partita';
  if(start.hidden)$('start-error').textContent='';
  $('role').textContent=mine<0?'Stai assistendo.':'Sei il giocatore '+(mine+1)+'.';
+ renderTurnClock();
 
  $('pass').hidden=!!boardState()||s.phase!=='playing'||mine<0;$('pass').disabled=mine!==s.turn||busy;
  $('finish').hidden=s.phase==='finished'||mine<0;

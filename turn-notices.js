@@ -1,3 +1,4 @@
+import { playScarabeo } from './scarabeo.js';
 // Long-turn games: a private Telegram message from the bot when it is your turn and you are not at the table.
 // Games: chess, checkers, Forza 4, Scarabeo, people only. One message per turn, quiet hours 23-8 (Rome time),
 // a short delay so live games (both players at the table) never get messages.
@@ -10,6 +11,8 @@ export const LONG_GAMES = ['chess', 'checkers', 'connect4', 'scarabeo'];
 export const isLongTurn = g => LONG_GAMES.includes(g?.game || 'chess') && (g?.mode || 'people') === 'people';
 export const LONG_LIMIT = 10;
 export const LONG_IDLE = 7 * 86400000;
+// Time to move: a reminder after TURN_LIMIT, the turn is lost after twice that.
+export const TURN_LIMIT = 48 * 3600000;
 export const BOT_USERNAME = 'checkmategame_bot';
 const GAME_NAMES = {
   chess: '♟ Scacchi',
@@ -58,8 +61,28 @@ export function outsideQuiet(at) {
   return t;
 }
 
-export function noticeText({ game, number, opponent, vote, seated, started }) {
+export function noticeText({ game, number, opponent, vote, seated, started, kind, outcome, penalty }) {
   const where = (GAME_NAMES[game] || 'Partita') + (number ? ' · Tavolo ' + number : '');
+  if (kind === 'reminder')
+    return (
+      '⏳ Promemoria: ' +
+      (vote
+        ? 'serve ancora il tuo voto su una parola di ' + opponent
+        : 'tocca a te' + (opponent ? ' contro ' + opponent : '')) +
+      ' da 2 giorni. ' +
+      (penalty === 'skip'
+        ? 'Se non giochi entro 2 giorni salti il turno.'
+        : penalty === 'accept'
+          ? 'Se non voti entro 2 giorni la parola viene accettata.'
+          : 'Se non muovi entro 2 giorni la partita è persa a tavolino.') +
+      '\n' +
+      where
+    );
+  if (outcome === 'lost') return '⌛ Tempo scaduto: hai perso a tavolino contro ' + opponent + '.\n' + where;
+  if (outcome === 'won') return '🏆 ' + opponent + ' non ha mosso in tempo: vinci a tavolino.\n' + where;
+  if (outcome === 'skipped') return '⌛ Tempo scaduto: hai saltato il turno.\n' + where;
+  if (outcome === 'accepted')
+    return '⌛ Tempo scaduto: la parola di ' + opponent + ' è stata accettata senza il tuo voto.\n' + where;
   if (started) return 'La partita è iniziata: tocca a te.\n' + where;
   if (seated) return opponent + ' si è seduto al tuo tavolo: tocca a te.\n' + where;
   if (vote) return 'Scarabeo: ' + opponent + ' ha proposto una parola, serve il tuo voto.\n' + where;
@@ -86,6 +109,99 @@ export function noticeRequest(s) {
       player,
       opponent: last?.by || s.players.find(p => p.id !== player && !p.bot)?.name || ''
     }))
+  };
+}
+
+// What happens when time runs out: Scarabeo votes still missing count as "accepted"; Scarabeo with 3-4
+// players skips the turn; otherwise (chess, checkers, Forza 4, two-player Scarabeo) the game is lost.
+export const penaltyFor = s =>
+  s.scarabeo?.pending ? 'accept' : s.scarabeo && s.players.length > 2 ? 'skip' : 'lose';
+
+// The reminder after TURN_LIMIT without a move (one per turn).
+export function reminderRequest(s) {
+  const request = noticeRequest(s);
+  if (!request) return null;
+  return {
+    ...request,
+    key: request.key + ':reminder',
+    checkKey: request.key,
+    kind: 'reminder',
+    penalty: penaltyFor(s)
+  };
+}
+
+// Applies the timeout to the table state (mutates s). Returns who to tell and how, or null if nobody was on turn.
+export function timeoutTable(s, now = Date.now()) {
+  const targets = turnTargets(s);
+  if (!targets.length) return null;
+  const seatOf = id => s.players.findIndex(p => p.id === id);
+  const note = (by, description) => s.moves.push({ description, by, at: now, number: s.moves.length + 1 });
+  if (s.scarabeo?.pending) {
+    const proposer = s.players[s.scarabeo.pending.by]?.name || '';
+    let g = s.scarabeo;
+    const told = [];
+    for (const id of targets) {
+      if (!g.pending) break;
+      g = playScarabeo(g, seatOf(id), { kind: 'vote', accept: true });
+      told.push({ player: id, outcome: 'accepted', opponent: proposer });
+    }
+    s.scarabeo = g;
+    s.turn = g.turn;
+    note('Binottoland', 'Tempo scaduto: parola di ' + proposer + ' accettata');
+    if (g.result) s.phase = 'finished';
+    return told;
+  }
+  const seat = s.turn,
+    loser = s.players[seat];
+  if (s.scarabeo && s.players.length > 2) {
+    const g = playScarabeo(s.scarabeo, seat, { kind: 'pass' });
+    g.lastEvent = loser.name + ' salta il turno: tempo scaduto';
+    s.scarabeo = g;
+    s.turn = g.turn;
+    note(loser.name, g.lastEvent);
+    if (g.result) s.phase = 'finished';
+    return [{ player: loser.id, outcome: 'skipped', opponent: '' }];
+  }
+  const winnerSeat = s.players.findIndex((_, i) => i !== seat),
+    winner = s.players[winnerSeat];
+  const reason = 'Tempo scaduto · ' + winner.name + ' vince a tavolino';
+  if (s.scarabeo) {
+    s.scarabeo = {
+      ...s.scarabeo,
+      pending: null,
+      result: 'win',
+      winners: [winnerSeat],
+      reason,
+      lastEvent: reason
+    };
+    note(loser.name, reason);
+  } else {
+    const key = s.chess ? 'chess' : s.checkers ? 'checkers' : 'connect4';
+    s[key] = {
+      ...s[key],
+      legalMoves: [],
+      result: winnerSeat === 0 ? '1-0' : '0-1',
+      reason,
+      ...(key === 'connect4' ? { winning: [] } : {})
+    };
+  }
+  s.phase = 'finished';
+  s.drawOffer = null;
+  return [
+    { player: loser.id, outcome: 'lost', opponent: winner.name },
+    { player: winner.id, outcome: 'won', opponent: loser.name }
+  ].filter(t => telegramId(t.player));
+}
+// The message request after a timeout (no "is it still your turn" check: it already happened).
+export function resultRequest(s, key, told) {
+  if (!told?.length) return null;
+  return {
+    room: s.room,
+    key: key + ':timeout',
+    kind: 'result',
+    game: game(s),
+    number: s.number || null,
+    targets: told
   };
 }
 
@@ -161,8 +277,9 @@ export class TurnNotices {
         )
           continue;
         // A newer turn of the same table replaces any older message still waiting.
-        for (const [old, item] of await this.ctx.storage.list({ prefix: 'queue:' + body.room + ':' }))
-          if (item.player === target.player) await this.ctx.storage.delete(old);
+        if (body.kind !== 'result')
+          for (const [old, item] of await this.ctx.storage.list({ prefix: 'queue:' + body.room + ':' }))
+            if (item.player === target.player && item.kind !== 'result') await this.ctx.storage.delete(old);
         await this.ctx.storage.put(key, {
           key: body.key,
           room: body.room,
@@ -174,6 +291,10 @@ export class TurnNotices {
           seated: !!body.seated,
           started: !!body.started,
           opponent: String(target.opponent || '').slice(0, 60),
+          kind: ['reminder', 'result'].includes(body.kind) ? body.kind : 'turn',
+          checkKey: typeof body.checkKey === 'string' ? body.checkKey : null,
+          penalty: ['skip', 'accept', 'lose'].includes(body.penalty) ? body.penalty : null,
+          outcome: ['lost', 'won', 'skipped', 'accepted'].includes(target.outcome) ? target.outcome : null,
           due: this.quiet ? outsideQuiet(this.now() + this.delay) : this.now() + this.delay
         });
       }
@@ -222,8 +343,11 @@ export class TurnNotices {
       try {
         const u = await this.user(item.userId);
         if (u && !u.enabled) continue;
-        const turn = await this.table(item.room, { player: item.player, key: item.key });
-        if (!turn?.due) continue;
+        // Turn and reminder messages only if that turn is still waiting; results always.
+        if (item.kind !== 'result') {
+          const turn = await this.table(item.room, { player: item.player, key: item.checkKey || item.key });
+          if (!turn?.due) continue;
+        }
         if (await this.presence(item.player, item.room)) continue;
         const sent = await this.telegram('sendMessage', {
           chat_id: Number(item.userId),

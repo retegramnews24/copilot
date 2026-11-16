@@ -24,7 +24,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
 import { radioNowPlaying } from './radio-metadata.js';
 import { initialCheckers, playCheckers, checkersSnapshot, checkersKey } from './checkers.js';
-import { TurnNotices, noticeRequest, turnTargets, turnKey, isLongTurn, LONG_LIMIT, LONG_IDLE } from './turn-notices.js';
+import { TurnNotices, noticeRequest, reminderRequest, resultRequest, timeoutTable, turnTargets, turnKey, isLongTurn, LONG_LIMIT, LONG_IDLE, TURN_LIMIT } from './turn-notices.js';
 // Long-turn games: one queue of private bot messages ("tocca a te"), see turn-notices.js.
 const noticeHub=env=>env.ROOMS.get(env.ROOMS.idFromName('turn-notices-v1'));
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
@@ -168,7 +168,7 @@ export default {
   if(u.pathname==='/api/telegram/webhook'&&req.method==='POST')return telegramWebhook(req,env);
   if(!u.pathname.startsWith('/api/'))return env.ASSETS.fetch(req);
   if(req.headers.get('Origin')&&req.headers.get('Origin')!==u.origin)return json({error:'Origine non consentita.'},403);
-  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.22'});
+  if(u.pathname==='/api/health')return json({ok:true,version:'1.0.23'});
 
   if(u.pathname==='/api/session'&&req.method==='POST')return login(req,env);
   const groupMedia=/^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
@@ -236,7 +236,7 @@ export default {
   if(response.ok&&(req.method==='POST'||match[2]==='state')){
    const result=await response.clone().json();
    const s=result.state||result;
-   if(match[2]!=='dismiss'||s.deleted)await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires})}));
+   if(match[2]!=='dismiss'||s.deleted)await lobby.fetch(new Request(u.origin+(s.deleted?'/lobby/remove':'/lobby/update'),{method:'POST',body:JSON.stringify({room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,deadline:s.clock?.deadline??null})}));
   }
   return response;
  }
@@ -254,7 +254,7 @@ const concluded=table=>table.phase==='finished'&&!activeTable(table)&&!table.arc
 
 export class Room extends DurableObject {
  constructor(ctx,env){super(ctx,env);this.ctx=ctx;this.env=env;this.lab=new ExpeditionRoom(ctx,env,()=>telegramAccessTag(env));this.moto=new MotoTrialRoom(ctx,env);this.pong=new PongRoom(ctx,env);this.golf=new GolfRoom(ctx,env);this.cinema=new Cinema(ctx);}
- public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires}}
+ public(s,viewer=null){return {room:s.room,matchId:s.matchId||null,number:s.number||null,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players.map(p=>({id:p.id,name:p.name,bot:!!p.bot})),mode:s.mode||'people',tutorial:s.mode==='tutorial'&&s.phase==='playing'&&s.players[0].id===viewer?this.tutorialView(s):null,turn:s.turn,revision:s.revision,moves:s.moves,series:s.series||null,limits:limits(s.game),drawOffer:s.drawOffer||null,chess:s.chess||null,checkers:s.checkers||null,connect4:s.connect4||null,uno:s.uno?unoView(s.uno,s.players.findIndex(p=>p.id===viewer)):null,scarabeo:s.scarabeo?scarabeoView(s.scarabeo,s.players.findIndex(p=>p.id===viewer)):null,scopa:s.scopa?scopaView(s.scopa,s.players.findIndex(p=>p.id===viewer)):null,naval:s.naval?navalView(s.naval,s.players.findIndex(p=>p.id===viewer)):null,briscola:s.briscola?briscolaView(s.briscola,s.players.findIndex(p=>p.id===viewer)):null,created:s.created,expires:s.expires,clock:s.clock?{since:s.clock.since,reminded:!!s.clock.reminded,deadline:s.clock.since+2*this.turnLimit()}:null}}
  newTable(room,b,token){
   const game=b.game??'chess';
   const s={
@@ -304,7 +304,7 @@ export class Room extends DurableObject {
   if(s.archived||concluded(s))await this.ctx.storage.deleteAlarm();
   else{
    const nextBot=this.botSeat(s)>=0?Date.now()+650:Infinity;
-   await this.ctx.storage.setAlarm(Math.min(nextBot,s.expires));
+   await this.ctx.storage.setAlarm(Math.min(nextBot,s.expires,this.clockDue(s)));
   }
  }
  hasResultViewer(s,{socket,player}={}){
@@ -328,11 +328,38 @@ export class Room extends DurableObject {
   this.ctx.waitUntil(lobby.fetch(new Request('https://internal/lobby/remove',{method:'POST',body:JSON.stringify({room})})));
  }
  // Long-turn tables stay open 7 days after the last action, instead of a week after creation.
- keepAlive(s){if(isLongTurn(s)&&activeTable(s))s.expires=Date.now()+LONG_IDLE}
+ keepAlive(s){
+  if(!isLongTurn(s)||!activeTable(s)){delete s.clock;return}
+  s.expires=Date.now()+LONG_IDLE;
+  // Turn clock: restarts whenever someone else has to act (new move, new vote); a draw offer does not reset it.
+  if(s.phase!=='playing'||!turnTargets(s).length){delete s.clock;return}
+  const key=turnKey(s);if(s.clock?.key!==key)s.clock={key,since:Date.now(),reminded:false};
+ }
+ // Time to move (TURN_LIMIT; the test-only TURN_LIMIT_MS shortens it): reminder after one limit, lost turn after two.
+ turnLimit(){return /^\d+$/.test(this.env.TURN_LIMIT_MS||'')?Number(this.env.TURN_LIMIT_MS):TURN_LIMIT}
+ clockDue(s){return s.clock?s.clock.since+this.turnLimit()*(s.clock.reminded?2:1):Infinity}
+ // Called by the alarm: sends the reminder, or applies the timeout. Returns false when the table has no clock.
+ async runClock(s){
+  const c=s.clock;
+  if(!c||!isLongTurn(s)||s.phase!=='playing')return false;
+  const now=Date.now(),limit=this.turnLimit();
+  if(now>=c.since+2*limit){
+   const key=turnKey(s),told=timeoutTable(s,now);
+   settleSeries(s);s.revision++;this.keepAlive(s);await this.saveState(s);await this.broadcast(s);await this.syncLobby(s);
+   this.sendNotice(resultRequest(s,key,told));
+   this.queueNotice(s);
+   return true;
+  }
+  if(!c.reminded&&now>=c.since+limit){c.reminded=true;this.sendNotice(reminderRequest(s))}
+  await this.saveState(s);
+  return true;
+ }
+ sendNotice(request){
+  if(request&&this.env.TURN_NOTIFY!=='false')this.ctx.waitUntil(noticeHub(this.env).fetch(new Request('https://internal/notices/queue',{method:'POST',body:JSON.stringify(request)})).catch(()=>{}));
+ }
  // Long-turn games: tell the notice queue who must act now (it decides later whether a message is needed).
  queueNotice(s){
-  const request=this.env.TURN_NOTIFY==='false'?null:noticeRequest(s);
-  if(request)this.ctx.waitUntil(noticeHub(this.env).fetch(new Request('https://internal/notices/queue',{method:'POST',body:JSON.stringify(request)})).catch(()=>{}));
+  this.sendNotice(noticeRequest(s));
  }
  async syncLobby(s){await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(new Request('https://internal/lobby/update',{method:'POST',body:JSON.stringify(this.summary(this.public(s)))}));}
  applyMove(s,who,b){
@@ -552,7 +579,7 @@ export class Room extends DurableObject {
   });
  }
 
- summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:s.game==='golf'?{capacity:s.capacity,hole:s.hole,campaign:s.campaign,holes:s.holes,collisions:s.collisions===true}:{})};}
+ summary(s){return {room:s.room,number:s.number,game:s.game||'chess',archived:!!s.archived,phase:s.phase,players:s.players,turn:s.turn,revision:s.revision,series:s.series||null,mode:s.mode||'people',created:s.created,expires:s.expires,deadline:s.clock?.deadline??null,...(s.game==='labyrinth'?{online:s.online,arrived:s.arrived,entryLocked:s.entryLocked,arenaResult:s.arenaResult}:s.game==='moto-trial'?{online:s.online,capacity:s.capacity,courseName:s.courseName}:s.game==='golf'?{capacity:s.capacity,hole:s.hole,campaign:s.campaign,holes:s.holes,collisions:s.collisions===true}:{})};}
  async lobbyList(){
   const entries=await this.ctx.storage.list({prefix:'game:'});
   return [...entries.values()].filter(s=>s.game!=='cluedo'&&(isArcade(s.game)||!activeTable(s)||s.expires>Date.now())).sort((a,b)=>a.number-b.number);
@@ -774,6 +801,8 @@ export class Room extends DurableObject {
    this.notifyTableRemoved(current.room);
    return;
   }
+  // Long-turn tables: reminder or timeout when the time to move runs out.
+  if(await this.runClock(current))return;
   const who=this.botSeat(current);
   if(who<0){
    await this.ctx.storage.setAlarm(current.expires);
