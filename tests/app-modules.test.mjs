@@ -49,6 +49,23 @@ document.getElementById('clear-terminal').click();
 assert.equal(events.length, 1);
 assert.match(events[0], /Registro pulito/);
 
+// Error reports to the server: redacted, each message once, at most 10 per session.
+{
+  const { errorReporter } = await import('../public/debug-log.js');
+  const reports = [];
+  const report = errorReporter(e => reports.push(e));
+  report({ message: 'boom token=session.abc.' + 'a'.repeat(64), source: 'https://x/app.js', line: 3 });
+  report({ message: 'boom token=session.abc.' + 'a'.repeat(64), source: 'https://x/app.js', line: 3 });
+  assert.equal(reports.length, 1, 'same error once');
+  assert.ok(!reports[0].message.includes('session.abc'), 'session token redacted');
+  for (let i = 0; i < 20; i++) report({ message: 'different ' + i });
+  assert.equal(reports.length, 10, 'at most 10 per session');
+  const broken = errorReporter(() => {
+    throw Error('network');
+  });
+  broken({ message: 'x' }); // a failing report never breaks the app
+}
+
 // Themes: saved choices are applied at start, a click changes and remembers them.
 save('checkmate-board', 'forest');
 const { initThemes } = await import('../public/themes.js');

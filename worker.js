@@ -33,8 +33,19 @@ import * as tables from './table-rules.js';
 import { concluded } from './table-rules.js';
 import { LobbyHub } from './lobby-hub.js';
 import { handleRequest } from './api.js';
+import { BackupHub, exportStorage, importStorage, encode, decode } from './backup.js';
 
-export default { fetch: handleRequest };
+export default {
+  fetch: handleRequest,
+  // Weekly cron (wrangler.jsonc → triggers): backup of all game data (backup.js).
+  scheduled(_event, env, ctx) {
+    ctx.waitUntil(
+      env.ROOMS.get(env.ROOMS.idFromName('backup-v1')).fetch('https://internal/backups/run', {
+        method: 'POST'
+      })
+    );
+  }
+};
 
 export class Room extends DurableObject {
   constructor(ctx, env) {
@@ -229,6 +240,23 @@ export class Room extends DurableObject {
       return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).fetch(req);
     if (path.startsWith('/notices/'))
       return (this.notices ??= new TurnNotices(this.ctx, this.env)).fetch(req);
+    // Backup (backup.js): every object exports/imports its whole storage; 'backup-v1' keeps the snapshots.
+    if (path === '/backup/export')
+      return new Response(encode(await exportStorage(this.ctx.storage)), {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    if (path === '/backup/import' && req.method === 'POST') {
+      const data = decode(await req.text());
+      await this.ctx.blockConcurrencyWhile(() => importStorage(this.ctx.storage, data));
+      // Restart this object so nothing cached in memory survives the restore.
+      setTimeout(() => {
+        try {
+          this.ctx.abort('Ripristino dal backup');
+        } catch {}
+      }, 50);
+      return json({ ok: true });
+    }
+    if (path.startsWith('/backups/')) return (this.backups ??= new BackupHub(this.ctx, this.env)).fetch(req);
     if (path === '/cinema/group-directory')
       return (this.telegramCinema ??= new TelegramCinema(this.ctx, this.env.BOT_TOKEN)).fetch(req);
     if (path === '/cinema/group-file')

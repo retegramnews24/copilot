@@ -4,7 +4,23 @@
   // Before publishing, Cloudflare's build runs the tests (scripts/deploy-gate.mjs): a failure stops the deploy.
   "build": { "command": "node scripts/deploy-gate.mjs" },
   "compatibility_date": "2026-11-04",
+  // Workers Logs: server errors and errors reported by the app (/api/client-error) are kept and searchable
+  // in the Cloudflare dashboard (Workers → binottoland-motore → Logs).
+  "observability": { "enabled": true },
+  // Weekly backup of all game data, Monday 03:00 UTC (backup.js).
+  "triggers": { "crons": ["0 3 * * 1"] },
   "assets": { "directory": "./public", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }]
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
+  // Test environment: a separate Worker with its own data (its own Durable Objects), published from the
+  // "staging" branch with `npx wrangler deploy --env staging` (see docs/ambiente-di-prova.md).
+  // Same bot (opened through a second Mini App link), but it never writes to anyone and makes no backups.
+  "env": {
+    "staging": {
+      "name": "binottoland-motore-staging",
+      "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
+      "triggers": { "crons": [] },
+      "vars": { "TURN_NOTIFY": "false", "APP_ENV": "staging" }
+    }
+  }
 }

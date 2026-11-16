@@ -9,7 +9,7 @@ import {initCatalog,renderCatalog} from './games-catalog.js?v=450d7363f6';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
-import {events,trace,initDebugLog} from './debug-log.js?v=938d711947';
+import {events,trace,initDebugLog} from './debug-log.js?v=497d88fa03';
 import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=5a31d49670';
 import {renderMyGames,myTables,timeLeft} from './my-games.js?v=55386c178a';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
@@ -27,10 +27,12 @@ import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
 import {createArcadeLink} from './arcade-link.js?v=e866c5d3c5';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
+// The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
+if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.24',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.25',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -514,7 +516,8 @@ async function sendMove(move){
  catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch{}}
  finally{busy=false;if(room===current&&state)render(state)}
 }
-initDebugLog();
+// Unexpected errors also reach the server logs (only once signed in; keepalive survives closing the app).
+initDebugLog({report:error=>{if(sessionToken)fetch('/api/client-error',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json',Authorization:'Bearer '+sessionToken},body:JSON.stringify({...error,page:document.querySelector('.page:not([hidden])')?.id||'',version:APP_VERSION,platform:tg?.platform||'browser'})}).catch(()=>{})}});
 
 function renderArchive(){
  $('archive-games').replaceChildren();
