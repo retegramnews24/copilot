@@ -3424,3 +3424,57 @@ button.uno-card:not(:disabled) {
   min-height: 34px;
   padding: 4px 14px;
 }
+
+/* Lobby: le tue partite aperte, prima quelle dove tocca a te. */
+.my-games {
+  margin: 0 0 12px;
+}
+.my-games[hidden] {
+  display: none;
+}
+.my-games .count-pill.urgent {
+  background: var(--accent);
+  color: var(--onaccent);
+}
+.my-games-list {
+  display: grid;
+  gap: 6px;
+}
+.my-game {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.my-game.urgent {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.my-game-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.my-game-copy strong {
+  font-size: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.my-game-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.my-game button {
+  flex: none;
+  width: auto;
+  min-height: 34px;
+  padding: 4px 14px;
+}

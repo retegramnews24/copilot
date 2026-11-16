@@ -257,6 +257,86 @@ assert.equal(
   null
 );
 
+// Long-turn rule: the app and the server agree on which tables count.
+const serverRules = await import('../turn-notices.js');
+const clientRules = await import('../public/game-info.js');
+assert.deepEqual(clientRules.LONG_GAMES, serverRules.LONG_GAMES);
+assert.equal(clientRules.LONG_LIMIT, serverRules.LONG_LIMIT);
+for (const g of [{ game: 'chess' }, { game: 'scarabeo', mode: 'ai' }, { game: 'uno' }, {}])
+  assert.equal(clientRules.isLongTurn(g), serverRules.isLongTurn(g));
+
+// "Le tue partite": only your open tables, your turn first, with who you play against.
+document.body.insertAdjacentHTML(
+  'beforeend',
+  '<section id="my-games" hidden><span class="count-pill"></span><div class="my-games-list"></div></section>'
+);
+const { renderMyGames } = await import('../public/my-games.js');
+const me = () => 'tg:1',
+  openedRooms = [];
+const lobbyGames = [
+  {
+    room: 'a',
+    number: 4,
+    game: 'chess',
+    phase: 'playing',
+    turn: 1,
+    players: [{ id: 'tg:1' }, { id: 'tg:2', name: 'Bruno' }]
+  },
+  {
+    room: 'b',
+    number: 2,
+    game: 'connect4',
+    phase: 'playing',
+    turn: 0,
+    players: [{ id: 'tg:1' }, { id: 'tg:3', name: 'Carla' }]
+  },
+  { room: 'c', number: 1, game: 'checkers', phase: 'waiting', turn: 0, players: [{ id: 'tg:1' }] },
+  {
+    room: 'd',
+    number: 3,
+    game: 'chess',
+    phase: 'playing',
+    turn: 0,
+    players: [{ id: 'tg:5' }, { id: 'tg:6' }]
+  },
+  { room: 'e', number: 5, game: 'golf', phase: 'playing', players: [{ id: 'tg:1' }] },
+  {
+    room: 'f',
+    number: 6,
+    game: 'uno',
+    mode: 'ai',
+    phase: 'playing',
+    turn: 1,
+    players: [{ id: 'tg:1' }, { id: 'bot:1', name: 'AI 1', bot: true }]
+  },
+  {
+    room: 'g',
+    number: 7,
+    game: 'chess',
+    phase: 'finished',
+    players: [{ id: 'tg:1' }, { id: 'tg:2', name: 'Bruno' }]
+  }
+];
+const myGames = document.getElementById('my-games');
+assert.equal(
+  renderMyGames(myGames, lobbyGames, me, room => openedRooms.push(room)),
+  4
+);
+assert.equal(myGames.hidden, false);
+const rowsText = [...myGames.querySelectorAll('.my-game')].map(r => r.textContent);
+assert.match(rowsText[0], /Forza 4 · Tavolo 2contro Carla · Tocca a teGioca/);
+assert.match(rowsText[1], /Checkmate! · Tavolo 4contro Bruno · Tocca a BrunoApri/);
+assert.match(rowsText[2], /UNO · Tavolo 6contro AI · Tocca all’AIApri/);
+assert.match(rowsText[3], /Dama italiana · Tavolo 1Aspetta altri giocatori/);
+assert.equal(myGames.querySelector('.count-pill').textContent, '1 tocca a te');
+myGames.querySelector('.my-game button').click();
+assert.deepEqual(openedRooms, ['b']);
+assert.equal(
+  renderMyGames(myGames, [], me, () => {}),
+  0
+);
+assert.equal(myGames.hidden, true);
+
 console.log(
-  'PASS App modules: game info, pieces, preferences, debug log, themes, leaderboard, avatar, chat, Forza 4, UNO, turn alerts.'
+  'PASS App modules: game info, pieces, preferences, debug log, themes, leaderboard, avatar, chat, Forza 4, UNO, turn alerts, my games.'
 );

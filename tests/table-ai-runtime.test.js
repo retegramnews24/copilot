@@ -53,6 +53,18 @@ try{
   await new Promise(r=>setTimeout(r,1500));
   assert.equal(botMessages.filter(m=>m.chat_id===4001).length,1,'switched off in Settings: no message');
   console.log('PASS runtime long-turn messages: seated, move, one per turn, Settings switch');}
+ // Long-turn tables: several at once (chess, Forza 4…), still one table for the other games, at most 10, expiry 7 days after the last move.
+ {const chessT=await call(5000,'/api/create',{game:'chess'}),c4=await call(5000,'/api/create',{game:'connect4'});assert.equal(chessT.status,200);assert.equal(c4.status,200,JSON.stringify(c4.data));
+  const uno=await call(5000,'/api/create',{game:'uno'});assert.equal(uno.status,200,'one other table is still allowed');
+  const scopa=await call(5000,'/api/create',{game:'scopa'});assert.equal(scopa.status,409);assert.equal(scopa.data.error,'Hai già una partita aperta.');
+  const ai=await call(5000,'/api/create',{game:'chess',mode:'ai'});assert.equal(ai.status,409,'a game against the AI is not a long-turn table');
+  let a=(await call(5001,'/api/room/'+chessT.data.state.room+'/claim',{})),b=(await call(5001,'/api/room/'+c4.data.state.room+'/claim',{}));assert.equal(a.status,200);assert.equal(b.status,200,'joining a second long-turn table');
+  const before=Date.now();let s=(await call(5000,'/api/room/'+chessT.data.state.room+'/move',{from:'d2',to:'d4',revision:a.data.state.revision})).data;
+  assert.ok(s.expires>=before+7*86400000-1000&&s.expires<=Date.now()+7*86400000+1000,'expiry moves to 7 days after the last move');
+  const lobby=(await call(5000,'/api/lobby')).data.games.filter(g=>g.players.some(p=>p.id==='tg:5000'));assert.ok(lobby.length>=3);
+  for(let i=0;i<8;i++)assert.equal((await call(5000,'/api/create',{game:i%2?'checkers':'scarabeo'})).status,200);
+  const eleventh=await call(5000,'/api/create',{game:'checkers'});assert.equal(eleventh.status,409);assert.match(eleventh.data.error,/10 partite a turni/);
+  console.log('PASS runtime long-turn tables: several at once, one other table, AI excluded, limit 10, rolling expiry');}
  // Four-seat human Scopa, atomic private projections and join bounds.
  const four=await call(3000,'/api/create',{game:'scopa'}),fourRoom=four.data.state.room;assert.equal(four.status,200);for(let i=1;i<4;i++)assert.equal((await call(3000+i,'/api/room/'+fourRoom+'/claim',{})).status,200);assert.equal((await call(3004,'/api/room/'+fourRoom+'/claim',{})).status,409);let fourState=(await call(3000,'/api/room/'+fourRoom+'/state')).data;fourState=(await call(3000,'/api/room/'+fourRoom+'/start',{revision:fourState.revision})).data;assert.equal(fourState.scopa.hand.length,3);assert.equal(fourState.scopa.table.length,4);assert.deepEqual((await call(3999,'/api/room/'+fourRoom+'/state')).data.scopa.hand,[]);const take=fourState.scopa.legalMoves[0];assert.equal((await call(3001,'/api/room/'+fourRoom+'/move',{...take,revision:fourState.revision})).status,403);assert.equal((await call(3000,'/api/room/'+fourRoom+'/move',{...take,revision:fourState.revision})).status,200);
  // Complete real two-player result, deduplication, deletion and persistence.

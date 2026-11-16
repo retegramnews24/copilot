@@ -1,5 +1,5 @@
 // Leaderboards on the Giochi page: wins against the AI, wins between people, Number Connect points.
-import { gameTitle } from './game-info.js?v=2f8dbeba94';
+import { gameTitle } from './game-info.js?v=5a31d49670';
 const $ = id => document.getElementById(id);
 
 function paintLeaders(kind, rows) {

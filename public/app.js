@@ -10,11 +10,12 @@ import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
 import {events,trace,initDebugLog} from './debug-log.js?v=938d711947';
-import {gameTitle,staged,gameLimits,ongoing} from './game-info.js?v=2f8dbeba94';
+import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=5a31d49670';
+import {renderMyGames,myTables} from './my-games.js?v=c4e1f7edc5';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=64a501b9f0';
-import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=6ae06cf3ca';
+import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=ce436079f5';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=532b8aadbd';
@@ -24,12 +25,12 @@ import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
-import {createArcadeLink} from './arcade-link.js?v=61cfe330e9';
+import {createArcadeLink} from './arcade-link.js?v=e866c5d3c5';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.21',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.22',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -74,7 +75,10 @@ async function request(path,data,keepalive=false){
 }
 function api(action,data){return request(action==='create'?'/api/create':'/api/room/'+room+'/'+action,data)}
 const boardState=()=>state?.naval||state?.briscola||state?.scarabeo||state?.scopa||state?.uno||state?.connect4||state?.checkers||state?.chess;
-function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+// Your open table that is not a long-turn game: only one of those at a time.
+function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+// Can you take a seat at this table? Long-turn games: up to LONG_LIMIT at once; any other: only without another open table.
+function canSit(g){return isLongTurn(g)?myTables(games,id=>seat(id).player).filter(isLongTurn).length<LONG_LIMIT:!ownedGame()}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -150,21 +154,22 @@ function renderLobby(){
   const note=document.createElement('p');note.className='turn-note';
   const mine=game.players.some(p=>p.id===seat(game.room).player);
   note.textContent=game.phase==='playing'?(game.players[game.turn]?.id===seat(game.room).player?'Tocca a te':'Tocca a '+game.players[game.turn].name):game.phase==='waiting'?(staged(game)?'Il creatore avvia la partita.':''):'In attesa della prossima manche.';
-  const button=document.createElement('button');button.className='table-open '+(game.phase==='waiting'&&!mine&&!own?'':'alt');
-  button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(own||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
+  const button=document.createElement('button');button.className='table-open '+(game.phase==='waiting'&&!mine&&canSit(game)?'':'alt');
+  button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(!canSit(game)||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room,staged(game)&&game.players.length>=gameLimits(game).max);if(game.series)note.textContent+=' · Torneo: '+game.series.target+' vittorie';card.append(title,names,note,button);$('games').append(card);
  }
+ renderMyGames($('my-games'),games,id=>seat(id).player,async id=>{await openRoom(id,false);if(room===id)selectPage('game')});
  renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();
 }
 // "Adesso": the few things worth doing right now, built from data the Lobby already has.
 function renderNow(){
- const items=[],own=ownedGame(),me=id=>seat(id).player;
+ const items=[],me=id=>seat(id).player;
  for(const game of games.filter(ongoing)){
   if(['golf','pong','moto-trial','labyrinth'].includes(game.game))continue;
   const mine=game.players.some(p=>p.id===me(game.room)),full=staged(game)&&game.players.length>=gameLimits(game).max;
   if(mine&&game.phase==='playing'&&game.players[game.turn]?.id===me(game.room))items.push({rank:0,text:'Tocca a te · Tavolo '+game.number+' · '+gameTitle(game),label:'Gioca',action:()=>openRoom(game.room,false)});
   else if(mine&&game.phase==='waiting')items.push({rank:2,text:'Il tuo tavolo '+game.number+' · '+gameTitle(game)+' aspetta giocatori',label:'Apri',action:()=>openRoom(game.room,false)});
-  else if(!mine&&!own&&game.phase==='waiting'&&!full&&game.players.length)items.push({rank:1,text:game.players[0].name+' ti aspetta a '+gameTitle(game)+' · Tavolo '+game.number,label:'Gioca',action:()=>openRoom(game.room,false)});
+  else if(!mine&&canSit(game)&&game.phase==='waiting'&&!full&&game.players.length)items.push({rank:1,text:game.players[0].name+' ti aspetta a '+gameTitle(game)+' · Tavolo '+game.number,label:'Gioca',action:()=>openRoom(game.room,false)});
  }
  items.push(...cinema.nowItems());
  items.push(...arcade.nowItems());
@@ -219,7 +224,7 @@ async function openRoom(nextRoom,watchOnly=false){
  err('');
  try{
  let s=await api('state');if(epoch!==roomEpoch)return;
- if(!watchOnly&&s.phase==='waiting'&&!s.players.some(p=>p.id===credentials.player)&&!ownedGame()){
+ if(!watchOnly&&s.phase==='waiting'&&!s.players.some(p=>p.id===credentials.player)&&canSit(s)){
   const playerName=identity.name;
   $('name').textContent=playerName;
   try{

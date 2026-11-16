@@ -5,6 +5,11 @@
 // turn is still the same and the Lobby whether the player is looking at the table right now.
 
 export const LONG_GAMES = ['chess', 'checkers', 'connect4', 'scarabeo'];
+// Long-turn tables (these games, between people): several can be open at once, and they stay alive
+// LONG_IDLE after the last move instead of expiring a week after creation.
+export const isLongTurn = g => LONG_GAMES.includes(g?.game || 'chess') && (g?.mode || 'people') === 'people';
+export const LONG_LIMIT = 10;
+export const LONG_IDLE = 7 * 86400000;
 export const BOT_USERNAME = 'checkmategame_bot';
 const GAME_NAMES = {
   chess: '♟ Scacchi',

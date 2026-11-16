@@ -35,4 +35,8 @@ export const gameLimits = g =>
       : g?.game === 'uno'
         ? { min: 2, max: 10 }
         : { min: 2, max: 2 });
+// Long-turn tables (same rule as the server, turn-notices.js): several can be open at once, up to LONG_LIMIT.
+export const LONG_GAMES = ['chess', 'checkers', 'connect4', 'scarabeo'];
+export const LONG_LIMIT = 10;
+export const isLongTurn = g => LONG_GAMES.includes(g?.game || 'chess') && (g?.mode || 'people') === 'people';
 export const ongoing = g => !g.archived && (g.phase !== 'finished' || (g.series && !g.series.done));

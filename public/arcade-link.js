@@ -1,7 +1,7 @@
 // Arcade overlay seen from the app: Number Connect, Pong (solo or online), Giulio Simulator, Binotto Simulator and
 // the Blackboard rooms share one iframe. Online Pong and the Blackboard keep their authenticated sockets here.
 import { blackboardLink } from './blackboard/link.js?v=ed710cda29';
-import { renderNumberLeaders } from './leaderboard.js?v=6ae06cf3ca';
+import { renderNumberLeaders } from './leaderboard.js?v=ce436079f5';
 const $ = id => document.getElementById(id);
 
 export function createArcadeLink({
