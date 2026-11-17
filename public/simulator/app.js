@@ -346,11 +346,16 @@ setInterval(() => {
   if (!document.hidden && autoJobs.size) flushAutoSaves();
 }, 10000);
 
-async function poll() {
+let lastPoll = 0,
+  lastPresence = 0;
+// withPresence: the presence answer is the full view, so one request both refreshes and keeps the team online.
+async function poll(withPresence = false) {
   if (polling || busy || !token || document.hidden) return;
   polling = true;
   try {
-    const next = await api();
+    const next = await api(withPresence ? { action: 'presence', visible: true } : undefined);
+    lastPoll = Date.now();
+    if (withPresence) lastPresence = lastPoll;
     const changed = next.revision !== data?.revision;
     const raceChanged = raceKey(next.race) !== renderedRaceKey;
     accept(next);
@@ -398,16 +403,27 @@ async function presence() {
       { action: 'presence', visible: !document.hidden && opened },
       { keepalive: document.hidden }
     );
+    if (!document.hidden) lastPresence = Date.now();
     accept(next);
   } catch {}
 }
+// Every 3 s only while it matters: live pages, a race, or an own practice/qualifying run (10 s disconnect rule).
+// Otherwise a refresh every 15 s and presence every 20 s (online window 25 s). Nothing while hidden.
+function liveNeeded() {
+  return (
+    ['Gara', 'Libere', 'Qualifiche', 'Paddock'].includes(tab) ||
+    !!data?.race?.active ||
+    !!data?.sessions?.practice?.running ||
+    !!data?.sessions?.qualifying?.cars?.some(c => c.own && c.onTrack)
+  );
+}
 setInterval(() => {
-  if (['Gara', 'Libere', 'Qualifiche', 'Paddock'].includes(tab)) poll();
+  if (document.hidden) return;
+  const live = liveNeeded(),
+    now = Date.now();
+  if (data?.me && opened && (live || now - lastPresence >= 20000)) poll(true);
+  else if (live || now - lastPoll >= 15000) poll();
 }, 3000);
-setInterval(() => presence(), 3000);
-setInterval(() => {
-  if (!['Gara', 'Libere', 'Qualifiche', 'Paddock'].includes(tab)) poll();
-}, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     persistView();
