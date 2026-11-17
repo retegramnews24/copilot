@@ -194,7 +194,7 @@ function strike(s,p,w,floor,now){
  return true;
 }
 function aimCard(p,t){return near(p,t,.38)||(p.player.pitch<-.35&&facing(p,t))}
-export function act(s,p,b,now){
+export function act(s,p,b,now,options={}){
  if(!p||!p.online||s.archived||s.deleted)fail('Non puoi agire in questa spedizione.');
  if(p.eliminated&&b.kind!=='appearance')fail('Sei stato eliminato. Puoi seguire dagli spalti.');
  if(p.standsUntil&&b.kind!=='appearance')fail('Sei sugli spalti. Attendi il rientro.');
@@ -217,6 +217,15 @@ export function act(s,p,b,now){
   if(!takeGear(r,b.kind))fail('Oggetto già raccolto o inventario pieno.');
   Object.assign(p,{backpack:r.backpack,swordTaken:r.swordTaken,shieldTaken:r.shieldTaken,helmet:r.helmet,armor:r.armor});
  }
+ }
+ // Test environment only (LAB_TRAVEL=true): jump straight to a floor or the arena.
+ else if(b.kind==='travel'){
+  if(!options.travel)fail('Selezione dei piani non disponibile.');
+  if(!Number.isInteger(b.level)||b.level<1||b.level>6)fail('Piano non valido.');
+  if(s.arenaMatch&&!s.arenaMatch.result)fail('La sfida è in corso.');
+  const slot=p.inventory.indexOf('key:'+p.level);if(slot>=0)drop(r,w,slot,p.player);
+  p.level=b.level;const next=expeditionWorld(s,p.level);
+  relocate(p,next.arena?{x:next.showcase.x,z:next.showcase.z+2.2,yaw:0}:next.spawn,now);barrier(s,now);
  }
  else if(b.kind==='appearance')p.appearance=clothes(b.appearance);
  else if(b.kind==='strike'){if(w.arena){startArena(s,now);if(s.arenaMatch?.result)fail('Il combattimento è concluso.');if(s.arenaMatch&&!s.arenaMatch.roster.includes(p.id))fail('La sfida è già iniziata.');}if(!strike(s,p,w,floorState(r,w),now))return false;}

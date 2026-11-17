@@ -223,3 +223,12 @@ console.log('PASS Arena: persistent eliminations, only the last survivor wins, r
  assert.equal(CRACK_DAMAGE,10);assert.equal(medalShield({}),0);assert.equal(medalShield({medals:2}),.2);assert.equal(medalShield({medals:9}),.3);
  console.log('PASS Floors and race: deterministic red cracks (safe start, exit and key), jump over cracks, medal damage reduction capped at 30%.');
 }
+{
+ // Staging-only floor selector: refused without the server flag, moves the player with it.
+ const t0=2e6,trip=createExpedition('travel-room',1,9,{id:'1',name:'Uno'},t0);connectPlayer(trip,'1','c1',t0);const p=trip.players['1'];
+ assert.throws(()=>act(trip,p,{kind:'travel',level:4},t0),/non disponibile/);assert.equal(p.level,1);
+ assert.throws(()=>act(trip,p,{kind:'travel',level:9},t0,{travel:true}),/non valido/);
+ act(trip,p,{kind:'travel',level:4},t0,{travel:true});assert.equal(p.level,4);assert.deepEqual([p.player.x,p.player.z],[expeditionWorld(trip,4).spawn.x,expeditionWorld(trip,4).spawn.z]);
+ act(trip,p,{kind:'travel',level:6},t0,{travel:true});assert.equal(p.level,6);
+ console.log('PASS Staging floor selector: server flag required, valid floors only, spawn placement.');
+}

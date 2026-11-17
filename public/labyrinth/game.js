@@ -355,10 +355,13 @@ function tick(now){
  raf=requestAnimationFrame(tick);
 }
 $('follow-player').onchange=e=>{followId=e.target.value;if(multiplayer)receiveState(multiplayer.state,true)};
+// Test environment (staging host): the floor selector also works in shared expeditions, validated by the server.
+const stagingTravel=()=>!!multiplayer&&!multiplayer.watch&&/-staging\./.test(location.hostname);
 $('test-travel-go').onclick=()=>{
- if(!devMode()||!renderer||transitioning)return;
  const next=Number($('test-floor').value);
  if(!Number.isInteger(next)||next<1||next>6)return;
+ if(stagingTravel()){if(renderer&&!transitioning){sendAction('travel',{level:next});resume();toast('Prova · '+(next===6?'Arena':'Piano '+next))}return}
+ if(!devMode()||!renderer||transitioning)return;
  const slot=run.inventory.indexOf('key:'+level);
  if(slot>=0)drop(run,world,slot,player);
  level=next;run.level=next;
@@ -497,7 +500,7 @@ function receiveState(s,correct=false){
   if(!p.impact||p.impact.number===previous.players.find(before=>before.id===p.id)?.impact?.number)continue;
   if(p.id===playerId||p.impact.attacker===playerId)showImpact(p.impact,p.id===playerId);
  }
- $('test-travel').hidden=true;$('guide-option').hidden=true;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent=s.arenaResult?(s.archived?'Risultato archiviato.':'Puoi archiviare il risultato prima di uscire.'):'La spedizione rimane nella Lobby anche quando è vuota.';
+ $('test-travel').hidden=!stagingTravel();$('dev-kit').hidden=stagingTravel();$('guide-option').hidden=true;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent=s.arenaResult?(s.archived?'Risultato archiviato.':'Puoi archiviare il risultato prima di uscire.'):'La spedizione rimane nella Lobby anche quando è vuota.';
  const active=s.players.filter(p=>p.counted),arrived=active.filter(p=>p.level===6);$('expedition-status').textContent=(multiplayer.watch?'Spettatore · ':'')+active.filter(p=>p.online).length+' online · arena '+arrived.length+'/'+active.length+(s.entryLocked?' · ingressi chiusi':' · ingressi aperti')+(s.players.some(p=>p.medals)?' · 🏅 '+s.players.filter(p=>p.medals).map(p=>p.name.split(' ')[0]+' '+p.medals).join(', '):'');
  $('expedition-status').dataset.base=$('expedition-status').textContent;zoneLabel='';
  // Race: tell everyone who left each floor first.

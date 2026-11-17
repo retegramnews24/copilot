@@ -20,7 +20,7 @@
       "name": "binottoland-motore-staging",
       "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
       "triggers": { "crons": [] },
-      "vars": { "TURN_NOTIFY": "false", "APP_ENV": "staging" }
+      "vars": { "TURN_NOTIFY": "false", "APP_ENV": "staging", "LAB_TRAVEL": "true" }
     }
   }
 }

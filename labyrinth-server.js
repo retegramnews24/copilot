@@ -43,7 +43,7 @@ export class ExpeditionRoom{
   if(result==='level')await this.index();
   await this.broadcast(important);return
  }
- if(b.type==='action'&&Number.isSafeInteger(b.request)){const prior=s.arenaMatch?.result;act(s,p,b,now);await this.save();if(prior!==s.arenaMatch?.result||b.kind!=='strike'&&b.kind!=='appearance')await this.index();await this.schedule();await this.broadcast();ws.send(JSON.stringify({type:'ack',request:b.request,ok:true}));}
+ if(b.type==='action'&&Number.isSafeInteger(b.request)){const prior=s.arenaMatch?.result;act(s,p,b,now,{travel:this.env.LAB_TRAVEL==='true'});await this.save();if(prior!==s.arenaMatch?.result||b.kind!=='strike'&&b.kind!=='appearance')await this.index();await this.schedule();await this.broadcast();ws.send(JSON.stringify({type:'ack',request:b.request,ok:true}));}
  }catch(e){try{const b=JSON.parse(message);ws.send(JSON.stringify({type:'ack',request:b.request,ok:false,error:e.message}));ws.send(JSON.stringify({type:'state',state:snapshot(s)}))}catch{}}})}
  async close(ws){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load(),a=ws.deserializeAttachment();if(!s||a.watch)return;disconnectPlayer(s,a.id,a.connection,Date.now());await this.save();await this.index();await this.schedule();await this.broadcast()})}
  async alarm(){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load();if(!s)return;if(sweep(s,Date.now())){await this.save();await this.index();await this.broadcast()}else if(s.arenaMatch?.result?.winner&&!this.arenaRecorded)await this.index();await this.schedule()})}

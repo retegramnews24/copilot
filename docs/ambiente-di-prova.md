@@ -17,6 +17,7 @@ Se il Worker di prova mostra la versione di `main`, in Cloudflare → binottolan
 
 ## Cosa fa diversamente
 - Dati separati: è un altro Worker con i suoi Durable Objects.
+- Labirinto: nel menu di pausa c'è il selettore dei piani anche nelle spedizioni condivise (variabile `LAB_TRAVEL=true`, solo in staging; il server lo rifiuta senza). Quando il Labirinto si riporta su `main` non va attivato.
 - Il bot non scrive a nessuno (`TURN_NOTIFY=false`) e non fa backup (nessun cron).
 - Stesso bot e stesso gruppo: l'accesso è riservato ai membri come nell'app vera.
 - Non configurare mai il webhook del bot dall'ambiente di prova (`SETUP_ENABLED` resta spento): il bot deve continuare a rispondere al Worker vero.
