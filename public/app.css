@@ -3915,3 +3915,6 @@ html[data-env='staging'] .lobby-wordmark::after {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 25%, var(--panel));
 }
+.settings-list-top {
+  margin-top: 16px;
+}

@@ -56,10 +56,10 @@ export function initSettings({ appName, tg, trace, events }) {
   const chosen = selector =>
     document.querySelector(selector + '[aria-pressed="true"]')?.textContent.trim() || '';
   function renderValues() {
-    $('value-theme').textContent = chosen('[data-theme-choice]') + ' ›';
-    $('value-board').textContent = chosen('[data-board-choice]') + ' ›';
+    // One "Aspetto" row: theme and board shown on the right, everything else inside the sub-page.
+    $('value-look').textContent =
+      [chosen('[data-theme-choice]'), chosen('[data-board-choice]')].filter(Boolean).join(' · ') + ' ›';
     const size = $('setting-text').value;
-    $('value-text').textContent = ($('setting-text').selectedOptions[0]?.textContent || '') + ' ›';
     document.querySelectorAll('[data-text-size]').forEach(b => {
       const on = String(b.dataset.textSize === size);
       if (b.getAttribute('aria-pressed') !== on) b.setAttribute('aria-pressed', on);

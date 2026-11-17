@@ -14,7 +14,7 @@ import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-
 import {renderMyGames,myTables,timeLeft} from './my-games.js?v=55386c178a';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
-import {initSettings} from './settings.js?v=c98f3e19bb';
+import {initSettings} from './settings.js?v=6f9a6958a5';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=ce436079f5';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
@@ -33,7 +33,7 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.38',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.39',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
