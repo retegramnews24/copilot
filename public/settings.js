@@ -1,4 +1,5 @@
-// Settings page: preferences (sound, vibration, text size), theme preview, developer mode, problem report.
+// Settings page: a grouped list (profile, notifications, appearance, games and help) with sub-pages for
+// Aspetto (theme preview, swatches, text size) and the character; developer mode, problem report.
 import { pref, setPref } from './prefs.js?v=bd123656a4';
 import { pieceSvg } from './pieces.js?v=fa35e21be7';
 const $ = id => document.getElementById(id);
@@ -24,8 +25,69 @@ export function initSettings({ appName, tg, trace, events }) {
   $('setting-text').onchange = e => {
     setPref('binottoland-text', e.target.value);
     applyPreferences();
+    renderValues();
   };
+  // Text size as three pills; the (hidden) select stays the source of truth.
+  document.querySelectorAll('[data-text-size]').forEach(button => {
+    button.onclick = () => {
+      $('setting-text').value = button.dataset.textSize;
+      $('setting-text').dispatchEvent(new Event('change'));
+    };
+  });
   applyPreferences();
+
+  // Settings as a grouped list (like Telegram's): rows open sub-pages, each with "‹ Settings" to go back.
+  const subPages = ['settings-look', 'settings-character'];
+  function showSub(id, focus) {
+    $('settings-main').hidden = !!id;
+    for (const sub of subPages) $(sub).hidden = sub !== id;
+    const page = $('page-settings');
+    if (focus) $(focus)?.scrollIntoView({ block: 'start' });
+    else page.scrollTop = 0;
+    if (id === 'settings-look') renderThemePreview();
+  }
+  document.querySelectorAll('[data-settings-open]').forEach(button => {
+    button.onclick = () => showSub(button.dataset.settingsOpen, button.dataset.settingsFocus);
+  });
+  document.querySelectorAll('.settings-back').forEach(button => (button.onclick = () => showSub(null)));
+  // Leaving the Settings tab and coming back starts again from the list.
+  $('tab-settings')?.addEventListener('click', () => showSub(null));
+  // Current choice shown on the right of each row.
+  const chosen = selector =>
+    document.querySelector(selector + '[aria-pressed="true"]')?.textContent.trim() || '';
+  function renderValues() {
+    // One "Aspetto" row: theme and board shown on the right, everything else inside the sub-page.
+    $('value-look').textContent =
+      [chosen('[data-theme-choice]'), chosen('[data-board-choice]')].filter(Boolean).join(' · ') + ' ›';
+    const size = $('setting-text').value;
+    document.querySelectorAll('[data-text-size]').forEach(b => {
+      const on = String(b.dataset.textSize === size);
+      if (b.getAttribute('aria-pressed') !== on) b.setAttribute('aria-pressed', on);
+    });
+  }
+  // Profile row: the same avatar and name as the Lobby header.
+  function renderProfileRow() {
+    const avatar = $('profile-avatar');
+    if (avatar) $('settings-avatar').replaceChildren(...[...avatar.childNodes].map(n => n.cloneNode(true)));
+    $('settings-name').textContent = $('name')?.textContent || 'Il tuo profilo';
+  }
+  // Theme, board and piece buttons mark the choice with aria-pressed (themes.js): follow it.
+  new MutationObserver(renderValues).observe($('settings-look'), {
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['aria-pressed']
+  });
+  for (const id of ['profile-avatar', 'name'])
+    if ($(id)) new MutationObserver(renderProfileRow).observe($(id), { childList: true, subtree: true });
+  renderProfileRow();
+  setTimeout(renderValues, 0);
+  // The version at the bottom: shows the app version; five taps toggle developer mode, as on the Info page.
+  const showVersion = () => ($('settings-version').textContent = $('app-version')?.textContent || appName);
+  $('settings-version').onclick = () => {
+    $('app-version')?.click();
+    showVersion();
+  };
+  showVersion();
 
   function renderThemePreview() {
     const pieces = ['r', 'n', 'q', 'k', 'P', 'P', 'B', 'K'];

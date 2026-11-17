@@ -390,8 +390,8 @@ lobbySocket.onmessage({data:JSON.stringify({...payload(),games:[],messages:[
  {id:'b',name:'Fausto',userId:'1',at:2,text:'Ultimo'}
 ]})});
 await wait();
-assert.equal(chat.scrollTop,0);
-assert.match(chat.firstElementChild.textContent,/Ultimo/);
+assert.equal(chat.scrollTop,700);
+assert.match(chat.lastElementChild.textContent,/Ultimo/);
 assert.equal(get('chat-form').nextElementSibling,chat);
 assert.deepEqual(errors,[]);dom.window.close();console.log('PASS UI: Scopa cards and captures, live tutorial, 5-seat solo setup, disabled solo tournaments, leaderboard text safety and out-of-turn human word validation, repeated creation, active tables, both rankings, latest chat and result dismissal.');
 const layout=new JSDOM(await fs.readFile('public/index.html','utf8'));

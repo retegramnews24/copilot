@@ -5,7 +5,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=4b40a70e69';
 import {readAppearance} from './appearance.js?v=3bf8d2e2ca';
 import './labyrinth/avatar.js?v=5318415024';
-import {initCatalog,renderCatalog} from './games-catalog.js?v=72f8add5d1';
+import {initCatalog,renderCatalog} from './games-catalog.js?v=8748203dc7';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
@@ -14,29 +14,32 @@ import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-
 import {renderMyGames,myTables,timeLeft} from './my-games.js?v=55386c178a';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
-import {initSettings} from './settings.js?v=64a501b9f0';
-import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=ce436079f5';
+import {initSettings} from './settings.js?v=6f9a6958a5';
+import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=83b95ddebc';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
-import {createChat} from './chat.js?v=532b8aadbd';
+import {createChat} from './chat.js?v=957b56ae56';
+import {createLobbyChips} from './lobby-chips.js?v=e32cd05095';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
-import {createArcadeLink} from './arcade-link.js?v=e866c5d3c5';
+import {createArcadeLink} from './arcade-link.js?v=ddb6eb9096';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.27',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.28',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
 const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
+// Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
+createLobbyChips({notice:item=>chat.notice(item)});
 const board=createChessBoard({get:()=>({state,mine:state.players.findIndex(p=>p.id===credentials.player),active:canMove(),replayPly,frame:replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:null}),send:move=>sendMove(move),rerender:()=>renderBoard()});
 // Overlays with their own iframe and socket (see *-link.js). Dependencies are wrapped: some are defined further down.
 const linkBase={tg,token:()=>sessionToken,me:()=>identity,request,onError:err,enterFullscreen:()=>enterFullscreen(),sendPresence:()=>sendPresence(),safeInsets};
@@ -628,7 +631,7 @@ async function startSession(){
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
-  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);
+  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
   renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
   alerts.refresh();
   // Launched from a "tocca a te" message: straight to that table.

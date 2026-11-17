@@ -110,7 +110,7 @@ assert.equal(makeAvatar({ name: 'mario rossi' }).textContent, 'MR');
 assert.equal(makeAvatar({ name: 'A', photo: 'http://x/y.jpg' }).querySelector('img'), null);
 assert.ok(makeAvatar({ name: 'A', photo: 'https://x/y.jpg' }).querySelector('img'));
 
-// Chat: newest first, own messages marked, send adds the reply once and clears the field.
+// Chat: oldest first and newest at the bottom, own messages marked, send adds the reply once and clears the field.
 document.body.insertAdjacentHTML(
   'beforeend',
   `<form id="chat-form"><input id="chat-input"><button id="chat-send"></button></form><div id="chat-messages"></div>`
@@ -139,7 +139,7 @@ chat.set([
 ]);
 chat.render(true);
 const texts = () => [...document.querySelectorAll('#chat-messages p')].map(p => p.textContent);
-assert.deepEqual(texts(), ['secondo', 'primo']);
+assert.deepEqual(texts(), ['primo', 'secondo']);
 assert.equal(document.querySelectorAll('#chat-messages .mine').length, 1);
 assert.equal(document.getElementById('chat-send').disabled, false);
 chat.render(false);
@@ -148,7 +148,7 @@ document.getElementById('chat-input').value = '  ciao  ';
 document.getElementById('chat-form').dispatchEvent(new window.Event('submit', { cancelable: true }));
 await new Promise(r => setTimeout(r, 10));
 assert.deepEqual(posted, ['/api/chat', { text: 'ciao' }]);
-assert.deepEqual(texts(), ['ciao', 'secondo', 'primo']);
+assert.deepEqual(texts(), ['primo', 'secondo', 'ciao']);
 assert.equal(document.getElementById('chat-input').value, '');
 assert.equal(refreshed, 2);
 
