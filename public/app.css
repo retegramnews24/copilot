@@ -3775,3 +3775,143 @@ html[data-env='staging'] .lobby-wordmark::after {
   padding: 4px 10px;
   font-size: 12.5px;
 }
+
+/* Settings as a grouped list, like Telegram's settings: profile on top, groups of rows, sub-pages for the big choices. */
+.settings-main,
+.settings-sub {
+  padding: 6px 0 16px;
+}
+.settings-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0 0 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+}
+.settings-profile-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.settings-profile-copy strong {
+  font-size: 17px;
+}
+.settings-profile-copy small {
+  color: var(--muted);
+}
+.settings-label {
+  margin: 16px 4px 6px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--accent);
+}
+.settings-list {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.settings-list > :is(.toggle-row, .settings-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font-size: 15px;
+  text-align: left;
+}
+.settings-list > * + * {
+  border-top: 1px solid var(--line) !important;
+}
+.settings-value {
+  flex: none;
+  color: var(--muted);
+  font-size: 14px;
+}
+#report-result:empty {
+  display: none;
+}
+.settings-version {
+  display: block;
+  width: 100%;
+  margin: 18px 0 0;
+  padding: 8px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  text-align: center;
+}
+.settings-back {
+  width: auto;
+  min-height: 34px;
+  margin: 0 0 8px;
+  padding: 5px 12px;
+}
+.settings-sub .settings-preview {
+  margin: 4px 0 6px;
+}
+/* Swatches: a coloured circle with the name under it. */
+.themes.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 10px 6px;
+}
+.themes.swatches button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-height: 0;
+  margin: 0;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+  font-size: 12px;
+}
+.themes.swatches .swatch {
+  display: block;
+  width: 40px;
+  height: 40px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--preview);
+  border: 2px solid var(--line);
+}
+.themes.swatches button[aria-pressed='true'] .swatch {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.themes.swatches button[aria-pressed='true'] {
+  font-weight: 650;
+}
+.text-sizes {
+  display: flex;
+  gap: 8px;
+}
+.text-sizes button {
+  flex: 1;
+  margin: 0;
+  border-radius: 18px;
+}
+.text-sizes button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, var(--panel));
+}
