@@ -3576,10 +3576,27 @@ html[data-env='staging'] .lobby-wordmark::after {
   width: 100%;
   font-size: 12px;
   line-height: 1.2;
+  min-height: 2.4em;
   text-align: center;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+.app-tile {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.app-tile.lifted .catalog-icon {
+  transform: scale(1.12);
+  box-shadow: 0 8px 20px #0006;
+}
+.app-tile.dragging {
+  position: relative;
+  z-index: 5;
+  opacity: 0.92;
 }
 .app-tile.favourite .app-name::after {
   content: ' ★';
