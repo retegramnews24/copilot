@@ -137,10 +137,13 @@ body:not(.playing) #minimap{display:none}
 /* Android status bar (clock on the left, icons on the right) stays free: Binottoland and sound go in the far corners,
    pause sits right of Telegram's ⌄ ⋮ buttons, the map reaches the right edge. */
 :root{--sys-top:max(env(safe-area-inset-top,0px),var(--system-safe-top,0px));--pause-top:max(calc(var(--sys-top) + var(--content-safe-top,0px)/2 - 15px),40px)}
-#leave{position:fixed;top:var(--top-row);left:6px;min-width:30px;height:30px;padding:0 6px;font-size:16px;z-index:5}
-#sound{position:fixed;top:var(--top-row);right:6px;height:30px;min-width:32px;z-index:5}
-#pause{position:fixed;top:var(--pause-top);right:6px;height:30px;min-width:32px;z-index:5}
-#minimap{top:max(var(--below-tg),calc(var(--pause-top) + 38px));right:6px}
+/* Android and Telegram areas (side bands and top corners) stay free: no own Back button (Telegram's Indietro and the
+   pause menu do that), the map sits inside the safe margins under Telegram's buttons, sound and pause right below it. */
+#leave{display:none}
+#minimap{top:var(--below-tg);right:calc(var(--ui-safe-right) + 10px)}
+#sound,#pause{position:fixed;top:calc(var(--below-tg) + var(--map-size,0px) + 8px);height:32px;min-width:36px;z-index:5}
+#pause{right:calc(var(--ui-safe-right) + 10px)}
+#sound{right:calc(var(--ui-safe-right) + 52px)}
 
 /* Low health: blinking bar and a steady red edge (no blinking with reduced motion). */
 .low-health #health-meter{animation:low-health 1s ease-in-out infinite}

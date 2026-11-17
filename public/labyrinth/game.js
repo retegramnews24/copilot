@@ -136,7 +136,7 @@ function loadMap(key){
 }
 function trackMap(){
  const box=$('minimap');if(!box)return;
- box.hidden=!!world.arena;if(world.arena)return;
+ box.hidden=!!world.arena;if(world.arena){document.documentElement.style.setProperty('--map-size','0px');return}
  const key='labyrinth-map:'+seed+':'+level;if(key!==mapKey||mapSeen?.length!==world.n*world.n)loadMap(key);
  const n=world.n,cx=Math.floor(player.x/CELL),cz=Math.floor(player.z/CELL),cell=cz*n+cx;
  if(cell!==mapCell){
@@ -147,9 +147,11 @@ function trackMap(){
  const now=performance.now();if(!mapDirty&&now-mapDrawn<(mapLarge?120:60))return;mapDrawn=now;mapDirty=false;
  // Small map: a 9-cell window around the player, sized to stay above the right-hand touch buttons. Large: whole floor.
  let room=150;
- if(!mapLarge){const top=box.getBoundingClientRect().top;for(const id of ['jump','guard','action','look-pad']){const b=$(id);if(b?.offsetParent){const r=b.getBoundingClientRect();if(r.right>innerWidth*.6)room=Math.min(room,r.top-top-10)}}}
+ if(!mapLarge){const top=box.getBoundingClientRect().top;for(const id of ['jump','guard','action','look-pad']){const b=$(id);if(b?.offsetParent){const r=b.getBoundingClientRect();if(r.right>innerWidth*.6)room=Math.min(room,r.top-top-50)}}}
  const ratio=Math.min(2,devicePixelRatio||1),size=Math.round(mapLarge?Math.min(innerWidth,innerHeight)*.72:Math.max(56,Math.min(150,room))),px=Math.round(size*ratio);
  if(box.width!==px){box.width=box.height=px;box.style.width=box.style.height=size+'px'}
+ // Sound and pause sit right under the small map.
+ const mapSize=mapLarge?(parseFloat(document.documentElement.style.getPropertyValue('--map-size'))||0):size;document.documentElement.style.setProperty('--map-size',mapSize+'px');
  const c=box.getContext('2d'),cells=mapLarge?n:9,s=px/cells,ox=mapLarge?0:player.x/CELL-cells/2,oz=mapLarge?0:player.z/CELL-cells/2,seen=i=>mapSeen[i]===1;if(!c)return;
  c.clearRect(0,0,px,px);c.fillStyle='#0c110bd0';c.fillRect(0,0,px,px);
  for(let z=Math.max(0,Math.floor(oz));z<Math.min(n,Math.ceil(oz+cells));z++)for(let x=Math.max(0,Math.floor(ox));x<Math.min(n,Math.ceil(ox+cells));x++){const i=z*n+x;if(!seen(i))continue;c.fillStyle=world.grid[i]?'#59604c':'#c9bf8f';c.fillRect(Math.floor((x-ox)*s),Math.floor((z-oz)*s),Math.ceil(s)+1,Math.ceil(s)+1)}
