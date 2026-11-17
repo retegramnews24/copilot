@@ -3918,3 +3918,128 @@ html[data-env='staging'] .lobby-wordmark::after {
 .settings-list-top {
   margin-top: 16px;
 }
+
+/* Lobby leaderboard: top 5 on one row above the chat; the full lists on the Giochi page are no longer shown. */
+#page-games.app-mode .leaderboard-panel {
+  display: none;
+}
+.lobby-leaders {
+  margin: 0 0 8px;
+  padding: 8px 10px 6px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  box-shadow: 0 3px 10px #0002;
+}
+.leaders-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.leaders-head h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.leaders-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 14px;
+  background: var(--field);
+}
+.leaders-tabs button {
+  width: auto;
+  min-height: 24px;
+  margin: 0;
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.leaders-tabs button[aria-pressed='true'] {
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 650;
+  box-shadow: 0 1px 3px #0003;
+}
+.leaders-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.leaders-row .leaders-empty {
+  grid-column: 1 / -1;
+  margin: 4px 0;
+  text-align: center;
+}
+.leader {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  gap: 1px;
+}
+.leader .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 13px;
+  box-shadow: 0 2px 6px #0004;
+}
+.leader.rank-1 .avatar {
+  width: 44px;
+  height: 44px;
+  font-size: 15px;
+  outline: 2px solid #e6b422;
+  outline-offset: 1px;
+}
+.leader-medal {
+  position: absolute;
+  top: -4px;
+  right: calc(50% - 26px);
+  font-size: 14px;
+  line-height: 1;
+}
+.leader-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 650;
+}
+.leader small {
+  color: var(--muted);
+  font-size: 11px;
+}
+/* Icons with depth: soft drop shadow, light from the top, symbol slightly lifted (Giochi grid and favourites). */
+:is(.app-tile, .game-tile) .catalog-icon {
+  background:
+    linear-gradient(180deg, #ffffff30 0%, #ffffff08 42%, #00000014 100%),
+    color-mix(in srgb, var(--cover, var(--accent)) 70%, var(--panel));
+  box-shadow:
+    inset 0 1px 0 #ffffff40,
+    inset 0 -2px 0 #00000026,
+    0 4px 10px #0005,
+    0 1px 2px #0004;
+  text-shadow: 0 2px 3px #0006;
+}
+:is(.app-tile, .game-tile) .catalog-icon :is(svg, img) {
+  filter: drop-shadow(0 2px 2px #0006);
+}
+/* The favourites row in the Lobby is a small dock with its own shadow. */
+#lobby-favourites .tile-row {
+  padding: 8px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  box-shadow:
+    inset 0 1px 0 #ffffff12,
+    0 4px 12px #0003;
+}

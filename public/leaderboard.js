@@ -1,5 +1,7 @@
-// Leaderboards on the Giochi page: wins against the AI, wins between people, Number Connect points.
+// Leaderboards: the compact top 5 in the Lobby, plus the full lists (wins against the AI, between people,
+// Number Connect points) kept in the Giochi page markup.
 import { gameTitle } from './game-info.js?v=5a31d49670';
+import { makeAvatar } from './avatar.js?v=7a059821b4';
 const $ = id => document.getElementById(id);
 
 function paintLeaders(kind, rows) {
@@ -50,10 +52,57 @@ export function renderNumberLeaders(rows) {
   );
   $('leaderboard-number-empty').hidden = rows.length > 0;
 }
+// Lobby: the top 5 on one row (avatar, medal, name, wins or points), with Persone / Contro AI / Number tabs.
+const strip = { mode: 'multi', multi: [], solo: [], number: [] };
+const MEDALS = ['🥇', '🥈', '🥉'];
+function drawStrip() {
+  const list = $('lobby-leaders-list');
+  if (!list) return;
+  document
+    .querySelectorAll('[data-leaders-mode]')
+    .forEach(b => b.setAttribute('aria-pressed', String(b.dataset.leadersMode === strip.mode)));
+  const rows = strip[strip.mode].slice(0, 5);
+  if (!rows.length) {
+    const empty = document.createElement('li');
+    empty.className = 'hint leaders-empty';
+    empty.textContent = strip.mode === 'number' ? 'Nessun punteggio' : 'Nessuna vittoria';
+    list.replaceChildren(empty);
+    return;
+  }
+  list.replaceChildren(
+    ...rows.map((row, index) => {
+      const item = document.createElement('li');
+      item.className = 'leader rank-' + (index + 1);
+      const face = makeAvatar(row);
+      const medal = document.createElement('span');
+      medal.className = 'leader-medal';
+      medal.textContent = MEDALS[index] || index + 1;
+      const name = document.createElement('span');
+      name.className = 'leader-name';
+      name.textContent = row.name.split(' ')[0];
+      const value = document.createElement('small');
+      value.textContent =
+        strip.mode === 'number' ? Number(row.points).toLocaleString('it-IT') + ' pt' : String(row.wins);
+      item.title = row.name;
+      item.append(face, medal, name, value);
+      return item;
+    })
+  );
+}
+document.addEventListener('click', event => {
+  const tab = event.target.closest('[data-leaders-mode]');
+  if (!tab) return;
+  strip.mode = tab.dataset.leadersMode;
+  drawStrip();
+});
 export function renderLeaders(data) {
   paintLeaders('solo', data.aiLeaderboard || []);
   paintLeaders('multi', data.leaderboard || []);
   if (Array.isArray(data.numberConnectLeaders)) renderNumberLeaders(data.numberConnectLeaders);
+  if (Array.isArray(data.leaderboard)) strip.multi = data.leaderboard;
+  if (Array.isArray(data.aiLeaderboard)) strip.solo = data.aiLeaderboard;
+  if (Array.isArray(data.numberConnectLeaders)) strip.number = data.numberConnectLeaders;
+  drawStrip();
 }
 // Loads the leaderboard, asking again while the server is still counting (pending). One load at a time.
 export function createLeaderboardLoader({ request, onError, ready }) {

@@ -15,7 +15,7 @@ import {renderMyGames,myTables,timeLeft} from './my-games.js?v=55386c178a';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=6f9a6958a5';
-import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=ce436079f5';
+import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=83b95ddebc';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=957b56ae56';
@@ -26,14 +26,14 @@ import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
-import {createArcadeLink} from './arcade-link.js?v=e866c5d3c5';
+import {createArcadeLink} from './arcade-link.js?v=ddb6eb9096';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.39',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.40',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -631,7 +631,7 @@ async function startSession(){
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
-  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);
+  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
   renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
   alerts.refresh();
   // Launched from a "tocca a te" message: straight to that table.
