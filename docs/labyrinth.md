@@ -2,6 +2,8 @@
 
 [← Binottoland](../README.md)
 
+**Ritirato.** Dalla 1.0.27 la scheda di Labyrinth è nascosta nella pagina Giochi e non compare tra i preferiti. Il codice resta nel progetto e le spedizioni già aperte si possono ancora riprendere, archiviare o eliminare dalla Lobby. Lo sviluppo successivo, provato solo in staging, non è stato portato nell'app vera.
+
 Dalla pagina Giochi si crea una spedizione numerata; nella Lobby gli altri possono entrare o assistere. Il creatore è il primo partecipante, ma non ospita la partita: ogni spedizione vive in un Durable Object distinto, tramite il binding ROOMS già configurato. Non servono nuove migrazioni, binding o segreti. Le esplorazioni vuote rimangono nella Lobby fino all’archiviazione o eliminazione da parte di un partecipante. L’arena conclusa libera il numero e si può archiviare dal menu prima di uscire. Quando una spedizione si chiude, il suo numero torna disponibile.
 
 Fino a 16 partecipanti per spedizione e 40 connessioni complessive includendo spettatori. Ingresso tardivo dal primo piano. Quando qualcuno arriva nell’arena con un gruppo di più persone, si chiudono i nuovi ingressi; chi è già partecipante può riconnettersi. Se si arriva da soli, invece, gli ingressi restano aperti finché si sceglie **Apri vetrina**. Un nuovo ingresso durante questa attesa aggiunge la propria vetrina accanto alle altre ed elimina la possibilità di aprire da soli. L’apertura di gruppo attende tutti i partecipanti attivi; chi è ancora nel periodo di riconnessione resta nel conteggio. Gli spettatori non contano.

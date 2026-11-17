@@ -105,7 +105,8 @@ export function showGame(key) {
 function tiles(picks) {
   return picks
     .map(key => cards.find(c => c.dataset.game === key))
-    .filter(Boolean)
+    // Retired games keep their card hidden in the page (Labyrinth): no tile either, even if starred.
+    .filter(card => card && !card.hidden)
     .map(card => {
       const tile = document.createElement('button');
       tile.type = 'button';
