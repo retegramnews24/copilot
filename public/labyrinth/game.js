@@ -1,7 +1,7 @@
 import {FrameBudget} from './performance.js';
 import {applyInsets} from '../safe-area.js';
 import {move,free,restoreProgress,beginJump,crossedDoor,forwardVector,CELL,RADIUS} from './core.js';
-import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction,arenaZone,outsideZone,ZONE_DAMAGE,crackAt,CRACK_DAMAGE} from './adventure.js?v=adb1fdbed2';
+import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction,arenaZone,outsideZone,ZONE_DAMAGE,ZONE_START,ZONE_MIN,crackAt,CRACK_DAMAGE} from './adventure.js?v=adb1fdbed2';
 import {framePose,struckFrame,frameSupport,settledFrames,triggerFrames} from './traps.js';
 import {projectPoint,Renderer} from './render.js?v=a15950b5d2';
 import {readAppearance} from './avatar.js?v=5318415024';
@@ -88,6 +88,8 @@ function updateHealth(value=run.health){
  $('health').hidden=!!multiplayer?.watch;
  const meter=$('health-meter');meter.value=display;meter.style.setProperty('--life-hue',String(Math.round(display*1.2)));
  textIfChanged('health-value',display+'%');
+ // Low health (under 25%): the bar blinks and the screen edge stays slightly red.
+ document.body.classList.toggle('low-health',display>0&&display<25&&!multiplayer?.watch);
 }
 // Hit feedback: short camera shake and vibration (Binottoland "Vibrazione" setting, off with reduced motion for the shake).
 let shakeUntil=0,shakePower=0;
@@ -120,8 +122,12 @@ function syncScene(){hasKey=run.inventory.includes('key:'+level);renderer.scene=
  const zone=world.arena&&multiplayer.state.arenaLive?arenaZone(multiplayer.state.arenaStartedAt,renderer.scene.serverNow):1;renderer.scene.zone=zone;
  if(zone<1&&!zoneAnnounced){zoneAnnounced=true;sound.chime?.();toast('La zona sicura si restringe: resta dentro il muro rosso.')}
  if(zone===1)zoneAnnounced=false;
+ // Zone countdown in the status line during a live duel.
+ const startedAt=multiplayer.state.arenaStartedAt,left=world.arena&&multiplayer.state.arenaLive&&Number.isFinite(startedAt)?startedAt+ZONE_START-renderer.scene.serverNow:null;
+ const label=left===null?'':left>0?' · zona: si restringe tra '+Math.floor(Math.ceil(left/1000)/60)+':'+String(Math.ceil(left/1000)%60).padStart(2,'0'):zone>ZONE_MIN?' · zona: in restringimento':' · zona: al minimo';
+ if(label!==zoneLabel){zoneLabel=label;const status=$('expedition-status');status.textContent=(status.dataset.base||'')+label}
  if(zone<1&&!multiplayer.watch&&!inStands()&&outsideZone(world,player,zone)&&performance.now()-zoneWarned>2500){zoneWarned=performance.now();toast('Fuori dalla zona sicura: −'+ZONE_DAMAGE+'% di vita al secondo')}}}
-var zoneAnnounced=false,zoneWarned=0;
+var zoneAnnounced=false,zoneWarned=0,zoneLabel='';
 // Map of visited corridors, per floor, kept on this device for the current seed.
 var mapSeen=null,mapKey='',mapCell=-1,mapLarge=false,mapDirty=true,mapDrawn=0;
 function loadMap(key){
@@ -140,9 +146,9 @@ function trackMap(){
  }
  const now=performance.now();if(!mapDirty&&now-mapDrawn<(mapLarge?120:60))return;mapDrawn=now;mapDirty=false;
  // Small map: a 9-cell window around the player, sized to stay above the right-hand touch buttons. Large: whole floor.
- let room=104;
+ let room=150;
  if(!mapLarge){const top=box.getBoundingClientRect().top;for(const id of ['jump','guard','action','look-pad']){const b=$(id);if(b?.offsetParent){const r=b.getBoundingClientRect();if(r.right>innerWidth*.6)room=Math.min(room,r.top-top-10)}}}
- const ratio=Math.min(2,devicePixelRatio||1),size=Math.round(mapLarge?Math.min(innerWidth,innerHeight)*.72:Math.max(56,Math.min(104,room))),px=Math.round(size*ratio);
+ const ratio=Math.min(2,devicePixelRatio||1),size=Math.round(mapLarge?Math.min(innerWidth,innerHeight)*.72:Math.max(56,Math.min(150,room))),px=Math.round(size*ratio);
  if(box.width!==px){box.width=box.height=px;box.style.width=box.style.height=size+'px'}
  const c=box.getContext('2d'),cells=mapLarge?n:9,s=px/cells,ox=mapLarge?0:player.x/CELL-cells/2,oz=mapLarge?0:player.z/CELL-cells/2,seen=i=>mapSeen[i]===1;if(!c)return;
  c.clearRect(0,0,px,px);c.fillStyle='#0c110bd0';c.fillRect(0,0,px,px);
@@ -150,6 +156,8 @@ function trackMap(){
  const cellOf=p=>Math.floor(p.z/CELL)*n+Math.floor(p.x/CELL),dot=(p,color,r)=>{c.fillStyle=color;c.beginPath();c.arc((p.x/CELL-ox)*s,(p.z/CELL-oz)*s,r,0,Math.PI*2);c.fill()};
  if(world.door&&seen(cellOf(world.door)))dot(world.door,'#ffd65a',Math.max(3,s*.45));
  for(const item of itemsAt(run,world))if(seen(cellOf(item)))dot(item,item.color||'#fff',Math.max(2.5,s*.35));
+ // Companions on the same floor, in their shirt colour with a light outline.
+ if(multiplayer)for(const r of remoteViews.values())if(r.level===level&&!r.standsUntil&&!r.eliminated&&r.online!==false){dot(r.player,'#f4efd9',Math.max(3.5,s*.42));dot(r.player,r.appearance?.shirt||'#7fd3ff',Math.max(2.5,s*.32))}
  const f=forwardVector(player.yaw),x=(player.x/CELL-ox)*s,z=(player.z/CELL-oz)*s,r=Math.max(3,s*.4);
  c.fillStyle='#ff6b4a';c.beginPath();c.moveTo(x+f.x*r*1.8,z+f.z*r*1.8);c.lineTo(x-f.z*r,z+f.x*r);c.lineTo(x+f.z*r,z-f.x*r);c.closePath();c.fill();
 }
@@ -469,6 +477,7 @@ function receiveState(s,correct=false){
  }
  $('test-travel').hidden=true;$('guide-option').hidden=true;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent=s.arenaResult?(s.archived?'Risultato archiviato.':'Puoi archiviare il risultato prima di uscire.'):'La spedizione rimane nella Lobby anche quando è vuota.';
  const active=s.players.filter(p=>p.counted),arrived=active.filter(p=>p.level===6);$('expedition-status').textContent=(multiplayer.watch?'Spettatore · ':'')+active.filter(p=>p.online).length+' online · arena '+arrived.length+'/'+active.length+(s.entryLocked?' · ingressi chiusi':' · ingressi aperti')+(s.players.some(p=>p.medals)?' · 🏅 '+s.players.filter(p=>p.medals).map(p=>p.name.split(' ')[0]+' '+p.medals).join(', '):'');
+ $('expedition-status').dataset.base=$('expedition-status').textContent;zoneLabel='';
  // Race: tell everyone who left each floor first.
  if(previous)for(const [floor,win] of Object.entries(s.floorWinners||{}))if(!previous.floorWinners?.[floor])toast('🏅 Primo a uscire dal piano '+floor+': '+(win.id===playerId?'tu':win.name)+' · in arena −10% danni per medaglia');
  if(previous&&!previous.showcaseOpen&&s.showcaseOpen){sound.chime();toast(s.arenaLive?'Tutti arrivati. Vince l’ultimo superstite.':'Le vetrine sono aperte.')}

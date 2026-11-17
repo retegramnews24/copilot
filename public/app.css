@@ -3505,6 +3505,16 @@ html[data-env='staging'] body::before {
   background: #c0392b;
   pointer-events: none;
 }
+/* Full-screen games use the whole top band: no red line there (Lobby and other pages keep it). */
+html[data-env='staging']
+  body:has(
+    #labyrinth-overlay:not([hidden]),
+    #arcade-overlay:not([hidden]),
+    #golf-overlay:not([hidden]),
+    #moto-trial-overlay:not([hidden])
+  )::before {
+  display: none;
+}
 html[data-env='staging'] .lobby-wordmark::after {
   content: 'PROVA';
   margin-left: 6px;

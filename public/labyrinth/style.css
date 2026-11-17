@@ -126,6 +126,23 @@ body:not(.playing) #stands,.in-stands #inventory-overlay,.in-stands #crosshair,
 #minimap.large{top:50%;right:auto;left:50%;transform:translate(-50%,-50%);z-index:7}
 body:not(.playing) #minimap{display:none}
 
+/* Top layout around Telegram's own buttons (Indietro on the left, ⌄ ⋮ on the right, which cannot move):
+   Binottoland, floor texts, sound and pause in the band above them; health and map just below them. */
+:root{--top-row:calc(env(safe-area-inset-top,0px) + 4px);--below-tg:calc(max(var(--ui-safe-top),44px) + 6px)}
+#hud{top:var(--top-row);padding-top:0}
+.floor-label{transform:none}
+#expedition-status{top:calc(var(--top-row) + 33px)}
+#guide{top:calc(var(--top-row) + 52px)}
+#health{top:var(--below-tg)}
+#minimap{top:var(--below-tg);right:calc(var(--ui-safe-right) + 12px)}
+
+/* Low health: blinking bar and a steady red edge (no blinking with reduced motion). */
+.low-health #health-meter{animation:low-health 1s ease-in-out infinite}
+.low-health #vignette{box-shadow:inset 0 0 90px 18px #a3202073}
+body:not(.playing).low-health #vignette{box-shadow:none}
+@keyframes low-health{50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.low-health #health-meter{animation:none}}
+
 /* Bigger touch controls: easier to hit on a phone held sideways. */
 body.touch{--stick-size:clamp(88px,24vmin,122px)}
 .touch #action{width:70px;height:70px;font-size:12px}
