@@ -1,4 +1,4 @@
-import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,FRAME_DAMAGE,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
+import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,SWORD_ARMOURED_DAMAGE,FRAME_DAMAGE,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
 import {SPRING_HEIGHT,springAt} from './public/labyrinth/spring.js';
 import {crossedDoor,free,move,RADIUS} from './public/labyrinth/core.js';
 import {struckFrame,settledFrames,triggerFrames} from './public/labyrinth/traps.js';
@@ -147,7 +147,7 @@ function strike(s,p,w,floor,now){
   const gear=equipment(other),damage=strikeDamage(kind,guarded,gear);
   const impact=takeDamage(other,kind,damage,now,p.id);
   if(impact){
-   impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||damage===2&&kind==='sword');
+   impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||damage===SWORD_ARMOURED_DAMAGE&&kind==='sword');
    if(impact.fatal){
     if(w.arena){
      if(s.arenaMatch?.roster.includes(other.id)){eliminate(other,w,now);settleArena(s)}

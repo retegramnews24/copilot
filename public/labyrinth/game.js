@@ -1,9 +1,9 @@
 import {FrameBudget} from './performance.js';
 import {applyInsets} from '../safe-area.js';
 import {move,free,restoreProgress,beginJump,crossedDoor,forwardVector,CELL,RADIUS} from './core.js';
-import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction} from './adventure.js?v=ceb47a4141';
+import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction} from './adventure.js?v=b20c19916c';
 import {framePose,struckFrame,frameSupport,settledFrames,triggerFrames} from './traps.js';
-import {projectPoint,Renderer} from './render.js?v=95fd0f4206';
+import {projectPoint,Renderer} from './render.js?v=f974fa81b0';
 import {readAppearance} from './avatar.js?v=5318415024';
 import {avatarSprite} from './visuals.js';
 import {Atmosphere} from './audio.js';
@@ -89,10 +89,25 @@ function updateHealth(value=run.health){
  const meter=$('health-meter');meter.value=display;meter.style.setProperty('--life-hue',String(Math.round(display*1.2)));
  textIfChanged('health-value',display+'%');
 }
+// Hit feedback: short camera shake and vibration (Binottoland "Vibrazione" setting, off with reduced motion for the shake).
+let shakeUntil=0,shakePower=0;
+function buzz(pattern){
+ let on=true;try{on=localStorage.getItem('binottoland-haptics')!=='off'}catch{}
+ if(on)try{navigator.vibrate?.(pattern)}catch{}
+}
+function shaken(view,now){
+ const left=shakeUntil-now;if(left<=0||reduced)return view;
+ const a=shakePower*left/260;
+ return {...view,yaw:view.yaw+Math.sin(now*.09)*a,pitch:view.pitch+Math.cos(now*.11)*a*.7};
+}
 function showImpact(impact,received){
  const {kind,damage,fatal,guarded}=impact;
  sound.impact?.(kind,impact.shielded,received?1:.7);
- if(!received)return;
+ if(!received){if(damage){buzz(25);shakeUntil=performance.now()+120;shakePower=.006}return}
+ if(damage||fatal){
+  shakeUntil=performance.now()+260;shakePower=fatal?.05:Math.min(.04,.008+damage*.0015);
+  buzz(fatal?[70,40,110]:damage>=14?60:30);
+ }
  if(fatal)healthFlash=performance.now()+480;
  if(damage||fatal){
   const flash=$('damage-flash');flash.classList.remove('hit');
@@ -259,7 +274,7 @@ function tick(now){
   }
   seconds+=dt;saveClock+=dt;if(saveClock>5){store();saveClock=0}
   advanceAction(actionState,dt);updateActions();
-  networkTick(dt);renderer.scene.guard=guarding;if(healthFlash&&now>=healthFlash){healthFlash=0;updateHealth()}renderer.scene.swing=actionState.remaining;renderer.scene.walk=walk;renderer.scene.spring=jumpState.contact?SPRING_HEIGHT-jumpState.height:0;renderer.draw(player,hasKey,now/1000,bob+cameraHeight());renderRemoteNames();
+  networkTick(dt);renderer.scene.guard=guarding;if(healthFlash&&now>=healthFlash){healthFlash=0;updateHealth()}renderer.scene.swing=actionState.remaining;renderer.scene.walk=walk;renderer.scene.spring=jumpState.contact?SPRING_HEIGHT-jumpState.height:0;renderer.draw(shaken(player,performance.now()),hasKey,now/1000,bob+cameraHeight());renderRemoteNames();
   if(quality==='auto'&&seconds>5)renderer.resolutionScale=frameBudget.sample(raw);
   if(debug){$('debug').hidden=false;$('debug').textContent='Piano '+level+' · '+Math.round(1/Math.max(raw,.001))+' fps\nx '+player.x.toFixed(2)+' z '+player.z.toFixed(2)+' · chiave '+hasKey+'\n'+canvas.width+' × '+canvas.height}
  }

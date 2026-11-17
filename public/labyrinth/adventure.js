@@ -124,10 +124,12 @@ export function takeDamage(target,kind,damage,now,attacker=null){
  if(fatal)target.protectedUntil=now+1250;
  return target.impact={kind,damage,fatal,attacker,number:(target.impact?.number||0)+1};
 }
+// Heavier hits keep arena duels short: fist 5%, sword 20% (14% parried), 6% against helmet, armour and shield.
+export const FIST_DAMAGE=5,SWORD_DAMAGE=20,SWORD_GUARDED_DAMAGE=14,SWORD_ARMOURED_DAMAGE=6;
 export function strikeDamage(kind,guarded,gear){
- if(kind==='fist')return guarded?0:2;
- if(gear.helmet&&gear.armor&&gear.shield)return 2;
- return guarded?7:10;
+ if(kind==='fist')return guarded?0:FIST_DAMAGE;
+ if(gear.helmet&&gear.armor&&gear.shield)return SWORD_ARMOURED_DAMAGE;
+ return guarded?SWORD_GUARDED_DAMAGE:SWORD_DAMAGE;
 }
 export function nextWaypoint(world,player,target){
  const start=index(Math.floor(player.x/CELL),Math.floor(player.z/CELL),world.n),end=index(Math.floor(target.x/CELL),Math.floor(target.z/CELL),world.n),ds=distances(world.grid,world.n,end);

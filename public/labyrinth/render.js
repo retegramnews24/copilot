@@ -8,7 +8,7 @@ import {colosseumMeshes,crowdSeats,arcadeTile,ARCADE_TOP,ARCH_BAYS,CROWD_COLORS,
 import {armPose,between,limbModel} from './character.js';
 import {SPRING_HEIGHT,netDeflection} from './spring.js?v=420bd5df2e';
 const VS=`attribute vec3 aPosition;attribute vec3 aNormal;attribute vec2 aUV;uniform mat4 uViewProjection;uniform mat4 uModel;uniform float uCrowd;uniform vec3 uNetDip;uniform mediump float uTime;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;void main(){vec4 p=uModel*vec4(aPosition,1.);float sway=uCrowd*sin(uTime*1.8+aPosition.x*1.38+aPosition.z*1.78);p.x+=sway*.035;p.y+=sway*.024;if(uNetDip.z>0.){vec2 d=p.xz-uNetDip.xy;p.y-=uNetDip.z*max(0.,1.-dot(d,d)*.25);}vPosition=p.xyz;vec3 x=uModel[0].xyz,y=uModel[1].xyz,z=uModel[2].xyz;vNormal=x*aNormal.x/dot(x,x)+y*aNormal.y/dot(y,y)+z*aNormal.z/dot(z,z);vUV=aUV;gl_Position=uViewProjection*p;}`;
-const FS=`precision mediump float;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;uniform sampler2D uTexture;uniform vec3 uColor;uniform vec3 uCamera;uniform vec3 uLights[8];uniform float uEmission;uniform float uTime;uniform vec3 uAmbient;uniform vec3 uTint;uniform vec3 uFog;uniform float uPower;uniform float uVisibility;uniform float uAlpha;uniform float uSky;uniform vec4 uClip;uniform vec2 uMirrorScale;void main(){if(dot(vec4(vPosition,1.),uClip)<0.)discard;if(uMirrorScale.x>0.){vec3 reflected=texture2D(uTexture,gl_FragCoord.xy*uMirrorScale).rgb;gl_FragColor=vec4(reflected*.93+vec3(.035,.048,.055),1.);return;}if(uSky>.5){gl_FragColor=texture2D(uTexture,vUV);return;}vec3 n=normalize(vNormal);vec3 light=uAmbient;for(int i=0;i<8;i++){vec3 d=uLights[i]-vPosition;float r=dot(d,d);float diffuse=max(dot(n,normalize(d)),.025);light+=uTint*diffuse*uPower/(1.+r*.22);}vec4 tex=texture2D(uTexture,vUV);vec3 c=tex.rgb*uColor; c*=mix(light,vec3(1.1),uEmission);float fog=1.-exp(-pow(length(vPosition-uCamera)/uVisibility,1.55));c=mix(c,uFog,clamp(fog,0.,.92));gl_FragColor=vec4(pow(max(c,vec3(0.)),vec3(.94)),uAlpha*tex.a);}`;
+const FS=`precision mediump float;varying mediump vec3 vPosition;varying mediump vec3 vNormal;varying mediump vec2 vUV;uniform sampler2D uTexture;uniform vec3 uColor;uniform vec3 uCamera;uniform vec3 uLights[8];uniform float uEmission;uniform float uTime;uniform vec3 uAmbient;uniform vec3 uTint;uniform vec3 uFog;uniform float uPower;uniform float uVisibility;uniform float uAlpha;uniform float uGlow;uniform float uSky;uniform vec4 uClip;uniform vec2 uMirrorScale;void main(){if(dot(vec4(vPosition,1.),uClip)<0.)discard;if(uMirrorScale.x>0.){vec3 reflected=texture2D(uTexture,gl_FragCoord.xy*uMirrorScale).rgb;gl_FragColor=vec4(reflected*.93+vec3(.035,.048,.055),1.);return;}if(uSky>.5){gl_FragColor=texture2D(uTexture,vUV);return;}vec3 n=normalize(vNormal);vec3 light=uAmbient;for(int i=0;i<8;i++){vec3 d=uLights[i]-vPosition;float r=dot(d,d);float diffuse=max(dot(n,normalize(d)),.025);light+=uTint*diffuse*uPower/(1.+r*.22);}vec4 tex=texture2D(uTexture,vUV);vec3 c=tex.rgb*uColor; c*=mix(light,vec3(1.1),uEmission);float fog=1.-exp(-pow(length(vPosition-uCamera)/uVisibility,1.55));c=mix(c,uFog,clamp(fog,0.,.92)*(1.-uGlow));gl_FragColor=vec4(pow(max(c,vec3(0.)),vec3(.94)),uAlpha*tex.a);}`;
 const identity=()=>new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);
 function multiply(a,b){const o=new Float32Array(16);for(let c=0;c<4;c++)for(let r=0;r<4;r++)for(let k=0;k<4;k++)o[c*4+r]+=a[k*4+r]*b[c*4+k];return o}
 function cameraMatrix(p,aspect,bob=0){
@@ -112,7 +112,7 @@ export class Renderer{
   this.anisotropy=this.anisotropic?Math.min(4,gl.getParameter(this.anisotropic.MAX_TEXTURE_MAX_ANISOTROPY_EXT)):1;
   const compile=(type,source)=>{const s=gl.createShader(type);gl.shaderSource(s,source);gl.compileShader(s);if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw Error('Shader non disponibile: '+gl.getShaderInfoLog(s));return s};
   const program=gl.createProgram();gl.attachShader(program,compile(gl.VERTEX_SHADER,VS));gl.attachShader(program,compile(gl.FRAGMENT_SHADER,FS));gl.linkProgram(program);if(!gl.getProgramParameter(program,gl.LINK_STATUS))throw Error('Renderer non disponibile.');this.program=program;gl.useProgram(program);
-  this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky','uCrowd','uNetDip','uClip','uMirrorScale'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
+  this.attrs=['aPosition','aNormal','aUV'].map(n=>gl.getAttribLocation(program,n));this.uniforms=Object.fromEntries(['uViewProjection','uModel','uTexture','uColor','uCamera','uLights[0]','uEmission','uTime','uAmbient','uTint','uFog','uPower','uVisibility','uAlpha','uSky','uCrowd','uNetDip','uClip','uMirrorScale','uGlow'].map(n=>[n,gl.getUniformLocation(program,n)]));gl.enable(gl.DEPTH_TEST);gl.disable(gl.CULL_FACE);gl.clearColor(.2,.18,.115,1);gl.uniform1i(this.uniforms.uTexture,0);
   gl.uniform1f(this.uniforms.uAlpha,1);const white=document.createElement('canvas');white.width=white.height=1;white.getContext('2d').fillRect(0,0,1,1);const ctx=white.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1,1);this.white=this.texture(white);this.surfaces=new SurfaceBank();this.generation=0;this.closed=false;this.resolutionScale=1;this.meshes=[];this.textures=[];this.quality='auto';this.resize();
  }
  texture(canvas){const g=this.gl,t=g.createTexture();g.bindTexture(g.TEXTURE_2D,t);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,true);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,canvas);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR_MIPMAP_LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.REPEAT);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.REPEAT);if(this.anisotropy>1)g.texParameterf(g.TEXTURE_2D,this.anisotropic.TEXTURE_MAX_ANISOTROPY_EXT,this.anisotropy);g.generateMipmap(g.TEXTURE_2D);return t}
@@ -150,7 +150,7 @@ export class Renderer{
   key.box(0,.014,0,.32,.012,.20);
   const preview=this.surfaces.preview(world.level),textures=[this.texture(surfaceCanvas(preview.wall)),this.texture(surfaceCanvas(preview.floor)),this.texture(surfaceCanvas(preview.ceiling)),this.texture(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'))];this.textures=textures;this.surfaces.request(world.level).then(maps=>{if(this.closed||generation!==this.generation||!maps)return;for(const [i,key] of ['wall','floor','ceiling'].entries()){gl.bindTexture(gl.TEXTURE_2D,textures[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,surfaceCanvas(maps[key]));gl.generateMipmap(gl.TEXTURE_2D)}this.boundTexture=null;this.surfaces.request(world.level===6?1:world.level+1)});
   this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,world.level===1?[1,.98,.79]:world.palette?.light||[1,.98,.79],world.level===1?1:world.arena?.5:world.level===5?.025:world.level===4?.12:.3),this.mesh(door,textures[3])];this.exitMesh=this.meshes.pop();this.keyMesh=this.mesh(key,null,[.64,.64,.6],0);
-  const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);this.props=[this.stripeMesh,this.exitMesh];
+  const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);const beam=new Geometry();beam.box(0,0,0,.1,2.6,.1);this.beamMesh=this.mesh(beam,null,[1,.93,.62],1);this.props=[this.stripeMesh,this.beamMesh,this.exitMesh];
   const legs=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry(),packRoll=new Geometry();
   for(const x of [-.119,.119]){
    legs.sphere(x,.105,-.016,.069,.265,.079);
@@ -370,14 +370,29 @@ export class Renderer{
   if(time-this.lightClock>.12||Math.hypot(player.x-(this.lightX||0),player.z-(this.lightZ||0))>.65){const nearest=this.world.lamps.map(p=>({p,d:(p.x-player.x)**2+(p.z-player.z)**2})).sort((a,b)=>a.d-b.d).slice(0,8),lights=new Float32Array(24).fill(9999);nearest.forEach(({p},i)=>lights.set([p.x,p.y,p.z],i*3));g.uniform3fv(u['uLights[0]'],lights);this.lightClock=time;this.lightX=player.x;this.lightZ=player.z}
   g.uniform1f(u.uCrowd,0);g.uniform1f(u.uSky,0);if(this.world.arena){g.disable(g.DEPTH_TEST);g.depthMask(false);g.uniform1f(u.uSky,1);const sky=identity();sky[12]=player.x;sky[14]=player.z;this.drawMesh(this.skyMesh,sky);g.uniform1f(u.uSky,0);g.depthMask(true);g.enable(g.DEPTH_TEST)}
   for(const mesh of this.meshes)this.drawMesh(mesh,identity());
-  this.drawMesh(scene.doorOpen&&!this.world.arena?this.openExit:this.exitMesh,identity());if(this.entryMesh)this.drawMesh(this.entryMesh,identity());
+  // Exit door and floor cards pulse and cut through the fog, so they can be spotted from far away.
+const pulse=.5+.5*Math.sin(time*3.2),exit=scene.doorOpen&&!this.world.arena?this.openExit:this.exitMesh,exitGlow=exit===this.exitMesh&&!this.world.arena&&!reflected;
+if(exitGlow){exit.emission=.16+.2*pulse;g.uniform1f(u.uGlow,.55)}
+this.drawMesh(exit,identity());if(exitGlow){exit.emission=0;g.uniform1f(u.uGlow,0)}
+if(this.entryMesh)this.drawMesh(this.entryMesh,identity());
   for(const frame of this.world.frames||[]){
    if(Math.hypot(frame.x-player.x,frame.z-player.z)>pal.visibility*1.3)continue;
    const pose=framePose(scene.traps?.[frame.id],scene.serverNow??Date.now()),m=frameTransform(frame,pose);
    this.frameArt.emission=pose.phase==='warning'?.72:.42;
    this.drawMesh(this.frameBoard,m);this.drawMesh(this.frameArt,m);
   }
-  for(const item of scene.items||[]){const m=identity();m[12]=item.x;m[14]=item.z;this.drawMesh(this.keyMesh,m);this.stripeMesh.color=hexColor(item.color);this.drawMesh(this.stripeMesh,m)}
+  const items=scene.items||[];
+if(items.length){
+ g.uniform1f(u.uGlow,.6);this.keyMesh.emission=.25+.35*pulse;this.stripeMesh.emission=.5+.4*pulse;
+ for(const item of items){const m=identity();m[12]=item.x;m[14]=item.z;this.drawMesh(this.keyMesh,m);this.stripeMesh.color=hexColor(item.color);this.drawMesh(this.stripeMesh,m)}
+ this.keyMesh.emission=0;this.stripeMesh.emission=0;
+ if(!reflected){
+  g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE);g.depthMask(false);g.uniform1f(u.uAlpha,.16+.12*pulse);g.uniform1f(u.uGlow,.75);
+  for(const item of items){const m=identity();m[12]=item.x;m[14]=item.z;this.drawMesh(this.beamMesh,m)}
+  g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND);
+ }
+ g.uniform1f(u.uGlow,0);
+}
   if(!reflected){
    this.drawMesh(this.mirrorRims,identity());
    for(const {mirror,mesh} of this.mirrorPanels){
@@ -547,7 +562,8 @@ class SoftwareRenderer{
   const project=(x,y,z)=>{const dx=x-p.x,dz=z-p.z,depth=dx*dirX+dz*dirZ;return {x:w/2+(dx*rightX+dz*rightZ)/depth*proj,y:horizon+(eye-y)/depth*proj,depth,scale:proj/depth}};
   const scene=this.scene||{items:!hasKey?[{...world.keyPosition,color:pal.stripe}]:[]},c=this.ctx;
   this.drawMirrors(p,bob,scene,pal,project,dirX,dirZ);
-  for(const item of scene.items||[]){const q=project(item.x,.025,item.z);if(q.depth>.15&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const width=Math.max(1,.32*q.scale),height=Math.max(1,.10*q.scale);c.fillStyle=world.level===5?'#16191a':'#8b8b7b';c.fillRect(q.x-width/2,q.y-height/2,width,height);c.fillStyle=item.color;c.fillRect(q.x-width/2,q.y-height/4,width,height*.3)}}
+  const glow=.5+.5*Math.sin(performance.now()/1000*3.2);
+   for(const item of scene.items||[]){const q=project(item.x,.025,item.z);if(q.depth>.15&&q.x>=0&&q.x<w&&q.depth<this.depth[Math.floor(q.x)]){const width=Math.max(1,.32*q.scale),height=Math.max(1,.10*q.scale);c.globalAlpha=.14+.12*glow;c.fillStyle='#ffeea0';c.fillRect(q.x-Math.max(1,.05*q.scale),q.y-2.6*q.scale,Math.max(2,.1*q.scale),2.6*q.scale);c.globalAlpha=1;c.fillStyle=world.level===5?'#16191a':'#8b8b7b';c.fillRect(q.x-width/2,q.y-height/2,width,height);c.fillStyle=item.color;c.fillRect(q.x-width/2,q.y-height/4,width,height*.3)}}
   for(const frame of world.frames||[]){
    const pose=framePose(scene.traps?.[frame.id],scene.serverNow??Date.now());
    const points=[[-1,0],[1,0],[1,FRAME_LENGTH],[-1,FRAME_LENGTH]].map(([side,length])=>{

@@ -107,15 +107,15 @@ function hit(){
  now+=600;
  return act(duel,attacker,{kind:'strike',weapon:'forged-sword'},now);
 }
-hit();assert.equal(defender.health,98);assert.equal(defender.impact.kind,'fist');
-guard(true);hit();assert.equal(defender.health,98);assert.equal(defender.impact.damage,0);
-guard(true,false);hit();assert.equal(defender.health,96);
-attacker.inventory=['sword'];guard(false);hit();assert.equal(defender.health,86);
-guard(true);hit();assert.equal(defender.health,79);
+hit();assert.equal(defender.health,95);assert.equal(defender.impact.kind,'fist');
+guard(true);hit();assert.equal(defender.health,95);assert.equal(defender.impact.damage,0);
+guard(true,false);hit();assert.equal(defender.health,90);
+attacker.inventory=['sword'];guard(false);hit();assert.equal(defender.health,70);
+guard(true);hit();assert.equal(defender.health,56);
 Object.assign(defender,{inventory:[null,'shield'],helmet:true,armor:true});
-guard(true);hit();assert.equal(defender.health,77);
-guard(false);hit();assert.equal(defender.health,75);
-attacker.guard=true;hit();assert.equal(defender.health,73,'The right hand attacks while the left stays on guard');
+guard(true);hit();assert.equal(defender.health,50);
+guard(false);hit();assert.equal(defender.health,44);
+attacker.guard=true;hit();assert.equal(defender.health,38,'The right hand attacks while the left stays on guard');
 assert.equal(attacker.guard,true);
 defender.health=2;const beforeWarp=defender.warp||0;
 hit();assert.equal(defender.health,0);assert.equal(defender.impact.fatal,true);
