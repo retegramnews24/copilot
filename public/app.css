@@ -3527,3 +3527,112 @@ html[data-env='staging'] .lobby-wordmark::after {
   letter-spacing: 0.06em;
   vertical-align: middle;
 }
+
+/* Giochi page as an Android home screen: one grid of square icons with a short name under each. */
+#page-games.app-mode section[aria-labelledby^='catalog-'] {
+  display: none;
+}
+.app-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  gap: 18px 8px;
+  margin: 6px 0 18px;
+}
+.app-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 4px 2px;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--ink);
+}
+.app-tile .catalog-icon {
+  width: 60px;
+  height: 60px;
+  margin: 0;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--cover, var(--accent)) 70%, var(--panel));
+  box-shadow:
+    inset 0 1px 0 #ffffff26,
+    0 3px 8px #0003;
+}
+.app-tile .catalog-icon :is(svg, img) {
+  max-width: 34px;
+  max-height: 34px;
+}
+.app-tile:active .catalog-icon {
+  transform: scale(0.94);
+}
+.app-name {
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-tile.favourite .app-name::after {
+  content: ' ★';
+  color: var(--cover, var(--accent));
+}
+.app-tile.flash .catalog-icon {
+  animation: card-flash 1.4s ease-out;
+}
+/* Bottom sheet with the game's modes, description and favourite star. */
+.game-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: #0008;
+}
+.game-sheet-panel {
+  width: min(100%, 520px);
+  padding: 10px 10px calc(14px + var(--safe-bottom, env(safe-area-inset-bottom, 0px)));
+  animation: sheet-up 0.18s ease-out;
+}
+.game-sheet-panel .catalog-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 16px;
+  border-radius: 18px;
+}
+.game-sheet-panel .catalog-icon {
+  width: 48px;
+  flex: 0 0 48px;
+  font-size: 26px;
+  border-radius: 13px;
+}
+.game-sheet-panel .catalog-card h3 {
+  font-size: 19px;
+  margin: 0;
+}
+.game-sheet-panel .catalog-actions button {
+  min-height: 44px;
+  font-size: 15px;
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(30px);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .game-sheet-panel {
+    animation: none;
+  }
+}
