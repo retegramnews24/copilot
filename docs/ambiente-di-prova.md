@@ -6,8 +6,12 @@ Serve a provare una modifica dentro Telegram prima di pubblicarla per tutti.
 ## Come si usa
 1. In GitHub Desktop crea il ramo `staging` (o passaci sopra), fai le modifiche, commit e **Push origin**.
 2. Cloudflare pubblica il ramo `staging` sul Worker di prova (dopo i test, come per main).
-3. Apri l'app di prova da Telegram: `https://t.me/checkmategame_bot/prova`. In alto c'è l'etichetta rossa **AMBIENTE DI PROVA**.
-4. Se va bene, unisci `staging` in `main` (GitHub Desktop → Branch → Merge into current branch, stando su main) e fai Push: va online per tutti.
+3. Apri l'app di prova da Telegram: `https://t.me/checkmategame_bot/prova`. In cima c'è una riga rossa e accanto al nome la scritta **PROVA**.
+4. Se va bene, la modifica si riporta a mano su `main`, con un commit a parte. **`staging` non si unisce mai in `main`**: la riga rossa e la scritta PROVA non devono finire nell'app vera.
+
+I due rami hanno numeri di versione separati: `staging` può essere più avanti di `main`.
+
+Se il Worker di prova mostra la versione di `main`, in Cloudflare → binottoland-motore-staging → Deployments i build hanno accanto la scritta **main**: in Settings → Build → Branch control il ramo di produzione deve essere `staging`. Dopo la correzione serve un nuovo push su `staging`.
 
 ## Cosa fa diversamente
 - Dati separati: è un altro Worker con i suoi Durable Objects.

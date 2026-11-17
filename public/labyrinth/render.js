@@ -150,7 +150,7 @@ export class Renderer{
   key.box(0,.014,0,.32,.012,.20);
   const preview=this.surfaces.preview(world.level),textures=[this.texture(surfaceCanvas(preview.wall)),this.texture(surfaceCanvas(preview.floor)),this.texture(surfaceCanvas(preview.ceiling)),this.texture(doorTexture(world.level,world.arena?'INDIETRO':'USCITA'))];this.textures=textures;this.surfaces.request(world.level).then(maps=>{if(this.closed||generation!==this.generation||!maps)return;for(const [i,key] of ['wall','floor','ceiling'].entries()){gl.bindTexture(gl.TEXTURE_2D,textures[i]);gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,surfaceCanvas(maps[key]));gl.generateMipmap(gl.TEXTURE_2D)}this.boundTexture=null;this.surfaces.request(world.level===6?1:world.level+1)});
   this.meshes=[this.mesh(wall,textures[0]),this.mesh(floor,textures[1]),this.mesh(ceiling,textures[2]),this.mesh(trim,null,[.26,.23,.14]),this.mesh(frames,null,[.23,.24,.2]),this.mesh(light,null,world.level===1?[1,.98,.79]:world.palette?.light||[1,.98,.79],world.level===1?1:world.arena?.5:world.level===5?.025:world.level===4?.12:.3),this.mesh(door,textures[3])];this.exitMesh=this.meshes.pop();this.keyMesh=this.mesh(key,null,[.64,.64,.6],0);
-  const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);const beam=new Geometry();beam.box(0,0,0,.1,2.6,.1);this.beamMesh=this.mesh(beam,null,[1,.93,.62],1);this.props=[this.stripeMesh,this.beamMesh,this.exitMesh];
+  const stripe=new Geometry();stripe.box(0,.027,-.045,.30,.002,.045);this.stripeMesh=this.mesh(stripe);const beam=new Geometry();beam.box(0,0,0,.1,2.6,.1);this.beamMesh=this.mesh(beam,null,[1,.93,.62],1);const zone=new Geometry();for(let i=0;i<64;i++){const a=i/64*Math.PI*2,b=(i+1)/64*Math.PI*2,p=[Math.cos(a),Math.sin(a)],q=[Math.cos(b),Math.sin(b)];zone.quad([p[0],0,p[1]],[q[0],0,q[1]],[q[0],2.4,q[1]],[p[0],2.4,p[1]],[-p[0],0,-p[1]])}this.zoneMesh=this.mesh(zone,null,[1,.16,.12],1);this.props=[this.stripeMesh,this.beamMesh,this.zoneMesh,this.exitMesh];
   const legs=new Geometry(),shirt=new Geometry(),shorts=new Geometry(),wornPack=new Geometry(),packRoll=new Geometry();
   for(const x of [-.119,.119]){
    legs.sphere(x,.105,-.016,.069,.265,.079);
@@ -392,6 +392,14 @@ if(items.length){
   g.uniform1f(u.uAlpha,1);g.depthMask(true);g.disable(g.BLEND);
  }
  g.uniform1f(u.uGlow,0);
+}
+// Arena safe zone: translucent red wall on the shrinking oval.
+const oval=this.world.oval;
+if(oval&&!reflected&&scene.zone<1){
+ const m=identity();m[0]=oval.rx*scene.zone;m[10]=oval.rz*scene.zone;m[12]=oval.cx;m[14]=oval.cz;
+ g.enable(g.BLEND);g.blendFunc(g.SRC_ALPHA,g.ONE_MINUS_SRC_ALPHA);g.depthMask(false);g.uniform1f(u.uAlpha,.26+.1*pulse);g.uniform1f(u.uGlow,.6);
+ this.drawMesh(this.zoneMesh,m);
+ g.uniform1f(u.uAlpha,1);g.uniform1f(u.uGlow,0);g.depthMask(true);g.disable(g.BLEND);
 }
   if(!reflected){
    this.drawMesh(this.mirrorRims,identity());

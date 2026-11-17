@@ -116,6 +116,17 @@ export const equipment=run=>({
 });
 export const healthValue=value=>Number.isFinite(value)?Math.max(1,Math.min(100,Math.round(value))):100;
 export const FRAME_DAMAGE=25;
+// Arena safe zone: after 2 minutes of the duel the oval shrinks for 2 minutes down to 35%; outside it costs 3% per second.
+export const ZONE_START=120000,ZONE_SHRINK=120000,ZONE_MIN=.35,ZONE_DAMAGE=3,ZONE_TICK=1000;
+export function arenaZone(startedAt,now){
+ if(!Number.isFinite(startedAt))return 1;
+ const t=(now-startedAt-ZONE_START)/ZONE_SHRINK;
+ return t<=0?1:Math.max(ZONE_MIN,1-(1-ZONE_MIN)*Math.min(1,t));
+}
+export function outsideZone(world,position,scale){
+ const o=world.oval;
+ return !!o&&scale<1&&((position.x-o.cx)/o.rx)**2+((position.z-o.cz)/o.rz)**2>scale*scale;
+}
 export function takeDamage(target,kind,damage,now,attacker=null){
  if(now<(target.protectedUntil||0))return null;
  const remaining=Math.max(0,healthValue(target.health)-damage);

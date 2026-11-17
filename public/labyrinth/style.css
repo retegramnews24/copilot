@@ -120,3 +120,20 @@ body:not(.playing) #stands,.in-stands #inventory-overlay,.in-stands #crosshair,
 #test-travel select{width:100%;min-height:38px}
 #test-travel button{margin:0;min-height:38px}
 #dev-kit{grid-column:1/-1}
+
+/* Map of visited corridors: small in the top-right corner, tap (or N) to enlarge. */
+#minimap{position:fixed;z-index:4;top:calc(var(--ui-safe-top) + 50px);right:calc(var(--ui-safe-right) + 12px);border:1px solid #b6b59a6b;border-radius:8px;box-shadow:0 3px 10px #0005;cursor:pointer;touch-action:manipulation}
+#minimap.large{top:50%;right:auto;left:50%;transform:translate(-50%,-50%);z-index:7}
+body:not(.playing) #minimap{display:none}
+
+/* Bigger touch controls: easier to hit on a phone held sideways. */
+body.touch{--stick-size:clamp(88px,24vmin,122px)}
+.touch #action{width:70px;height:70px;font-size:12px}
+.touch #jump,.touch #guard{width:56px;height:56px;font-size:12px;bottom:calc(var(--control-floor) + 80px)}
+.touch #guard{right:calc(var(--ui-safe-right) + var(--stick-size) + 66px)}
+.touch #crouch{width:62px;height:50px;font-size:12px}
+@media(max-width:670px){
+ .touch #action{width:58px;height:58px}
+ .touch #jump{right:calc(var(--ui-safe-right) + 85px);bottom:calc(var(--control-floor) + var(--stick-size) + 11px)}
+ .touch #guard{right:calc(var(--ui-safe-right) + 22px);bottom:calc(var(--control-floor) + var(--stick-size) + 72px)}
+}

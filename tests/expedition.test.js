@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,barrier,expeditionSummary,GRACE,STALE} from '../expedition-model.js';
-import {itemsAt,floorState,STANDS_WAIT,standsView} from '../public/labyrinth/adventure.js';
+import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,barrier,expeditionSummary,zoneDeadline,GRACE,STALE} from '../expedition-model.js';
+import {itemsAt,floorState,STANDS_WAIT,standsView,arenaZone,ZONE_START,ZONE_SHRINK,ZONE_MIN} from '../public/labyrinth/adventure.js';
 import {free,distances,index,CELL,PLAYER_CLEARANCE} from '../public/labyrinth/core.js';
 import {ExpeditionRoom} from '../labyrinth-server.js';
 import {framePose} from '../public/labyrinth/traps.js';
@@ -194,3 +194,21 @@ assert.deepEqual(indexed.filter(e=>e.path==='/lobby/result').map(e=>e.body),[
  {key:'last-standing:arena',game:'labyrinth',mode:'people',winners:[{id:'tg:1',name:'Pilota 1'}]}
 ]);
 console.log('PASS Arena: persistent eliminations, only the last survivor wins, reconnect preserves result, one ranking record and no solo award.');
+{
+ // Shrinking arena zone: full size for 2 minutes, then down to ZONE_MIN; outside costs 3% per second after one free second.
+ assert.equal(arenaZone(0,ZONE_START),1);assert.equal(arenaZone(0,ZONE_START+ZONE_SHRINK/2),1-(1-ZONE_MIN)/2);assert.equal(arenaZone(0,ZONE_START+ZONE_SHRINK*3),ZONE_MIN);assert.equal(arenaZone(null,1e12),1);
+ const t0=1e6,zone=createExpedition('zone-room',1,7,{id:'1',name:'Uno'},t0);joinExpedition(zone,{id:'2',name:'Due'},t0);
+ for(const id of ['1','2'])connectPlayer(zone,id,'c'+id,t0);
+ const w=expeditionWorld(zone,6),o=w.oval;
+ for(const p of Object.values(zone.players)){p.level=6;p.player={x:o.cx,z:o.cz,yaw:0,pitch:0,height:0}}
+ zone.players['2'].player.x=o.cx+o.rx*.6;zone.showcaseOpen=true;zone.entryLocked=true;zone.arenaMatch={roster:['1','2'],result:null,startedAt:t0};
+ assert.equal(zoneDeadline(zone,t0),t0+ZONE_START);
+ const late=t0+ZONE_START+ZONE_SHRINK+5000;
+ for(const p of Object.values(zone.players))p.lastSeen=late;
+ sweep(zone,late);assert.equal(zone.players['2'].health,100,'first second outside is free');
+ for(const p of Object.values(zone.players))p.lastSeen=late+1000;
+ sweep(zone,late+1000);assert.equal(zone.players['2'].health,97);assert.equal(zone.players['2'].impact.kind,'zone');assert.equal(zone.players['1'].health,100);
+ assert.equal(zoneDeadline(zone,late+1000),late+2000);
+ zone.players['2'].player.x=o.cx;assert.equal(zoneDeadline(zone,late+1000),null);
+ console.log('PASS Arena zone: shrink timing, free first second, 3% per second outside, alarm deadlines.');
+}
