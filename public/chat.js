@@ -10,7 +10,20 @@ export function createChat({ me, request, onError, refresh }) {
     sending = false;
   // Kept for callers: the list now fills the space given by the layout, no row limit.
   function limit() {}
+  // Stay on the latest message: when the Lobby is shown again (the list goes from hidden to visible) or its size
+  // changes, scroll back to the bottom unless the user had scrolled up to read older messages.
+  let atBottom = true;
+  const chatList = $('chat-messages');
+  chatList.addEventListener('scroll', () => {
+    if (chatList.clientHeight)
+      atBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 40;
+  });
+  if (typeof ResizeObserver === 'function')
+    new ResizeObserver(() => {
+      if (atBottom && chatList.clientHeight) chatList.scrollTop = chatList.scrollHeight;
+    }).observe(chatList);
   function scrollToLatest() {
+    atBottom = true;
     const list = $('chat-messages');
     list.scrollTop = list.scrollHeight;
     requestAnimationFrame(() => {
