@@ -1,63 +1,72 @@
-// Lobby chat: newest message first under the input, a box exactly 20 messages tall that scrolls for older ones.
+// Lobby chat, as in a messaging app: oldest at the top, newest at the bottom next to the input.
+// Game notices ("Sara ha aperto UNO · Entra") can be mixed in: they live only in this browser, not on the server.
 import { makeAvatar } from './avatar.js?v=7a059821b4';
 const $ = id => document.getElementById(id);
 
 // me(): the signed-in user; request/onError: app helpers; refresh(): re-renders people and chat together.
 export function createChat({ me, request, onError, refresh }) {
   let messages = [],
+    notices = [],
     sending = false;
-  // Box height: exactly the first 20 messages; older ones are reached by scrolling inside it.
-  function limit() {
-    const list = $('chat-messages'),
-      rows = [...list.children];
-    if (rows.length <= 20 || list.offsetParent === null) {
-      if (rows.length <= 20) list.style.maxHeight = '';
-      return;
-    }
-    const top = list.getBoundingClientRect().top - list.scrollTop,
-      bottom = rows[19].getBoundingClientRect().bottom;
-    list.style.maxHeight = Math.ceil(bottom - top + 4) + 'px';
-  }
-  addEventListener('resize', limit);
+  // Kept for callers: the list now fills the space given by the layout, no row limit.
+  function limit() {}
   function scrollToLatest() {
-    limit();
+    const list = $('chat-messages');
+    list.scrollTop = list.scrollHeight;
     requestAnimationFrame(() => {
-      const list = $('chat-messages');
-      limit();
-      list.scrollTop = 0;
+      list.scrollTop = list.scrollHeight;
     });
+  }
+  function messageRow(message, identity) {
+    const row = document.createElement('article');
+    row.className = 'chat-message' + (message.userId === identity?.id ? ' mine' : '');
+    row.append(makeAvatar(message));
+    const copy = document.createElement('div');
+    copy.className = 'chat-copy';
+    const header = document.createElement('small');
+    header.textContent =
+      message.name +
+      ' · ' +
+      new Date(message.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+    const text = document.createElement('p');
+    text.textContent = message.text;
+    copy.append(header, text);
+    row.append(copy);
+    return row;
+  }
+  function noticeRow(notice) {
+    const row = document.createElement('article');
+    row.className = 'chat-notice' + (notice.urgent ? ' urgent' : '');
+    const text = document.createElement('span');
+    text.textContent = notice.text;
+    row.append(text);
+    if (notice.label) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = notice.label + ' ›';
+      button.onclick = () => notice.action?.();
+      row.append(button);
+    }
+    return row;
   }
   function render(connected) {
     const list = $('chat-messages'),
       identity = me();
-    const signature = messages.map(m => m.id).join(',');
+    const signature = messages.map(m => m.id).join(',') + '|' + notices.map(n => n.id).join(',');
     if (list.dataset.signature !== signature) {
       list.dataset.signature = signature;
       list.replaceChildren();
-      if (!messages.length) {
+      if (!messages.length && !notices.length) {
         const p = document.createElement('p');
         p.className = 'hint';
         p.textContent = 'Il posto per due parole tra una partita e l’altra.';
         list.append(p);
       }
-      // Newest first under the input; the box shows 20 messages and scrolls for the older ones.
-      for (const message of messages.slice().reverse()) {
-        const row = document.createElement('article');
-        row.className = 'chat-message' + (message.userId === identity?.id ? ' mine' : '');
-        row.append(makeAvatar(message));
-        const copy = document.createElement('div');
-        copy.className = 'chat-copy';
-        const header = document.createElement('small');
-        header.textContent =
-          message.name +
-          ' · ' +
-          new Date(message.at).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-        const text = document.createElement('p');
-        text.textContent = message.text;
-        copy.append(header, text);
-        row.append(copy);
-        list.append(row);
-      }
+      const items = [
+        ...messages.map(m => ({ at: m.at, row: () => messageRow(m, identity) })),
+        ...notices.map(n => ({ at: n.at, row: () => noticeRow(n) }))
+      ].sort((a, b) => a.at - b.at);
+      for (const item of items) list.append(item.row());
       scrollToLatest();
     }
     $('chat-send').disabled = sending || !identity || !connected;
@@ -77,7 +86,7 @@ export function createChat({ me, request, onError, refresh }) {
       if (input.value.trim() === text) input.value = '';
       onError('');
       refresh();
-      $('chat-messages').scrollTop = $('chat-messages').scrollHeight;
+      scrollToLatest();
     } catch (e) {
       onError(e.message);
     } finally {
@@ -85,9 +94,15 @@ export function createChat({ me, request, onError, refresh }) {
       refresh();
     }
   };
+  let noticeId = 0;
   return {
     set: list => {
       messages = list || [];
+    },
+    // { text, label, action, urgent }: shown in the chat at the current time; the last 20 are kept.
+    notice: item => {
+      notices = [...notices, { ...item, id: 'n' + ++noticeId, at: Date.now() }].slice(-20);
+      refresh();
     },
     render,
     limit,
