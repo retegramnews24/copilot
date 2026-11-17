@@ -156,15 +156,30 @@ function trackMap(){
  const cellOf=p=>Math.floor(p.z/CELL)*n+Math.floor(p.x/CELL),dot=(p,color,r)=>{c.fillStyle=color;c.beginPath();c.arc((p.x/CELL-ox)*s,(p.z/CELL-oz)*s,r,0,Math.PI*2);c.fill()};
  if(world.door&&seen(cellOf(world.door)))dot(world.door,'#ffd65a',Math.max(3,s*.45));
  for(const item of itemsAt(run,world))if(seen(cellOf(item)))dot(item,item.color||'#fff',Math.max(2.5,s*.35));
- // Companions on the same floor, in their shirt colour with a light outline.
- if(multiplayer)for(const r of remoteViews.values())if(r.level===level&&!r.standsUntil&&!r.eliminated&&r.online!==false){dot(r.player,'#f4efd9',Math.max(3.5,s*.42));dot(r.player,r.appearance?.shirt||'#7fd3ff',Math.max(2.5,s*.32))}
+ // Red floor: cracks already seen, as small dark crosses.
+ for(const i of world.cracks||[])if(seen(i)){const cx=((i%n)+.5-ox)*s,cz=(Math.floor(i/n)+.5-oz)*s,h=s*.28;c.strokeStyle='#5b0d09';c.lineWidth=Math.max(1.5,s*.12);c.beginPath();c.moveTo(cx-h,cz-h);c.lineTo(cx+h,cz+h);c.moveTo(cx+h,cz-h);c.lineTo(cx-h,cz+h);c.stroke()}
+ // Companions on the same floor, in their shirt colour with a light outline; names on the large map.
+ if(multiplayer)for(const r of remoteViews.values())if(r.level===level&&!r.standsUntil&&!r.eliminated&&r.online!==false){dot(r.player,'#f4efd9',Math.max(3.5,s*.42));dot(r.player,r.appearance?.shirt||'#7fd3ff',Math.max(2.5,s*.32));if(mapLarge&&r.name){c.font=Math.round(11*ratio)+'px system-ui,sans-serif';c.fillStyle='#f4efd9';c.fillText(r.name.split(' ')[0],(r.player.x/CELL-ox)*s+s*.5,(r.player.z/CELL-oz)*s-s*.4)}}
  const f=forwardVector(player.yaw),x=(player.x/CELL-ox)*s,z=(player.z/CELL-oz)*s,r=Math.max(3,s*.4);
  c.fillStyle='#ff6b4a';c.beginPath();c.moveTo(x+f.x*r*1.8,z+f.z*r*1.8);c.lineTo(x-f.z*r,z+f.x*r);c.lineTo(x+f.z*r,z-f.x*r);c.closePath();c.fill();
 }
 function toggleMap(){mapLarge=!mapLarge;mapDirty=true;$('minimap').classList.toggle('large',mapLarge)}
 $('minimap')?.addEventListener('click',toggleMap);
 addEventListener('keydown',e=>{if(e.code==='KeyN'&&!e.repeat&&document.body.classList.contains('playing'))toggleMap()});
+// Time spent on each floor, shown when leaving it, with the best time kept on this device.
+var floorClock={level:0,start:0};
+function floorTime(back){
+ const now=performance.now(),done=floorClock.level&&!back&&level===floorClock.level+1&&level<=6&&floorClock.start;
+ if(done){
+  const seconds=Math.round((now-floorClock.start)/1000),key='labyrinth-best-floor:'+floorClock.level;let best=null;
+  try{best=Number(localStorage.getItem(key))||null;if(!best||seconds<best)localStorage.setItem(key,String(seconds))}catch{}
+  const fmt=t=>Math.floor(t/60)+':'+String(t%60).padStart(2,'0'),finished=floorClock.level;
+  setTimeout(()=>toast('Piano '+finished+' in '+fmt(seconds)+(best&&seconds>=best?' · record '+fmt(best):' · nuovo record')),900);
+ }
+ if(level!==floorClock.level)floorClock={level,start:now};
+}
 function loadWorld(saved=null,back=false){
+ floorTime(back);
  trapNotice=null;resetJump(jumpState,saved?.player?.height||0);world=worldFor(seed,level);sound.setArena?.(!!world.arena);configureNetworkWorld();const floor=floorState(run,world);player=saved?.player?{...saved.player}:{...world.spawn,pitch:0};
  if(!multiplayer)jumpState.height=frameSupport(settledFrames(world,floor,sceneTime()),player.x,player.z,RADIUS);
  if(back){player.x=world.door.x-world.door.dx*1.25;player.z=world.door.z-world.door.dz*1.25;player.yaw=Math.atan2(-world.door.dx,world.door.dz)}
@@ -193,12 +208,15 @@ function toggleCursor(){
 function resume(){if(!renderer||transitioning)return;$('new-run-confirm').hidden=true;if((networkMode||multiplayer)&&!networkConnected){toast('Collegamento alla spedizione…');return}localAppearance=readAppearance();updateInventory();if(multiplayer&&!multiplayer.watch)sendAction('appearance',{appearance:localAppearance},true);started=true;playing=true;syncScene();$('menu').hidden=true;$('fatal').textContent='';document.body.classList.add('playing');$('menu-title').textContent=devMode()?'Labyrinth · Dev Mode':'Labyrinth';resetInput();sound.resume();updateOrientation();canvas.focus({preventScroll:true});pointerLock();lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(tick);store();tell('Piano '+level+' · esplorazione avviata')}
 function pause(){if(!started||transitioning)return;playing=false;cancelAnimationFrame(raf);raf=0;resetInput();sound.active(false);if(document.pointerLockElement)document.exitPointerLock?.();document.body.classList.remove('playing');$('portrait').hidden=true;$('menu').hidden=false;$('menu-title').textContent='Una pausa.';$('start').textContent='Riprendi l’esplorazione';$('new-run').hidden=!!multiplayer;$('saved-info').textContent=(world.arena?'Arena':'Piano '+level)+(hasPass(run)?' · passe-partout':'');store()}
 function leave(){setGuard(false);store();sound.active(false);if(parent!==window)parent.postMessage({type:'labyrinth:exit'},location.origin);else location.href='/'}
-function tryJump(){
+function tryJump(retry=0){
+ if(typeof retry!=='number')retry=0;
  if(!playing||transitioning||portrait()||inStands()||player.crouch||touchCrouch||keys.has('ControlLeft')||keys.has('ControlRight')||(multiplayer&&!networkConnected))return;
  if(springAt(world,player)&&jumpFromSpring(jumpState)){sound.jump?.();return}
  const floor=frameSupport(settledFrames(world,floorState(run,world),sceneTime()),player.x,player.z,RADIUS);
  if(floor>0&&Math.abs(jumpState.height-floor)<.002&&jumpState.velocity<=0){jumpState.velocity=4.1;sound.jump?.();}
  else if(beginJump(jumpState))sound.jump?.();
+ // Pressed a moment before landing: try again for up to 200 ms instead of losing the jump.
+ else if(retry<5)setTimeout(()=>tryJump(retry+1),40);
 }
 function sceneTime(){return Date.now()+(multiplayer?.clockOffset||0)}
 function updateTraps(floor,now){
@@ -376,7 +394,9 @@ actionButton.onclick=e=>{
  pressAction();
 };
 $('menu-leave').onclick=leave;
-$('archive-arena').onclick=()=>parent.postMessage({type:'labyrinth:archive'},location.origin);$('drop-item').onclick=dropHeld;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=tryJump;
+$('archive-arena').onclick=()=>parent.postMessage({type:'labyrinth:archive'},location.origin);$('drop-item').onclick=dropHeld;$('leave').onclick=leave;$('portrait-exit').onclick=leave;$('pause').onclick=pause;$('jump').onclick=()=>{if(performance.now()-jumpTouchAt>600)tryJump()};
+// Touch: jump on pointerdown. A click is often not delivered while another finger holds the joystick.
+var jumpTouchAt=0;$('jump').addEventListener('pointerdown',e=>{if(e.pointerType!=='touch')return;e.preventDefault();jumpTouchAt=performance.now();tryJump()});
 $('sound').onclick=()=>{sound.toggle();sound.active(playing&&!portrait());write('labyrinth-sound',sound.enabled);updateSound()};
 $('guide-toggle').checked=guideEnabled=read('labyrinth-dev-guide',true);$('guide-toggle').onchange=e=>{guideEnabled=e.target.checked;write('labyrinth-dev-guide',guideEnabled);updateActions()};
 $('sensitivity').value=String(sensitivity=Math.max(.4,Math.min(2.2,Number(read('labyrinth-sensitivity',1))||1)));
