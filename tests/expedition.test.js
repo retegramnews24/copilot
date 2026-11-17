@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,barrier,expeditionSummary,zoneDeadline,GRACE,STALE} from '../expedition-model.js';
-import {itemsAt,floorState,STANDS_WAIT,standsView,arenaZone,ZONE_START,ZONE_SHRINK,ZONE_MIN} from '../public/labyrinth/adventure.js';
+import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,act,pose,snapshot,participants,expeditionWorld,runFor,casePosition,cases,ensureKeycards,barrier,expeditionSummary,zoneDeadline,medalShield,GRACE,STALE} from '../expedition-model.js';
+import {itemsAt,floorState,STANDS_WAIT,standsView,arenaZone,ZONE_START,ZONE_SHRINK,ZONE_MIN,worldFor,crackAt,CRACK_DAMAGE} from '../public/labyrinth/adventure.js';
 import {free,distances,index,CELL,PLAYER_CLEARANCE} from '../public/labyrinth/core.js';
 import {ExpeditionRoom} from '../labyrinth-server.js';
 import {framePose} from '../public/labyrinth/traps.js';
@@ -211,4 +211,15 @@ console.log('PASS Arena: persistent eliminations, only the last survivor wins, r
  assert.equal(zoneDeadline(zone,late+1000),late+2000);
  zone.players['2'].player.x=o.cx;assert.equal(zoneDeadline(zone,late+1000),null);
  console.log('PASS Arena zone: shrink timing, free first second, 3% per second outside, alarm deadlines.');
+}
+{
+ // Red floor cracks and race medals.
+ for(const seed of [3,77,4242]){
+  const red=worldFor(seed,3);assert(red.cracks.length>0,'red floor has cracks');assert(!worldFor(seed,2).cracks);
+  const cell=red.cracks[0],x=(cell%red.n+.5)*CELL,z=(Math.floor(cell/red.n)+.5)*CELL;
+  assert.equal(crackAt(red,{x,z}),cell);assert.equal(crackAt(red,{x,z},.4),null,'jumping over a crack is safe');
+  assert(!red.cracks.includes(red.start)&&!red.cracks.includes(red.exit)&&!red.cracks.includes(red.key));
+ }
+ assert.equal(CRACK_DAMAGE,10);assert.equal(medalShield({}),0);assert.equal(medalShield({medals:2}),.2);assert.equal(medalShield({medals:9}),.3);
+ console.log('PASS Floors and race: deterministic red cracks (safe start, exit and key), jump over cracks, medal damage reduction capped at 30%.');
 }

@@ -1,9 +1,9 @@
 import {FrameBudget} from './performance.js';
 import {applyInsets} from '../safe-area.js';
 import {move,free,restoreProgress,beginJump,crossedDoor,forwardVector,CELL,RADIUS} from './core.js';
-import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction,arenaZone,outsideZone,ZONE_DAMAGE} from './adventure.js?v=5f398b6ee1';
+import {worldFor,newRun,readRun,floorState,itemsAt,pickup,drop,hasPass,capacity,putInHand,openDoor,openShowcase,takeGear,SHOWCASE_GEAR,hasGear,equipment,healthValue,takeDamage,FRAME_DAMAGE,CROUCH_OFFSET,nextWaypoint,advanceBounce,beginAction,advanceAction,arenaZone,outsideZone,ZONE_DAMAGE,crackAt,CRACK_DAMAGE} from './adventure.js?v=adb1fdbed2';
 import {framePose,struckFrame,frameSupport,settledFrames,triggerFrames} from './traps.js';
-import {projectPoint,Renderer} from './render.js?v=4ff71dd3f5';
+import {projectPoint,Renderer} from './render.js?v=a15950b5d2';
 import {readAppearance} from './avatar.js?v=5318415024';
 import {avatarSprite} from './visuals.js';
 import {Atmosphere} from './audio.js';
@@ -113,7 +113,7 @@ function showImpact(impact,received){
   const flash=$('damage-flash');flash.classList.remove('hit');
   if(!reduced){void flash.offsetWidth;flash.classList.add('hit')}
  }
- toast(fatal?(inStands()?'Sei caduto. Ora sei sugli spalti.':'Sei caduto. Riparti dall’inizio del piano.'):damage===0?'Pugno parato':(kind==='frame'?'Quadro caduto':kind==='zone'?'Fuori dalla zona sicura':guarded?'Colpo parato':'Colpo subito')+' · −'+damage+'% vita');
+ toast(fatal?(inStands()?'Sei caduto. Ora sei sugli spalti.':'Sei caduto. Riparti dall’inizio del piano.'):damage===0?'Pugno parato':(kind==='frame'?'Quadro caduto':kind==='crack'?'Il pavimento cede':kind==='zone'?'Fuori dalla zona sicura':guarded?'Colpo parato':'Colpo subito')+' · −'+damage+'% vita');
  updateHealth();
 }
 function syncScene(){hasKey=run.inventory.includes('key:'+level);renderer.scene={appearance:inStands()?null:localAppearance,stillCrowd:reduced,spring:jumpState.contact?SPRING_HEIGHT-jumpState.height:0,items:itemsAt(run,world),showcaseOpen:run.showcaseOpen,...equipment(run),guard:guarding,swing:actionState.remaining,doorOpen:floorState(run,world).open,traps:floorState(run,world).traps};if(multiplayer){if(multiplayer.watch)renderer.scene.appearance=null;renderer.scene.serverNow=Date.now()+(multiplayer.clockOffset||0);renderer.scene.cases=multiplayer.state.cases;renderer.scene.players=[...remoteViews.values()].filter(p=>p.level===level&&!p.standsUntil&&!p.eliminated&&(!multiplayer.watch||p.id!==followId));
@@ -138,16 +138,19 @@ function trackMap(){
   for(let dz=-1;dz<=1;dz++)for(let dx=-1;dx<=1;dx++){const x=cx+dx,z=cz+dz;if(x<0||z<0||x>=n||z>=n)continue;const i=z*n+x;if(!mapSeen[i]){mapSeen[i]=1;added=true}}
   if(added)try{localStorage.setItem(mapKey,JSON.stringify(mapSeen.reduce((list,v,i)=>(v&&list.push(i),list),[])))}catch{}
  }
- const now=performance.now();if(!mapDirty&&now-mapDrawn<120)return;mapDrawn=now;mapDirty=false;
- const ratio=Math.min(2,devicePixelRatio||1),size=Math.round(mapLarge?Math.min(innerWidth,innerHeight)*.72:Math.min(118,innerHeight*.3)),px=Math.round(size*ratio);
+ const now=performance.now();if(!mapDirty&&now-mapDrawn<(mapLarge?120:60))return;mapDrawn=now;mapDirty=false;
+ // Small map: a 9-cell window around the player, sized to stay above the right-hand touch buttons. Large: whole floor.
+ let room=104;
+ if(!mapLarge){const top=box.getBoundingClientRect().top;for(const id of ['jump','guard','action','look-pad']){const b=$(id);if(b?.offsetParent){const r=b.getBoundingClientRect();if(r.right>innerWidth*.6)room=Math.min(room,r.top-top-10)}}}
+ const ratio=Math.min(2,devicePixelRatio||1),size=Math.round(mapLarge?Math.min(innerWidth,innerHeight)*.72:Math.max(56,Math.min(104,room))),px=Math.round(size*ratio);
  if(box.width!==px){box.width=box.height=px;box.style.width=box.style.height=size+'px'}
- const c=box.getContext('2d'),s=px/n,seen=i=>mapSeen[i]===1;if(!c)return;
+ const c=box.getContext('2d'),cells=mapLarge?n:9,s=px/cells,ox=mapLarge?0:player.x/CELL-cells/2,oz=mapLarge?0:player.z/CELL-cells/2,seen=i=>mapSeen[i]===1;if(!c)return;
  c.clearRect(0,0,px,px);c.fillStyle='#0c110bd0';c.fillRect(0,0,px,px);
- for(let i=0;i<n*n;i++){if(!seen(i))continue;c.fillStyle=world.grid[i]?'#59604c':'#c9bf8f';c.fillRect((i%n)*s,Math.floor(i/n)*s,Math.ceil(s),Math.ceil(s))}
- const cellOf=p=>Math.floor(p.z/CELL)*n+Math.floor(p.x/CELL),dot=(p,color,r)=>{c.fillStyle=color;c.beginPath();c.arc(p.x/CELL*s,p.z/CELL*s,r,0,Math.PI*2);c.fill()};
+ for(let z=Math.max(0,Math.floor(oz));z<Math.min(n,Math.ceil(oz+cells));z++)for(let x=Math.max(0,Math.floor(ox));x<Math.min(n,Math.ceil(ox+cells));x++){const i=z*n+x;if(!seen(i))continue;c.fillStyle=world.grid[i]?'#59604c':'#c9bf8f';c.fillRect(Math.floor((x-ox)*s),Math.floor((z-oz)*s),Math.ceil(s)+1,Math.ceil(s)+1)}
+ const cellOf=p=>Math.floor(p.z/CELL)*n+Math.floor(p.x/CELL),dot=(p,color,r)=>{c.fillStyle=color;c.beginPath();c.arc((p.x/CELL-ox)*s,(p.z/CELL-oz)*s,r,0,Math.PI*2);c.fill()};
  if(world.door&&seen(cellOf(world.door)))dot(world.door,'#ffd65a',Math.max(3,s*.45));
  for(const item of itemsAt(run,world))if(seen(cellOf(item)))dot(item,item.color||'#fff',Math.max(2.5,s*.35));
- const f=forwardVector(player.yaw),x=player.x/CELL*s,z=player.z/CELL*s,r=Math.max(3,s*.4);
+ const f=forwardVector(player.yaw),x=(player.x/CELL-ox)*s,z=(player.z/CELL-oz)*s,r=Math.max(3,s*.4);
  c.fillStyle='#ff6b4a';c.beginPath();c.moveTo(x+f.x*r*1.8,z+f.z*r*1.8);c.lineTo(x-f.z*r,z+f.x*r);c.lineTo(x+f.z*r,z-f.x*r);c.closePath();c.fill();
 }
 function toggleMap(){mapLarge=!mapLarge;mapDirty=true;$('minimap').classList.toggle('large',mapLarge)}
@@ -296,6 +299,13 @@ function tick(now){
    if(frame){
     (run.frameHits??=[]).push(frame);
     impact=takeDamage(run,'frame',FRAME_DAMAGE,nowMs);
+    if(impact?.fatal)resetAtEntrance();
+    if(impact)showImpact(impact,true);
+    store();
+   }
+   const crack=!multiplayer&&!impact?crackAt(world,player,jumpState.height):null;
+   if(crack!==null&&!(run.crackHits??=[]).includes(crack)){
+    run.crackHits.push(crack);impact=takeDamage(run,'crack',CRACK_DAMAGE,nowMs);
     if(impact?.fatal)resetAtEntrance();
     if(impact)showImpact(impact,true);
     store();
@@ -458,7 +468,9 @@ function receiveState(s,correct=false){
   if(p.id===playerId||p.impact.attacker===playerId)showImpact(p.impact,p.id===playerId);
  }
  $('test-travel').hidden=true;$('guide-option').hidden=true;$('follow-control').hidden=!multiplayer.watch;if(multiplayer.watch){const select=$('follow-player'),signature=JSON.stringify(s.players.filter(p=>p.online).map(p=>[p.id,p.name,p.level]));if(select.dataset.signature!==signature){select.dataset.signature=signature;select.replaceChildren();const free=document.createElement('option');free.value='';free.textContent='Visuale libera';select.append(free);for(const p of s.players.filter(p=>p.online)){const o=document.createElement('option');o.value=p.id;o.textContent=p.name+' · '+(p.level===6?'Arena':'Piano '+p.level);select.append(o)}select.value=followId}}$('start').textContent=started?'Riprendi':'Entra nella spedizione';$('saved-info').textContent='Spedizione '+s.number+(multiplayer.watch?' · spettatore':' · progressi condivisi');$('menu-note').textContent=s.arenaResult?(s.archived?'Risultato archiviato.':'Puoi archiviare il risultato prima di uscire.'):'La spedizione rimane nella Lobby anche quando è vuota.';
- const active=s.players.filter(p=>p.counted),arrived=active.filter(p=>p.level===6);$('expedition-status').textContent=(multiplayer.watch?'Spettatore · ':'')+active.filter(p=>p.online).length+' online · arena '+arrived.length+'/'+active.length+(s.entryLocked?' · ingressi chiusi':' · ingressi aperti');
+ const active=s.players.filter(p=>p.counted),arrived=active.filter(p=>p.level===6);$('expedition-status').textContent=(multiplayer.watch?'Spettatore · ':'')+active.filter(p=>p.online).length+' online · arena '+arrived.length+'/'+active.length+(s.entryLocked?' · ingressi chiusi':' · ingressi aperti')+(s.players.some(p=>p.medals)?' · 🏅 '+s.players.filter(p=>p.medals).map(p=>p.name.split(' ')[0]+' '+p.medals).join(', '):'');
+ // Race: tell everyone who left each floor first.
+ if(previous)for(const [floor,win] of Object.entries(s.floorWinners||{}))if(!previous.floorWinners?.[floor])toast('🏅 Primo a uscire dal piano '+floor+': '+(win.id===playerId?'tu':win.name)+' · in arena −10% danni per medaglia');
  if(previous&&!previous.showcaseOpen&&s.showcaseOpen){sound.chime();toast(s.arenaLive?'Tutti arrivati. Vince l’ultimo superstite.':'Le vetrine sono aperte.')}
  if(!playing)renderer.draw(player,hasKey,performance.now()/1000,cameraHeight());
 }

@@ -5,8 +5,8 @@ export const FLOORS=[
  {name:'Giallo',stripe:'#ddc267',light:[1,.96,.77],ambient:[.29,.275,.215],fog:[.20,.18,.115],power:1.15,visibility:18,brightness:1},
  {name:'Verde',stripe:'#70b87a',light:[.32,1,.44],ambient:[.065,.12,.065],fog:[.025,.06,.03],power:.85,visibility:15,brightness:.67},
  {name:'Rosso',stripe:'#c54a49',light:[1,.12,.09],ambient:[.065,.018,.015],fog:[.035,.006,.006],power:.65,visibility:12,brightness:.43},
- {name:'Blu',stripe:'#426ab5',light:[.16,.3,1],ambient:[.014,.023,.055],fog:[.005,.01,.027],power:.47,visibility:9,brightness:.26},
- {name:'Nero',stripe:'#191b1e',light:[.62,.68,.74],ambient:[.008,.01,.014],fog:[.002,.003,.005],power:.21,visibility:7,brightness:.105}
+ {name:'Blu',stripe:'#426ab5',light:[.16,.3,1],ambient:[.014,.023,.055],fog:[.005,.01,.027],power:.95,visibility:9,brightness:.26,torch:'only'},
+ {name:'Nero',stripe:'#191b1e',light:[.62,.68,.74],ambient:[.008,.01,.014],fog:[.002,.003,.005],power:.55,visibility:7,brightness:.105,torch:'with-lamps',flicker:true}
 ];
 export const ARENA_LIGHT={name:'Colosseo',stripe:'#cead73',light:[1,.92,.78],ambient:[.78,.69,.55],fog:[.65,.60,.51],power:.65,visibility:88,brightness:1};
 export const STANDS_WAIT=5000, CROUCH_OFFSET=.46;
@@ -26,7 +26,19 @@ export function standsView(world,seat=0){
  const x=cx+Math.cos(angle)*(rx+3.05),z=cz+Math.sin(angle)*(rz+3.05);
  return {x,z,yaw:Math.atan2(cx-x,z-cz),pitch:-.25,height:3.1};
 }
-export function worldFor(seed,level){const w=level===6?makeArena(seed):makeLevel(seed,level);if(level>1&&level<6)w.lamps=w.lamps.filter((p,i)=>{const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL),cell=index(x,z,w.n);return cell===w.exit||((x+z)%4===2&&(level<4||i%(level===5?4:2)===0))});w.palette=level===6?ARENA_LIGHT:FLOORS[level-1];w.frames=placeFrames(w,CELL,distances,random);w.mirrors=placeMirrors(w);return w}
+export function worldFor(seed,level){const w=level===6?makeArena(seed):makeLevel(seed,level);if(level>1&&level<6)w.lamps=w.lamps.filter((p,i)=>{const x=Math.floor(p.x/CELL),z=Math.floor(p.z/CELL),cell=index(x,z,w.n);return cell===w.exit||((x+z)%4===2&&(level<4||i%(level===5?4:2)===0))});w.palette=level===6?ARENA_LIGHT:FLOORS[level-1];w.frames=placeFrames(w,CELL,distances,random);w.mirrors=placeMirrors(w);if(level===3)w.cracks=placeCracks(w);return w}
+// Red floor: about 7% of the corridor cells are cracked. Stepping on one (not jumping) costs CRACK_DAMAGE once per crack.
+export const CRACK_DAMAGE=10;
+function placeCracks(w){
+ const rng=random(w.seed^0x5eed3),near=(a,b)=>Math.abs(a%w.n-b%w.n)+Math.abs(Math.floor(a/w.n)-Math.floor(b/w.n))<=2,cracks=[];
+ for(let i=0;i<w.grid.length;i++)if(!w.grid[i]&&!near(i,w.start)&&i!==w.exit&&i!==w.key&&!w.frames.some(f=>f.id===i)&&rng()<.07)cracks.push(i);
+ return cracks;
+}
+export function crackAt(w,p,height=0){
+ if(!w.cracks?.length||height>.05)return null;
+ const cell=index(Math.floor(p.x/CELL),Math.floor(p.z/CELL),w.n),c=centre(cell,w.n);
+ return w.cracks.includes(cell)&&Math.abs(p.x-c.x)<CELL*.32&&Math.abs(p.z-c.z)<CELL*.32?cell:null;
+}
 export function newRun(seed,test=true){return {version:2,seed:seed>>>0,level:1,seconds:0,player:null,inventory:[],inventoryLayout:2,health:100,kitRemoved:true,backpack:false,floors:{},showcaseOpen:false,swordTaken:false,test};}
 function randomSpot(world,salt){const rng=random(world.seed^Math.imul(world.level,7717)^salt),choices=[];for(let i=0;i<world.grid.length;i++)if(!world.grid[i]&&i!==world.start&&i!==world.exit&&i!==world.key&&!world.frames.some(f=>f.id===i))choices.push(i);return centre(choices[Math.floor(rng()*choices.length)],world.n)}
 export function floorState(run,world){

@@ -1,4 +1,4 @@
-import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,SWORD_ARMOURED_DAMAGE,FRAME_DAMAGE,arenaZone,outsideZone,ZONE_DAMAGE,ZONE_TICK,ZONE_START,ZONE_SHRINK,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
+import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,SWORD_ARMOURED_DAMAGE,FRAME_DAMAGE,arenaZone,outsideZone,ZONE_DAMAGE,crackAt,CRACK_DAMAGE,ZONE_TICK,ZONE_START,ZONE_SHRINK,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
 import {SPRING_HEIGHT,springAt} from './public/labyrinth/spring.js';
 import {crossedDoor,free,move,RADIUS} from './public/labyrinth/core.js';
 import {struckFrame,settledFrames,triggerFrames} from './public/labyrinth/traps.js';
@@ -42,6 +42,7 @@ export function joinExpedition(s,user,now){
  if(!p){if(s.entryLocked||s.showcaseOpen)fail('Ingressi chiusi: puoi assistere.');const list=Object.values(s.players);if(list.length>=MAX_PLAYERS)fail('Spedizione piena: puoi assistere.');const w=worldFor(s.seed,1);p=s.players[user.id]={id:user.id,name:user.name.slice(0,60),level:1,player:{...w.spawn,pitch:0,height:0},inventory:[],inventoryLayout:2,health:100,guard:false,backpack:false,swordTaken:false,appearance:clothes(),caseIndex:list.length,joined:now,online:false,counted:true,lastSeen:now,offlineAt:now,lastMove:now,seq:0};}
  p.counted=true;barrier(s);s.revision++;return p;
 }
+export const medalShield=p=>Math.min(.3,.1*(p.medals||0));
 function startArena(s,now=Date.now()){
  if(s.arenaMatch||!s.showcaseOpen||s.archived)return;
  const members=participants(s);
@@ -137,14 +138,22 @@ export function pose(s,p,b,now){
   impact=takeDamage(p,'frame',FRAME_DAMAGE,now);
   if(impact?.fatal){relocate(p,w.spawn,now);s.revision++;return 'warp'}
  }
+ const crack=impact?null:crackAt(w,candidate,height);
+ if(crack!==null&&!(p.crackHits??=[]).includes(crack)){
+  p.crackHits.push(crack);impact=takeDamage(p,'crack',CRACK_DAMAGE,now);
+  if(impact?.fatal){relocate(p,w.spawn,now);s.revision++;return 'warp'}
+ }
+ const cracked=crack!==null&&!!impact;
  if(floor.open&&crossedDoor(w,previous,candidate)){
+  // Race: the first to leave each floor (with at least two participants) earns a medal.
+  if(p.level<=5&&participants(s).length>=2&&!(s.floorWinners??={})[p.level]){s.floorWinners[p.level]={id:p.id,name:p.name};p.medals=(p.medals||0)+1}
   p.level++;relocate(p,expeditionWorld(s,p.level).spawn,now);barrier(s);s.revision++;
   return 'level';
  }
  p.player={...candidate,yaw,pitch};
  p.guard=b.guard===true;
  p.lastMove=now;
- if(triggered||frame){s.revision++;return 'trap'}
+ if(triggered||frame||cracked){s.revision++;return 'trap'}
  return Math.hypot(candidate.x-b.x,candidate.z-b.z)>.025?'clipped':true;
 }
 const near=(p,t,d)=>Math.hypot(p.player.x-t.x,p.player.z-t.z)<d;
@@ -168,10 +177,11 @@ function strike(s,p,w,floor,now){
   }
   if(!clear)continue;
   const guarded=other.guard&&now-other.lastMove<750&&facing(other,from);
-  const gear=equipment(other),damage=strikeDamage(kind,guarded,gear);
+  // Each race medal lowers the damage taken by 10%, up to 30%.
+  const gear=equipment(other),raw=strikeDamage(kind,guarded,gear),damage=Math.round(raw*(1-medalShield(other)));
   const impact=takeDamage(other,kind,damage,now,p.id);
   if(impact){
-   impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||damage===SWORD_ARMOURED_DAMAGE&&kind==='sword');
+   impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||raw===SWORD_ARMOURED_DAMAGE&&kind==='sword');
    if(impact.fatal){
     if(w.arena){
      if(s.arenaMatch?.roster.includes(other.id)){eliminate(other,w,now);settleArena(s)}
@@ -212,5 +222,5 @@ export function act(s,p,b,now){
  else if(b.kind==='strike'){if(w.arena){startArena(s,now);if(s.arenaMatch?.result)fail('Il combattimento è concluso.');if(s.arenaMatch&&!s.arenaMatch.roster.includes(p.id))fail('La sfida è già iniziata.');}if(!strike(s,p,w,floorState(r,w),now))return false;}
  else fail('Azione non valida.');p.weapon=equipment(p).weapon;s.revision++;return true;
 }
-export function snapshot(s){return {room:s.room,number:s.number,seed:s.seed,revision:s.revision,created:s.created,archived:s.archived,deleted:s.deleted,entryLocked:s.entryLocked,showcaseOpen:s.showcaseOpen,arenaResult:s.arenaMatch?.result??null,arenaLive:!!s.arenaMatch&&!s.arenaMatch.result,arenaStartedAt:s.arenaMatch?.startedAt??null,floors:s.floors,cases:cases(s),players:Object.values(s.players).map(({connection,lastMove,...p})=>({...p,...equipment(p)})),grace:GRACE}}
+export function snapshot(s){return {room:s.room,number:s.number,seed:s.seed,revision:s.revision,created:s.created,archived:s.archived,deleted:s.deleted,entryLocked:s.entryLocked,showcaseOpen:s.showcaseOpen,arenaResult:s.arenaMatch?.result??null,arenaLive:!!s.arenaMatch&&!s.arenaMatch.result,arenaStartedAt:s.arenaMatch?.startedAt??null,floorWinners:s.floorWinners||{},floors:s.floors,cases:cases(s),players:Object.values(s.players).map(({connection,lastMove,...p})=>({...p,...equipment(p)})),grace:GRACE}}
 export function expeditionSummary(s){return {room:s.room,number:s.number,game:'labyrinth',archived:s.archived,arenaResult:s.arenaMatch?.result??null,phase:s.archived||s.arenaMatch?.result?'finished':s.entryLocked?'playing':'waiting',players:Object.values(s.players).filter(p=>!s.arenaMatch||s.arenaMatch.roster.includes(p.id)).map(p=>({id:'tg:'+p.id,name:p.name})),turn:0,revision:s.revision,created:s.created,expires:null,online:participants(s).filter(p=>p.online).length,arrived:participants(s).filter(p=>p.level===6).length,entryLocked:s.entryLocked}}

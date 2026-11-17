@@ -18,6 +18,10 @@ Porte, carte, inventari, vita, cambi di piano e attivazione dei quadri vengono s
 
 Dal secondo al quinto piano, alcuni quadri oscillano prima di cadere quando un giocatore si avvicina. Il quadro caduto poggia contro la parete opposta. Si supera con un salto sul lato più basso. Un quadro in caduta toglie il 25% di vita una volta per giocatore. A zero si riparte all’ingresso del piano con il 100% di vita e tutto il proprio equipaggiamento.
 
+Ogni piano ha un'idea propria. Nel giallo e nel verde le regole sono quelle di base. Nel rosso circa il 7% dei corridoi ha il pavimento crepato, segnato da una macchia scura con fessure: calpestarlo toglie il 10% di vita una volta per crepa, mentre saltandoci sopra non succede nulla. Ingresso, uscita e carta non hanno crepe e il server controlla tutto. Il blu è al buio, con la sola torcia del giocatore puntata in avanti. Il nero ha la torcia e luci a soffitto che si spengono qualche secondo ogni 7. Nella grafica semplificata le crepe non si vedono.
+
+Gara: con almeno due partecipanti, il primo che esce da ciascun piano vince una medaglia e tutti ricevono l'avviso. Ogni medaglia riduce del 10% i danni dei colpi subiti nell'arena, fino al 30%. Le medaglie compaiono nella riga di stato della spedizione.
+
 Ogni piano del labirinto ha tre specchi a parete. Quello visibile più vicino riflette la stanza e i personaggi con il motore WebGL. Il renderer 2D usa riflessi dei personaggi semplificati.
 
 ## Arena, personaggi e comandi
