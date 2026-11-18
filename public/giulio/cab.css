@@ -46,3 +46,11 @@ main{max-width:1600px;padding-inline:max(env(safe-area-inset-left),var(--cab-saf
 .bank-head{font-weight:800}.bank{border-color:#435a51}.panel-label{color:#c2cfc0}
 .overlay{padding-top:max(16px,var(--cab-safe-top,0px));padding-bottom:max(16px,var(--cab-safe-bottom,0px))}
 @media(max-width:730px){.view-controls{bottom:7px;right:8px}.view-controls button{min-height:38px}.route-message{bottom:51px;left:10px;max-width:calc(100% - 20px)}.route-hud{left:9px;right:9px}.actions button{padding-inline:5px}.brand{gap:5px}.brand-icon{width:27px;height:27px}.brand strong{font-size:13px}}
+
+/* Fit: the whole simulator fits the screen without page scroll; the windscreen takes the height that is left. */
+html,body{height:100%;overflow:hidden}
+body{min-height:0;display:flex;flex-direction:column}
+body>header{flex:none}
+main#simulator{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;overflow:hidden}
+.windscreen{flex:1 1 auto;height:auto;min-height:150px}
+.desk,.route-strip{flex:none}

@@ -182,7 +182,7 @@ function shade(color,z){
 // Sky and mountains change little from one frame to the next: they are painted into a slightly larger image and
 // only moved, then repainted when the view turns or moves enough (or every 20 s for the clouds).
 const skyCanvas=document.createElement('canvas'), skyCtx=skyCanvas.getContext('2d',{alpha:false});
-let skyKey='',sky=null,skyMarginX=0,skyMarginY=0;
+let skyKey='',sky=null,skyMarginX=0,skyMarginY=0,railShine='#d2cec0';
 function atmosphere(){
   const drift=(camera.x*.00024+camera.z*.0001)*.18;
   const key=[width,height,ratio,focal,train.weather].join();
@@ -272,7 +272,64 @@ const glowSprite=(()=>{
   g.fillStyle=r;g.fillRect(0,0,64,64);return c;
 })();
 {let choice='auto';try{choice=localStorage.getItem('giulio-daytime')||'auto';}catch{}setPhase(choice);}
-function headlights(){
+// Glass: a faint reflection streak and darker screen edges, painted once per size and laid over each frame.
+const glassCanvas=document.createElement('canvas');let glassKey='';
+function glass(){
+  const key=width+'x'+height+'x'+ratio+phaseName;
+  if(key!==glassKey){
+    glassKey=key;glassCanvas.width=Math.round(width*ratio);glassCanvas.height=Math.round(height*ratio);
+    const g=glassCanvas.getContext('2d');g.setTransform(ratio,0,0,ratio,0,0);
+    const edge=g.createRadialGradient(width/2,height*.48,Math.min(width,height)*.35,width/2,height*.5,Math.hypot(width,height)*.62);
+    edge.addColorStop(0,'#0000');edge.addColorStop(1,phase.night?'#000a':'#06100c66');
+    g.fillStyle=edge;g.fillRect(0,0,width,height);
+    const streak=g.createLinearGradient(width*.12,0,width*.48,height*.6);
+    const shine=phase.night?'#9fb4d0':'#ffffff';
+    streak.addColorStop(0,shine+'00');streak.addColorStop(.45,shine+'14');streak.addColorStop(.55,shine+'08');streak.addColorStop(1,shine+'00');
+    g.fillStyle=streak;g.beginPath();g.moveTo(width*.08,0);g.lineTo(width*.3,0);g.lineTo(width*.62,height*.62);g.lineTo(width*.44,height*.62);g.closePath();g.fill();
+  }
+  ctx.drawImage(glassCanvas,0,0,width,height);
+}
+// Rain on the windscreen: drops build up while it rains and the wiper sweeps them away.
+const drops=[];let wiperAngle=Math.PI*.92,wiperDir=-1,lastRain=0;
+const dropSprite=(()=>{
+  const c=document.createElement('canvas');c.width=c.height=24;const g=c.getContext('2d');
+  const r=g.createRadialGradient(10,9,1,12,12,11);
+  r.addColorStop(0,'#ffffffaa');r.addColorStop(.35,'#d8ecef55');r.addColorStop(.8,'#2a3c3c44');r.addColorStop(1,'#2a3c3c00');
+  g.fillStyle=r;g.beginPath();g.arc(12,12,11,0,TAU);g.fill();return c;
+})();
+function windscreenRain(paneAt){
+  const wet=train.weather==='wet',now=train.elapsed,dt=Math.min(200,Math.max(0,now-lastRain));lastRain=now;
+  const pivot={u:.5,y:-.55},reach=.92;
+  if(wet){
+    const rate=.012+Math.min(1,Math.abs(train.v)/25)*.03;
+    if(drops.length<70&&Math.random()<rate*dt)drops.push({u:.08+Math.random()*.84,y:-.48+Math.random()*.98,r:.6+Math.random()*.8});
+    const before=wiperAngle;
+    wiperAngle+=wiperDir*dt*.0021;
+    if(wiperAngle<Math.PI*.08){wiperAngle=Math.PI*.08;wiperDir=1;}
+    if(wiperAngle>Math.PI*.92){wiperAngle=Math.PI*.92;wiperDir=-1;}
+    const lo=Math.min(before,wiperAngle),hi=Math.max(before,wiperAngle);
+    for(let i=drops.length-1;i>=0;i--){
+      const d=drops[i],du=(d.u-pivot.u)*2.62,dy=d.y-pivot.y,a=Math.atan2(dy,du);
+      if(Math.hypot(du,dy)<reach&&a>=lo-.02&&a<=hi+.02)drops.splice(i,1);
+    }
+  }else if(drops.length)drops.length=0;
+  for(const d of drops){
+    const q=project(paneAt(d.u,d.y));if(!q)continue;
+    const r=clamp(focal/q[2]*.02*d.r,1.5,9);
+    ctx.drawImage(dropSprite,q[0]-r,q[1]-r,r*2,r*2);
+  }
+  if(wet){
+    const tip=paneAt(pivot.u+Math.cos(wiperAngle)*reach/2.62,pivot.y+Math.sin(wiperAngle)*reach);
+    beam(paneAt(pivot.u,pivot.y),tip,'#142624',2.6);
+  }
+}
+// Soft ground shadow under trees, cast away from the sun (daylight only, near the track).
+function groundShadow(s,x,ground,radius){
+  if(phase.night||Math.abs(s-train.s)>260)return;
+  const pts=[];
+  for(let i=0;i<8;i++){const a=i*TAU/8;pts.push(point(s+Math.sin(a)*radius*.7,x+radius*.35+Math.cos(a)*radius,ground+.03));}
+  polygon(pts,train.weather==='wet'?'#1a262222':'#16231a38');
+}function headlights(){
   if(!phase.night&&phaseName!=='tramonto')return;
   const near=project(point(train.s+4)),far=project(point(train.s+90));
   if(!near||!far)return;
@@ -428,6 +485,7 @@ function scrub(s,x,seed,palette){
 }
 function broadleaf(tree,seed){
   const s=tree.s,x=tree.d*tree.side,ground=terrainLevel(s,x),h=tree.height*.82;
+  groundShadow(s,x,ground,tree.height*.3);
   const bottom=project(point(s,x,ground)),top=project(point(s,x,ground+h));
   if(!bottom||!top)return;
   const size=bottom[1]-top[1];
@@ -444,6 +502,7 @@ function broadleaf(tree,seed){
 function pine(tree){
   const x=tree.d*tree.side,h=tree.height,s=tree.s;
   const ground=terrainLevel(s,x);
+  groundShadow(s,x,ground,h*.22);
   const base=project(point(s,x,ground)),tip=project(point(s,x,ground+h));
   if(!base||!tip)return;
   const size=(base[1]-tip[1]),dx=base[0];
@@ -627,7 +686,8 @@ function drawCabin(cab){
     }
     const glass=front?.024:.042;
     panel(.06,.94,.52,-.52,'rgba(187,221,210,'+glass+')');
-    if(front){
+    if(front&&train.weather==='wet')windscreenRain((u,y)=>p(u,y));
+    else if(front){
       beam(p(.57,-.56),p(.76,-.35),'#263530',2.1);
       beam(p(.76,-.35),p(.83,-.32),'#142624',2.45);
       beam(p(.25,.573),p(.49,.573),'#9bb6a35c',1);
@@ -664,6 +724,9 @@ function render(){
   atmosphere();
   const wet=train.weather==='wet';
   const sideView=sideVisibility();
+  // Rails catch the light when looking toward the sun.
+  const sunAhead=Math.max(0,Math.cos(angleDiff(.57,viewBearing)));
+  railShine=mix('#d2cec0',phase.sun,Math.round(sunAhead*sunAhead*6)/10);
   const first=Math.max(trackStart,Math.floor((train.s-4-90*sideView)/3)*3);
   const last=Math.min(trackEnd,train.s+690-225*sideView),segments=[];
   for(let a=first;a<last;){
@@ -678,6 +741,7 @@ function render(){
     const hasBridge=paintLandscape(a,t,wet);
     if(hasBridge)bridge(a,t);
     strip(a,t,-1.84,1.84,-.075,even?'#858274':'#8c8576');
+    if(Math.abs(a-train.s)<48)for(let k=0;k<5;k++){const u=noise(a*7+k*13),j=a+(t-a)*noise(a*3+k*29),xx=-1.75+u*3.5;strip(j,j+.07+u*.05,xx,xx+.08,-.071,k%2?'#6b675b':'#a19b8a');}
     if(Math.abs(a-train.s)<138){
       const interval=1.7;
       for(let j=Math.ceil(a/interval)*interval;j<t;j+=interval){
@@ -685,8 +749,9 @@ function render(){
         if(Math.abs(a-train.s)<58)strip(j+.018,j+.066,-1.18,1.18,-.033,'#887662');
       }
     }
+    const relative=a-train.s;
     for(const rail of [-.7175,.7175]){
-      strip(a,t,rail-.043,rail+.043,.057,wet?'#b0b9bb':'#d2cec0');
+      strip(a,t,rail-.043,rail+.043,.057,!wet&&!phase.night&&relative>12&&relative<260?railShine:wet?'#b0b9bb':'#d2cec0');
       strip(a,t,rail-.074,rail-.037,.023,'#58554a');
     }
     const station=stationAt(center);if(station)stationPlatform(a,t,station);
@@ -712,4 +777,5 @@ function render(){
   }
   headlights();
   drawCabin(cab);
+  glass();
 }
