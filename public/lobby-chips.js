@@ -88,9 +88,7 @@ export function createLobbyChips({ notice }) {
       for (const item of items) {
         const key = item.key + (item.urgent ? ':urgent' : '');
         if (known.has(key)) continue;
-        const what = item.urgent
-          ? 'Tocca a te · ' + item.label
-          : item.kind === 'room'
+        const what = !item.urgent && item.kind === 'room'
             ? 'Nuova sala · ' + item.label
             : null; // new tables: stored by the server in the chat for everyone (lobby-hub.js)
         if (what)

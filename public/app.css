@@ -4196,3 +4196,26 @@ html[data-env='staging'] .lobby-wordmark::after {
 #lobby-chips {
   display: none !important;
 }
+
+/* No PROVA badge next to the name (the red line stays in the test environment). */
+html[data-env='staging'] .lobby-wordmark::after {
+  display: none;
+}
+/* Name: up to two lines, broken between words, never letter by letter. */
+.profile-copy strong {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.2;
+}
+/* "Riprendi tavolo" now lives in the bell. */
+#owned-table {
+  display: none !important;
+}
+.notice-item.pinned {
+  opacity: 1;
+  border-style: dashed;
+}

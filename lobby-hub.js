@@ -271,7 +271,12 @@ export class LobbyHub {
         limit = seatLimit(tables, user.player, tables.find(g => g.room === body.room) || { room: body.room });
       if (limit)
         return json(
-          { error: limit === 'long' ? longLimitText : 'Hai già una partita aperta. Puoi guardare le altre.' },
+          {
+            error:
+              limit === 'long'
+                ? longLimitText
+                : 'Hai già un tavolo aperto di questo gioco: lo trovi nella campanella.'
+          },
           409
         );
       const stub = this.env.ROOMS.get(this.env.ROOMS.idFromName(body.room));
@@ -344,7 +349,15 @@ export class LobbyHub {
           mode: body.mode || 'people'
         });
         if (limit)
-          return json({ error: limit === 'long' ? longLimitText : 'Hai già una partita aperta.' }, 409);
+          return json(
+            {
+              error:
+                limit === 'long'
+                  ? longLimitText
+                  : 'Hai già un tavolo aperto di questo gioco: lo trovi nella campanella.'
+            },
+            409
+          );
       }
       createSeries(body.target);
       const occupied = new Set(active.map(g => g.number));

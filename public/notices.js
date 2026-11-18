@@ -30,6 +30,7 @@ function ago(at) {
 export function createNotices({ me, isOpen, open }) {
   let server = [],
     local = [],
+    pinned = [],
     localId = 0,
     readAt = load(READ_KEY, 0),
     hidden = new Set(load(HIDDEN_KEY, []));
@@ -60,14 +61,14 @@ export function createNotices({ me, isOpen, open }) {
 
   function render() {
     const items = list(),
-      unread = items.filter(n => n.at > readAt).length,
+      unread = items.filter(n => n.at > readAt).length + pinned.filter(p => p.urgent).length,
       count = bell.querySelector('.notices-count');
     count.hidden = !unread;
     count.textContent = unread > 9 ? '9+' : String(unread);
     bell.setAttribute('aria-label', unread ? 'Avvisi: ' + unread + ' nuovi' : 'Avvisi');
     if (sheet.hidden) return;
     const box = $('notices-list');
-    if (!items.length) {
+    if (!items.length && !pinned.length) {
       const empty = document.createElement('p');
       empty.className = 'hint';
       empty.textContent = 'Nessun avviso. Qui arrivano i tavoli aperti, le vittorie e quando tocca a te.';
@@ -75,19 +76,21 @@ export function createNotices({ me, isOpen, open }) {
       return;
     }
     box.replaceChildren(
-      ...items.map(notice => {
+      ...[...pinned, ...items].map(notice => {
         const row = document.createElement('article');
-        row.className =
-          'notice-item' + (notice.at > shownFrom ? ' unread' : '') + (notice.urgent ? ' urgent' : '');
+        row.className = notice.pinned
+          ? 'notice-item pinned' + (notice.urgent ? ' urgent' : '')
+          : 'notice-item' + (notice.at > shownFrom ? ' unread' : '') + (notice.urgent ? ' urgent' : '');
         const copy = document.createElement('div');
         copy.className = 'notice-copy';
         const text = document.createElement('span');
         text.textContent = notice.text;
         const when = document.createElement('small');
-        when.textContent = ago(notice.at);
+        when.textContent = notice.pinned ? notice.detail || 'Partita aperta' : ago(notice.at);
         copy.append(text, when);
         row.append(copy);
-        const label = notice.label || (notice.notice === 'table' && notice.room && isOpen(notice.room) ? 'Entra' : '');
+        const label =
+          notice.label || (notice.notice === 'table' && notice.room && isOpen(notice.room) ? 'Entra' : '');
         if (label) {
           const go = document.createElement('button');
           go.type = 'button';
@@ -99,6 +102,8 @@ export function createNotices({ me, isOpen, open }) {
           };
           row.append(go);
         }
+        // Open games stay in the bell until they close: no ×.
+        if (notice.pinned) return row;
         const remove = document.createElement('button');
         remove.type = 'button';
         remove.className = 'notice-remove';
@@ -146,6 +151,11 @@ export function createNotices({ me, isOpen, open }) {
     // Server notices from the Lobby payload.
     set: items => {
       server = Array.isArray(items) ? items : [];
+      render();
+    },
+    // Your open games and single-player tables: { id, text, detail, label, action, urgent }, always on top.
+    setPinned: items => {
+      pinned = (items || []).map(item => ({ ...item, pinned: true }));
       render();
     },
     // { text, label, action, urgent }: a notice made in this browser.
