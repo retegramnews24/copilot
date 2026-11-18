@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#10191a">
 <title>Giulio Simulator · Linea dei Due Laghi</title>
-<link rel="stylesheet" href="../giulio/cab.css?v=78a4a36540">
+<link rel="stylesheet" href="../giulio/cab.css?v=57783f002f">
 </head>
 <body>
 <header>
@@ -20,44 +20,30 @@
       <button type="button" id="look-center" title="Ricomponi la visuale (Home)">Cabina <output id="view-angle">0°</output></button>
       <button type="button" id="look-right" aria-label="Guarda a destra">›</button>
     </div>
-    <div class="route-hud"><div class="route-label"><span class="eyebrow" id="hud-status">Prossima fermata</span><strong id="destination">Ponte Verde</strong><span id="distance">1.120 m</span></div><div class="speed-sign"><strong id="limit">45</strong><span>KM/H</span></div></div>
-    <div class="route-message" id="message" role="status">Pronto in banchina.</div>
-  </section>
-  <section class="desk" aria-label="Strumenti e comandi">
-    <div class="panel speed-panel">
-      <p class="panel-label">Velocità</p>
-      <div class="dial">
-        <svg viewBox="0 0 150 92" aria-hidden="true">
-          <path d="M16 73 A60 60 0 1 1 134 73" fill="none" stroke="#354b46" stroke-width="8" stroke-linecap="round"/>
-          <path id="speed-arc" d="M16 73 A60 60 0 1 1 134 73" pathLength="100" fill="none" stroke="#bce28b" stroke-width="8" stroke-linecap="round" stroke-dasharray="0 100"/>
-          <line id="cab-needle" class="cab-needle" x1="75" x2="75" y1="56" y2="22" transform="rotate(-130 75 56)"/>
-          <circle cx="75" cy="56" r="4" fill="#d7c199"/>
-          <g fill="#abbdb1" font-size="10" font-family="monospace" text-anchor="middle"><text x="10" y="90">0</text><text x="75" y="24">55</text><text x="137" y="90">110</text></g>
+    <div class="cab-hud">
+      <div class="route-label"><span class="eyebrow" id="hud-status">Prossima fermata</span><strong id="destination">Ponte Verde</strong><span id="distance">1.120 m</span><span class="hud-mini">Condotta <span id="pipe">5,00 bar</span></span><span class="hud-mini hud-warn" id="next-limit"></span></div>
+      <div class="speedo" aria-label="Velocità e limiti">
+        <svg viewBox="0 0 150 96" aria-hidden="true">
+          <path d="M16 73 A60 60 0 1 1 134 73" pathLength="100" fill="none" stroke="#ffffff33" stroke-width="7" stroke-linecap="round"/>
+          <path id="limit-zone" d="M16 73 A60 60 0 1 1 134 73" pathLength="100" fill="none" stroke="#ff6b5a" stroke-width="7" stroke-dasharray="0 100"/>
+          <path id="next-zone" d="M16 73 A60 60 0 1 1 134 73" pathLength="100" fill="none" stroke="#ffd166" stroke-width="13" stroke-dasharray="0 100"/>
+          <path id="speed-arc" d="M16 73 A60 60 0 1 1 134 73" pathLength="100" fill="none" stroke="#bce28b" stroke-width="7" stroke-linecap="round" stroke-dasharray="0 100"/>
+          <line id="cab-needle" class="cab-needle" x1="75" x2="75" y1="56" y2="20" transform="rotate(-130 75 56)"/>
+          <circle cx="75" cy="56" r="4" fill="#f4f0e4"/>
         </svg>
-        <output class="speed-number" id="speed">0</output><span class="speed-unit">km/h</span>
-      </div>
-      <p class="state-line" id="state">FERMO</p>
-    </div>
-    <div class="panel controls">
-      <div class="bank"><div class="bank-head">Trazione <output id="traction">0 / 4</output></div><div class="steps" id="traction-steps" aria-hidden="true"></div><div class="lever-control"><div id="traction-lever" class="lever-slot" aria-hidden="true"><div class="lever-handle"></div></div><div class="keys"><button data-cmd="powerDown" aria-label="Riduci trazione">− <kbd>S</kbd></button><button data-cmd="powerUp" aria-label="Aumenta trazione">+ <kbd>W</kbd></button></div></div></div>
-      <div class="bank brake"><div class="bank-head">Freno <output id="brake">3 / 5</output></div><div class="steps" id="brake-steps" aria-hidden="true"></div><div class="lever-control"><div id="brake-lever" class="lever-slot" aria-hidden="true"><div class="lever-handle"></div></div><div class="keys"><button data-cmd="brakeDown" aria-label="Allenta il freno">− <kbd>A</kbd></button><button data-cmd="brakeUp" aria-label="Aumenta il freno">+ <kbd>D</kbd></button></div></div></div>
-      <div class="secondary">
-        <button data-cmd="left" id="doors-left">Porte Sx <kbd>Q</kbd></button>
-        <button data-cmd="right" id="doors-right">Porte Dx <kbd>E</kbd></button>
-        <button data-cmd="reverse" id="reverser">Avanti <kbd>R</kbd></button>
-        <button data-cmd="sand" id="sand">Sabbia <kbd>C</kbd></button>
-        <button data-cmd="emergency" id="emergency" class="emergency">Emergenza <kbd>X</kbd></button>
+        <output class="speed-number" id="speed">0</output>
+        <span class="speedo-limit">limite <b id="limit">45</b></span>
       </div>
     </div>
-    <div class="panel stats-panel">
-      <p class="panel-label">Telemetria di bordo</p>
-      <dl class="readout">
-        <div class="pressure"><dt>Condotta</dt><dd id="pipe">4,25 bar</dd><i id="pipe-gauge" class="mini-gauge" aria-hidden="true"></i></div><div class="pressure"><dt>Cilindri</dt><dd id="cyl">1,87 bar</dd><i id="cyl-gauge" class="mini-gauge" aria-hidden="true"></i></div>
-        <div><dt>Accelerazione</dt><dd id="acc">0,00 m/s²</dd></div><div><dt>Pendenza</dt><dd id="grade">0 ‰</dd></div>
-      </dl>
-      <p class="next-limit" id="next-limit"></p>
+    <div class="route-message" id="message" role="status">Pronto in banchina.</div>
+    <div class="lever lever-brake"><span class="lever-name">Freno <output id="brake">3 / 5</output></span><div id="brake-lever" class="lever-slot" role="slider" aria-label="Freno: trascina in giù per frenare"><div class="lever-handle"></div></div></div>
+    <div class="lever lever-traction"><span class="lever-name">Trazione <output id="traction">0 / 4</output></span><div id="traction-lever" class="lever-slot" role="slider" aria-label="Trazione: trascina in su per accelerare"><div class="lever-handle"></div></div></div>
+    <div class="hud-bottom">
+      <div><button id="doors" type="button">Apri porte</button><button data-cmd="sand" id="sand" type="button">Sabbia</button></div>
+      <div><button data-cmd="reverse" id="reverser" type="button">Avanti </button><button data-cmd="emergency" id="emergency" class="emergency" type="button">STOP</button></div>
     </div>
   </section>
+  <div class="legacy" hidden><div id="traction-steps"></div><div id="brake-steps"></div><button id="doors-left" data-cmd="left" type="button"></button><button id="doors-right" data-cmd="right" type="button"></button><p id="state"></p><i id="pipe-gauge"></i><i id="cyl-gauge"></i><span id="cyl"></span><span id="acc"></span><span id="grade"></span></div>
   <div class="route-strip"><span>Officina</span><progress id="progress" max="11480" value="0" aria-label="Avanzamento sulla linea"></progress><span id="stop-count">0 / 6 fermate</span><span id="clock">08:17:00</span></div>
 </main>
 <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="brief-title">
@@ -71,7 +57,7 @@
   </section>
 </div>
 <script defer src="../giulio/line.js?v=3bc8f089ad"></script>
-<script defer src="../giulio/scenery.js?v=0e2b6a01e4"></script>
-<script defer src="../giulio/cab.js?v=86d531a632"></script>
+<script defer src="../giulio/scenery.js?v=4ac7b8f65b"></script>
+<script defer src="../giulio/cab.js?v=adf619732c"></script>
 </body>
 </html>

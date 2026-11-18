@@ -11,6 +11,11 @@ function drawHUD(){
   $('speed-arc').setAttribute('stroke-dasharray',clamp(v/110*100,0,100)+' 100');
   $('speed-arc').setAttribute('stroke',v>limit+2?'#ff9b89':'#bce28b');
   $('cab-needle').setAttribute('transform','rotate('+(-130+260*clamp(v/110,0,1))+' 75 56)');
+  // Speed dial: red from the current limit up, a yellow mark for the next limit when it is close.
+  const lp=clamp(limit/110*100,0,100);$('limit-zone').setAttribute('stroke-dasharray','0 '+lp+' '+(100-lp));
+  const near=sign&&t.direction>0&&sign[0]-t.s<400?clamp(sign[1]/110*100,0,100):null;
+  $('next-zone').setAttribute('stroke-dasharray',near===null?'0 100':'0 '+Math.max(0,near-.9)+' 1.8 100');
+  $('doors').classList.toggle('on',!!t.doors);$('doors').textContent=t.doors?'Chiudi porte':'Apri porte';
   $('traction-lever').style.setProperty('--lever',t.traction/4);
   $('brake-lever').style.setProperty('--lever',t.emergency?1:t.brake/5);
   $('pipe-gauge').style.setProperty('--needle',(-130+260*clamp(t.pipe/5,0,1))+'deg');
@@ -222,4 +227,24 @@ document.addEventListener('visibilitychange',()=>{if(document.hidden)saveCab()})
 drawHUD();
 requestAnimationFrame(loop);
 // Floating desk and header: their heights place the messages and the stop label (see cab.css).
-for(const [selector,name] of [['.desk','--desk-h'],['body>header','--header-h']]){const el=document.querySelector(selector);if(el&&window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.setProperty(name,el.offsetHeight+'px')).observe(el);}
+for(const [selector,name] of [['.route-strip','--strip-h'],['body>header','--header-h']]){const el=document.querySelector(selector);if(el&&window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.setProperty(name,el.offsetHeight+'px')).observe(el);}
+// One "Porte" button: opens on the platform side of the stop (or closes them if they are open).
+$('doors').onclick=()=>{
+  const t=train,stop=stops[t.docked>=0?t.docked:t.next]??stops[t.next-1];
+  command(t.doors||stop?.side||'left');
+};
+// Levers: drag the knob. Traction (right): up = more. Brake (left): down = more.
+function leverDrag(id,max,up,down,downwards){
+  const el=$(id),value=()=>id==='traction-lever'?train.traction:train.brake;
+  const move=event=>{
+    const r=el.getBoundingClientRect();let f=clamp((r.bottom-event.clientY)/r.height,0,1);if(downwards)f=1-f;
+    const want=Math.round(f*max);let guard=12;
+    while(value()!==want&&guard--){const before=value();command(want>before?up:down);if(value()===before)break;}
+  };
+  el.addEventListener('pointerdown',event=>{
+    if(mode!=='run')return;event.preventDefault();el.setPointerCapture(event.pointerId);move(event);
+    el.onpointermove=move;el.onpointerup=el.onpointercancel=()=>{el.onpointermove=null;};
+  });
+}
+leverDrag('traction-lever',4,'powerUp','powerDown',false);
+leverDrag('brake-lever',5,'brakeUp','brakeDown',true);

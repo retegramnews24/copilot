@@ -437,6 +437,17 @@ function flare(){
   }
   ctx.globalCompositeOperation='source-over';
 }
+// Speed: light streaks rushing past the sides of the view above 35 km/h (off with reduced motion).
+function speedStreaks(){
+  const v=Math.abs(train.v);if(v<9.5||reducedMotion?.matches)return;
+  const cx=width*.5,cy=horizon,phaseShift=(train.s*.9)%1;
+  ctx.strokeStyle=phase.night?'#9fb4d0':'#ffffff';ctx.lineWidth=1.3;ctx.globalAlpha=Math.min(.22,(v-9.5)*.014);ctx.beginPath();
+  for(let i=0;i<18;i++){
+    const side=i%2?1:-1,a=(.25+noise(i*5)*.9)*side,len=height*(.06+noise(i*3)*.08),r=height*(.42+((noise(i*7)+phaseShift)%1)*.5);
+    const dx=Math.sin(a),dy=Math.cos(a)*.55;ctx.moveTo(cx+dx*r,cy+dy*r);ctx.lineTo(cx+dx*(r+len),cy+dy*(r+len));
+  }
+  ctx.stroke();ctx.globalAlpha=1;
+}
 function headlights(){
   if(!phase.night&&phaseName!=='tramonto')return;
   const near=project(point(train.s+4)),far=project(point(train.s+90));
@@ -891,7 +902,7 @@ function render(){
   const roll=viewMode!=='cab'||reducedMotion?.matches?0:clamp(train.v*train.v*curveAt(train.s)*.028,-.024,.024);
   rollCos=Math.cos(roll);rollSin=Math.sin(roll);
   focal=Math.min(width*.91,height*1.25)*zoom;
-  horizon=height*(viewMode==='cab'?.40:.46)+Math.tan(lookPitch+camPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
+  horizon=height*(viewMode==='cab'?.45:.46)+Math.tan(lookPitch+camPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
   ctx.setTransform(ratio,0,0,ratio,0,0);
   atmosphere();
   const wet=train.weather==='wet';
@@ -950,6 +961,7 @@ function render(){
     ctx.stroke();
   }
   headlights();
+  speedStreaks();
   if(viewMode==='cab'){drawCabin(cab);glass();}
   flare();
 }
