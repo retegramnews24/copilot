@@ -63,3 +63,13 @@ main#simulator{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction
 .route-message{top:auto;bottom:6px;left:8px;right:8px;transform:none;width:auto;max-width:none;text-align:center;background:#0d1c1bcc}
 /* Emergency button: the label always fits. */
 #emergency,button.emergency,.emergency{font-size:clamp(9.5px,2.6vw,12.5px);letter-spacing:0;padding-inline:4px;white-space:normal;overflow-wrap:anywhere;line-height:1.1}
+
+/* Full-screen cab: the view fills the whole screen; desk, route strip and messages float over it in transparency. */
+main#simulator{position:relative}
+.windscreen{position:absolute;inset:0;height:auto;min-height:0;border-bottom:0}
+.desk{position:absolute;left:0;right:0;bottom:24px;z-index:5;background:transparent!important;border-top:0!important;box-shadow:none!important;pointer-events:none;padding:6px}
+.desk .panel{pointer-events:auto;background:#0b1715a3!important;backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);border-color:#a8c6b640!important;box-shadow:0 4px 18px #0006!important}
+.route-strip{position:absolute;left:0;right:0;bottom:0;z-index:5;background:#08110fb3;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.route-message{bottom:calc(var(--desk-h,200px) + 32px)!important;background:#0b1715b8!important}
+body>header{position:absolute;top:0;left:0;right:0;z-index:6;background:linear-gradient(#0a1412d9,#0a141200)!important;border-bottom:0!important}
+.route-hud{top:calc(var(--header-h,56px) + 6px)!important}

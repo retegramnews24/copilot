@@ -200,3 +200,5 @@ for(const event of ['click','keydown','pointerup'])document.addEventListener(eve
 document.addEventListener('visibilitychange',()=>{if(document.hidden)saveCab()});window.addEventListener('pagehide',saveCab);setInterval(()=>{if(mode==='run')saveCab()},1000);
 drawHUD();
 requestAnimationFrame(loop);
+// Floating desk and header: their heights place the messages and the stop label (see cab.css).
+for(const [selector,name] of [['.desk','--desk-h'],['body>header','--header-h']]){const el=document.querySelector(selector);if(el&&window.ResizeObserver)new ResizeObserver(()=>document.documentElement.style.setProperty(name,el.offsetHeight+'px')).observe(el);}

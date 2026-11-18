@@ -9,7 +9,7 @@ const STEP=1/120,send=(type,data={})=>parent.postMessage({type:'pong:'+type,...d
 let online=parent!==window&&new URLSearchParams(location.search).get('online')==='1',connected=false,pending=false;
 let seat=0,players=[],roomNumber=null,account=null,frame=null,last=0,elapsed=0;
 let match=newMatch('classic'),shown=match,phase=online?'waiting':'ready',sound=true,audio,lastPulse=null;
-let pointer=null,target=null,notice='';
+let pointer=null,target=null,notice='',padActive=false;
 try{const pref=JSON.parse(localStorage.getItem('binottoland-pong-settings')||'{}');if(typeof pref.sound==='boolean')sound=pref.sound;if(!online&&modes[pref.mode])shown=match=newMatch(pref.mode)}catch{}
 function savePreferences(){try{localStorage.setItem('binottoland-pong-settings',JSON.stringify({sound,mode:match.mode}))}catch{}}
 
@@ -143,7 +143,8 @@ function tick(now){
   }else{
     if(last)elapsed+=Math.min(.05,(now-last)/1000);
     while(elapsed>=STEP){
-      movePaddle(match,0,direction(),target,STEP);
+      // Touchpad: the paddle follows the finger faster, so it reacts at once but stays precise.
+      movePaddle(match,0,direction(),target,STEP,padActive?1100:490);
       if(!modes[match.mode].solo)moveOpponent(match,STEP);
       const event=stepMatch(match,STEP);
       if(event)beep(event);
@@ -241,7 +242,7 @@ if(touchpad){
     if(!playable()||event.button!==0||slide)return;
     event.preventDefault();unlockAudio();touchpad.setPointerCapture(event.pointerId);
     slide={id:event.pointerId,y:event.clientY,value:target??match.paddles[seat]};
-    touchpad.classList.add('active');
+    touchpad.classList.add('active');padActive=true;
   });
   touchpad.addEventListener('pointermove',event=>{
     if(slide?.id!==event.pointerId)return;
@@ -249,7 +250,7 @@ if(touchpad){
     moveTo(slide.value+(event.clientY-slide.y)*height*1.15/span);
   });
   for(const type of ['pointerup','pointercancel','lostpointercapture']){
-    touchpad.addEventListener(type,event=>{if(slide?.id===event.pointerId){slide=null;touchpad.classList.remove('active');}});
+    touchpad.addEventListener(type,event=>{if(slide?.id===event.pointerId){slide=null;padActive=false;touchpad.classList.remove('active');}});
   }
 }
 window.addEventListener('keydown',event=>{

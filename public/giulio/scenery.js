@@ -424,6 +424,19 @@ function person(s,x,seed){
   ctx.fillStyle=shade(seed%3?'#e8c4a0':'#a8714f',foot[2]);
   ctx.beginPath();ctx.arc(foot[0],head[1]+h*.1,Math.max(1,h*.11),0,TAU);ctx.fill();
 }
+// Lens flare when looking into the sun (cab and outside views, clear daytime only).
+function flare(){
+  if(train.weather==='wet'||phase.night)return;
+  const a=angleDiff(.57,viewBearing);if(Math.abs(a)>.55)return;
+  const sx=width*.5+Math.tan(a)*focal,sy=horizon-height*phase.sunY,cx=width*.5,cy=height*.5,k=1-Math.abs(a)/.55;
+  ctx.globalCompositeOperation='lighter';
+  for(const [t,r,c] of [[.0,.22,'#fff4d6'],[.35,.05,'#ffd9a0'],[.6,.03,'#a0e0ff'],[.85,.07,'#ffc8a0'],[1.25,.04,'#c8ffd8']]){
+    const x=sx+(cx-sx)*t*2,y=sy+(cy-sy)*t*2,rad=height*r,g=ctx.createRadialGradient(x,y,0,x,y,rad);
+    g.addColorStop(0,c+Math.round(k*(t?40:70)).toString(16).padStart(2,'0'));g.addColorStop(1,c+'00');
+    ctx.fillStyle=g;ctx.fillRect(x-rad,y-rad,rad*2,rad*2);
+  }
+  ctx.globalCompositeOperation='source-over';
+}
 function headlights(){
   if(!phase.night&&phaseName!=='tramonto')return;
   const near=project(point(train.s+4)),far=project(point(train.s+90));
@@ -878,7 +891,7 @@ function render(){
   const roll=viewMode!=='cab'||reducedMotion?.matches?0:clamp(train.v*train.v*curveAt(train.s)*.028,-.024,.024);
   rollCos=Math.cos(roll);rollSin=Math.sin(roll);
   focal=Math.min(width*.91,height*1.25)*zoom;
-  horizon=height*.49+Math.tan(lookPitch+camPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
+  horizon=height*(viewMode==='cab'?.40:.46)+Math.tan(lookPitch+camPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
   ctx.setTransform(ratio,0,0,ratio,0,0);
   atmosphere();
   const wet=train.weather==='wet';
@@ -938,4 +951,5 @@ function render(){
   }
   headlights();
   if(viewMode==='cab'){drawCabin(cab);glass();}
+  flare();
 }
