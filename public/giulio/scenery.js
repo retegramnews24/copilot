@@ -248,41 +248,55 @@ function paintSky(drift){
     cloud(x+w*.06,y+w*.017,w,c.shape,cloudShade(wet?'#b7c5c470':'#c8dedba6'));
     cloud(x,y,w,c.shape,cloudShade(wet?'#d7dcda8c':'#fff3d9de'));
   }
-  const base=wet?['#859ba3','#708a96','#5a787b','#49675f']:['#98adb0','#7796a2','#547985','#416b61'];
-  // Far ridges take the colour of the air; near ones keep more of their own.
-  const palette=base.map((c,layer)=>mix(phase.ridge?mix(c,phase.ridge,.45):c,phase.fog,(3-layer)*.07));
-  for(let layer=0;layer<4;layer++){
-    const points=[], depth=3600/(layer+1)**1.8;
-    const layerDrift=drift*(layer+1);
-    const ridgeBase=horizon+height*(.045+layer*.021), scale=height*(.43-layer*.052);
-    const step=Math.max(5,Math.round(width/118));
+  // Rolling hills instead of mountains: three soft layers (farthest blue-grey, nearest green), hilltop villages on
+  // the middle range and rows of cypresses on the nearest crest. Painted once with the sky, so they cost nothing per frame.
+  const hillColors=wet?['#8d9fa6','#71897f','#587260']:['#a3b6c2','#86a68d','#628f5f'];
+  const night=phase.night;
+  for(let layer=0;layer<3;layer++){
+    const pts=[],step=Math.max(4,Math.round(width/150));
+    const ridgeBase=horizon+height*(.012+layer*.017),scale=height*(.10+layer*.038);
+    const layerDrift=drift*(layer+1)*1.3;
     for(let x=left-step;x<=right+step;x+=step){
       const angle=viewBearing+Math.atan2(x-width*.5,focal)+layerDrift;
-      const altitude=ridgeValue(angle,layer), offset=(camera.y-2)*focal/depth;
-      points.push([x,ridgeBase-altitude*scale+offset,altitude]);
+      const v=.52+.24*Math.sin(angle*(2+layer)+layer*1.7)+.14*Math.sin(angle*(5+layer*2)+.6)+.06*Math.sin(angle*(13+layer*3)+layer);
+      pts.push([x,ridgeBase-v*scale,angle,v]);
     }
-    fillShape([[left,bottom],...points.map(p=>p.slice(0,2)),[right,bottom]],palette[layer]);
-    // Woods on the lower slopes of the nearer ranges, with an uneven tree line.
-    if(layer>=2){
-      const forest=mix(mix(layer===3?'#2e4a36':'#3b5842',phase.tint,phase.tintAmount),phase.fog,(3-layer)*.12);
-      fillShape([[left,bottom],...points.map(([x,y])=>[x,y+(ridgeBase-y)*(.48+.1*Math.sin(x*.07+layer))]),[right,bottom]],forest);
-    }
-    const sunFace=phase.night?'#7f93c020':wet?'#adbac540':'#e0d9c43b';
-    const shadow=wet?'#384d5b30':'#284f6435';
-    for(let j=2;j<points.length-2;j++){
-      const [x,y,alt]=points[j];
-      if(y>points[j-1][1]||y>points[j+1][1]||alt<.40)continue;
-      const [lx,ly]=points[j-2],[rx,ry]=points[j+2];
-      const foot=ridgeBase-height*.015;
-      fillShape([[x,y],[lx,ly],[x+(rx-x)*.52,foot]],sunFace);
-      fillShape([[x,y],[rx,ry],[x+(rx-x)*.52,foot]],shadow);
-      if(layer<2&&alt>.63){
-        const snowY=y+(foot-y)*.27;
-        fillShape([[x,y],[lx+(x-lx)*.32,snowY],[x,snowY-2],[x+(rx-x)*.32,snowY+1]],mix(wet?'#d4ded9c7':'#f5ebd5db',phase.tint,phase.tintAmount));
+    const color=mix(mix(hillColors[layer],phase.tint,phase.tintAmount),phase.fog,(2-layer)*.2);
+    fillShape([[left,bottom],...pts.map(p=>[p[0],p[1]]),[right,bottom]],color);
+    // Lit side of each hill: a lighter band on the slopes toward the sun.
+    if(!night){
+      const light=mix(color,'#fff6dc',wet?.06:.14);
+      for(let j=1;j<pts.length-1;j++){
+        const [x,y,ang]=pts[j],[nx,ny]=pts[j+1];
+        if(Math.cos(angleDiff(ang,.57+Math.PI*.5))>.35&&ny<y)fillShape([[x,y],[nx,ny],[nx,ny+scale*.25],[x,y+scale*.25]],light+'');
       }
     }
-  }
-  // Haze where the mountains meet the plain.
+    if(layer===1){
+      // Small villages on the higher tops: houses with red roofs, lit windows at night.
+      for(let j=2;j<pts.length-2;j++){
+        const [x,y,ang,v]=pts[j];
+        if(v<.86||v<pts[j-1][3]||v<pts[j+1][3]||noise(Math.round(ang*40))<.45)continue;
+        for(let h=-2;h<=2;h++){
+          const hx=x+h*height*.012,hw=height*(.007+noise(j+h)*.004),hh=height*(.006+noise(j*3+h)*.005),hy=y+Math.abs(h)*height*.003;
+          ctx.fillStyle=mix('#e3d6bd',phase.tint,phase.tintAmount*1.3);ctx.fillRect(hx-hw/2,hy-hh,hw,hh);
+          ctx.fillStyle=mix('#a9483a',phase.tint,phase.tintAmount);ctx.beginPath();ctx.moveTo(hx-hw*.62,hy-hh);ctx.lineTo(hx,hy-hh-hw*.45);ctx.lineTo(hx+hw*.62,hy-hh);ctx.fill();
+          if(night){ctx.fillStyle='#ffd98a';ctx.fillRect(hx-hw*.15,hy-hh*.6,Math.max(1,hw*.25),Math.max(1,hh*.3));}
+        }
+        if(noise(j*5)>.5){ctx.fillStyle=mix('#d8c9a8',phase.tint,phase.tintAmount);ctx.fillRect(x+height*.03,y-height*.03,height*.006,height*.03);}
+      }
+    }
+    if(layer===2){
+      // Cypress rows along the nearest crest.
+      const cypress=mix(night?'#0d1a14':'#2c4a33',phase.fog,.1);
+      ctx.fillStyle=cypress;
+      for(let j=1;j<pts.length-1;j+=2){
+        const [x,y,ang]=pts[j];
+        if(noise(Math.round(ang*60))<.62)continue;
+        const ch=height*(.025+noise(j)*.02),cw=ch*.2;
+        ctx.beginPath();ctx.ellipse(x,y-ch*.45,cw,ch*.55,0,0,TAU);ctx.fill();
+      }
+    }
+  }  // Haze where the hills meet the plain.
   const haze=ctx.createLinearGradient(0,horizon-height*.06,0,horizon+height*.05);
   haze.addColorStop(0,phase.fog+'00');haze.addColorStop(.6,phase.fog+(train.weather==='wet'?'88':'55'));haze.addColorStop(1,phase.fog+'00');
   ctx.fillStyle=haze;ctx.fillRect(left,horizon-height*.06,right-left,height*.11);
@@ -308,6 +322,9 @@ function glass(){
     const streak=g.createLinearGradient(width*.12,0,width*.48,height*.6);
     const shine=phase.night?'#9fb4d0':'#ffffff';
     streak.addColorStop(0,shine+'00');streak.addColorStop(.45,shine+'14');streak.addColorStop(.55,shine+'08');streak.addColorStop(1,shine+'00');
+    // Cab roof shadow over the top of the view.
+    const roofShade=g.createLinearGradient(0,0,0,height*.16);roofShade.addColorStop(0,'#05100c88');roofShade.addColorStop(1,'#05100c00');
+    g.fillStyle=roofShade;g.fillRect(0,0,width,height*.16);
     g.fillStyle=streak;g.beginPath();g.moveTo(width*.08,0);g.lineTo(width*.3,0);g.lineTo(width*.62,height*.62);g.lineTo(width*.44,height*.62);g.closePath();g.fill();
   }
   ctx.drawImage(glassCanvas,0,0,width,height);
@@ -809,6 +826,11 @@ function drawCabin(cab){
       panel(u,v,.63,-.57,'#293b35');
       panel(u,u+(v-u)*.22,.63,-.57,'#52675b');
     }
+    if(front){
+      // Sun visors at the top of the windscreen.
+      panel(.07,.43,.52,.43,'#1a2926');panel(.07,.43,.435,.42,'#2f443d');
+      panel(.57,.93,.52,.45,'#1a2926');
+    }
     const glass=front?.024:.042;
     panel(.06,.94,.52,-.52,'rgba(187,221,210,'+glass+')');
     if(front&&train.weather==='wet')windscreenRain((u,y)=>p(u,y));
@@ -834,6 +856,13 @@ function drawCabin(cab){
   consoleFace(-.45,.27,.30,.80,'#192b30');
   consoleFace(-.40,.22,.59,.72,'#658e7d');
   for(let i=0;i<4;i++)consoleFace(-.36+i*.14,-.26+i*.14,.38,.49,i===0?'#dabf7a':'#597368');
+  // Two lit screens (speed and line), and the traction lever on the right.
+  const lit=phase.night||phaseName==='tramonto';
+  consoleFace(-.46,-.13,.6,.8,'#0c2622');consoleFace(-.44,-.15,.63,.77,lit?'#3fd1a0':'#2b8a6c');
+  consoleFace(-.40,-.19,.70,.72,lit?'#c9ffe9':'#8fe0c2');
+  consoleFace(.0,.27,.6,.8,'#0c2622');consoleFace(.02,.25,.63,.77,lit?'#f0b04a':'#b9822f');
+  beam(cabPoint(.52,-.66,1.48),cabPoint(.52,-.43,1.40),'#141c1a',4);
+  beam(cabPoint(.52,-.43,1.40),cabPoint(.52,-.40,1.39),'#c8553d',7);
 }
 function render(){
   pointSamples.clear();
