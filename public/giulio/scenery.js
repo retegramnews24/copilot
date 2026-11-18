@@ -352,7 +352,62 @@ function groundShadow(s,x,ground,radius){
   const pts=[];
   for(let i=0;i<8;i++){const a=i*TAU/8;pts.push(point(s+Math.sin(a)*radius*.7,x+radius*.35+Math.cos(a)*radius,ground+.03));}
   polygon(pts,train.weather==='wet'?'#1a262222':'#16231a38');
-}function headlights(){
+}// Cinematic cameras: the cab (default), behind the train, and a three-quarter side shot. Button "🎥" or key C.
+const VIEWS=[['cab','Cabina'],['chase','Esterna'],['side','Laterale']];
+let viewMode='cab';
+function setView(mode){
+  viewMode=mode;skyKey='';renderDirty=true;
+  const button=$('view-mode');if(button)button.textContent='🎥 '+VIEWS.find(v=>v[0]===mode)[1];
+}
+$('view-mode')?.addEventListener('click',()=>setView(VIEWS[(VIEWS.findIndex(v=>v[0]===viewMode)+1)%VIEWS.length][0]));
+addEventListener('keydown',event=>{if((event.key==='c'||event.key==='C')&&!event.repeat&&!event.target.closest?.('input,textarea'))$('view-mode')?.click();});
+// The train itself (seen from outside): three cars with cream livery, red stripe, windows lit at night.
+function trainBox(s0,s1,front){
+  const hw=1.45,y0=.55,y1=4.05,night=phase.night||phaseName==='tramonto';
+  const P=(s,x,y)=>point(s,x,y);
+  const faces=[
+    {pts:[P(s0,-hw,y0),P(s1,-hw,y0),P(s1,-hw,y1),P(s0,-hw,y1)],color:'#e4dcc8',side:-1},
+    {pts:[P(s1,hw,y0),P(s0,hw,y0),P(s0,hw,y1),P(s1,hw,y1)],color:'#d2c9b3',side:1},
+    {pts:[P(s1,-hw,y0),P(s1,hw,y0),P(s1,hw,y1),P(s1,-hw,y1)],color:front?'#b53a32':'#c9c0a9',end:s1,front},
+    {pts:[P(s0,hw,y0),P(s0,-hw,y0),P(s0,-hw,y1),P(s0,hw,y1)],color:'#c9c0a9',end:s0},
+    {pts:[P(s0,-hw+.15,y1+.25),P(s1,-hw+.15,y1+.25),P(s1,hw-.15,y1+.25),P(s0,hw-.15,y1+.25)],color:'#7a8282',roof:true},
+    {pts:[P(s0,-hw,y1),P(s1,-hw,y1),P(s1,-hw+.15,y1+.25),P(s0,-hw+.15,y1+.25)],color:'#8d9494'},
+    {pts:[P(s1,hw,y1),P(s0,hw,y1),P(s0,hw-.15,y1+.25),P(s1,hw-.15,y1+.25)],color:'#6f7777'}
+  ];
+  for(const f of faces){let z=0;for(const p of f.pts)z+=local(p).z;f.z=z/f.pts.length;}
+  faces.sort((a,b)=>b.z-a.z);
+  for(const f of faces){
+    polygon(f.pts,f.color);
+    if(f.side){
+      const x=f.side*(hw+.01),win=night?'#ffd98a':'#2b3a40';
+      polygon([P(s0+.3,x,1.25),P(s1-.3,x,1.25),P(s1-.3,x,1.55),P(s0+.3,x,1.55)],'#b53a32');
+      for(let w=s0+1.2;w<s1-1.6;w+=2.4)polygon([P(w,x,2.25),P(w+1.7,x,2.25),P(w+1.7,x,3.2),P(w,x,3.2)],win);
+    }
+    if(f.front){
+      const z=s1+.01;
+      polygon([P(z,-1.15,2.35),P(z,1.15,2.35),P(z,1.05,3.55),P(z,-1.05,3.55)],night?'#30424a':'#22323a');
+      for(const x of [-.95,.95])polygon([P(z,x-.18,1.0),P(z,x+.18,1.0),P(z,x+.18,1.3),P(z,x-.18,1.3)],night?'#fff3c4':'#e9e1c2');
+    }
+  }
+}
+function trainObjects(objects){
+  for(let k=0;k<3;k++){
+    const s1=train.s+.6-k*21,s0=s1-20;
+    objects.push({s:(s0+s1)/2,draw:()=>trainBox(s0,s1,k===0)});
+  }
+}
+// Passengers waiting on the platforms (simple figures, scaled with distance).
+const CLOTHES=['#3d5a80','#b56576','#e9c46a','#6a994e','#8d99ae','#c8553d','#4a4e69'];
+function person(s,x,seed){
+  const foot=project(point(s,x,1.05)),head=project(point(s,x,2.75));
+  if(!foot||!head||foot[2]>220)return;
+  const h=foot[1]-head[1],w=Math.max(1.5,h*.26);
+  ctx.fillStyle=shade(CLOTHES[seed%CLOTHES.length],foot[2]);
+  ctx.beginPath();ctx.roundRect?ctx.roundRect(foot[0]-w/2,head[1]+h*.2,w,h*.8,w*.4):ctx.rect(foot[0]-w/2,head[1]+h*.2,w,h*.8);ctx.fill();
+  ctx.fillStyle=shade(seed%3?'#e8c4a0':'#a8714f',foot[2]);
+  ctx.beginPath();ctx.arc(foot[0],head[1]+h*.1,Math.max(1,h*.11),0,TAU);ctx.fill();
+}
+function headlights(){
   if(!phase.night&&phaseName!=='tramonto')return;
   const near=project(point(train.s+4)),far=project(point(train.s+90));
   if(!near||!far)return;
@@ -602,6 +657,7 @@ for(const stop of stops){
     const s=stop.s+offset;stationScenery.push({s,draw:()=>platformLamp(s,side)});
   }
   const s=stop.s-36;stationScenery.push({s,draw:()=>shelter(s,side)});
+  for(let k=0;k<8;k++){const ps=stop.s-62+k*8.5+noise(stop.s+k)*4,px=side*(2.9+noise(stop.s*3+k)*1.4),seed=Math.floor(noise(stop.s+k*7)*97);stationScenery.push({s:ps,draw:()=>person(ps,px,seed)});}
   const building=stop.s-62;stationScenery.push({s:building,draw:()=>hut(building,side*10.8)});
 }
 // Villages: houses around every station and a few farms along the line (walls, two-slope roof, windows lit at night).
@@ -782,13 +838,18 @@ function drawCabin(cab){
 function render(){
   pointSamples.clear();
   const cab=trackAt(train.s+.55);
-  camera={...cab,y:cab.y+2.46};
-  viewBearing=cab.yaw+lookYaw;
+  let camPitch=0;
+  if(viewMode==='cab'){camera={...cab,y:cab.y+2.46};viewBearing=cab.yaw+lookYaw;}
+  else{
+    const shot=viewMode==='chase'?{from:point(train.s-66,0,9.5),to:point(train.s+45,0,1.5)}:{from:point(train.s-36,15,3.4),to:point(train.s-16,0,2.4)};
+    camera=shot.from;const dx=shot.to.x-camera.x,dz=shot.to.z-camera.z;
+    viewBearing=Math.atan2(dx,dz)+lookYaw;camPitch=Math.atan2(shot.to.y-camera.y,Math.hypot(dx,dz));
+  }
   cy=Math.cos(viewBearing);sy=Math.sin(viewBearing);
-  const roll=reducedMotion?.matches?0:clamp(train.v*train.v*curveAt(train.s)*.028,-.024,.024);
+  const roll=viewMode!=='cab'||reducedMotion?.matches?0:clamp(train.v*train.v*curveAt(train.s)*.028,-.024,.024);
   rollCos=Math.cos(roll);rollSin=Math.sin(roll);
   focal=Math.min(width*.91,height*1.25)*zoom;
-  horizon=height*.49+Math.tan(lookPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
+  horizon=height*.49+Math.tan(lookPitch+camPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
   ctx.setTransform(ratio,0,0,ratio,0,0);
   atmosphere();
   const wet=train.weather==='wet';
@@ -796,7 +857,7 @@ function render(){
   // Rails catch the light when looking toward the sun.
   const sunAhead=Math.max(0,Math.cos(angleDiff(.57,viewBearing)));
   railShine=mix('#d2cec0',phase.sun,Math.round(sunAhead*sunAhead*6)/10);
-  const first=Math.max(trackStart,Math.floor((train.s-4-90*sideView)/3)*3);
+  const first=Math.max(trackStart,Math.floor((train.s-4-90*sideView-(viewMode==='cab'?0:85))/3)*3);
   const last=Math.min(trackEnd,train.s+690-225*sideView),segments=[];
   for(let a=first;a<last;){
     const relative=Math.abs(a-train.s),t=Math.min(last,a+(relative<85?3:relative<235?8:15));
@@ -828,6 +889,7 @@ function render(){
   const objects=nearbyScenery(train.s);
   for(const item of stationScenery)if(item.s>first&&item.s<train.s+340)objects.push(item);
   for(const item of villageScenery)if(item.s>first&&item.s<train.s+420)objects.push(item);
+  if(viewMode!=='cab')trainObjects(objects);
   for(let s=Math.ceil((first+2)/48)*48;s<train.s+600;s+=48)objects.push({s,draw:()=>gantry(s)});
   for(const sign of signs)if(sign.s>first&&sign.s<train.s+370)objects.push({s:sign.s,draw:()=>signboard(sign)});
   const sorted=objects.map(o=>({o,z:local(point(o.s)).z})).sort((a,b)=>b.z-a.z);
@@ -846,6 +908,5 @@ function render(){
     ctx.stroke();
   }
   headlights();
-  drawCabin(cab);
-  glass();
+  if(viewMode==='cab'){drawCabin(cab);glass();}
 }
