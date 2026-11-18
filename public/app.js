@@ -18,8 +18,8 @@ import {initSettings} from './settings.js?v=6f9a6958a5';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=83b95ddebc';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
-import {createChat} from './chat.js?v=957b56ae56';
-import {createLobbyChips} from './lobby-chips.js?v=e32cd05095';
+import {createChat} from './chat.js?v=0505abcb2a';
+import {createLobbyChips} from './lobby-chips.js?v=9d324b8bcb';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
@@ -33,11 +33,13 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.40',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.41',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
-const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
+// Stored notices in the chat (new table, win): 'Entra' while the table is open, opening it like its Lobby button.
+const noticeGame=room=>games.find(g=>g.room===room&&ongoing(g));
+const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial(),isOpen:room=>!!noticeGame(room),open:room=>{const g=noticeGame(room);if(!g)return;if(g.game==='golf')golf.open(room);else if(g.game==='pong')arcade.openPong(room);else if(g.game==='moto-trial')moto.open(room);else openRoom(room,false)}});
 // Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
 createLobbyChips({notice:item=>chat.notice(item)});
 const board=createChessBoard({get:()=>({state,mine:state.players.findIndex(p=>p.id===credentials.player),active:canMove(),replayPly,frame:replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:null}),send:move=>sendMove(move),rerender:()=>renderBoard()});

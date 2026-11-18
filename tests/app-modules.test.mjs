@@ -152,6 +152,29 @@ assert.deepEqual(texts(), ['primo', 'secondo', 'ciao']);
 assert.equal(document.getElementById('chat-input').value, '');
 assert.equal(refreshed, 2);
 
+// Stored game notices (from the server): shown as notices, not as messages; no button when the table is closed.
+const { tableNotice, winNotice } = await import('../lobby-hub.js');
+const tableOpened = tableNotice({ id: '2', name: 'Sara' }, 'uno', 3, 'room-3');
+assert.equal(tableOpened.notice, 'table');
+assert.equal(tableOpened.text, 'Sara ha aperto UNO · Tavolo 3');
+assert.equal(
+  tableNotice({ id: '2', name: 'Sara' }, 'golf', 2, 'g').text,
+  'Sara ha aperto Golf with your gay friends · sala 2'
+);
+assert.equal(
+  winNotice({ game: 'uno', mode: 'people', winners: [{ id: 'tg:2', name: 'Sara' }] }).text,
+  '🏆 Sara vince a UNO'
+);
+assert.equal(winNotice({ game: 'uno', mode: 'ai', winners: [{ id: 'tg:2', name: 'Sara' }] }), null);
+chat.set([
+  { id: 'm1', userId: '2', name: 'Ada', at: 1, text: 'primo' },
+  { ...tableOpened, at: 5 }
+]);
+chat.render(true);
+assert.equal(document.querySelectorAll('#chat-messages .chat-notice').length, 1);
+assert.equal(document.querySelector('#chat-messages .chat-notice button'), null, 'closed table: no button');
+assert.match(document.querySelector('#chat-messages .chat-notice').textContent, /Sara ha aperto UNO/);
+
 // Forza 4: full columns disabled, winning discs marked, a click sends the column.
 const { renderConnect4 } = await import('../public/connect4-ui.js');
 const board = document.createElement('div'),

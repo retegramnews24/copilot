@@ -6,6 +6,35 @@ import { activeTable, createSeries } from './match-series.js';
 import { hasMove, replayNumberGame } from './public/arcade/number-connect-rules.js';
 import { json, id, name } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
+import { gameTitle } from './public/game-info.js';
+
+// Game notices stored in the Lobby chat, so everyone sees them, also later: a table opened to people, a win.
+// Same list and limit as the messages (last 100); the app shows them as notices with a button.
+export function tableNotice(user, game, number, room) {
+  const where = isArcade(game) ? ' · sala ' + number : ' · Tavolo ' + number;
+  return {
+    id: id(),
+    notice: 'table',
+    userId: user.id,
+    name: user.name,
+    room,
+    game,
+    text: name(user.name) + ' ha aperto ' + gameTitle({ game }) + where,
+    at: Date.now()
+  };
+}
+export function winNotice(result) {
+  const winners = (result.winners || []).map(w => w.name).filter(Boolean);
+  if (result.mode !== 'people' || !winners.length || !result.game) return null;
+  return {
+    id: id(),
+    notice: 'win',
+    game: result.game,
+    text:
+      '🏆 ' + winners.join(' e ') + (winners.length > 1 ? ' vincono' : ' vince') + ' a ' + gameTitle(result),
+    at: Date.now()
+  };
+}
 
 export class LobbyHub {
   constructor(ctx, env) {
@@ -65,6 +94,11 @@ export class LobbyHub {
       leaderboard: topFive(records),
       aiLeaderboard: topFive(records, 'ai')
     };
+  }
+  async addChatNotice(notice) {
+    const messages = (await this.ctx.storage.get('chat')) || [];
+    messages.push(notice);
+    await this.ctx.storage.put('chat', messages.slice(-100));
   }
   async lobbyBroadcast(force = true) {
     const payload = await this.lobbyPayload(),
@@ -217,7 +251,14 @@ export class LobbyHub {
     }
     if (path === '/lobby/result') {
       const old = await this.ctx.storage.get('result:' + body.key);
-      if (!old) await this.ctx.storage.put('result:' + body.key, body);
+      if (!old) {
+        await this.ctx.storage.put('result:' + body.key, body);
+        const notice = winNotice(body);
+        if (notice) {
+          await this.addChatNotice(notice);
+          await this.lobbyBroadcast();
+        }
+      }
       return json({ ok: true });
     }
     if (path === '/lobby/join') {
@@ -335,6 +376,9 @@ export class LobbyHub {
         if (!response.ok) return response;
         const result = await response.json();
         await this.ctx.storage.put('game:' + room, result.summary);
+        // Shared rooms open to others (not single-player Pong, not the retired Labyrinth) appear in the chat.
+        if (body.game !== 'labyrinth' && !(body.game === 'pong' && body.mode === 'solo'))
+          await this.addChatNotice(tableNotice(user, body.game, number, room));
         await this.lobbyBroadcast();
         return json(result);
       }
@@ -359,6 +403,9 @@ export class LobbyHub {
       const result = await response.json();
       await this.ctx.storage.put('game:' + room, tableSummary(result.state));
       await this.ctx.storage.setAlarm(Date.now() + 3600000);
+      // Tables against the AI and tutorials are private: no notice for those.
+      if (!['ai', 'tutorial'].includes(result.state?.mode))
+        await this.addChatNotice(tableNotice(user, result.state?.game || body.game || 'chess', number, room));
       await this.lobbyBroadcast();
       return json(result);
     }

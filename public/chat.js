@@ -4,13 +4,28 @@ import { makeAvatar } from './avatar.js?v=7a059821b4';
 const $ = id => document.getElementById(id);
 
 // me(): the signed-in user; request/onError: app helpers; refresh(): re-renders people and chat together.
-export function createChat({ me, request, onError, refresh }) {
+// Stored notices (message.notice: 'table' or 'win', from the server) show a button while the table is still open:
+// isOpen(room) tells whether it is, open(room) enters it.
+export function createChat({ me, request, onError, refresh, isOpen = () => false, open = () => {} }) {
   let messages = [],
     notices = [],
     sending = false;
   // Kept for callers: the list now fills the space given by the layout, no row limit.
   function limit() {}
+  // Stay on the latest message: when the Lobby is shown again (the list goes from hidden to visible) or its size
+  // changes, scroll back to the bottom unless the user had scrolled up to read older messages.
+  let atBottom = true;
+  const chatList = $('chat-messages');
+  chatList.addEventListener('scroll', () => {
+    if (chatList.clientHeight)
+      atBottom = chatList.scrollHeight - chatList.scrollTop - chatList.clientHeight < 40;
+  });
+  if (typeof ResizeObserver === 'function')
+    new ResizeObserver(() => {
+      if (atBottom && chatList.clientHeight) chatList.scrollTop = chatList.scrollHeight;
+    }).observe(chatList);
   function scrollToLatest() {
+    atBottom = true;
     const list = $('chat-messages');
     list.scrollTop = list.scrollHeight;
     requestAnimationFrame(() => {
@@ -52,7 +67,11 @@ export function createChat({ me, request, onError, refresh }) {
   function render(connected) {
     const list = $('chat-messages'),
       identity = me();
-    const signature = messages.map(m => m.id).join(',') + '|' + notices.map(n => n.id).join(',');
+    // A stored table notice loses its button when the table closes: that is part of the signature too.
+    const signature =
+      messages.map(m => m.id + (m.notice === 'table' && m.room && isOpen(m.room) ? '+' : '')).join(',') +
+      '|' +
+      notices.map(n => n.id).join(',');
     if (list.dataset.signature !== signature) {
       list.dataset.signature = signature;
       list.replaceChildren();
@@ -63,7 +82,17 @@ export function createChat({ me, request, onError, refresh }) {
         list.append(p);
       }
       const items = [
-        ...messages.map(m => ({ at: m.at, row: () => messageRow(m, identity) })),
+        ...messages.map(m => ({
+          at: m.at,
+          row: () =>
+            m.notice
+              ? noticeRow({
+                  text: m.text,
+                  label: m.notice === 'table' && m.room && isOpen(m.room) ? 'Entra' : '',
+                  action: () => open(m.room)
+                })
+              : messageRow(m, identity)
+        })),
         ...notices.map(n => ({ at: n.at, row: () => noticeRow(n) }))
       ].sort((a, b) => a.at - b.at);
       for (const item of items) list.append(item.row());

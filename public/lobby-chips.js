@@ -1,6 +1,7 @@
 // Lobby B: the Lobby is the group chat. Your games, open tables and rooms become scrolling chips at the top,
 // mirrored from the original panels, which stay in the page (hidden) so their buttons and handlers do not change.
-// New tables, new rooms and a new "tocca a te" also show up as notices inside the chat (this browser only).
+// New Cinema/Blackboard rooms and a new "tocca a te" show up as notices inside the chat (this browser only);
+// new tables and wins are stored by the server in the chat itself, for everyone.
 const $ = id => document.getElementById(id);
 // [container id, item selector, kind]: "mine" first, so a table you sit at is shown once, as yours.
 const SOURCES = [
@@ -91,9 +92,7 @@ export function createLobbyChips({ notice }) {
           ? 'Tocca a te · ' + item.label
           : item.kind === 'room'
             ? 'Nuova sala · ' + item.label
-            : item.kind === 'table'
-              ? 'Nuovo tavolo · ' + item.label
-              : null;
+            : null; // new tables: stored by the server in the chat for everyone (lobby-hub.js)
         if (what)
           notice({
             text: what,
