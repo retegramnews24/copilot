@@ -54,3 +54,12 @@ body>header{flex:none}
 main#simulator{flex:1 1 auto;min-height:0;width:100%;display:flex;flex-direction:column;overflow:hidden}
 .windscreen{flex:1 1 auto;height:auto;min-height:150px}
 .desk,.route-strip{flex:none}
+
+/* Windscreen: no view buttons (drag to look, pinch or wheel to zoom), no speed sign (it is on the desk),
+   stop label on an almost transparent background, messages in the line at the bottom. */
+.view-controls,.speed-sign{display:none!important}
+#view{touch-action:none}
+.route-label{background:#0d1c1b38;border-color:#cfe2d522;box-shadow:none;backdrop-filter:blur(1.5px);text-shadow:0 1px 3px #000c;max-width:max-content}
+.route-message{top:auto;bottom:6px;left:8px;right:8px;transform:none;width:auto;max-width:none;text-align:center;background:#0d1c1bcc}
+/* Emergency button: the label always fits. */
+#emergency,button.emergency,.emergency{font-size:clamp(9.5px,2.6vw,12.5px);letter-spacing:0;padding-inline:4px;white-space:normal;overflow-wrap:anywhere;line-height:1.1}

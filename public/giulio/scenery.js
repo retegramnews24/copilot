@@ -10,24 +10,38 @@ function setLook(yaw,pitch=0){
   lookYaw=clamp(yaw,-HALF_TURN,HALF_TURN);
   lookPitch=clamp(pitch,-.21,.20);
   const deg=Math.round(lookYaw*180/Math.PI);
-  $('view-angle').textContent=(deg>0?'+':'')+deg+'°';
+  const angle=$('view-angle');if(angle)angle.textContent=(deg>0?'+':'')+deg+'°';
   renderDirty=true;
 }
 $('look-left').onclick=()=>setLook(lookYaw-Math.PI/6,lookPitch);
 $('look-right').onclick=()=>setLook(lookYaw+Math.PI/6,lookPitch);
 $('look-center').onclick=()=>setLook(0,0);
+// One finger (or the mouse) drags the view; two fingers pinch to zoom (field of view); the wheel zooms too.
+let zoom=1,pinch=null;
+const touches=new Map();
+const spread=()=>{const [p,q]=[...touches.values()];return Math.hypot(p.x-q.x,p.y-q.y)||1;};
 canvas.addEventListener('pointerdown',event=>{
-  if(event.button!==0||drag)return;
-  drag={id:event.pointerId,x:event.clientX,y:event.clientY,yaw:lookYaw,pitch:lookPitch};
+  touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
   canvas.setPointerCapture?.(event.pointerId);
+  if(touches.size===2){drag=null;pinch={dist:spread(),zoom};canvas.classList.remove('dragging');return;}
+  if(event.button!==0||drag||pinch)return;
+  drag={id:event.pointerId,x:event.clientX,y:event.clientY,yaw:lookYaw,pitch:lookPitch};
   canvas.classList.add('dragging');
 });
 canvas.addEventListener('pointermove',event=>{
+  if(touches.has(event.pointerId))touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(pinch&&touches.size===2){zoom=clamp(pinch.zoom*spread()/pinch.dist,.75,2.2);renderDirty=true;return;}
   if(drag?.id!==event.pointerId)return;
-  setLook(drag.yaw-(event.clientX-drag.x)*Math.PI/Math.max(250,width*.9),
-    drag.pitch+(event.clientY-drag.y)*.75/Math.max(160,height));
+  setLook(drag.yaw-(event.clientX-drag.x)*Math.PI/Math.max(250,width*.9*zoom),
+    drag.pitch+(event.clientY-drag.y)*.75/Math.max(160,height*zoom));
 });
+canvas.addEventListener('wheel',event=>{
+  event.preventDefault();
+  zoom=clamp(zoom*Math.exp(-event.deltaY*.0012),.75,2.2);renderDirty=true;
+},{passive:false});
 function finishLook(event){
+  touches.delete(event.pointerId);
+  if(touches.size<2)pinch=null;
   if(drag?.id!==event.pointerId)return;
   drag=null;canvas.classList.remove('dragging');
 }
@@ -101,7 +115,7 @@ const ridgeBank=Array.from({length:4},(_,layer)=>Array.from({length:RIDGE_SAMPLE
   const u=(i%RIDGE_SAMPLES)/RIDGE_SAMPLES, a=u*TAU, j=(i%RIDGE_SAMPLES);
   return .22+.20*Math.sin(a*(layer+3)+layer)+.24*Math.abs(Math.sin(a*(layer+6)+2.1))
     +.14*Math.sin(a*(layer+13)+2.6)+.09*Math.abs(Math.cos(a*27+layer))
-    +.065*noise(j*5+layer*13);
+    +.065*noise(j*5+layer*13)+.045*Math.sin(a*(layer*7+41)+layer)+.03*Math.sin(a*(layer*11+67));
 }));
 const cloudBank=Array.from({length:19},(_,i)=>({
   a:i*TAU/19+noise(i*19)*.20,y:.085+noise(i*13+20)*.21,
@@ -248,6 +262,11 @@ function paintSky(drift){
       points.push([x,ridgeBase-altitude*scale+offset,altitude]);
     }
     fillShape([[left,bottom],...points.map(p=>p.slice(0,2)),[right,bottom]],palette[layer]);
+    // Woods on the lower slopes of the nearer ranges, with an uneven tree line.
+    if(layer>=2){
+      const forest=mix(mix(layer===3?'#2e4a36':'#3b5842',phase.tint,phase.tintAmount),phase.fog,(3-layer)*.12);
+      fillShape([[left,bottom],...points.map(([x,y])=>[x,y+(ridgeBase-y)*(.48+.1*Math.sin(x*.07+layer))]),[right,bottom]],forest);
+    }
     const sunFace=phase.night?'#7f93c020':wet?'#adbac540':'#e0d9c43b';
     const shadow=wet?'#384d5b30':'#284f6435';
     for(let j=2;j<points.length-2;j++){
@@ -263,6 +282,10 @@ function paintSky(drift){
       }
     }
   }
+  // Haze where the mountains meet the plain.
+  const haze=ctx.createLinearGradient(0,horizon-height*.06,0,horizon+height*.05);
+  haze.addColorStop(0,phase.fog+'00');haze.addColorStop(.6,phase.fog+(train.weather==='wet'?'88':'55'));haze.addColorStop(1,phase.fog+'00');
+  ctx.fillStyle=haze;ctx.fillRect(left,horizon-height*.06,right-left,height*.11);
 }
 // Night: a soft halo for station lamps and the train's headlights on the track.
 const glowSprite=(()=>{
@@ -581,6 +604,52 @@ for(const stop of stops){
   const s=stop.s-36;stationScenery.push({s,draw:()=>shelter(s,side)});
   const building=stop.s-62;stationScenery.push({s:building,draw:()=>hut(building,side*10.8)});
 }
+// Villages: houses around every station and a few farms along the line (walls, two-slope roof, windows lit at night).
+const HOUSE_COLORS=[['#d8c7a4','#b7a581','#9c4a3a'],['#e2d6c0','#c0b39b','#6e4b3c'],['#c9b48e','#a8946f','#7f3f33'],['#e6dccb','#c4b9a6','#4f5b5e']];
+function house(s,x,h){
+  const ground=terrainLevel(s,x),hw=h.w/2,hd=h.d/2,rh=h.w*.42;
+  const P=(ds,dx,y)=>point(s+ds,x+dx,ground+y);
+  const parts=[];
+  const corners=[[-hd,-hw],[-hd,hw],[hd,hw],[hd,-hw]];
+  for(let i=0;i<4;i++){
+    const [s1,x1]=corners[i],[s2,x2]=corners[(i+1)%4],gable=i%2===1;
+    const pts=[P(s1,x1,0),P(s2,x2,0),P(s2,x2,h.ht),P(s1,x1,h.ht)];
+    if(gable)pts.splice(3,0,P(s2,0,h.ht+rh));
+    parts.push({pts,color:i%2?h.wall:h.shade,z:local(P((s1+s2)/2,(x1+x2)/2,1)).z,face:i});
+  }
+  const roofL=[P(-hd-.3,-hw-.35,h.ht-.1),P(hd+.3,-hw-.35,h.ht-.1),P(hd+.3,0,h.ht+rh),P(-hd-.3,0,h.ht+rh)];
+  const roofR=[P(-hd-.3,hw+.35,h.ht-.1),P(hd+.3,hw+.35,h.ht-.1),P(hd+.3,0,h.ht+rh),P(-hd-.3,0,h.ht+rh)];
+  parts.push({pts:roofL,color:h.roof,z:local(P(0,-hw*.5,h.ht+rh*.5)).z-.01},{pts:roofR,color:mix(h.roof,'#000',.18),z:local(P(0,hw*.5,h.ht+rh*.5)).z-.01});
+  parts.sort((a,b)=>b.z-a.z);
+  const night=phase.night||phaseName==='tramonto';
+  for(const part of parts){
+    polygon(part.pts,part.color);
+    // Two windows and a door on the long walls.
+    if(part.face===0||part.face===2){
+      const side=part.face===0?-hd-.01:hd+.01;
+      for(const [u,y0,y1,c] of [[-hw*.55,1.1,1.9,night?'#ffd98a':'#3d4f57'],[hw*.55,1.1,1.9,night?'#ffd98a':'#3d4f57'],[0,0,1.7,'#5a3d2c']]){
+        polygon([P(side,u-.35,y0),P(side,u+.35,y0),P(side,u+.35,y1),P(side,u-.35,y1)],c);
+      }
+    }
+  }
+}
+const villageScenery=[];
+for(const [index,stop] of stops.entries()){
+  const away=stop.side==='left'?1:-1;
+  for(let k=0;k<7;k++){
+    const r=noise(index*31+k*7),side=k%3===0?-away:away;
+    const s=stop.s-150+k*55+noise(index*17+k)*30,x=side*(17+noise(index*5+k*3)*28);
+    const [wall,shade,roof]=HOUSE_COLORS[Math.floor(r*HOUSE_COLORS.length)];
+    const h={w:6+r*3,d:8+noise(k*13+index)*4,ht:3.2+(r>.6?2.6:0),wall,shade,roof};
+    villageScenery.push({s,draw:()=>house(s,x,h)});
+  }
+}
+for(let s=600;s<TERMINUS;s+=640+noise(s)*300){
+  if(stops.some(st=>Math.abs(st.s-s)<260)||waterBody(s))continue;
+  const side=noise(s*3)>.5?1:-1,x=side*(26+noise(s*7)*40),[wall,shade,roof]=HOUSE_COLORS[Math.floor(noise(s*11)*4)];
+  const h={w:7,d:10,ht:3.4,wall,shade,roof};
+  villageScenery.push({s,draw:()=>house(s,x,h)});
+}
 function terrainLevel(s,x){
   const edge=ease((Math.abs(x)-9)/142);
   const swell=.7+Math.sin(s*.013+x*.051)*.8+Math.cos(s*.006-x*.073)*.55;
@@ -718,7 +787,7 @@ function render(){
   cy=Math.cos(viewBearing);sy=Math.sin(viewBearing);
   const roll=reducedMotion?.matches?0:clamp(train.v*train.v*curveAt(train.s)*.028,-.024,.024);
   rollCos=Math.cos(roll);rollSin=Math.sin(roll);
-  focal=Math.min(width*.91,height*1.25);
+  focal=Math.min(width*.91,height*1.25)*zoom;
   horizon=height*.49+Math.tan(lookPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
   ctx.setTransform(ratio,0,0,ratio,0,0);
   atmosphere();
@@ -758,6 +827,7 @@ function render(){
   }
   const objects=nearbyScenery(train.s);
   for(const item of stationScenery)if(item.s>first&&item.s<train.s+340)objects.push(item);
+  for(const item of villageScenery)if(item.s>first&&item.s<train.s+420)objects.push(item);
   for(let s=Math.ceil((first+2)/48)*48;s<train.s+600;s+=48)objects.push({s,draw:()=>gantry(s)});
   for(const sign of signs)if(sign.s>first&&sign.s<train.s+370)objects.push({s:sign.s,draw:()=>signboard(sign)});
   const sorted=objects.map(o=>({o,z:local(point(o.s)).z})).sort((a,b)=>b.z-a.z);

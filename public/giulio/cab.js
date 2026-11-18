@@ -32,7 +32,7 @@ function drawHUD(){
   $('grade').textContent=(grade>0?'+':'')+grade+' ‰';
   let state=t.emergency?'EMERGENZA':t.doors?'PORTE APERTE':t.slip?'SLITTAMENTO':t.slide?'ANTISLITTAMENTO':v<.2?'FERMO':t.brake?'IN FRENATA':t.traction?'IN TRAZIONE':'INERZIA';
   $('state').textContent=state;$('state').classList.toggle('warn',t.slip||t.slide||t.emergency);
-  $('progress').value=clamp(t.s,0,TERMINUS);$('clock').textContent=clock(t.elapsed);
+  $('progress').max=TERMINUS;$('progress').value=clamp(t.s,0,TERMINUS);$('clock').textContent=clock(t.elapsed);
   $('stop-count').textContent=t.stopResults.length+' / '+(stops.length-1)+' fermate';
   $('next-limit').textContent=t.direction>0&&sign&&sign[0]-t.s<260?'Limite '+sign[1]+' tra '+fmt(sign[0]-t.s)+' m':'';
   const docking=t.doors&&t.docked>=0;
@@ -57,7 +57,7 @@ function setOverlay(kind){
   $('continue').hidden=kind==='result';
   $('brief-note').hidden=kind!=='intro';
   if(kind==='intro'){
-    $('brief-kicker').textContent='Linea dei Due Laghi · 8,42 km';$('brief-title').textContent='Giulio Simulator';
+    $('brief-kicker').textContent='Linea dei Due Laghi · '+(TERMINUS/1000).toLocaleString('it-IT',{maximumFractionDigits:2})+' km';$('brief-title').textContent='Giulio Simulator';
     $('continue').textContent='Entra in cabina';
     body.innerHTML='<p>Porta il regionale da Officina a Belvedere, con sei fermate lungo la Linea dei Due Laghi. Rispetta i limiti e arresta il muso entro 10 metri dal cartello STOP.</p><div class="legend"><span><kbd>W / S</kbd> Trazione</span><span><kbd>D / A</kbd> Freno</span><span><kbd>Q / E</kbd> Porte Sx / Dx</span><span><kbd>R</kbd> Invertitore da fermo</span><span><kbd>C</kbd> Sabbia</span><span><kbd>X</kbd> Emergenza</span><span><kbd>P</kbd> Pausa</span><span><kbd>H</kbd> Tromba con audio</span></div><p class="minor">Trascina il parabrezza per guardare a 180°, oppure usa ←, → e Home. Per partire, chiudi le porte a sinistra e allenta il freno fino a zero.</p>';
   }else if(kind==='paused'){

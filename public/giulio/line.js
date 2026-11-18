@@ -11,15 +11,19 @@ const stops = [
   {name:'Lago Chiaro', s:3890, side:'right', time:354},
   {name:'Borgo del Fiume', s:5320, side:'left', time:482},
   {name:'Costa dei Larici', s:6880, side:'right', time:615},
-  {name:'Belvedere', s:8420, side:'left', time:751}
+  {name:'Belvedere', s:8420, side:'left', time:751},
+  {name:'Pian delle Case', s:9960, side:'right', time:887},
+  {name:'Monte Alto', s:11480, side:'left', time:1020}
 ];
 const TERMINUS=stops.at(-1).s;
 const limits = [[-120,45],[190,75],[870,45],[1280,90],[2100,60],[2310,35],
   [2640,85],[3460,60],[3700,40],[4050,85],[4740,65],[5120,40],
-  [5500,90],[6440,65],[6660,45],[7050,90],[7930,65],[8220,35]];
+  [5500,90],[6440,65],[6660,45],[7050,90],[7930,65],[8220,35],
+  [8560,70],[9300,85],[9780,45],[10180,80],[11200,40]];
 const grades = [[-120,0],[220,10],[610,-12],[960,0],[1250,-14],[1640,12],[2080,-8],[2330,0],
   [2680,8],[3090,-11],[3690,0],[4030,-7],[4550,4],[5090,0],
-  [5490,12],[6040,-7],[6650,0],[7060,9],[7670,-11],[8190,0]];
+  [5490,12],[6040,-7],[6650,0],[7060,9],[7670,-11],[8190,0],
+  [8560,9],[9200,-6],[9900,0],[10300,11],[11000,-4],[11400,0]];
 const LEVELS=[0,.14,.32,.52,.75,1], POWER=[0,.24,.48,.75,1];
 const MASS=160000, G=9.81, DWELL=8, STOP_TOL=10;
 const fmt = (value,digits=0) => value.toLocaleString('it-IT',{minimumFractionDigits:digits,maximumFractionDigits:digits});
@@ -37,7 +41,8 @@ function curveAt(s) {
   return bend(255,730,460)-bend(1350,1820,510)+bend(1890,2260,760)
     -bend(2660,3090,700)+bend(3130,3720,610)-bend(4150,4530,640)
     +bend(4760,5120,720)-bend(5540,6080,670)+bend(6150,6620,620)
-    -bend(7090,7660,730)+bend(7730,8200,650);
+    -bend(7090,7660,730)+bend(7730,8200,650)
+    +bend(8700,9150,600)-bend(9350,9800,700)+bend(10250,10800,650);
 }
 const stepLength=2, trackStart=-160, trackEnd=TERMINUS+300, track=[];
 let wx=0, wy=0, wz=0, yaw=0;
