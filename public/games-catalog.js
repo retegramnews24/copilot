@@ -133,7 +133,11 @@ function buildAppGrid(page) {
   // An action inside the sheet (not the star) starts the game: close the sheet.
   sheet.firstChild.addEventListener('click', event => {
     const button = event.target.closest('button');
-    if (button && !button.closest('.fav-toggle') && !button.disabled) setTimeout(closeSheet, 0);
+    if (button && !button.closest('.fav-toggle') && !button.disabled) {
+      // Hide the sheet at once (the game opens from the same click); put the card back right after.
+      sheet.hidden = true;
+      setTimeout(closeSheet, 0);
+    }
   });
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && !sheet.hidden) closeSheet();
@@ -141,7 +145,7 @@ function buildAppGrid(page) {
   document.body.append(sheet);
 }
 function closeSheet() {
-  if (!sheet || sheet.hidden) return;
+  if (!sheet || (sheet.hidden && !sheetCard)) return;
   sheet.hidden = true;
   if (sheetCard) homes.get(sheetCard).append(sheetCard);
   sheetCard = null;

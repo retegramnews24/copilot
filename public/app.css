@@ -4255,3 +4255,8 @@ html[data-env='staging'] .lobby-wordmark::after {
 .notices-count[hidden] {
   display: none;
 }
+/* Game and notice sheets stay below the game overlays (z-index 30): no flash of the sheet over a game that is starting. */
+.game-sheet,
+.notices-sheet {
+  z-index: 25;
+}

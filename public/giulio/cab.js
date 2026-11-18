@@ -126,36 +126,52 @@ window.addEventListener('keydown',event=>{
   if(!event.repeat)command(cmd);
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='run')setOverlay('paused');});
-$('sound').onclick=async ()=>{
-  try{
-    const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
-    // Global "Suoni" setting of Binottoland (same key as public/sound-pref.js).
-    try{if(localStorage.getItem('binottoland-sound')==='off'&&!audio)return}catch{}
-    if(!audio){
-      const ac=new Audio(),osc=ac.createOscillator(),gain=ac.createGain(),filter=ac.createBiquadFilter();
-      osc.type='triangle';gain.gain.value=0;filter.type='lowpass';filter.frequency.value=210;
-      osc.connect(filter);filter.connect(gain);gain.connect(ac.destination);osc.start();
-      const rollNoise=ac.createBufferSource(), rollGain=ac.createGain(), rollFilter=ac.createBiquadFilter();
-      const buffer=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);
-      const samples=buffer.getChannelData(0);
-      for(let i=0;i<samples.length;i++)samples[i]=Math.random()*2-1;
-      rollNoise.buffer=buffer;rollNoise.loop=true;rollFilter.type='lowpass';rollGain.gain.value=0;
-      rollNoise.connect(rollFilter);rollFilter.connect(rollGain);rollGain.connect(ac.destination);rollNoise.start();
-      audio={ac,osc,gain,filter,rollGain,rollFilter};
-    }
-    if(!audioOn)await audio.ac.resume();
-    audioOn=!audioOn;$('sound').setAttribute('aria-pressed',String(audioOn));
-    if(!audioOn){
-      audio.gain.gain.setTargetAtTime(0,audio.ac.currentTime,.04);
-      audio.rollGain.gain.setTargetAtTime(0,audio.ac.currentTime,.04);
-    }
-  }catch{audioOn=false;}
-};
-function horn(){
+// Sound: engine (audible on phone speakers), wheels on the rails and joint clacks, through one master volume.
+// It starts with the first touch (browsers need a gesture), unless switched off here or in Binottoland settings.
+let volume=.8;try{const v=Number(localStorage.getItem('giulio-volume'));if(localStorage.getItem('giulio-volume')!==null&&v>=0&&v<=1)volume=v;}catch{}
+function buildAudio(){
+  const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;
+  const ac=new Ctx(),master=ac.createGain();master.gain.value=volume;master.connect(ac.destination);
+  const osc=ac.createOscillator(),osc2=ac.createOscillator(),gain=ac.createGain(),filter=ac.createBiquadFilter();
+  osc.type='sawtooth';osc2.type='square';gain.gain.value=0;filter.type='lowpass';filter.frequency.value=500;
+  osc.connect(filter);osc2.connect(filter);filter.connect(gain);gain.connect(master);osc.start();osc2.start();
+  const rollNoise=ac.createBufferSource(),rollGain=ac.createGain(),rollFilter=ac.createBiquadFilter();
+  const buffer=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate),samples=buffer.getChannelData(0);
+  for(let i=0;i<samples.length;i++)samples[i]=Math.random()*2-1;
+  rollNoise.buffer=buffer;rollNoise.loop=true;rollFilter.type='bandpass';rollFilter.Q.value=.7;rollGain.gain.value=0;
+  rollNoise.connect(rollFilter);rollFilter.connect(rollGain);rollGain.connect(master);rollNoise.start();
+  audio={ac,master,osc,osc2,gain,filter,rollGain,rollFilter,buffer,joint:0};
+}
+async function ensureAudio(){if(!audio)buildAudio();if(audio&&audio.ac.state!=='running')await audio.ac.resume();}
+function setSound(on){
+  audioOn=on;$('sound').setAttribute('aria-pressed',String(on));
+  try{localStorage.setItem('giulio-audio',on?'on':'off');}catch{}
+  if(!on&&audio){audio.gain.gain.setTargetAtTime(0,audio.ac.currentTime,.04);audio.rollGain.gain.setTargetAtTime(0,audio.ac.currentTime,.04);}
+}
+$('sound').onclick=async ()=>{try{if(!audioOn){await ensureAudio();if(audio)setSound(true);}else setSound(false);}catch{setSound(false);}};
+const soundWanted=()=>{try{return localStorage.getItem('binottoland-sound')!=='off'&&localStorage.getItem('giulio-audio')!=='off';}catch{return true;}};
+const autoSound=()=>{if(!audioOn&&soundWanted())ensureAudio().then(()=>{if(audio&&!audioOn)setSound(true);}).catch(()=>{});};
+addEventListener('pointerdown',autoSound,{once:true,capture:true});addEventListener('keydown',autoSound,{once:true,capture:true});
+// Volume (pause panel and intro).
+const volumeInput=$('volume');
+if(volumeInput){
+  volumeInput.value=String(volume);
+  volumeInput.oninput=()=>{volume=Number(volumeInput.value);try{localStorage.setItem('giulio-volume',String(volume));}catch{}if(audio)audio.master.gain.setTargetAtTime(volume,audio.ac.currentTime,.03);};
+}
+function clack(strength){
+  if(!audio)return;
+  const ac=audio.ac,t=ac.currentTime;
+  for(const [delay,level] of [[0,1],[.11,.75]]){
+    const src=ac.createBufferSource(),g=ac.createGain(),f=ac.createBiquadFilter();
+    src.buffer=audio.buffer;f.type='bandpass';f.frequency.value=900;f.Q.value=1.2;
+    g.gain.setValueAtTime(.0001,t+delay);g.gain.exponentialRampToValueAtTime(.22*strength*level,t+delay+.008);g.gain.exponentialRampToValueAtTime(.0001,t+delay+.09);
+    src.connect(f);f.connect(g);g.connect(audio.master);src.start(t+delay,Math.random()*1.5,.12);
+  }
+}function horn(){
   if(!audio||mode!=='run')return;
   const ac=audio.ac,g=ac.createGain(),start=ac.currentTime;
-  g.connect(ac.destination);g.gain.setValueAtTime(.0001,start);
-  g.gain.linearRampToValueAtTime(.035,start+.06);
+  g.connect(audio.master);g.gain.setValueAtTime(.0001,start);
+  g.gain.linearRampToValueAtTime(.18,start+.06);
   g.gain.exponentialRampToValueAtTime(.0001,start+.58);
   for(const hz of [220,278]){
     const osc=ac.createOscillator();osc.frequency.value=hz;osc.type='triangle';osc.connect(g);osc.start(start);osc.stop(start+.6);
@@ -173,11 +189,16 @@ function loop(now){
     hudTimer=now;drawHUD();
     if(audio&&audioOn){
       const time=audio.ac.currentTime, speed=Math.abs(train.v);
-      audio.osc.frequency.setTargetAtTime(34+speed*3.1+train.traction*6,time,.08);
-      audio.filter.frequency.setTargetAtTime(120+speed*8,time,.1);
-      audio.gain.gain.setTargetAtTime(mode==='run'?train.traction*.004:0,time,.1);
-      audio.rollGain.gain.setTargetAtTime(mode==='run'?Math.min(.035,speed*.0014):0,time,.13);
-      audio.rollFilter.frequency.setTargetAtTime(75+speed*14,time,.1);
+      const pitch=70+speed*4.2+train.traction*14;
+      audio.osc.frequency.setTargetAtTime(pitch,time,.08);audio.osc2.frequency.setTargetAtTime(pitch*1.505,time,.08);
+      audio.filter.frequency.setTargetAtTime(380+speed*22+train.traction*80,time,.1);
+      audio.gain.gain.setTargetAtTime(mode==='run'?.018+train.traction*.055:0,time,.1);
+      audio.rollGain.gain.setTargetAtTime(mode==='run'?Math.min(.16,speed*.008):0,time,.13);
+      audio.rollFilter.frequency.setTargetAtTime(260+speed*38,time,.1);
+      // Rail joints every 25 m: the classic double clack.
+      const joint=Math.floor(train.s/25);
+      if(mode==='run'&&joint!==audio.joint&&speed>1.5)clack(Math.min(1,speed/18));
+      audio.joint=joint;
     }
   }
   if(renderDirty||(mode==='run'&&now-lastRender>=(width<780?1000/38:1000/55))){

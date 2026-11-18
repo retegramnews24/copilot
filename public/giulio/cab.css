@@ -73,3 +73,4 @@ main#simulator{position:relative}
 .route-message{bottom:calc(var(--desk-h,200px) + 32px)!important;background:#0b1715b8!important}
 body>header{position:absolute;top:0;left:0;right:0;z-index:6;background:linear-gradient(#0a1412d9,#0a141200)!important;border-bottom:0!important}
 .route-hud{top:calc(var(--header-h,56px) + 6px)!important}
+.volume-row{display:flex;align-items:center;gap:10px;margin:10px 0 4px;font-size:13px}.volume-row input{flex:1;accent-color:var(--green)}
