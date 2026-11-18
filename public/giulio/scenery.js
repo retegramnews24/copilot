@@ -7,8 +7,8 @@ const reducedMotion=window.matchMedia?.("(prefers-reduced-motion: reduce)");
 let lookYaw=0,lookPitch=0,drag=null,viewBearing=0;
 const HALF_TURN=Math.PI/2;
 function setLook(yaw,pitch=0){
-  lookYaw=clamp(yaw,-HALF_TURN,HALF_TURN);
-  lookPitch=clamp(pitch,-.21,.20);
+  lookYaw=Math.atan2(Math.sin(yaw),Math.cos(yaw));
+  lookPitch=clamp(pitch,-1.3,1.3);
   const deg=Math.round(lookYaw*180/Math.PI);
   const angle=$('view-angle');if(angle)angle.textContent=(deg>0?'+':'')+deg+'°';
   renderDirty=true;
@@ -33,7 +33,7 @@ canvas.addEventListener('pointermove',event=>{
   if(pinch&&touches.size===2){zoom=clamp(pinch.zoom*spread()/pinch.dist,.75,2.2);renderDirty=true;return;}
   if(drag?.id!==event.pointerId)return;
   setLook(drag.yaw-(event.clientX-drag.x)*Math.PI/Math.max(250,width*.9*zoom),
-    drag.pitch+(event.clientY-drag.y)*.75/Math.max(160,height*zoom));
+    drag.pitch+(event.clientY-drag.y)*1.9/Math.max(160,height*zoom));
 });
 canvas.addEventListener('wheel',event=>{
   event.preventDefault();
@@ -66,13 +66,15 @@ function point(s,x=0,y=0){
   }
   return {x:p.x+p.cos*x,y:p.y+y,z:p.z-p.sin*x};
 }
+// Camera: turn (yaw) then tilt (pitch), so the view can look up and down for real.
+let pitchCos=1,pitchSin=0,vcenter=0;
 function local(p){
-  const x=p.x-camera.x,z=p.z-camera.z;
-  return {x:x*cy-z*sy,y:p.y-camera.y,z:x*sy+z*cy};
+  const x=p.x-camera.x,z=p.z-camera.z,lz=x*sy+z*cy,ly=p.y-camera.y;
+  return {x:x*cy-z*sy,y:ly*pitchCos-lz*pitchSin,z:lz*pitchCos+ly*pitchSin};
 }
 function screen(p){
   const x=p.x*focal/p.z,y=-p.y*focal/p.z;
-  return [width*.5+x*rollCos-y*rollSin,horizon+x*rollSin+y*rollCos];
+  return [width*.5+x*rollCos-y*rollSin,vcenter+x*rollSin+y*rollCos];
 }
 const NEAR=.5;
 function project(p){const v=local(p);return v.z<NEAR?null:[...screen(v),v.z];}
@@ -542,8 +544,10 @@ function chunkScenery(index){
   return items;
 }
 function sideVisibility(){return ease((Math.abs(lookYaw)-.26)/1.13);}
+// Looking backwards: also the track and scenery behind the train.
+function backVisibility(){return ease((Math.abs(lookYaw)-1.45)/.9);}
 function nearbyScenery(s){
-  const behind=4+90*sideVisibility();
+  const behind=4+90*sideVisibility()+430*backVisibility();
   const first=Math.floor((s-behind)/CHUNK), last=Math.floor((s+510)/CHUNK);
   for(const key of sceneryChunks.keys())if(key<first-1||key>last+1)sceneryChunks.delete(key);
   const items=[];
@@ -828,9 +832,24 @@ function bridge(a,b){
     }
   }
 }
+// Cab interior as a closed box you can look around in (360°, up and down): floor, ceiling with a light, back wall
+// with door and window, windows on three sides. The controls are on screen, so no console is drawn.
 function drawCabin(cab){
-  const sin=Math.sin(cab.yaw),cos=Math.cos(cab.yaw),base=cab.y+2.46;
+  const sin=Math.sin(cab.yaw),cos=Math.cos(cab.yaw),base=cab.y+2.46,FLOOR=-1.5,ROOF=.95;
   const cabPoint=(x,y,z)=>({x:cab.x+x*cos+z*sin,y:base+y,z:cab.z-x*sin+z*cos});
+  const quad=(pts,color)=>polygon(pts.map(([x,y,z])=>cabPoint(x,y,z)),color);
+  const night=phase.night||phaseName==='tramonto';
+  // Floor: rubber mat with a few ribs.
+  quad([[-1.31,FLOOR,-1.55],[1.31,FLOOR,-1.55],[1.31,FLOOR,1.86],[-1.31,FLOOR,1.86]],'#2b3330');
+  for(let z=-1.3;z<1.8;z+=.42)quad([[-1.1,FLOOR+.002,z],[1.1,FLOOR+.002,z],[1.1,FLOOR+.002,z+.06],[-1.1,FLOOR+.002,z+.06]],'#363f3b');
+  // Ceiling with a long light panel.
+  quad([[-1.31,ROOF,-1.55],[1.31,ROOF,-1.55],[1.31,ROOF,1.86],[-1.31,ROOF,1.86]],'#8f978f');
+  quad([[-.32,ROOF-.004,-1.1],[.32,ROOF-.004,-1.1],[.32,ROOF-.004,1.4],[-.32,ROOF-.004,1.4]],night?'#fff6d8':'#eef0e8');
+  // Back wall with the door to the corridor and its small window.
+  quad([[-1.31,FLOOR,-1.55],[1.31,FLOOR,-1.55],[1.31,ROOF,-1.55],[-1.31,ROOF,-1.55]],'#5b6d64');
+  quad([[-.42,FLOOR,-1.54],[.42,FLOOR,-1.54],[.42,.55,-1.54],[-.42,.55,-1.54]],'#41524b');
+  quad([[-.26,-.1,-1.535],[.26,-.1,-1.535],[.26,.4,-1.535],[-.26,.4,-1.535]],night?'#1d2b33':'#7b9aa3');
+  quad([[.28,-.45,-1.53],[.36,-.45,-1.53],[.36,-.3,-1.53],[.28,-.3,-1.53]],'#c9b37a');
   const panes=[
     {a:[-1.31,1.86],b:[1.31,1.86],front:true},
     {a:[-1.31,-1.55],b:[-1.31,1.86],front:false},
@@ -839,56 +858,22 @@ function drawCabin(cab){
   for(const {a,b,front} of panes){
     const p=(u,y)=>cabPoint(blend(a[0],b[0],u),y,blend(a[1],b[1],u));
     const panel=(u,v,top,bottom,fill)=>polygon([p(u,top),p(v,top),p(v,bottom),p(u,bottom)],fill);
-    panel(0,1,2.2,.65,'#273b36');
+    panel(0,1,ROOF,.65,'#2f443d');
     panel(0,1,.72,.63,'#4a6257');
     panel(0,1,.647,.61,'#121f1e');
-    panel(0,1,-.57,-2.1,'#34483f');
-    panel(0,1,-.57,-.66,'#52695c');
-    panel(0,1,-.66,-.81,'#20342f');
+    panel(0,1,-.57,FLOOR,'#3d5249');
+    panel(0,1,-.57,-.66,'#5a7266');
+    panel(0,1,-.66,-.81,'#24382f');
     const posts=front?[[0,.048],[.952,1]]:[[0,.075],[.58,.631],[.94,1]];
     for(const [u,v] of posts){
       panel(u,v,.63,-.57,'#293b35');
       panel(u,u+(v-u)*.22,.63,-.57,'#52675b');
     }
-    if(front){
-      // Sun visors at the top of the windscreen.
-      panel(.07,.43,.52,.43,'#1a2926');panel(.07,.43,.435,.42,'#2f443d');
-      panel(.57,.93,.52,.45,'#1a2926');
-    }
     const glass=front?.024:.042;
     panel(.06,.94,.52,-.52,'rgba(187,221,210,'+glass+')');
     if(front&&train.weather==='wet')windscreenRain((u,y)=>p(u,y));
-    else if(front){
-      beam(p(.57,-.56),p(.76,-.35),'#263530',2.1);
-      beam(p(.76,-.35),p(.83,-.32),'#142624',2.45);
-      beam(p(.25,.573),p(.49,.573),'#9bb6a35c',1);
-    }
   }
-  const bench=[
-    cabPoint(-1.13,-.64,1.83),cabPoint(1.13,-.64,1.83),
-    cabPoint(1.02,-.95,1.11),cabPoint(-1.02,-.95,1.11)
-  ];
-  polygon(bench,'#344d44');
-  beam(bench[3],bench[2],'#768677',1.3);
-  const consoleFace=(l,r,a,b,color)=>polygon([
-    cabPoint(l,blend(-.95,-.64,a),blend(1.11,1.83,a)),
-    cabPoint(r,blend(-.95,-.64,a),blend(1.11,1.83,a)),
-    cabPoint(r,blend(-.95,-.64,b),blend(1.11,1.83,b)),
-    cabPoint(l,blend(-.95,-.64,b),blend(1.11,1.83,b))
-  ],color);
-  consoleFace(-.48,.30,.25,.86,'#182d29');
-  consoleFace(-.45,.27,.30,.80,'#192b30');
-  consoleFace(-.40,.22,.59,.72,'#658e7d');
-  for(let i=0;i<4;i++)consoleFace(-.36+i*.14,-.26+i*.14,.38,.49,i===0?'#dabf7a':'#597368');
-  // Two lit screens (speed and line), and the traction lever on the right.
-  const lit=phase.night||phaseName==='tramonto';
-  consoleFace(-.46,-.13,.6,.8,'#0c2622');consoleFace(-.44,-.15,.63,.77,lit?'#3fd1a0':'#2b8a6c');
-  consoleFace(-.40,-.19,.70,.72,lit?'#c9ffe9':'#8fe0c2');
-  consoleFace(.0,.27,.6,.8,'#0c2622');consoleFace(.02,.25,.63,.77,lit?'#f0b04a':'#b9822f');
-  beam(cabPoint(.52,-.66,1.48),cabPoint(.52,-.43,1.40),'#141c1a',4);
-  beam(cabPoint(.52,-.43,1.40),cabPoint(.52,-.40,1.39),'#c8553d',7);
-}
-function render(){
+}function render(){
   pointSamples.clear();
   const cab=trackAt(train.s+.55);
   let camPitch=0;
@@ -902,7 +887,9 @@ function render(){
   const roll=viewMode!=='cab'||reducedMotion?.matches?0:clamp(train.v*train.v*curveAt(train.s)*.028,-.024,.024);
   rollCos=Math.cos(roll);rollSin=Math.sin(roll);
   focal=Math.min(width*.91,height*1.25)*zoom;
-  horizon=height*(viewMode==='cab'?.45:.46)+Math.tan(lookPitch+camPitch)*focal+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
+  const tilt=lookPitch+camPitch;pitchCos=Math.cos(tilt);pitchSin=Math.sin(tilt);
+  vcenter=height*(viewMode==='cab'?.45:.46)+(reducedMotion?.matches?0:clamp(train.a,-1.2,1.2)*4);
+  horizon=vcenter+Math.tan(tilt)*focal;
   ctx.setTransform(ratio,0,0,ratio,0,0);
   atmosphere();
   const wet=train.weather==='wet';
@@ -910,7 +897,7 @@ function render(){
   // Rails catch the light when looking toward the sun.
   const sunAhead=Math.max(0,Math.cos(angleDiff(.57,viewBearing)));
   railShine=mix('#d2cec0',phase.sun,Math.round(sunAhead*sunAhead*6)/10);
-  const first=Math.max(trackStart,Math.floor((train.s-4-90*sideView-(viewMode==='cab'?0:85))/3)*3);
+  const first=Math.max(trackStart,Math.floor((train.s-4-90*sideView-430*backVisibility()-(viewMode==='cab'?0:85))/3)*3);
   const last=Math.min(trackEnd,train.s+690-225*sideView),segments=[];
   for(let a=first;a<last;){
     const relative=Math.abs(a-train.s),t=Math.min(last,a+(relative<85?3:relative<235?8:15));

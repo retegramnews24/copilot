@@ -114,3 +114,11 @@ body>header .actions button,.hud-bottom button{background:none!important;box-sha
 .hud-bottom #sand.on{border-color:#e9c46a!important}
 .route-strip{background:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;color:#fff;text-shadow:0 1px 3px #000;padding-bottom:max(3px,var(--cab-safe-bottom,0px))!important}
 .legacy{display:none!important}
+
+/* Anchored to Telegram's margins (--cab-safe-*), not to measured heights: nothing can slide under Telegram's
+   buttons or overlap. Top: Telegram buttons, our button row, info + speed, message. Bottom: buttons, then strip. */
+.cab-hud{top:calc(var(--cab-safe-top,0px) + 50px)!important}
+.route-message{top:calc(var(--cab-safe-top,0px) + 160px)!important}
+.hud-bottom{bottom:calc(var(--cab-safe-bottom,0px) + 30px)!important}
+.route-strip{bottom:0!important;padding-bottom:calc(var(--cab-safe-bottom,0px) + 4px)!important}
+.lever{top:calc(var(--cab-safe-top,0px) + 200px)!important;bottom:calc(var(--cab-safe-bottom,0px) + 86px);height:auto!important;max-height:46%}
