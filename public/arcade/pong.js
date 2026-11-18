@@ -224,6 +224,34 @@ dials.forEach(dial=>{
     knob.addEventListener(type,event=>{if(turn?.id===event.pointerId)turn=null;});
   }
 });
+// Touchpad under the console: precise, relative control. Sliding the whole pad height moves the paddle across
+// most of the field; where you start does not matter (like a laptop touchpad).
+const touchpad=document.getElementById('touchpad');
+if(touchpad){
+  let slide=null;
+  const moveTo=value=>{
+    target=Math.min(height,Math.max(0,value));
+    if(!online&&phase==='ready'){
+      const edge=modes[match.mode].paddle/2+2;
+      match.paddles[0]=Math.min(height-edge,Math.max(edge,target));
+      updateDials();draw();
+    }
+  };
+  touchpad.addEventListener('pointerdown',event=>{
+    if(!playable()||event.button!==0||slide)return;
+    event.preventDefault();unlockAudio();touchpad.setPointerCapture(event.pointerId);
+    slide={id:event.pointerId,y:event.clientY,value:target??match.paddles[seat]};
+    touchpad.classList.add('active');
+  });
+  touchpad.addEventListener('pointermove',event=>{
+    if(slide?.id!==event.pointerId)return;
+    const span=Math.max(80,touchpad.clientHeight);
+    moveTo(slide.value+(event.clientY-slide.y)*height*1.15/span);
+  });
+  for(const type of ['pointerup','pointercancel','lostpointercapture']){
+    touchpad.addEventListener(type,event=>{if(slide?.id===event.pointerId){slide=null;touchpad.classList.remove('active');}});
+  }
+}
 window.addEventListener('keydown',event=>{
   if(event.target.closest?.('button,select,input,a'))return;
   if(event.code==='Space'){event.preventDefault();if(!event.repeat)command('start');return;}
