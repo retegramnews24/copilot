@@ -606,20 +606,38 @@ function scrub(s,x,seed,palette){
       point(ss+.15,xx+.05,level+h),point(ss+.22,xx+w*.67,level+h*.58),point(ss,xx+w,level)],palette[i%3]);
   }
 }
+// Trees drawn like real ones: a broadleaf has a trunk with two branches and a crown of many leaf clusters, darker
+// underneath and on the shadow side, lit on top toward the sun; a conifer has jagged tiers, shadow side and lit side.
+// Colours go through shade() (time of day + haze). Far trees use fewer clusters.
+function leafCluster(x,y,r,color,seed){
+  const pts=[];
+  for(let k=0;k<9;k++){const a=k/9*TAU,w=r*(.78+noise(seed+k*5)*.38);pts.push([x+Math.cos(a)*w,y+Math.sin(a)*w*.86]);}
+  fillShape(pts,color);
+}
 function broadleaf(tree,seed){
-  const s=tree.s,x=tree.d*tree.side,ground=terrainLevel(s,x),h=tree.height*.82;
+  const s=tree.s,x=tree.d*tree.side,ground=terrainLevel(s,x),h=tree.height*.86;
   groundShadow(s,x,ground,tree.height*.3);
   const bottom=project(point(s,x,ground)),top=project(point(s,x,ground+h));
   if(!bottom||!top)return;
-  const size=bottom[1]-top[1];
+  const size=bottom[1]-top[1],z=bottom[2];
   if(size<3||bottom[0]<-size||bottom[0]>width+size)return;
-  const x0=bottom[0], y0=bottom[1];
-  ctx.fillStyle='#7b6d53';ctx.fillRect(x0-size*.035,y0-size*.68,size*.07,size*.68);
-  const colors=noise(seed+4)>.68?['#716438','#978249','#c5a45b']:['#355e4c','#5e8057','#84966a'];
-  for(let i=0;i<5;i++){
-    const x=x0+(noise(seed+31+i*7)-.5)*size*.53,y=top[1]+size*(.24+noise(seed+7+i*3)*.27);
-    const rx=size*(.16+noise(seed+2+i)*.08),ry=size*(.16+noise(seed+11+i)*.11);
-    fillShape([[x-rx,y+ry*.2],[x-rx*.55,y-ry*.7],[x,y-ry],[x+rx*.72,y-ry*.46],[x+rx,y+ry*.3],[x+rx*.16,y+ry],[x-rx*.64,y+ry*.7]],colors[i%3]);
+  const x0=bottom[0],y0=bottom[1],autumn=noise(seed+4)>.72;
+  const pal=autumn?['#5e4a26','#8a6a32','#b8893c','#ddb35e']:['#22402f','#33573c','#4f7a48','#7fa35e'];
+  const c=pal.map(col=>shade(col,z));
+  // Trunk and branches.
+  ctx.fillStyle=shade('#5b4a36',z);
+  ctx.beginPath();ctx.moveTo(x0-size*.045,y0);ctx.lineTo(x0-size*.025,y0-size*.55);ctx.lineTo(x0+size*.025,y0-size*.55);ctx.lineTo(x0+size*.045,y0);ctx.fill();
+  if(size>14){ctx.strokeStyle=c[0];ctx.lineWidth=Math.max(1,size*.022);ctx.beginPath();ctx.moveTo(x0,y0-size*.42);ctx.lineTo(x0-size*.16,y0-size*.62);ctx.moveTo(x0,y0-size*.48);ctx.lineTo(x0+size*.14,y0-size*.66);ctx.stroke();}
+  // Crown: back layer dark, middle, front lit; the lit side faces the sun.
+  const n=size<10?3:size<30?7:12,cx=x0,cy=top[1]+size*.36,crown=size*.36;
+  const sunSide=Math.sign(Math.sin(angleDiff(.57,viewBearing)))||1;
+  for(let layer=0;layer<3;layer++){
+    for(let i=0;i<n;i++){
+      const a=noise(seed+i*13+layer*7)*TAU,d=crown*(.25+noise(seed+i*3+layer)*.6)*(layer===0?1:.8);
+      const px=cx+Math.cos(a)*d,py=cy+Math.sin(a)*d*.75-layer*size*.03,r=size*(.11+noise(seed+i+layer*17)*.07);
+      const lit=(px-cx)*sunSide>0&&py<cy;
+      leafCluster(px,py,r,layer===0?c[0]:layer===1?c[1]:lit?c[3]:c[2],seed+i*31+layer);
+    }
   }
 }
 function pine(tree){
@@ -628,17 +646,22 @@ function pine(tree){
   groundShadow(s,x,ground,h*.22);
   const base=project(point(s,x,ground)),tip=project(point(s,x,ground+h));
   if(!base||!tip)return;
-  const size=(base[1]-tip[1]),dx=base[0];
+  const size=(base[1]-tip[1]),dx=base[0],z=base[2];
   if(size<1||dx< -size||dx>width+size)return;
-  ctx.fillStyle='#5f5545';ctx.fillRect(dx-size*.036,base[1]-size*.22,size*.072,size*.22);
-  ctx.fillStyle=tree.shade?'#294a3f':'#4b6c4a';
-  for(let i=0;i<3;i++){
-    const top=tip[1]+size*.18*i, span=size*(.12+i*.052);
-    fillShape([[dx,top],[dx-span,top+size*.49],[dx,top+size*.40],[dx+span,top+size*.49]],tree.shade?'#2d5143':'#466e4e');
-    if(size>12)fillShape([[dx,top],[dx-span,top+size*.49],[dx,top+size*.40]],tree.shade?'#496951':'#62825b');
+  ctx.fillStyle=shade('#4f4334',z);ctx.fillRect(dx-size*.03,base[1]-size*.2,size*.06,size*.2);
+  const dark=shade(tree.shade?'#1f3b30':'#2c4d3a',z),mid=shade(tree.shade?'#2f5242':'#3e6648',z),light=shade(tree.shade?'#4a6e55':'#5f8a5c',z);
+  const sunSide=Math.sign(Math.sin(angleDiff(.57,viewBearing)))||1,tiers=size<12?3:6;
+  for(let i=0;i<tiers;i++){
+    const f=i/(tiers-1),top=tip[1]+size*.8*f*.92,spanW=size*(.06+f*.2),drop=size*(.22+f*.06);
+    // Jagged lower edge.
+    const left=[],right=[],teeth=size<12?2:4;
+    for(let k=0;k<=teeth;k++){const u=k/teeth;left.push([dx-spanW*u,top+drop*(.55+u*.45)-(k%2?drop*.12:0)]);right.push([dx+spanW*u,top+drop*(.55+u*.45)-(k%2?drop*.12:0)]);}
+    fillShape([[dx,top],...right,[dx,top+drop*.75],...left.slice().reverse()],mid);
+    // Shadow half and lit half.
+    fillShape([[dx,top],...(sunSide>0?left:right),[dx,top+drop*.75]],dark);
+    if(size>10)fillShape([[dx,top],[dx+sunSide*spanW*.55,top+drop*.7],[dx,top+drop*.5]],light);
   }
-}
-function stationAt(s){
+}function stationAt(s){
   return stops.find(stop=>s>=stop.s-87&&s<stop.s+31);
 }
 function stationPlatform(s,t,station){
@@ -873,11 +896,44 @@ function drawCabin(cab){
     panel(.06,.94,.52,-.52,'rgba(187,221,210,'+glass+')');
     if(front&&train.weather==='wet')windscreenRain((u,y)=>p(u,y));
   }
+  // Second-man seat on the right (seen when looking right).
+  quad([[.35,-1.0,-.2],[.95,-1.0,-.2],[.95,-1.0,.35],[.35,-1.0,.35]],'#3b4f6e');
+  quad([[.35,-1.0,-.22],[.95,-1.0,-.22],[.95,-.2,-.3],[.35,-.2,-.3]],'#2f4260');
+  // Driver's desk across the front: top, front face, slanted instrument panel on the driver's side (left).
+  const D=-.66,Z0=1.12,Z1=1.84;
+  quad([[-1.29,D,Z0],[1.29,D,Z0],[1.29,D,Z1],[-1.29,D,Z1]],'#2d3532');
+  quad([[-1.29,D,Z0],[1.29,D,Z0],[1.29,FLOOR,Z0],[-1.29,FLOOR,Z0]],'#3a4541');
+  quad([[-1.29,D+.004,Z0],[1.29,D+.004,Z0],[1.29,D+.004,Z0+.05],[-1.29,D+.004,Z0+.05]],'#59665f');
+  const panelAt=(x,t)=>[x,-.34-.3*t,Z1-.36*t];
+  quad([panelAt(-1.2,0),panelAt(-.02,0),panelAt(-.02,1),panelAt(-1.2,1)],'#1b2220');
+  // Dials: speedometer and brake pipe gauge, with real needles.
+  const dial=(x,r,value,max,face)=>{
+    const ring=[],faceP=[];
+    for(let k=0;k<16;k++){const a=k/16*TAU;ring.push(panelAt(x+Math.cos(a)*r*1.12,.5+Math.sin(a)*r*1.12/.47));faceP.push(panelAt(x+Math.cos(a)*r,.5+Math.sin(a)*r/.47));}
+    quad(ring,'#0f1413');quad(faceP,face);
+    const ang=Math.PI*.75+clamp(value/max,0,1)*Math.PI*1.5,tip=panelAt(x+Math.cos(ang)*r*.85,.5+Math.sin(ang)*r*.85/.47);
+    beam(cabPoint(...panelAt(x,.5)),cabPoint(...tip),'#d8452f',2.2);
+  };
+  dial(-.88,.12,Math.abs(train.v)*3.6,120,night?'#d9e6c8':'#ece8da');
+  dial(-.55,.09,train.pipe??5,6,night?'#d9e6c8':'#ece8da');
+  // Display screen with a lit line.
+  quad([panelAt(-.38,.25),panelAt(-.08,.25),panelAt(-.08,.75),panelAt(-.38,.75)],'#0b1d19');
+  quad([panelAt(-.35,.3),panelAt(-.11,.3),panelAt(-.11,.7),panelAt(-.35,.7)],night?'#1f8f6c':'#16634d');
+  quad([panelAt(-.33,.45),panelAt(-.13,.45),panelAt(-.13,.5),panelAt(-.33,.5)],night?'#b8ffe3':'#7fe0c2');
+  // Brake handle (left of the driver) and traction handle (right): they move with the levers on screen.
+  const handle=(x,z,lean,color)=>{
+    const root=cabPoint(x,D,z),top=cabPoint(x,D+.3,z+lean*.18);
+    beam(root,top,'#151a19',5);
+    const p=project(top);if(p){const r=clamp(focal/p[2]*.05,3,16);ctx.fillStyle=shade(color,p[2]);ctx.beginPath();ctx.arc(p[0],p[1],r,0,TAU);ctx.fill();}
+  };
+  handle(-1.12,1.3,(train.emergency?5:train.brake)/5*2-1,'#e0902f');
+  handle(-.06,1.3,train.traction/4*2-1,'#6fbf5a');
 }function render(){
   pointSamples.clear();
   const cab=trackAt(train.s+.55);
   let camPitch=0;
-  if(viewMode==='cab'){camera={...cab,y:cab.y+2.46};viewBearing=cab.yaw+lookYaw;}
+  // Driver's seat: on the left side of the cab, seated eye height.
+  if(viewMode==='cab'){camera=point(train.s+.55,-.6,2.3);viewBearing=cab.yaw+lookYaw;}
   else{
     const shot=viewMode==='chase'?{from:point(train.s-66,0,9.5),to:point(train.s+45,0,1.5)}:{from:point(train.s-36,15,3.4),to:point(train.s-16,0,2.4)};
     camera=shot.from;const dx=shot.to.x-camera.x,dz=shot.to.z-camera.z;

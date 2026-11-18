@@ -122,3 +122,18 @@ body>header .actions button,.hud-bottom button{background:none!important;box-sha
 .hud-bottom{bottom:calc(var(--cab-safe-bottom,0px) + 30px)!important}
 .route-strip{bottom:0!important;padding-bottom:calc(var(--cab-safe-bottom,0px) + 4px)!important}
 .lever{top:calc(var(--cab-safe-top,0px) + 200px)!important;bottom:calc(var(--cab-safe-bottom,0px) + 86px);height:auto!important;max-height:46%}
+
+/* Landscape (phone held sideways): info top-left, speed top-right, message in the middle column at the top,
+   levers along the sides between the info and the bottom buttons. */
+@media (orientation:landscape) and (max-height:560px){
+  .cab-hud{top:calc(var(--cab-safe-top,0px) + 46px)!important;left:calc(var(--cab-safe-left,0px) + 70px)!important;right:calc(var(--cab-safe-right,0px) + 70px)!important}
+  .cab-hud .route-label strong{font-size:15px}
+  .speedo{width:96px}
+  .speedo .speed-number{font-size:22px}
+  .route-message{top:calc(var(--cab-safe-top,0px) + 50px)!important;max-width:min(44%,380px)!important;font-size:12.5px!important}
+  .lever{top:calc(var(--cab-safe-top,0px) + 46px)!important;bottom:calc(var(--cab-safe-bottom,0px) + 76px)!important;max-height:none!important;width:50px}
+  .lever .lever-handle{width:38px!important;height:18px!important;margin-left:-19px!important}
+  .lever-traction .lever-handle{bottom:calc(var(--lever,0) * (100% - 18px))!important}
+  .lever-brake .lever-handle{top:calc(var(--lever,0) * (100% - 18px))!important}
+  .lever-name{font-size:9.5px}
+}

@@ -131,52 +131,73 @@ window.addEventListener('keydown',event=>{
   if(!event.repeat)command(cmd);
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&mode==='run')setOverlay('paused');});
-// Sound: engine (audible on phone speakers), wheels on the rails and joint clacks, through one master volume.
-// It starts with the first touch (browsers need a gesture), unless switched off here or in Binottoland settings.
-let volume=.8;try{const v=Number(localStorage.getItem('giulio-volume'));if(localStorage.getItem('giulio-volume')!==null&&v>=0&&v<=1)volume=v;}catch{}
+// Sound of an electric train (EMU): inverter whine that rises in steps at start, motor hum, low rolling rumble
+// (no hiss), the "ta-tam ta-tam" of each axle over the rail joints, an air hiss when the brake is released.
+// All through one master volume; it starts with the first touch unless switched off.
+let volume=.5;try{const v=Number(localStorage.getItem('giulio-volume2'));if(localStorage.getItem('giulio-volume2')!==null&&v>=0&&v<=1)volume=v;}catch{}
 function buildAudio(){
   const Ctx=window.AudioContext||window.webkitAudioContext;if(!Ctx)return;
   const ac=new Ctx(),master=ac.createGain();master.gain.value=volume;master.connect(ac.destination);
-  const osc=ac.createOscillator(),osc2=ac.createOscillator(),gain=ac.createGain(),filter=ac.createBiquadFilter();
-  osc.type='sawtooth';osc2.type='square';gain.gain.value=0;filter.type='lowpass';filter.frequency.value=500;
-  osc.connect(filter);osc2.connect(filter);filter.connect(gain);gain.connect(master);osc.start();osc2.start();
-  const rollNoise=ac.createBufferSource(),rollGain=ac.createGain(),rollFilter=ac.createBiquadFilter();
-  const buffer=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate),samples=buffer.getChannelData(0);
-  for(let i=0;i<samples.length;i++)samples[i]=Math.random()*2-1;
-  rollNoise.buffer=buffer;rollNoise.loop=true;rollFilter.type='bandpass';rollFilter.Q.value=.7;rollGain.gain.value=0;
-  rollNoise.connect(rollFilter);rollFilter.connect(rollGain);rollGain.connect(master);rollNoise.start();
-  audio={ac,master,osc,osc2,gain,filter,rollGain,rollFilter,buffer,joint:0};
+  // Inverter: two detuned tones through a narrow band-pass.
+  const inv1=ac.createOscillator(),inv2=ac.createOscillator(),invFilter=ac.createBiquadFilter(),invGain=ac.createGain();
+  inv1.type='sawtooth';inv2.type='triangle';invFilter.type='bandpass';invFilter.Q.value=5;invGain.gain.value=0;
+  inv1.connect(invFilter);inv2.connect(invFilter);invFilter.connect(invGain);invGain.connect(master);inv1.start();inv2.start();
+  // Motor hum.
+  const hum=ac.createOscillator(),humGain=ac.createGain();hum.type='sine';humGain.gain.value=0;hum.connect(humGain);humGain.connect(master);hum.start();
+  // Rolling: brown noise (integrated white noise) low-passed: a rumble, not a hiss.
+  const len=ac.sampleRate*2,buffer=ac.createBuffer(1,len,ac.sampleRate),data=buffer.getChannelData(0);
+  let last=0;for(let i=0;i<len;i++){last=(last+.02*(Math.random()*2-1))/1.02;data[i]=last*3.2;}
+  const white=ac.createBuffer(1,ac.sampleRate,ac.sampleRate),wd=white.getChannelData(0);for(let i=0;i<wd.length;i++)wd[i]=Math.random()*2-1;
+  const roll=ac.createBufferSource(),rollFilter=ac.createBiquadFilter(),rollGain=ac.createGain();
+  roll.buffer=buffer;roll.loop=true;rollFilter.type='lowpass';rollFilter.frequency.value=160;rollGain.gain.value=0;
+  roll.connect(rollFilter);rollFilter.connect(rollGain);rollGain.connect(master);roll.start();
+  audio={ac,master,inv1,inv2,invFilter,invGain,hum,humGain,rollFilter,rollGain,white,joint:0,brake:0,
+    // Kept for older code paths (horn, settings).
+    gain:invGain};
 }
 async function ensureAudio(){if(!audio)buildAudio();if(audio&&audio.ac.state!=='running')await audio.ac.resume();}
 function setSound(on){
   audioOn=on;$('sound').setAttribute('aria-pressed',String(on));
   try{localStorage.setItem('giulio-audio',on?'on':'off');}catch{}
-  if(!on&&audio){audio.gain.gain.setTargetAtTime(0,audio.ac.currentTime,.04);audio.rollGain.gain.setTargetAtTime(0,audio.ac.currentTime,.04);}
+  if(!on&&audio)for(const g of [audio.invGain,audio.humGain,audio.rollGain])g.gain.setTargetAtTime(0,audio.ac.currentTime,.04);
 }
 $('sound').onclick=async ()=>{try{if(!audioOn){await ensureAudio();if(audio)setSound(true);}else setSound(false);}catch{setSound(false);}};
 const soundWanted=()=>{try{return localStorage.getItem('binottoland-sound')!=='off'&&localStorage.getItem('giulio-audio')!=='off';}catch{return true;}};
 const autoSound=()=>{if(!audioOn&&soundWanted())ensureAudio().then(()=>{if(audio&&!audioOn)setSound(true);}).catch(()=>{});};
 addEventListener('pointerdown',autoSound,{once:true,capture:true});addEventListener('keydown',autoSound,{once:true,capture:true});
-// Volume (pause panel and intro).
 const volumeInput=$('volume');
 if(volumeInput){
   volumeInput.value=String(volume);
-  volumeInput.oninput=()=>{volume=Number(volumeInput.value);try{localStorage.setItem('giulio-volume',String(volume));}catch{}if(audio)audio.master.gain.setTargetAtTime(volume,audio.ac.currentTime,.03);};
+  volumeInput.oninput=()=>{volume=Number(volumeInput.value);try{localStorage.setItem('giulio-volume2',String(volume));}catch{}if(audio)audio.master.gain.setTargetAtTime(volume,audio.ac.currentTime,.03);};
 }
-function clack(strength){
-  if(!audio)return;
-  const ac=audio.ac,t=ac.currentTime;
-  for(const [delay,level] of [[0,1],[.11,.75]]){
-    const src=ac.createBufferSource(),g=ac.createGain(),f=ac.createBiquadFilter();
-    src.buffer=audio.buffer;f.type='bandpass';f.frequency.value=900;f.Q.value=1.2;
-    g.gain.setValueAtTime(.0001,t+delay);g.gain.exponentialRampToValueAtTime(.22*strength*level,t+delay+.008);g.gain.exponentialRampToValueAtTime(.0001,t+delay+.09);
-    src.connect(f);f.connect(g);g.connect(audio.master);src.start(t+delay,Math.random()*1.5,.12);
-  }
+// One wheel over a joint: a short low thump plus a small metallic click.
+function wheelHit(at,level){
+  const ac=audio.ac,o=ac.createOscillator(),g=ac.createGain();
+  o.type='sine';o.frequency.setValueAtTime(95,at);o.frequency.exponentialRampToValueAtTime(55,at+.09);
+  g.gain.setValueAtTime(.0001,at);g.gain.exponentialRampToValueAtTime(.5*level,at+.006);g.gain.exponentialRampToValueAtTime(.0001,at+.13);
+  o.connect(g);g.connect(audio.master);o.start(at);o.stop(at+.15);
+  const n=ac.createBufferSource(),f=ac.createBiquadFilter(),ng=ac.createGain();
+  n.buffer=audio.white;f.type='bandpass';f.frequency.value=2300;f.Q.value=2;
+  ng.gain.setValueAtTime(.0001,at);ng.gain.exponentialRampToValueAtTime(.09*level,at+.003);ng.gain.exponentialRampToValueAtTime(.0001,at+.035);
+  n.connect(f);f.connect(ng);ng.connect(audio.master);n.start(at,Math.random()*.8,.05);
+}
+// The whole train over one joint: two axles per bogie, front bogie loudest (under the cab), then the others.
+const AXLES=[[0,1],[2.5,.95],[15,.55],[17.5,.5],[21,.38],[23.5,.35]];
+function joint(speed){
+  if(!audio||speed<1)return;
+  const now=audio.ac.currentTime,level=Math.min(1,.25+speed/22);
+  for(const [offset,gain] of AXLES){const t=offset/speed;if(t<2.5)wheelHit(now+t,level*gain);}
+}
+function airHiss(){
+  const ac=audio.ac,n=ac.createBufferSource(),f=ac.createBiquadFilter(),g=ac.createGain(),t=ac.currentTime;
+  n.buffer=audio.white;n.loop=true;f.type='highpass';f.frequency.value=2500;
+  g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.06,t+.03);g.gain.exponentialRampToValueAtTime(.0001,t+.55);
+  n.connect(f);f.connect(g);g.connect(audio.master);n.start(t);n.stop(t+.6);
 }function horn(){
   if(!audio||mode!=='run')return;
   const ac=audio.ac,g=ac.createGain(),start=ac.currentTime;
   g.connect(audio.master);g.gain.setValueAtTime(.0001,start);
-  g.gain.linearRampToValueAtTime(.18,start+.06);
+  g.gain.linearRampToValueAtTime(.22,start+.06);
   g.gain.exponentialRampToValueAtTime(.0001,start+.58);
   for(const hz of [220,278]){
     const osc=ac.createOscillator();osc.frequency.value=hz;osc.type='triangle';osc.connect(g);osc.start(start);osc.stop(start+.6);
@@ -194,16 +215,23 @@ function loop(now){
     hudTimer=now;drawHUD();
     if(audio&&audioOn){
       const time=audio.ac.currentTime, speed=Math.abs(train.v);
-      const pitch=70+speed*4.2+train.traction*14;
-      audio.osc.frequency.setTargetAtTime(pitch,time,.08);audio.osc2.frequency.setTargetAtTime(pitch*1.505,time,.08);
-      audio.filter.frequency.setTargetAtTime(380+speed*22+train.traction*80,time,.1);
-      audio.gain.gain.setTargetAtTime(mode==='run'?.018+train.traction*.055:0,time,.1);
-      audio.rollGain.gain.setTargetAtTime(mode==='run'?Math.min(.16,speed*.008):0,time,.13);
-      audio.rollFilter.frequency.setTargetAtTime(260+speed*38,time,.1);
-      // Rail joints every 25 m: the classic double clack.
-      const joint=Math.floor(train.s/25);
-      if(mode==='run'&&joint!==audio.joint&&speed>1.5)clack(Math.min(1,speed/18));
-      audio.joint=joint;
+      // Inverter: steps while starting (like a real VVVF), then a steady rise with speed.
+      const stepped=speed<9?420+Math.floor(speed*1.6)*95:560+speed*16;
+      const effort=mode==='run'?Math.max(train.traction/4,speed>2?train.brake/5*.6:0):0;
+      audio.inv1.frequency.setTargetAtTime(stepped,time,.05);audio.inv2.frequency.setTargetAtTime(stepped*1.5,time,.05);
+      audio.invFilter.frequency.setTargetAtTime(stepped*1.2,time,.08);
+      audio.invGain.gain.setTargetAtTime(effort*.05,time,.12);
+      audio.hum.frequency.setTargetAtTime(48+speed*6,time,.1);
+      audio.humGain.gain.setTargetAtTime(mode==='run'?.02+effort*.05:0,time,.12);
+      audio.rollFilter.frequency.setTargetAtTime(110+speed*7,time,.15);
+      audio.rollGain.gain.setTargetAtTime(mode==='run'?Math.min(.22,speed*.012):0,time,.2);
+      // Rail joints every 25 m.
+      const jointIndex=Math.floor(train.s/25);
+      if(mode==='run'&&jointIndex!==audio.joint)joint(speed);
+      audio.joint=jointIndex;
+      // Air released from the brake cylinders.
+      if(mode==='run'&&train.brake<audio.brake)airHiss();
+      audio.brake=train.brake;
     }
   }
   if(renderDirty||(mode==='run'&&now-lastRender>=(width<780?1000/38:1000/55))){
