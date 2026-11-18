@@ -4219,3 +4219,21 @@ html[data-env='staging'] .lobby-wordmark::after {
   opacity: 1;
   border-style: dashed;
 }
+
+/* Autofit: pages never scroll sideways; every block and long word fits the width. */
+.page {
+  overflow-x: hidden;
+}
+#lobby.lobby-b,
+#lobby.lobby-b > *,
+.lobby-layout,
+.community-panel,
+.chat-card {
+  min-width: 0;
+  max-width: 100%;
+}
+.chat-copy,
+.chat-copy p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
