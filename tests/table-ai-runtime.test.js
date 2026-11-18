@@ -53,11 +53,11 @@ try{
   await new Promise(r=>setTimeout(r,1500));
   assert.equal(botMessages.filter(m=>m.chat_id===4001).length,1,'switched off in Settings: no message');
   console.log('PASS runtime long-turn messages: seated, move, one per turn, Settings switch');}
- // Long-turn tables: several at once (chess, Forza 4…), still one table for the other games, at most 10, expiry 7 days after the last move.
+ // Long-turn tables: several at once (chess, Forza 4…), one table per game for the other games, at most 10, expiry 7 days after the last move.
  {const chessT=await call(5000,'/api/create',{game:'chess'}),c4=await call(5000,'/api/create',{game:'connect4'});assert.equal(chessT.status,200);assert.equal(c4.status,200,JSON.stringify(c4.data));
   const uno=await call(5000,'/api/create',{game:'uno'});assert.equal(uno.status,200,'one other table is still allowed');
-  const scopa=await call(5000,'/api/create',{game:'scopa'});assert.equal(scopa.status,409);assert.equal(scopa.data.error,'Hai già una partita aperta.');
-  const ai=await call(5000,'/api/create',{game:'chess',mode:'ai'});assert.equal(ai.status,409,'a game against the AI is not a long-turn table');
+  const scopa=await call(5000,'/api/create',{game:'scopa'});assert.equal(scopa.status,200,'a different game is allowed');const uno2=await call(5000,'/api/create',{game:'uno'});assert.equal(uno2.status,409);assert.equal(uno2.data.error,'Hai già un tavolo aperto di questo gioco: lo trovi nella campanella.');
+  const ai=await call(5000,'/api/create',{game:'chess',mode:'ai'});assert.equal(ai.status,200,'a game against the AI is another game: allowed');
   let a=(await call(5001,'/api/room/'+chessT.data.state.room+'/claim',{})),b=(await call(5001,'/api/room/'+c4.data.state.room+'/claim',{}));assert.equal(a.status,200);assert.equal(b.status,200,'joining a second long-turn table');
   const before=Date.now();let s=(await call(5000,'/api/room/'+chessT.data.state.room+'/move',{from:'d2',to:'d4',revision:a.data.state.revision})).data;
   assert.ok(s.expires>=before+7*86400000-1000&&s.expires<=Date.now()+7*86400000+1000,'expiry moves to 7 days after the last move');

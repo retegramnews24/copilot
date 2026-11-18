@@ -18,8 +18,9 @@ import {initSettings} from './settings.js?v=6f9a6958a5';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=83b95ddebc';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
-import {createChat} from './chat.js?v=59b969827c';
-import {createLobbyChips} from './lobby-chips.js?v=e32cd05095';
+import {createChat} from './chat.js?v=f139a08339';
+import {createLobbyChips} from './lobby-chips.js?v=34f547ad4a';
+import {createNotices} from './notices.js?v=b255c76632';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
@@ -33,13 +34,18 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.29',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.30',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
+// Stored notices (new table, win): 'Entra' while the table is open, opening it like its Lobby button.
+const noticeGame=room=>games.find(g=>g.room===room&&ongoing(g));
 const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
+// Lobby bell: personal notices (stored by the server, or made here), outside the chat (see notices.js).
+const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(g.game==='golf')golf.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
+const notices=createNotices({me:()=>identity,isOpen:target=>!!noticeGame(target),open:openGameRoom});
 // Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
-createLobbyChips({notice:item=>chat.notice(item)});
+createLobbyChips({notice:item=>notices.add(item)});
 const board=createChessBoard({get:()=>({state,mine:state.players.findIndex(p=>p.id===credentials.player),active:canMove(),replayPly,frame:replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:null}),send:move=>sendMove(move),rerender:()=>renderBoard()});
 // Overlays with their own iframe and socket (see *-link.js). Dependencies are wrapped: some are defined further down.
 const linkBase={tg,token:()=>sessionToken,me:()=>identity,request,onError:err,enterFullscreen:()=>enterFullscreen(),sendPresence:()=>sendPresence(),safeInsets};
@@ -90,7 +96,10 @@ setInterval(()=>{if(!$('table').hidden&&state?.clock)renderTurnClock()},60000);
 // Your open table that is not a long-turn game: only one of those at a time.
 function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 // Can you take a seat at this table? Long-turn games: up to LONG_LIMIT at once; any other: only without another open table.
-function canSit(g){return isLongTurn(g)?myTables(games,id=>seat(id).player).filter(isLongTurn).length<LONG_LIMIT:!ownedGame()}
+// One open table per game (long-turn games: up to LONG_LIMIT), as on the server.
+function canSit(g){return isLongTurn(g)?myTables(games,id=>seat(id).player).filter(isLongTurn).length<LONG_LIMIT:!games.some(o=>o.room!==g.room&&o.game===g.game&&!isLongTurn(o)&&ongoing(o)&&o.players.some(p=>p.id===seat(o.room).player))}
+// Bell: your open games (also single-player) stay pinned there, without ×, until they close.
+function pinnedGames(){return games.filter(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player||p.id===identity?.player)).map(g=>{const turn=g.phase==='playing'&&g.players[g.turn]?.id===seat(g.room).player;return {id:'pin-'+g.room,text:(turn?'Tocca a te · ':'')+gameTitle(g)+' · '+(['golf','pong','moto-trial'].includes(g.game)?'sala ':'Tavolo ')+g.number,detail:['ai','tutorial'].includes(g.mode)?'Partita singola aperta':'Partita aperta',label:turn?'Gioca':'Riprendi',urgent:turn,action:()=>openGameRoom(g.room)}})}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -170,6 +179,7 @@ function renderLobby(){
   button.textContent=mine?(game.phase==='finished'?'Riprendi torneo':'Riprendi'):game.phase==='waiting'?(!canSit(game)||(staged(game)&&game.players.length>=gameLimits(game).max)?'Guarda':'Gioca'):'Guarda';
   button.onclick=()=>openRoom(game.room,staged(game)&&game.players.length>=gameLimits(game).max);if(game.series)note.textContent+=' · Torneo: '+game.series.target+' vittorie';card.append(title,names,note,button);$('games').append(card);
  }
+ notices.setPinned(pinnedGames());
  renderMyGames($('my-games'),games,id=>seat(id).player,async id=>{await openRoom(id,false);if(room===id)selectPage('game')});
  renderArchive();refreshDebug();renderSocial();renderNow();loadSimSummary();
 }
@@ -324,7 +334,7 @@ function connectLobby(){
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
- socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
+ socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
  socket.onclose=()=>{trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
@@ -631,7 +641,7 @@ async function startSession(){
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
-  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
+  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);notices.set(payload.notices);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
   renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
   alerts.refresh();
   // Launched from a "tocca a te" message: straight to that table.

@@ -337,7 +337,8 @@ export function seatLimit(tables, player, target) {
     g => !isArcade(g.game) && activeTable(g) && g.room !== target.room && g.players.some(p => p.id === player)
   );
   if (isLongTurn(target)) return mine.filter(isLongTurn).length >= LONG_LIMIT ? 'long' : null;
-  return mine.some(g => !isLongTurn(g)) ? 'other' : null;
+  // Other games: any number of different games, one open table per game.
+  return mine.some(g => !isLongTurn(g) && g.game === target.game) ? 'other' : null;
 }
 export const longLimitText =
   'Hai già ' + LONG_LIMIT + ' partite a turni aperte: finiscine una prima di aprirne un’altra.';

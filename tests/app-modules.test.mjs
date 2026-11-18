@@ -152,6 +152,52 @@ assert.deepEqual(texts(), ['primo', 'secondo', 'ciao']);
 assert.equal(document.getElementById('chat-input').value, '');
 assert.equal(refreshed, 2);
 
+// Stored game notices (from the server): shown as notices, not as messages; no button when the table is closed.
+const { tableNotice, winNotice } = await import('../lobby-hub.js');
+const tableOpened = tableNotice({ id: '2', name: 'Sara' }, 'uno', 3, 'room-3');
+assert.equal(tableOpened.notice, 'table');
+assert.equal(tableOpened.text, 'Sara ha aperto UNO · Tavolo 3');
+assert.equal(
+  tableNotice({ id: '2', name: 'Sara' }, 'golf', 2, 'g').text,
+  'Sara ha aperto Golf with your gay friends · sala 2'
+);
+assert.equal(
+  winNotice({ game: 'uno', mode: 'people', winners: [{ id: 'tg:2', name: 'Sara' }] }).text,
+  '🏆 Sara vince a UNO'
+);
+assert.equal(winNotice({ game: 'uno', mode: 'ai', winners: [{ id: 'tg:2', name: 'Sara' }] }), null);
+// The chat shows messages only: notices stored there by 1.0.41 are left out.
+chat.set([
+  { id: 'm1', userId: '2', name: 'Ada', at: 1, text: 'primo' },
+  { ...tableOpened, at: 5 }
+]);
+chat.render(true);
+assert.deepEqual(texts(), ['primo']);
+
+// Lobby bell: personal notices, own table left out, unread count, × removes, "Entra" only while open.
+localStorage.clear();
+document.body.insertAdjacentHTML('beforeend', '<header class="profile-bar"></header>');
+const { createNotices } = await import('../public/notices.js');
+let entered = null;
+const bell = createNotices({
+  me: () => ({ id: '1' }),
+  isOpen: room => room === 'room-3',
+  open: room => (entered = room)
+});
+bell.set([tableOpened, { ...tableNotice({ id: '1', name: 'Io' }, 'uno', 4, 'room-4'), at: Date.now() }]);
+assert.equal(document.querySelector('.notices-count').textContent, '1', 'own table is not a notice');
+bell.add({ text: 'Tocca a te · Scacchi', label: 'Gioca', urgent: true, action: () => (entered = 'chess') });
+assert.equal(document.querySelector('.notices-count').textContent, '2');
+document.getElementById('notices-bell').click();
+assert.equal(document.querySelector('.notices-count').hidden, true, 'opening the bell marks them read');
+assert.equal(document.querySelectorAll('#notices-list .notice-item').length, 2);
+[...document.querySelectorAll('#notices-list .notice-item button')]
+  .find(b => b.textContent === 'Entra')
+  .click();
+assert.equal(entered, 'room-3');
+document.getElementById('notices-bell').click();
+document.querySelector('#notices-list .notice-remove').click();
+assert.equal(document.querySelectorAll('#notices-list .notice-item').length, 1, '× removes the notice');
 // Forza 4: full columns disabled, winning discs marked, a click sends the column.
 const { renderConnect4 } = await import('../public/connect4-ui.js');
 const board = document.createElement('div'),
