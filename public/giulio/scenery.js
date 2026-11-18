@@ -1,4 +1,6 @@
-const canvas=$('view'), ctx=canvas.getContext('2d',{alpha:false});
+const canvas=$('view');
+// ctx is swapped for the sky image while that is repainted (see atmosphere).
+let ctx=canvas.getContext('2d',{alpha:false});
 let width=1,height=1,ratio=1,camera,focal,horizon,cy,sy,rollCos=1,rollSin=0;
 let quality=1,renderCost=0,qualityChanged=0;
 const reducedMotion=window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -75,6 +77,9 @@ function polygon(vertices,color,joinEdges=false){
   const vertices2=clipped.map(screen);
   if(vertices2.every(([x])=>x<0)||vertices2.every(([x])=>x>width)||
     vertices2.every(([,y])=>y<0)||vertices2.every(([,y])=>y>height))return;
+  // Time-of-day tint and haze by distance (average depth of the visible part).
+  let depth=0;for(const p of clipped)depth+=p.z;
+  color=shade(color,depth/clipped.length);
   ctx.fillStyle=color;ctx.beginPath();
   for(let i=0;i<vertices2.length;i++){
     const [x,y]=vertices2[i];if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);
@@ -88,7 +93,7 @@ function strip(a,b,left,right,level,color){
 function beam(a,b,color,pixels=1){
   const p=project(a),q=project(b);
   if(!p||!q)return;
-  ctx.strokeStyle=color;ctx.lineWidth=pixels;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
+  ctx.strokeStyle=shade(color,(p[2]+q[2])/2);ctx.lineWidth=pixels;ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke();
 }
 const TAU=Math.PI*2;
 const RIDGE_SAMPLES=256;
@@ -120,56 +125,164 @@ function cloud(x,y,w,shape,color){
   points.push([x+w*.55,y],[x+w*.36,y+w*.024],[x-w*.36,y+w*.03]);
   fillShape(points,color);
 }
+// Time of day from the Italian clock: dawn, day, sunset, night. Each phase sets sky, sun, light tint and haze.
+const PHASES={
+  alba:{sky:['#2c3a63','#c48d8f','#ffd0a0'],sun:'#ffd6a6',sunY:.07,tint:'#ffb58f',tintAmount:.12,fog:'#e7c3ae',fogMax:.62,ridge:'#c99a91'},
+  giorno:{sky:['#24446f','#6ca8c2','#f8dca7'],sun:'#fff3cc',sunY:.24,tint:'#ffffff',tintAmount:0,fog:'#c9dde0',fogMax:.55,ridge:null},
+  tramonto:{sky:['#2a2e5c','#d0705a','#ffc070'],sun:'#ffb066',sunY:.05,tint:'#ff9a5c',tintAmount:.16,fog:'#e2a682',fogMax:.6,ridge:'#b0706a'},
+  notte:{sky:['#05070f','#0d1730','#1d2a44'],sun:'#e8ecf5',sunY:.3,tint:'#0b1430',tintAmount:.58,fog:'#141d33',fogMax:.7,ridge:'#1c2840',night:true}
+};
+function phaseNow(){
+  let hour=12;
+  try{hour=Number(new Intl.DateTimeFormat('it-IT',{timeZone:'Europe/Rome',hour:'numeric',hourCycle:'h23'}).format(new Date()));}catch{}
+  return hour>=5&&hour<8?'alba':hour>=8&&hour<17?'giorno':hour>=17&&hour<20?'tramonto':'notte';
+}
+// "Ora reale" follows the clock; the other choices (intro screen) are kept on this device.
+let phaseName='giorno',phase=PHASES.giorno;
+function setPhase(choice){
+  phaseName=choice in PHASES?choice:phaseNow();phase=PHASES[phaseName];
+  skyKey='';shadeCache.clear();renderDirty=true;
+  for(const b of document.querySelectorAll('[data-daytime]'))b.setAttribute('aria-pressed',String(b.dataset.daytime===choice));
+}
+for(const b of document.querySelectorAll('[data-daytime]'))b.onclick=()=>{
+  try{localStorage.setItem('giulio-daytime',b.dataset.daytime);}catch{}
+  setPhase(b.dataset.daytime);
+};
+// Color mixing with a cache: tint for the time of day plus haze by distance (16 levels), so it costs almost nothing.
+const rgbCache=new Map(), shadeCache=new Map(), probe=document.createElement('canvas').getContext('2d');
+function rgb(color){
+  let v=rgbCache.get(color);
+  if(v)return v;
+  probe.fillStyle='#000';probe.fillStyle=color;
+  const s=probe.fillStyle;
+  if(s[0]==='#')v=[parseInt(s.slice(1,3),16),parseInt(s.slice(3,5),16),parseInt(s.slice(5,7),16),1];
+  else{const m=s.match(/[\d.]+/g)||[0,0,0,1];v=[+m[0],+m[1],+m[2],m[3]==null?1:+m[3]];}
+  rgbCache.set(color,v);return v;
+}
+function mix(color,target,amount){
+  if(amount<=0)return color;
+  const c=rgb(color),t=rgb(target),k=1-amount;
+  const out=[0,1,2].map(i=>Math.round(c[i]*k+t[i]*amount));
+  return c[3]<1?'rgba('+out.join(',')+','+c[3]+')':'rgb('+out.join(',')+')';
+}
+const FOG_START=110,FOG_END=720;
+function shade(color,z){
+  const wet=train.weather==='wet';
+  const fog=Math.round(clamp((z-(wet?60:FOG_START))/(FOG_END-(wet?60:FOG_START)),0,1)*15);
+  const key=color+'|'+fog+'|'+wet;
+  let v=shadeCache.get(key);
+  if(!v){
+    v=mix(color,phase.tint,phase.tintAmount);
+    v=mix(v,wet?mix(phase.fog,'#8a9aa0',.4):phase.fog,Math.pow(fog/15,1.25)*(wet?phase.fogMax+.15:phase.fogMax));
+    if(shadeCache.size>4000)shadeCache.clear();
+    shadeCache.set(key,v);
+  }
+  return v;
+}
+// Sky and mountains change little from one frame to the next: they are painted into a slightly larger image and
+// only moved, then repainted when the view turns or moves enough (or every 20 s for the clouds).
+const skyCanvas=document.createElement('canvas'), skyCtx=skyCanvas.getContext('2d',{alpha:false});
+let skyKey='',sky=null,skyMarginX=0,skyMarginY=0;
 function atmosphere(){
+  const drift=(camera.x*.00024+camera.z*.0001)*.18;
+  const key=[width,height,ratio,focal,train.weather].join();
+  const turned=sky?angleDiff(viewBearing,sky.bearing):9;
+  if(key!==skyKey||Math.abs(turned)>.06||Math.abs(drift-sky.drift)>.0015||
+    Math.abs(horizon-sky.horizon)>height*.07||Math.abs(camera.y-sky.cameraY)>1.5||train.elapsed-sky.elapsed>20000){
+    skyKey=key;skyMarginX=Math.round(width*.09);skyMarginY=Math.round(height*.11);
+    const w=Math.round((width+skyMarginX*2)*ratio),h=Math.round((height+skyMarginY*2)*ratio);
+    if(skyCanvas.width!==w||skyCanvas.height!==h){skyCanvas.width=w;skyCanvas.height=h;}
+    skyCtx.setTransform(ratio,0,0,ratio,skyMarginX*ratio,skyMarginY*ratio);
+    const main=ctx;ctx=skyCtx;
+    try{paintSky(drift);}finally{ctx=main;}
+    sky={bearing:viewBearing,drift,horizon,cameraY:camera.y,elapsed:train.elapsed};
+  }
+  const dx=-Math.tan(angleDiff(viewBearing,sky.bearing))*focal,dy=horizon-sky.horizon;
+  ctx.drawImage(skyCanvas,-skyMarginX+dx,-skyMarginY+dy,width+skyMarginX*2,height+skyMarginY*2);
+}
+function paintSky(drift){
   const wet=train.weather==='wet', top=Math.max(30,horizon+height*.18);
-  const sky=ctx.createLinearGradient(0,0,0,top);
-  const colors=wet?['#243b56','#607e8d','#bbc4bd']:['#24446f','#6ca8c2','#f8dca7'];
-  sky.addColorStop(0,colors[0]);sky.addColorStop(.55,colors[1]);sky.addColorStop(1,colors[2]);
-  ctx.fillStyle=sky;ctx.fillRect(0,0,width,height);
+  const left=-skyMarginX,right=width+skyMarginX,bottom=height+skyMarginY;
+  const gradient=ctx.createLinearGradient(0,-skyMarginY,0,top);
+  const colors=wet?phase.sky.map(c=>mix(c,'#5d6f78',phase.night?.25:.45)):phase.sky;
+  gradient.addColorStop(0,colors[0]);gradient.addColorStop(.55,colors[1]);gradient.addColorStop(1,colors[2]);
+  ctx.fillStyle=gradient;ctx.fillRect(left,-skyMarginY,right-left,bottom+skyMarginY);
+  // Stars at night (fixed in the sky, they turn with the view).
+  if(phase.night&&!wet){
+    ctx.fillStyle='#e9eefc';
+    for(let i=0;i<140;i++){
+      const a=angleDiff(noise(i*3+1)*TAU,viewBearing);
+      if(Math.abs(a)>1.25)continue;
+      const x=width*.5+Math.tan(a)*focal,y=horizon-height*(.05+noise(i*7+2)*.5),r=noise(i*11+3)>.9?1.4:.8;
+      ctx.globalAlpha=.35+noise(i*5+4)*.6;ctx.fillRect(x,y,r,r);
+    }
+    ctx.globalAlpha=1;
+  }
   const sunAngle=angleDiff(.57,viewBearing);
   if(!wet&&Math.abs(sunAngle)<1.28){
-    const x=width*.5+Math.tan(sunAngle)*focal,y=horizon-height*.24;
-    const radius=height*.24, glow=ctx.createRadialGradient(x,y,1,x,y,radius);
-    glow.addColorStop(0,'#fff4ceba');glow.addColorStop(1,'#fff1c500');
+    const x=width*.5+Math.tan(sunAngle)*focal,y=horizon-height*phase.sunY;
+    const radius=height*(phase.night?.12:.24), glow=ctx.createRadialGradient(x,y,1,x,y,radius);
+    glow.addColorStop(0,phase.night?'#dfe6ff40':phase.sun+'ba');glow.addColorStop(1,phase.sun+'00');
     ctx.fillStyle=glow;ctx.fillRect(x-radius,y-radius,radius*2,radius*2);
-    ctx.fillStyle='#fff3cc';ctx.beginPath();ctx.arc(x,y,Math.max(5,height*.033),0,TAU);ctx.fill();
+    ctx.fillStyle=phase.sun;ctx.beginPath();ctx.arc(x,y,Math.max(5,height*(phase.night?.022:.033)),0,TAU);ctx.fill();
   }
+  const cloudShade=c=>mix(c,phase.tint,phase.tintAmount*1.2);
   for(const c of cloudBank){
     const a=angleDiff(c.a+train.elapsed*.000055,viewBearing);
-    if(Math.abs(a)>1.18)continue;
+    if(Math.abs(a)>1.25)continue;
     const x=width*.5+Math.tan(a)*focal,y=horizon-height*c.y,w=focal*c.w;
-    cloud(x+w*.06,y+w*.017,w,c.shape,wet?'#b7c5c470':'#c8dedba6');
-    cloud(x,y,w,c.shape,wet?'#d7dcda8c':'#fff3d9de');
+    cloud(x+w*.06,y+w*.017,w,c.shape,cloudShade(wet?'#b7c5c470':'#c8dedba6'));
+    cloud(x,y,w,c.shape,cloudShade(wet?'#d7dcda8c':'#fff3d9de'));
   }
-  const palette=wet?['#859ba3','#708a96','#5a787b','#49675f']:['#98adb0','#7796a2','#547985','#416b61'];
+  const base=wet?['#859ba3','#708a96','#5a787b','#49675f']:['#98adb0','#7796a2','#547985','#416b61'];
+  // Far ridges take the colour of the air; near ones keep more of their own.
+  const palette=base.map((c,layer)=>mix(phase.ridge?mix(c,phase.ridge,.45):c,phase.fog,(3-layer)*.07));
   for(let layer=0;layer<4;layer++){
     const points=[], depth=3600/(layer+1)**1.8;
-    const drift=(camera.x*.00024+camera.z*.0001)*(layer+1)*.18;
-    const base=horizon+height*(.045+layer*.021), scale=height*(.43-layer*.052);
+    const layerDrift=drift*(layer+1);
+    const ridgeBase=horizon+height*(.045+layer*.021), scale=height*(.43-layer*.052);
     const step=Math.max(5,Math.round(width/118));
-    for(let x=-step;x<=width+step;x+=step){
-      const angle=viewBearing+Math.atan2(x-width*.5,focal)+drift;
+    for(let x=left-step;x<=right+step;x+=step){
+      const angle=viewBearing+Math.atan2(x-width*.5,focal)+layerDrift;
       const altitude=ridgeValue(angle,layer), offset=(camera.y-2)*focal/depth;
-      points.push([x,base-altitude*scale+offset,altitude]);
+      points.push([x,ridgeBase-altitude*scale+offset,altitude]);
     }
-    fillShape([[0,height],...points.map(p=>p.slice(0,2)),[width,height]],palette[layer]);
-    const sunFace=wet?'#adbac540':'#e0d9c43b';
+    fillShape([[left,bottom],...points.map(p=>p.slice(0,2)),[right,bottom]],palette[layer]);
+    const sunFace=phase.night?'#7f93c020':wet?'#adbac540':'#e0d9c43b';
     const shadow=wet?'#384d5b30':'#284f6435';
     for(let j=2;j<points.length-2;j++){
       const [x,y,alt]=points[j];
       if(y>points[j-1][1]||y>points[j+1][1]||alt<.40)continue;
-      const [left,ly]=points[j-2],[right,ry]=points[j+2];
-      const foot=base-height*.015;
-      fillShape([[x,y],[left,ly],[x+(right-x)*.52,foot]],sunFace);
-      fillShape([[x,y],[right,ry],[x+(right-x)*.52,foot]],shadow);
+      const [lx,ly]=points[j-2],[rx,ry]=points[j+2];
+      const foot=ridgeBase-height*.015;
+      fillShape([[x,y],[lx,ly],[x+(rx-x)*.52,foot]],sunFace);
+      fillShape([[x,y],[rx,ry],[x+(rx-x)*.52,foot]],shadow);
       if(layer<2&&alt>.63){
         const snowY=y+(foot-y)*.27;
-        fillShape([[x,y],[left+(x-left)*.32,snowY],[x,snowY-2],[x+(right-x)*.32,snowY+1]],wet?'#d4ded9c7':'#f5ebd5db');
+        fillShape([[x,y],[lx+(x-lx)*.32,snowY],[x,snowY-2],[x+(rx-x)*.32,snowY+1]],mix(wet?'#d4ded9c7':'#f5ebd5db',phase.tint,phase.tintAmount));
       }
     }
   }
 }
-const CHUNK=96, sceneryChunks=new Map();
+// Night: a soft halo for station lamps and the train's headlights on the track.
+const glowSprite=(()=>{
+  const c=document.createElement('canvas');c.width=c.height=64;
+  const g=c.getContext('2d'),r=g.createRadialGradient(32,32,1,32,32,32);
+  r.addColorStop(0,'#ffe6aacc');r.addColorStop(.35,'#ffd98a55');r.addColorStop(1,'#ffd98a00');
+  g.fillStyle=r;g.fillRect(0,0,64,64);return c;
+})();
+{let choice='auto';try{choice=localStorage.getItem('giulio-daytime')||'auto';}catch{}setPhase(choice);}
+function headlights(){
+  if(!phase.night&&phaseName!=='tramonto')return;
+  const near=project(point(train.s+4)),far=project(point(train.s+90));
+  if(!near||!far)return;
+  const spread=focal*1.6/near[2],top=far[1],bottom=near[1];
+  const light=ctx.createLinearGradient(0,bottom,0,top);
+  light.addColorStop(0,phase.night?'#ffe8b03a':'#ffe8b018');light.addColorStop(1,'#ffe8b000');
+  ctx.globalCompositeOperation='lighter';ctx.fillStyle=light;ctx.beginPath();
+  ctx.moveTo(near[0]-spread,bottom);ctx.lineTo(far[0]-focal*1.6/far[2],top);ctx.lineTo(far[0]+focal*1.6/far[2],top);ctx.lineTo(near[0]+spread,bottom);
+  ctx.closePath();ctx.fill();ctx.globalCompositeOperation='source-over';
+}const CHUNK=96, sceneryChunks=new Map();
 function noise(n){const f=Math.sin(n*78.233+36.7)*43758.5453;return f-Math.floor(f);}
 const WATER=[
   {id:'lago-chiaro',start:2780,end:4230,center:-68,width:53,level:trackAt(3530).y-4.5},
@@ -398,6 +511,7 @@ function platformLamp(s,side){
   beam(point(s,x,.65),point(s,x,3.55),'#485952',px);
   beam(point(s,x,3.55),lamp,'#485952',px);
   ctx.fillStyle='#f2d79d';ctx.fillRect(p[0]-px,p[1],px*2.1,Math.max(1,px*.55));
+  if(phase.night||phaseName==='tramonto'){const r=clamp(focal/p[2]*1.4,6,90);ctx.globalCompositeOperation='lighter';ctx.drawImage(glowSprite,p[0]-r,p[1]-r*.6,r*2,r*2);ctx.globalCompositeOperation='source-over';}
 }
 const stationScenery=[];
 for(const stop of stops){
@@ -596,5 +710,6 @@ function render(){
     }
     ctx.stroke();
   }
+  headlights();
   drawCabin(cab);
 }
