@@ -18,8 +18,9 @@ import {initSettings} from './settings.js?v=6f9a6958a5';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=83b95ddebc';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
-import {createChat} from './chat.js?v=0505abcb2a';
+import {createChat} from './chat.js?v=f139a08339';
 import {createLobbyChips} from './lobby-chips.js?v=9d324b8bcb';
+import {createNotices} from './notices.js?v=b4208380e3';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
@@ -33,15 +34,17 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.41',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.42',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
-// Stored notices in the chat (new table, win): 'Entra' while the table is open, opening it like its Lobby button.
+// Stored notices (new table, win): 'Entra' while the table is open, opening it like its Lobby button.
 const noticeGame=room=>games.find(g=>g.room===room&&ongoing(g));
-const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial(),isOpen:room=>!!noticeGame(room),open:room=>{const g=noticeGame(room);if(!g)return;if(g.game==='golf')golf.open(room);else if(g.game==='pong')arcade.openPong(room);else if(g.game==='moto-trial')moto.open(room);else openRoom(room,false)}});
+const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
+// Lobby bell: personal notices (stored by the server, or made here), outside the chat (see notices.js).
+const notices=createNotices({me:()=>identity,isOpen:room=>!!noticeGame(room),open:room=>{const g=noticeGame(room);if(!g)return;if(g.game==='golf')golf.open(room);else if(g.game==='pong')arcade.openPong(room);else if(g.game==='moto-trial')moto.open(room);else openRoom(room,false)}});
 // Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
-createLobbyChips({notice:item=>chat.notice(item)});
+createLobbyChips({notice:item=>notices.add(item)});
 const board=createChessBoard({get:()=>({state,mine:state.players.findIndex(p=>p.id===credentials.player),active:canMove(),replayPly,frame:replayPly!==null&&replayFrames[replayPly]?replayFrames[replayPly]:null}),send:move=>sendMove(move),rerender:()=>renderBoard()});
 // Overlays with their own iframe and socket (see *-link.js). Dependencies are wrapped: some are defined further down.
 const linkBase={tg,token:()=>sessionToken,me:()=>identity,request,onError:err,enterFullscreen:()=>enterFullscreen(),sendPresence:()=>sendPresence(),safeInsets};
@@ -326,7 +329,7 @@ function connectLobby(){
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
- socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
+ socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
  socket.onclose=()=>{trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
@@ -633,7 +636,7 @@ async function startSession(){
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
-  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
+  const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);notices.set(payload.notices);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
   renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
   alerts.refresh();
   // Launched from a "tocca a te" message: straight to that table.

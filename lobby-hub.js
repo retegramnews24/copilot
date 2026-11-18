@@ -8,8 +8,8 @@ import { json, id, name } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
 import { gameTitle } from './public/game-info.js';
 
-// Game notices stored in the Lobby chat, so everyone sees them, also later: a table opened to people, a win.
-// Same list and limit as the messages (last 100); the app shows them as notices with a button.
+// Game notices stored by the server, so everyone finds them also later: a table opened to people, a win.
+// Kept in their own list (not in the chat); the app shows them in the Lobby bell, each with a button.
 export function tableNotice(user, game, number, room) {
   const where = isArcade(game) ? ' · sala ' + number : ' · Tavolo ' + number;
   return {
@@ -90,15 +90,18 @@ export class LobbyHub {
     return {
       games,
       users,
-      messages: (await this.ctx.storage.get('chat')) || [],
+      // Chat: messages only (notices stored there by 1.0.41 are dropped).
+      messages: ((await this.ctx.storage.get('chat')) || []).filter(m => !m.notice),
+      notices: (await this.ctx.storage.get('notices')) || [],
       leaderboard: topFive(records),
       aiLeaderboard: topFive(records, 'ai')
     };
   }
-  async addChatNotice(notice) {
-    const messages = (await this.ctx.storage.get('chat')) || [];
-    messages.push(notice);
-    await this.ctx.storage.put('chat', messages.slice(-100));
+  // Game notices: a list of their own (last 30), outside the chat; each person reads them in the Lobby bell.
+  async addNotice(notice) {
+    const notices = (await this.ctx.storage.get('notices')) || [];
+    notices.push(notice);
+    await this.ctx.storage.put('notices', notices.slice(-30));
   }
   async lobbyBroadcast(force = true) {
     const payload = await this.lobbyPayload(),
@@ -255,7 +258,7 @@ export class LobbyHub {
         await this.ctx.storage.put('result:' + body.key, body);
         const notice = winNotice(body);
         if (notice) {
-          await this.addChatNotice(notice);
+          await this.addNotice(notice);
           await this.lobbyBroadcast();
         }
       }
@@ -378,7 +381,7 @@ export class LobbyHub {
         await this.ctx.storage.put('game:' + room, result.summary);
         // Shared rooms open to others (not single-player Pong, not the retired Labyrinth) appear in the chat.
         if (body.game !== 'labyrinth' && !(body.game === 'pong' && body.mode === 'solo'))
-          await this.addChatNotice(tableNotice(user, body.game, number, room));
+          await this.addNotice(tableNotice(user, body.game, number, room));
         await this.lobbyBroadcast();
         return json(result);
       }
@@ -405,7 +408,7 @@ export class LobbyHub {
       await this.ctx.storage.setAlarm(Date.now() + 3600000);
       // Tables against the AI and tutorials are private: no notice for those.
       if (!['ai', 'tutorial'].includes(result.state?.mode))
-        await this.addChatNotice(tableNotice(user, result.state?.game || body.game || 'chess', number, room));
+        await this.addNotice(tableNotice(user, result.state?.game || body.game || 'chess', number, room));
       await this.lobbyBroadcast();
       return json(result);
     }

@@ -1,14 +1,11 @@
 // Lobby chat, as in a messaging app: oldest at the top, newest at the bottom next to the input.
-// Game notices ("Sara ha aperto UNO · Entra") can be mixed in: they live only in this browser, not on the server.
+// Messages only: game notices live in the Lobby bell (notices.js).
 import { makeAvatar } from './avatar.js?v=7a059821b4';
 const $ = id => document.getElementById(id);
 
 // me(): the signed-in user; request/onError: app helpers; refresh(): re-renders people and chat together.
-// Stored notices (message.notice: 'table' or 'win', from the server) show a button while the table is still open:
-// isOpen(room) tells whether it is, open(room) enters it.
-export function createChat({ me, request, onError, refresh, isOpen = () => false, open = () => {} }) {
+export function createChat({ me, request, onError, refresh }) {
   let messages = [],
-    notices = [],
     sending = false;
   // Kept for callers: the list now fills the space given by the layout, no row limit.
   function limit() {}
@@ -49,53 +46,20 @@ export function createChat({ me, request, onError, refresh, isOpen = () => false
     row.append(copy);
     return row;
   }
-  function noticeRow(notice) {
-    const row = document.createElement('article');
-    row.className = 'chat-notice' + (notice.urgent ? ' urgent' : '');
-    const text = document.createElement('span');
-    text.textContent = notice.text;
-    row.append(text);
-    if (notice.label) {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.textContent = notice.label + ' ›';
-      button.onclick = () => notice.action?.();
-      row.append(button);
-    }
-    return row;
-  }
   function render(connected) {
     const list = $('chat-messages'),
       identity = me();
-    // A stored table notice loses its button when the table closes: that is part of the signature too.
-    const signature =
-      messages.map(m => m.id + (m.notice === 'table' && m.room && isOpen(m.room) ? '+' : '')).join(',') +
-      '|' +
-      notices.map(n => n.id).join(',');
+    const signature = messages.map(m => m.id).join(',');
     if (list.dataset.signature !== signature) {
       list.dataset.signature = signature;
       list.replaceChildren();
-      if (!messages.length && !notices.length) {
+      if (!messages.length) {
         const p = document.createElement('p');
         p.className = 'hint';
         p.textContent = 'Il posto per due parole tra una partita e l’altra.';
         list.append(p);
       }
-      const items = [
-        ...messages.map(m => ({
-          at: m.at,
-          row: () =>
-            m.notice
-              ? noticeRow({
-                  text: m.text,
-                  label: m.notice === 'table' && m.room && isOpen(m.room) ? 'Entra' : '',
-                  action: () => open(m.room)
-                })
-              : messageRow(m, identity)
-        })),
-        ...notices.map(n => ({ at: n.at, row: () => noticeRow(n) }))
-      ].sort((a, b) => a.at - b.at);
-      for (const item of items) list.append(item.row());
+      for (const message of messages) list.append(messageRow(message, identity));
       scrollToLatest();
     }
     $('chat-send').disabled = sending || !identity || !connected;
@@ -123,15 +87,10 @@ export function createChat({ me, request, onError, refresh, isOpen = () => false
       refresh();
     }
   };
-  let noticeId = 0;
   return {
+    // Notices stored in the chat by version 1.0.41 are left out.
     set: list => {
-      messages = list || [];
-    },
-    // { text, label, action, urgent }: shown in the chat at the current time; the last 20 are kept.
-    notice: item => {
-      notices = [...notices, { ...item, id: 'n' + ++noticeId, at: Date.now() }].slice(-20);
-      refresh();
+      messages = (list || []).filter(m => !m.notice);
     },
     render,
     limit,

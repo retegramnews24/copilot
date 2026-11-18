@@ -4043,3 +4043,128 @@ html[data-env='staging'] .lobby-wordmark::after {
     inset 0 1px 0 #ffffff12,
     0 4px 12px #0003;
 }
+
+/* Lobby bell: personal notices outside the chat. */
+.notices-bell {
+  position: relative;
+  flex: none;
+  width: 40px;
+  min-height: 40px;
+  margin: 0 0 0 8px;
+  padding: 0;
+  border-radius: 12px;
+  font-size: 19px;
+  line-height: 1;
+}
+.notices-count {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: #d64541;
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  box-shadow: 0 1px 3px #0005;
+}
+.notices-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: calc(var(--ui-safe-top, 0px) + 50px) 10px 10px;
+  background: #0008;
+}
+.notices-panel {
+  width: min(100%, 520px);
+  max-height: 75vh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+  box-shadow: 0 10px 30px #0006;
+  animation: sheet-up 0.18s ease-out;
+}
+.notices-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.notices-head h3 {
+  margin: 0;
+  font-size: 17px;
+}
+.notices-head button {
+  width: auto;
+  min-height: 30px;
+  margin: 0;
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+.notices-list {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.notice-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field);
+  opacity: 0.75;
+}
+.notice-item.unread {
+  opacity: 1;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+}
+.notice-item.urgent {
+  border-color: var(--accent);
+  font-weight: 650;
+}
+.notice-copy {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 14px;
+}
+.notice-copy small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.notice-item > button {
+  flex: none;
+  width: auto;
+  min-height: 32px;
+  margin: 0;
+  padding: 4px 12px;
+  font-size: 13px;
+}
+.notice-item > .notice-remove {
+  min-height: 28px;
+  width: 28px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--muted);
+  font-size: 20px;
+  line-height: 1;
+}
