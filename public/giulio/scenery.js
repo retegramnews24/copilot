@@ -30,7 +30,7 @@ canvas.addEventListener('pointerdown',event=>{
 });
 canvas.addEventListener('pointermove',event=>{
   if(touches.has(event.pointerId))touches.set(event.pointerId,{x:event.clientX,y:event.clientY});
-  if(pinch&&touches.size===2){zoom=clamp(pinch.zoom*spread()/pinch.dist,.75,2.2);renderDirty=true;return;}
+  if(pinch&&touches.size===2){zoom=clamp(pinch.zoom*spread()/pinch.dist,.75,2.2);renderDirty=true;saveSeat();syncSeat();return;}
   if(drag?.id!==event.pointerId)return;
   setLook(drag.yaw-(event.clientX-drag.x)*Math.PI/Math.max(250,width*.9*zoom),
     drag.pitch+(event.clientY-drag.y)*1.9/Math.max(160,height*zoom));
@@ -39,7 +39,16 @@ canvas.addEventListener('wheel',event=>{
   event.preventDefault();
   zoom=clamp(zoom*Math.exp(-event.deltaY*.0012),.75,2.2);renderDirty=true;
 },{passive:false});
-function finishLook(event){
+// Driver's seat (pause menu): height and forward/back position, plus zoom; kept on this device.
+const seat={h:0,d:0};
+try{const saved=JSON.parse(localStorage.getItem('giulio-seat')||'{}');if(Number.isFinite(saved.h))seat.h=clamp(saved.h,-.35,.35);if(Number.isFinite(saved.d))seat.d=clamp(saved.d,-.5,.5);if(Number.isFinite(saved.zoom))zoom=clamp(saved.zoom,.75,2.2);}catch{}
+function saveSeat(){try{localStorage.setItem('giulio-seat',JSON.stringify({...seat,zoom}));}catch{}}
+function syncSeat(){const set=(id,v)=>{const el=$(id);if(el)el.value=String(v);};set('seat-height',seat.h);set('seat-depth',seat.d);set('seat-zoom',zoom);}
+for(const [id,apply] of [['seat-height',v=>seat.h=v],['seat-depth',v=>seat.d=v],['seat-zoom',v=>zoom=v]]){
+  const el=$(id);if(el)el.oninput=()=>{apply(Number(el.value));saveSeat();renderDirty=true;};
+}
+$('seat-reset')?.addEventListener('click',()=>{seat.h=0;seat.d=0;zoom=1;saveSeat();syncSeat();renderDirty=true;});
+syncSeat();function finishLook(event){
   touches.delete(event.pointerId);
   if(touches.size<2)pinch=null;
   if(drag?.id!==event.pointerId)return;
@@ -204,7 +213,7 @@ function atmosphere(){
   const key=[width,height,ratio,focal,train.weather].join();
   const turned=sky?angleDiff(viewBearing,sky.bearing):9;
   if(key!==skyKey||Math.abs(turned)>.06||Math.abs(drift-sky.drift)>.0015||
-    Math.abs(horizon-sky.horizon)>height*.07||Math.abs(camera.y-sky.cameraY)>1.5||train.elapsed-sky.elapsed>20000){
+    Math.abs(horizon-sky.horizon)>height*.07||Math.abs(camera.y-sky.cameraY)>1.5||train.elapsed-sky.elapsed>20){
     skyKey=key;skyMarginX=Math.round(width*.09);skyMarginY=Math.round(height*.11);
     const w=Math.round((width+skyMarginX*2)*ratio),h=Math.round((height+skyMarginY*2)*ratio);
     if(skyCanvas.width!==w||skyCanvas.height!==h){skyCanvas.width=w;skyCanvas.height=h;}
@@ -334,10 +343,14 @@ function glass(){
 // Rain on the windscreen: drops build up while it rains and the wiper sweeps them away.
 const drops=[];let wiperAngle=Math.PI*.92,wiperDir=-1,lastRain=0;
 const dropSprite=(()=>{
-  const c=document.createElement('canvas');c.width=c.height=24;const g=c.getContext('2d');
-  const r=g.createRadialGradient(10,9,1,12,12,11);
-  r.addColorStop(0,'#ffffffaa');r.addColorStop(.35,'#d8ecef55');r.addColorStop(.8,'#2a3c3c44');r.addColorStop(1,'#2a3c3c00');
-  g.fillStyle=r;g.beginPath();g.arc(12,12,11,0,TAU);g.fill();return c;
+  // A water drop on glass: almost transparent body, dark rim at the bottom, small bright highlight at the top.
+  const c=document.createElement('canvas');c.width=c.height=32;const g=c.getContext('2d');
+  const body=g.createRadialGradient(16,14,2,16,16,13);
+  body.addColorStop(0,'#c8dde01a');body.addColorStop(.75,'#9fb8bc22');body.addColorStop(.92,'#1c2a2c66');body.addColorStop(1,'#1c2a2c00');
+  g.fillStyle=body;g.beginPath();g.ellipse(16,16,12,13,0,0,TAU);g.fill();
+  g.fillStyle='#ffffffcc';g.beginPath();g.ellipse(12,10,3,2.2,-.5,0,TAU);g.fill();
+  g.fillStyle='#ffffff55';g.beginPath();g.ellipse(19,22,2,1.2,0,0,TAU);g.fill();
+  return c;
 })();
 function windscreenRain(paneAt){
   const wet=train.weather==='wet',now=train.elapsed,dt=Math.min(200,Math.max(0,now-lastRain));lastRain=now;
@@ -371,7 +384,7 @@ function groundShadow(s,x,ground,radius){
   const pts=[];
   for(let i=0;i<8;i++){const a=i*TAU/8;pts.push(point(s+Math.sin(a)*radius*.7,x+radius*.35+Math.cos(a)*radius,ground+.03));}
   polygon(pts,train.weather==='wet'?'#1a262222':'#16231a38');
-}// Cinematic cameras: the cab (default), behind the train, and a three-quarter side shot. Button "🎥" or key C.
+}// Cinematic cameras: the cab (default), behind the train, and a three-quarter side shot. Button "🎥" or key V.
 const VIEWS=[['cab','Cabina'],['chase','Esterna'],['side','Laterale']];
 let viewMode='cab';
 function setView(mode){
@@ -379,7 +392,7 @@ function setView(mode){
   const button=$('view-mode');if(button)button.textContent='🎥 '+VIEWS.find(v=>v[0]===mode)[1];
 }
 $('view-mode')?.addEventListener('click',()=>setView(VIEWS[(VIEWS.findIndex(v=>v[0]===viewMode)+1)%VIEWS.length][0]));
-addEventListener('keydown',event=>{if((event.key==='c'||event.key==='C')&&!event.repeat&&!event.target.closest?.('input,textarea'))$('view-mode')?.click();});
+addEventListener('keydown',event=>{if((event.key==='v'||event.key==='V')&&!event.repeat&&!event.target.closest?.('input,textarea'))$('view-mode')?.click();});
 // The train itself (seen from outside): three cars with cream livery, red stripe, windows lit at night.
 function trainBox(s0,s1,front){
   const hw=1.45,y0=.55,y1=4.05,night=phase.night||phaseName==='tramonto';
@@ -961,7 +974,7 @@ function drawCabin(cab){
   const cab=trackAt(train.s+.55);
   let camPitch=0;
   // Driver's seat: on the left side of the cab, seated eye height.
-  if(viewMode==='cab'){camera=point(train.s+.55,-.6,2.3);viewBearing=cab.yaw+lookYaw;}
+  if(viewMode==='cab'){camera=point(train.s+.55+seat.d,-.6,2.3+seat.h);viewBearing=cab.yaw+lookYaw;}
   else{
     const shot=viewMode==='chase'?{from:point(train.s-66,0,9.5),to:point(train.s+45,0,1.5)}:{from:point(train.s-36,15,3.4),to:point(train.s-16,0,2.4)};
     camera=shot.from;const dx=shot.to.x-camera.x,dz=shot.to.z-camera.z;
@@ -1023,11 +1036,13 @@ function drawCabin(cab){
   }
   ctx.globalAlpha=1;
   if(wet){
-    ctx.strokeStyle='#d4e6e444';ctx.lineWidth=.85;ctx.beginPath();
-    for(let i=0;i<45;i++){
-      const x=(noise(i+8)*width+(train.elapsed*55*(.5+noise(i+4))))%width;
-      const y=(noise(i+18)*height+train.elapsed*(90+noise(i+2)*210))%height;
-      ctx.moveTo(x,y);ctx.lineTo(x-4,y+11+noise(i+9)*12);
+    // Rain: thin streaks, more slanted the faster the train goes.
+    const slant=-(3+Math.abs(train.v)*.9);
+    ctx.strokeStyle=phase.night?'#9fb0c055':'#d8e8ec66';ctx.lineWidth=1;ctx.beginPath();
+    for(let i=0;i<95;i++){
+      const len=16+noise(i+9)*22,x=(noise(i+8)*width*1.2+(train.elapsed*40*(.5+noise(i+4))))%(width*1.2)-width*.1;
+      const y=(noise(i+18)*height+train.elapsed*(650+noise(i+2)*450))%height;
+      ctx.moveTo(x,y);ctx.lineTo(x+slant*len/30,y+len);
     }
     ctx.stroke();
   }
