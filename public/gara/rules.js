@@ -289,9 +289,11 @@ function checkLapPossible(t) {
   const key = (p) => p.x + ',' + p.y;
   const goal = new Set(t.startSlots.map(key));
   const queue = [], seen = new Set();
+  // primo passo dalla partenza: una casella in avanti (anche se cade proprio sulla linea)
+  const fw = dir8(t.normal.x, t.normal.y);
   for (const s of t.startSlots) {
-    const q = { x: Math.round(s.x + t.normal.x * 1.5), y: Math.round(s.y + t.normal.y * 1.5) };
-    if (goodCell(t, q) && !crossesBorder(t, s, q)) { queue.push(q); seen.add(key(q)); }
+    const q = { x: s.x + fw.x, y: s.y + fw.y };
+    if (goodCell(t, q) && !crossesBorder(t, s, q) && !seen.has(key(q))) { queue.push(q); seen.add(key(q)); }
   }
   const b = t.bbox, cache = new Map();
   const good = (p) => { const k = key(p); if (!cache.has(k)) cache.set(k, goodCell(t, p)); return cache.get(k); };
@@ -304,7 +306,8 @@ function checkLapPossible(t) {
         const q = { x: p.x + dx, y: p.y + dy };
         if (q.x < b.minX - 1 || q.x > b.maxX + 1 || q.y < b.minY - 1 || q.y > b.maxY + 1) continue;
         const k = key(q);
-        if (seen.has(k) || !good(q) || crossesFinish(t, p, q) || crossesBorder(t, p, q)) continue;
+        // stessa regola della gara: è vietato solo passare da un lato all'altro della linea
+        if (seen.has(k) || !good(q) || finishCross(t, p, q) !== 0 || crossesBorder(t, p, q)) continue;
         if (goal.has(k)) return true;
         seen.add(k);
         queue.push(q);

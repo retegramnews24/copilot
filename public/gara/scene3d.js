@@ -33,6 +33,26 @@ function inwardNormals(poly, towardInside) {
   });
 }
 
+// per ogni punto del bordo: quanto è stretta la curva (0..1) e se ci va la sabbia (curva verso l'interno del poligono)
+function bends(poly) {
+  // si misura la svolta su 8 punti per lato (4 caselle): stretta se il raggio è sotto le 16 caselle circa
+  const n = poly.length, w = 8, ccw = signedArea(poly) > 0 ? 1 : -1;
+  const raw = poly.map((p, i) => {
+    const a = poly[(i - w + n) % n], b = poly[(i + w) % n];
+    const d1x = p.x - a.x, d1y = p.y - a.y, d2x = b.x - p.x, d2y = b.y - p.y;
+    return Math.atan2(d1x * d2y - d1y * d2x, d1x * d2x + d1y * d2y);
+  });
+  const tight = raw.map((ang) => (Math.abs(ang) > 0.5 ? 1 : 0));
+  const conv = raw.map((ang, i) => (tight[i] && ang * ccw > 0 ? 1 : 0));
+  // allarga e ammorbidisce, così cordoli e sabbia entrano ed escono dolcemente
+  const soft = (arr, grow, blur) => {
+    const g = arr.map((_, i) => { for (let k = -grow; k <= grow; k++) if (arr[(i + k + n) % n]) return 1; return 0; });
+    return g.map((_, i) => { let s = 0; for (let k = -blur; k <= blur; k++) s += g[(i + k + n) % n]; return s / (2 * blur + 1); });
+  };
+  const t = soft(tight, 5, 4), o = soft(conv, 6, 6);
+  return poly.map((_, i) => ({ tight: t[i], out: o[i] }));
+}
+
 function texCanvas(w, h, draw) {
   const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'));
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
@@ -121,10 +141,16 @@ export class Race3D {
     asphalt.position.y = 0.02; asphalt.receiveShadow = true;
     S.add(asphalt);
 
-    // cordoli bianchi e rossi, verso l'asfalto
+    // bordi: cordoli in rilievo nelle curve strette, riga bianca sui rettilinei,
+    // sabbia fuori dalle curve del bordo esterno, barriere dietro
+    this.gravelW = new Map();
     for (const [poly, inside] of [[track.outer, true], [track.inner, false]]) {
-      S.add(this.kerb(poly, inwardNormals(poly, inside)));
-      S.add(this.barrier(poly, inwardNormals(poly, inside)));
+      const nor = inwardNormals(poly, inside), bend = bends(poly);
+      const gw = inside ? bend.map((b) => b.out * 2.4) : bend.map(() => 0);
+      this.gravelW.set(poly, gw);
+      S.add(this.kerb(poly, nor, bend));
+      if (inside) S.add(this.gravel(poly, nor, gw));
+      S.add(this.barrier(poly, nor, gw));
     }
 
     // linea di partenza a scacchi
@@ -135,12 +161,27 @@ export class Race3D {
     fl.rotation.x = -Math.PI / 2; fl.rotation.z = -Math.atan2(f.b.y - f.a.y, f.b.x - f.a.x);
     fl.position.set((f.a.x + f.b.x) / 2, 0.04, (f.a.y + f.b.y) / 2); fl.receiveShadow = true;
     S.add(fl);
-    // portale sopra la linea
-    const gantry = new THREE.Group(), gm = new THREE.MeshStandardMaterial({ color: 0xe5e7eb, metalness: 0.5, roughness: 0.4 });
-    for (const e of [f.a, f.b]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.6, 0.18), gm); post.position.set(e.x, 1.3, e.y); post.castShadow = true; gantry.add(post); }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(L + 0.2, 0.45, 0.14), new THREE.MeshStandardMaterial({ map: flag }));
-    beam.position.set((f.a.x + f.b.x) / 2, 2.6, (f.a.y + f.b.y) / 2); beam.rotation.y = -Math.atan2(f.b.y - f.a.y, f.b.x - f.a.x); beam.castShadow = true;
-    gantry.add(beam); S.add(gantry);
+    // portale sopra la linea: trave scura con la scritta e i semafori (dall'alto non sembra un'altra linea)
+    const gantry = new THREE.Group(), gm = new THREE.MeshStandardMaterial({ color: 0xd1d5db, metalness: 0.6, roughness: 0.35 });
+    const ang = -Math.atan2(f.b.y - f.a.y, f.b.x - f.a.x), mx = (f.a.x + f.b.x) / 2, mz = (f.a.y + f.b.y) / 2;
+    const ux = (f.b.x - f.a.x) / L, uz = (f.b.y - f.a.y) / L;
+    for (const s of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.9, 0.2), gm); post.position.set(mx + ux * (L / 2 + 0.35) * s, 1.45, mz + uz * (L / 2 + 0.35) * s); post.castShadow = true; gantry.add(post); }
+    const banner = texCanvas(512, 64, (c) => {
+      c.fillStyle = '#111827'; c.fillRect(0, 0, 512, 64);
+      c.fillStyle = '#facc15'; c.fillRect(0, 0, 512, 5); c.fillRect(0, 59, 512, 5);
+      c.fillStyle = '#fff'; c.font = 'bold 34px system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('BINOTTOLAND', 256, 34);
+    });
+    banner.repeat.set(Math.max(1, Math.round(L / 9)), 1); banner.wrapS = THREE.RepeatWrapping;
+    const dark = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.6 });
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(L + 0.9, 0.5, 0.16), [dark, dark, dark, dark, new THREE.MeshStandardMaterial({ map: banner, roughness: 0.5 }), new THREE.MeshStandardMaterial({ map: banner, roughness: 0.5 })]);
+    beam.position.set(mx, 2.75, mz); beam.rotation.y = ang; beam.castShadow = true; gantry.add(beam);
+    const lampMat = new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xb91c1c, emissiveIntensity: 1.2 });
+    for (let k = -2; k <= 2; k++) for (const side of [-1, 1]) {
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), lampMat);
+      const nx = -uz * side * 0.1, nz = ux * side * 0.1;
+      lamp.position.set(mx + ux * k * 0.22 + nx, 2.42, mz + uz * k * 0.22 + nz); gantry.add(lamp);
+    }
+    S.add(gantry);
 
     // griglia delle caselle: le auto stanno sugli incroci
     const gx0 = Math.floor(bb.minX) - 1, gx1 = Math.ceil(bb.maxX) + 1, gz0 = Math.floor(bb.minY) - 1, gz1 = Math.ceil(bb.maxY) + 1;
@@ -162,16 +203,22 @@ export class Race3D {
     this.rig.dist = Math.max(18, span * 1.05); this.rig.goal = null;
   }
 
-  kerb(poly, nor) {
-    const pos = [], col = [], n = poly.length, w = 0.38, red = new THREE.Color(0xd92b2b), white = new THREE.Color(0xf5f5f5);
+  // cordolo: dove la curva è stretta è a strisce rosse e bianche e rialzato verso il bordo; altrove una riga bianca
+  kerb(poly, nor, bend) {
+    const pos = [], col = [], n = poly.length, red = new THREE.Color(0xd92b2b), white = new THREE.Color(0xf5f5f5), line = new THREE.Color(0xf1f1f1);
     let acc = 0;
     for (let i = 0; i < n; i++) {
       const j = (i + 1) % n, a = poly[i], b = poly[j], na = nor[i], nb = nor[j];
-      const c = Math.floor(acc / 0.9) % 2 ? red : white;
-      acc += Math.hypot(b.x - a.x, b.y - a.y);
-      const A = [a.x, 0.045, a.y], B = [b.x, 0.045, b.y], A2 = [a.x + na.x * w, 0.045, a.y + na.y * w], B2 = [b.x + nb.x * w, 0.045, b.y + nb.y * w];
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      const ka = bend[i].tight, kb = bend[j].tight, on = (ka + kb) / 2 > 0.25;
+      const wa = 0.12 + 0.36 * ka, wb = 0.12 + 0.36 * kb, ha = 0.036 + 0.04 * ka, hb = 0.036 + 0.04 * kb;
+      const c = on ? (Math.floor(acc / 0.9) % 2 ? red : white) : line;
+      acc += len;
+      const A = [a.x, ha, a.y], B = [b.x, hb, b.y], A2 = [a.x + na.x * wa, 0.034, a.y + na.y * wa], B2 = [b.x + nb.x * wb, 0.034, b.y + nb.y * wb];
       pos.push(...A, ...B, ...A2, ...A2, ...B, ...B2);
-      for (let k = 0; k < 6; k++) col.push(c.r, c.g, c.b);
+      // fianco verso l'esterno
+      pos.push(a.x, 0.02, a.y, b.x, 0.02, b.y, ...A, ...A, b.x, 0.02, b.y, ...B);
+      for (let k = 0; k < 12; k++) col.push(c.r, c.g, c.b);
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -182,11 +229,38 @@ export class Race3D {
     return m;
   }
 
-  barrier(poly, nor) {
-    const pos = [], n = poly.length, off = 0.55, h = 0.45;
+  // via di fuga in sabbia, fuori dal bordo esterno nelle curve
+  gravel(poly, nor, gw) {
+    const pos = [], uv = [], n = poly.length;
+    const tex = texCanvas(128, 128, (g) => {
+      g.fillStyle = '#d9c38f'; g.fillRect(0, 0, 128, 128);
+      const r = rng(17);
+      for (let i = 0; i < 1600; i++) { const v = r(); g.fillStyle = v < 0.5 ? 'rgba(150,120,70,.35)' : 'rgba(255,240,200,.4)'; g.fillRect(r() * 128, r() * 128, 1.6, 1.6); }
+    });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
     for (let i = 0; i < n; i++) {
-      const j = (i + 1) % n, a = poly[i], b = poly[j];
-      const ax = a.x - nor[i].x * off, az = a.y - nor[i].y * off, bx = b.x - nor[j].x * off, bz = b.y - nor[j].y * off;
+      const j = (i + 1) % n;
+      if (gw[i] < 0.05 && gw[j] < 0.05) continue;
+      const a = poly[i], b = poly[j];
+      const P = (p, nn, d) => [p.x - nn.x * d, 0.014, p.y - nn.y * d];
+      const A = P(a, nor[i], 0.05), B = P(b, nor[j], 0.05), A2 = P(a, nor[i], 0.3 + gw[i]), B2 = P(b, nor[j], 0.3 + gw[j]);
+      pos.push(...A, ...B, ...A2, ...A2, ...B, ...B2);
+      for (const q of [A, B, A2, A2, B, B2]) uv.push(q[0] / 3, q[2] / 3);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, roughness: 1, side: THREE.DoubleSide }));
+    m.receiveShadow = true;
+    return m;
+  }
+
+  barrier(poly, nor, gw) {
+    const pos = [], n = poly.length, h = 0.45;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, a = poly[i], b = poly[j], oa = 0.55 + gw[i], ob = 0.55 + gw[j];
+      const ax = a.x - nor[i].x * oa, az = a.y - nor[i].y * oa, bx = b.x - nor[j].x * ob, bz = b.y - nor[j].y * ob;
       pos.push(ax, 0, az, bx, 0, bz, ax, h, az, ax, h, az, bx, 0, bz, bx, h, bz);
     }
     const g = new THREE.BufferGeometry();
@@ -218,10 +292,10 @@ export class Race3D {
         const nx = -uz * sgn, nz = ux * sgn;
         // estremo della linea che tocca il bordo esterno
         const ex = Math.hypot(f.a.x - a.x, f.a.y - a.y) < Math.hypot(f.b.x - a.x, f.b.y - a.y) ? f.a : f.b;
-        for (let off = 3.2; off < 9; off += 0.8) {
+        for (let off = 3.8; off < 10; off += 0.8) {
           const x = ex.x + nx * off, z = ex.y + nz * off;
           const corners = [[-5, -1.3], [5, -1.3], [-5, 1.3], [5, 1.3], [0, 0]].map(([u, v]) => ({ x: x + ux * u + nx * v, y: z + uz * u + nz * v }));
-          if (corners.every((c) => !pointInPoly(c, t.outer) && clearance(t, c) > 1.4)) return { x, z, ang: Math.atan2(uz, ux), nx, nz, ux, uz };
+          if (corners.every((c) => !pointInPoly(c, t.outer) && clearance(t, c) > 2.2)) return { x, z, ang: Math.atan2(uz, ux), nx, nz, ux, uz };
         }
       }
       return null;
@@ -248,6 +322,28 @@ export class Race3D {
       take(st.x, st.z, 5.6);
     }
 
+    // cartelloni lungo i rettilinei, dietro la barriera esterna, rivolti verso la pista
+    const ob = bends(t.outer), onor = inwardNormals(t.outer, true), gwo = this.gravelW.get(t.outer) || [];
+    const ads = [['BINOTTOLAND', '#111827', '#facc15'], ['GARA A QUADRETTI', '#2563eb', '#ffffff'], ['MARCIA 7', '#dc2626', '#ffffff'], ['GIRO VELOCE', '#16a34a', '#ffffff'], ['PIT STOP', '#f97316', '#111827'], ['PLAYGROUND', '#9333ea', '#ffffff']];
+    const adMat = ads.map(([txt, bg, fg]) => new THREE.MeshStandardMaterial({ roughness: 0.6, map: texCanvas(256, 64, (c) => { c.fillStyle = bg; c.fillRect(0, 0, 256, 64); c.fillStyle = fg; c.font = `bold ${txt.length > 12 ? 26 : 32}px system-ui, sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(txt, 128, 34); }) }));
+    const backMat = new THREE.MeshStandardMaterial({ color: 0x374151 }), postMat = new THREE.MeshStandardMaterial({ color: 0x6b7280 });
+    let adN = 0, sinceLast = 99;
+    for (let i = 0; i < t.outer.length; i++) {
+      sinceLast++;
+      if (sinceLast < 34 || ob[i].tight > 0.05) continue;
+      const p = t.outer[i], nn = onor[i], d = 0.55 + (gwo[i] || 0) + 0.7;
+      const x = p.x - nn.x * d, z = p.y - nn.y * d;
+      if (taken.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + 1.4)) continue;
+      const q = t.outer[(i + 2) % t.outer.length], yaw = -Math.atan2(q.y - p.y, q.x - p.x);
+      const g = new THREE.Group();
+      const m = adMat[adN++ % adMat.length];
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.6, 0.06), [backMat, backMat, backMat, backMat, m, m]);
+      panel.position.y = 0.75; panel.castShadow = true; g.add(panel);
+      for (const s of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.75, 0.06), postMat); post.position.set(s * 1.05, 0.37, 0); g.add(post); }
+      g.position.set(x, 0, z); g.rotation.y = yaw;
+      S.add(g); take(x, z, 1.3); sinceLast = 0;
+    }
+
     // box dei meccanici: dentro il bordo interno, vicino alla linea
     const ie = Math.hypot(f.a.x - t.inner[f.innerSeg].x, f.a.y - t.inner[f.innerSeg].y) < Math.hypot(f.b.x - t.inner[f.innerSeg].x, f.b.y - t.inner[f.innerSeg].y) ? f.a : f.b;
     for (let tries = 0; tries < 80; tries++) {
@@ -270,7 +366,7 @@ export class Race3D {
     let wheel = null;
     for (let i = 0; i < 400 && !wheel; i++) {
       const x = bb.minX - 8 + r() * (bb.maxX - bb.minX + 16), z = bb.minY - 8 + r() * (bb.maxY - bb.minY + 16);
-      if (free(x, z, 3, 1.5)) wheel = { x, z };
+      if (free(x, z, 3, 3.4)) wheel = { x, z };
     }
     if (wheel) {
       const g = new THREE.Group(), wm = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, metalness: 0.6, roughness: 0.3 });
@@ -294,7 +390,7 @@ export class Race3D {
     for (let i = 0; i < 2000 && trees.length < 90; i++) {
       const x = bb.minX - 14 + r() * (bb.maxX - bb.minX + 28), z = bb.minY - 14 + r() * (bb.maxY - bb.minY + 28);
       const sc = 0.7 + r() * 0.8;
-      if (free(x, z, 0.8 * sc, 1.6)) { trees.push({ x, z, sc, kind: r() < 0.5 ? 0 : 1 }); take(x, z, 0.8 * sc); }
+      if (free(x, z, 0.8 * sc, 3.4)) { trees.push({ x, z, sc, kind: r() < 0.5 ? 0 : 1 }); take(x, z, 0.8 * sc); }
     }
     const cone = new THREE.ConeGeometry(0.75, 1.9, 8), ball = new THREE.IcosahedronGeometry(0.85, 1), trunk = new THREE.CylinderGeometry(0.1, 0.14, 0.7, 6);
     const cones = trees.filter((q) => !q.kind), balls = trees.filter((q) => q.kind);
@@ -310,8 +406,10 @@ export class Race3D {
     // pubblico sparso lungo il bordo esterno
     for (let i = 0; i < 3000 && people.length < 180; i++) {
       const k = Math.floor(r() * t.outer.length), p = t.outer[k];
-      const ang = r() * Math.PI * 2, d = 1.6 + r() * 2.5, x = p.x + Math.cos(ang) * d, z = p.y + Math.sin(ang) * d;
-      if (free(x, z, 0.2, 1.2)) { people.push([x, 0.32, z]); take(x, z, 0.25); }
+      // sempre dietro la barriera (che nelle curve è più lontana per via della sabbia)
+      const back = 0.55 + (gwo[k] || 0) + 0.45;
+      const ang = r() * Math.PI * 2, d = back + r() * 2.5, x = p.x + Math.cos(ang) * d, z = p.y + Math.sin(ang) * d;
+      if (free(x, z, 0.2, back - 0.2)) { people.push([x, 0.32, z]); take(x, z, 0.25); }
     }
     const PP = new THREE.InstancedMesh(new THREE.CapsuleGeometry(0.13, 0.28, 3, 8), new THREE.MeshStandardMaterial({ roughness: 0.8 }), Math.max(1, people.length));
     PP.count = people.length;
@@ -457,6 +555,22 @@ export class Race3D {
     const car = this.cars[i], b = car.userData.body;
     this.crashFx(car.position, car.rotation.y);
     return this.tween(650, (k) => { const a = Math.sin(k * 40) * (1 - k); b.rotation.y = a * 0.35; b.rotation.z = a * 0.12; }).then(() => { b.rotation.set(0, 0, 0); });
+  }
+
+  // segni di frenata: due righe scure sulla seconda metà della mossa, quando si scala o si sbatte
+  skid(a, b) {
+    const dx = b.x - a.x, dz = b.y - a.y, l = Math.hypot(dx, dz);
+    if (l < 0.5) return;
+    if (!this.skidMat) this.skidMat = new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.32, depthWrite: false });
+    if (!this.skids || this.skids.parent !== this.scene) { this.skids = new THREE.Group(); this.scene.add(this.skids); }
+    const nx = -dz / l, nz = dx / l, from = 0.45, len = l * (1 - from);
+    for (const s of [-0.17, 0.17]) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.07), this.skidMat);
+      m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(dz, dx);
+      m.position.set(a.x + dx * (from + (1 - from) / 2) + nx * s, 0.026, a.y + dz * (from + (1 - from) / 2) + nz * s);
+      this.skids.add(m);
+    }
+    while (this.skids.children.length > 400) { const o = this.skids.children[0]; o.geometry.dispose(); this.skids.remove(o); }
   }
 
   // urto: scintille arancioni e sbuffi di fumo davanti all'auto

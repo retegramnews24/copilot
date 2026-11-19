@@ -243,8 +243,9 @@ async function pick(mark) {
   busy = true;
   scene.clearMarks();
   $('rcHelp').textContent = '';
-  const i = race.turn, car = race.cars[i], from = { ...car.pos };
+  const i = race.turn, car = race.cars[i], from = { ...car.pos }, prevGear = car.gear;
   const ev = R.applyMove(race, opt);
+  if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
   const lap = car.path[car.path.length - 1].lap;
   await scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash);
   scene.addTrail(i, from, car.pos, lap);
