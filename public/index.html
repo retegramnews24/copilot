@@ -2,9 +2,59 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Binottoland · prova</title>
-<style>html,body{margin:0;height:100%;background:#fff}</style>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Gara a quadretti · prova</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="stylesheet" href="gara/gara.css">
 </head>
-<body></body>
+<body>
+<div id="app">
+
+  <section id="ed" class="screen on">
+    <canvas id="c2"></canvas>
+    <div class="bar top">
+      <div class="row"><b id="edStep">Passo 1 di 4</b><span class="sp"></span><span id="edCells" class="muted"></span></div>
+      <div id="edHelp" class="help"></div>
+    </div>
+    <div id="toast" class="toast"></div>
+    <div class="bar bottom">
+      <div class="row zoom"><button class="ico" id="zOut" aria-label="Allontana">−</button><input id="zoom" type="range" min="14" max="160" step="1"><button class="ico" id="zIn" aria-label="Avvicina">+</button></div>
+      <div id="laps" class="row laps" hidden><span>Giri</span><span class="sp"></span><button class="ico" id="lapM" aria-label="Meno giri">−</button><b id="lapN">3</b><button class="ico" id="lapP" aria-label="Più giri">+</button></div>
+      <div class="row"><button id="undo">Annulla</button><button id="fit">Centra</button><span class="sp"></span><button id="go" class="pri" hidden>Crea pista 3D</button></div>
+    </div>
+  </section>
+
+  <section id="rc" class="screen">
+    <div id="gl"></div>
+    <div class="bar top" id="rcTop">
+      <div class="row cars" id="chips"></div>
+      <div id="rcHelp" class="help"></div>
+    </div>
+    <div id="legend" class="legend" hidden><span class="d" style="--c:#ef4444"></span>scala<span class="d" style="--c:#22c55e"></span>tieni<span class="d" style="--c:#3b82f6"></span>sali<span class="x">✕</span>urto</div>
+    <div id="banner" class="banner"></div>
+    <div class="bar bottom">
+      <div class="row"><button id="grid" class="on">Griglia</button><button id="view">Vista alta</button><button id="center">Centra</button><span class="sp"></span><button id="menuB" class="ico" aria-label="Menu">☰</button></div>
+    </div>
+  </section>
+
+  <div id="menu" class="sheet" hidden>
+    <div class="card">
+      <b>Partita</b>
+      <button id="again">Rigioca su questa pista</button>
+      <button id="newT">Nuova pista</button>
+      <button id="close">Chiudi</button>
+    </div>
+  </div>
+
+  <div id="over" class="sheet" hidden>
+    <div class="card win">
+      <div class="flag"></div>
+      <div id="winT" class="big"></div>
+      <div id="winS" class="muted"></div>
+      <div class="row"><button id="newT2">Nuova pista</button><span class="sp"></span><button id="again2" class="pri">Rigioca</button></div>
+    </div>
+  </div>
+</div>
+<script type="module" src="gara/main.js"></script>
+</body>
 </html>
