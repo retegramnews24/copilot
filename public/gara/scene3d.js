@@ -472,11 +472,47 @@ export class Race3D {
       this.markers.add(m);
     }
   }
-  clearMarks() { for (const c of [...this.markers.children]) { c.material.dispose(); this.markers.remove(c); } }
+  clearMarks() { for (const c of [...this.markers.children]) { c.material.dispose(); this.markers.remove(c); } this.clearPreview(); }
+
+  // anteprima della mossa scelta: puntini dall'auto al punto e un'auto "fantasma" dove arriverà
+  showPreview(i, from, opt) {
+    this.clearPreview();
+    const g = (this.preview = new THREE.Group());
+    const dotGeo = new THREE.CircleGeometry(0.07, 10);
+    const white = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false });
+    const red = new THREE.MeshBasicMaterial({ color: 0xf87171, transparent: true, opacity: 0.95, depthWrite: false });
+    const line = (a, b, mat) => {
+      const l = Math.hypot(b.x - a.x, b.y - a.y), n = Math.max(1, Math.floor(l / 0.3));
+      for (let k = 1; k < n; k++) { const d = new THREE.Mesh(dotGeo, mat); d.rotation.x = -Math.PI / 2; d.position.set(a.x + ((b.x - a.x) * k) / n, 0.13, a.y + ((b.y - a.y) * k) / n); d.renderOrder = 6; g.add(d); }
+    };
+    if (opt.crash) { line(from, opt.stop, white); line(opt.stop, opt, red); } else line(from, opt, white);
+    // auto fantasma
+    const ghost = this.cars[i].clone(true);
+    ghost.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = o.isSprite ? 0 : 0.6; o.material.depthWrite = false; } o.castShadow = false; o.renderOrder = 8; });
+    // i dischi si attenuano, così l'auto fantasma si vede bene
+    for (const m of this.markers.children) m.material.opacity = m.userData.x === opt.x && m.userData.y === opt.y ? 0.25 : 0.55;
+    ghost.position.set(opt.stop.x, 0, opt.stop.y);
+    const aim = { x: opt.x - from.x, y: opt.y - from.y };
+    ghost.rotation.y = Math.atan2(-aim.y, aim.x);
+    g.add(ghost);
+    // anello attorno al disco scelto
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.6, 32), new THREE.MeshBasicMaterial({ color: opt.crash ? 0xf87171 : 0xffffff, transparent: true, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(opt.x, 0.14, opt.y); ring.renderOrder = 7; g.add(ring);
+    this.ring = ring;
+    this.scene.add(g);
+  }
+
+  clearPreview() {
+    if (!this.preview) return;
+    if (this.markers) for (const m of this.markers.children) m.material.opacity = 1;
+    this.preview.traverse((o) => { if (o.material) o.material.dispose(); });
+    this.scene.remove(this.preview); this.preview = null; this.ring = null;
+  }
 
   // ---------- telecamera e tocchi ----------
   focus(p, near) {
-    this.rig.goal = { tx: p.x, tz: p.y, dist: near ? Math.min(this.rig.dist, 16) : this.rig.dist };
+    const cur = this.rig.goal ? this.rig.goal.dist : this.rig.dist;
+    this.rig.goal = { tx: p.x, tz: p.y, dist: near ? Math.min(cur, 16) : cur };
   }
   setView(v) { this.view = v; }
   setGrid(on) { this.gridOn = on; if (this.grid) this.grid.visible = on; }
@@ -550,6 +586,7 @@ export class Race3D {
     if (this.wheel) { this.wheel.rotation.z += dt * 0.25; for (const c of this.cabins || []) c.rotation.z = -this.wheel.rotation.z; }
     const pulse = 1 + Math.sin(now * 0.006) * 0.08;
     if (this.markers) for (const m of this.markers.children) m.scale.set(pulse, pulse, 1);
+    if (this.ring) { const k = 1 + Math.sin(now * 0.01) * 0.12; this.ring.scale.set(k, k, 1); }
     const R = this.rig;
     if (R.goal) { R.tx += (R.goal.tx - R.tx) * 0.08; R.tz += (R.goal.tz - R.tz) * 0.08; R.dist += (R.goal.dist - R.dist) * 0.08; if (Math.hypot(R.goal.tx - R.tx, R.goal.tz - R.tz) < 0.02) R.goal = null; }
     const pitchGoal = this.view === 'top' ? 1.5 : this.userPitch ?? 0.95;

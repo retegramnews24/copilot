@@ -184,7 +184,8 @@ function refresh() {
   }
   if (race.phase === 'over') return;
   $('legend').hidden = false;
-  $('rcHelp').textContent = `Tocca a ${col.name}: scegli dove andare.`;
+  chosen = null;
+  helpTurn();
   let opts = R.options(race);
   if (!opts.length) opts = [{ x: car.pos.x + car.dir.x, y: car.pos.y + car.dir.y, gear: 1, crash: true, stop: { ...car.pos } }];
   race.opts = opts;
@@ -193,11 +194,28 @@ function refresh() {
     kind: o.crash ? 'crash' : car.gear === 0 || o.gear === car.gear ? 'same' : o.gear < car.gear ? 'down' : 'up',
     txt: String(o.gear)
   })));
-  scene.focus(car.pos);
+  // telecamera a metà tra l'auto e i dischi, così si vede tutto
+  const cx = opts.reduce((s, o) => s + o.x, 0) / opts.length, cy = opts.reduce((s, o) => s + o.y, 0) / opts.length;
+  scene.focus({ x: (car.pos.x + cx) / 2, y: (car.pos.y + cy) / 2 }, race.moves === 0);
+}
+
+// la legenda sta sempre sotto la barra in alto, anche quando il testo va su due righe
+new ResizeObserver(() => document.documentElement.style.setProperty('--topH', $('rcTop').offsetHeight + 'px')).observe($('rcTop'));
+
+let chosen = null; // mossa scelta col primo tocco, in attesa di conferma
+
+function helpTurn() {
+  const col = COL[race.turn];
+  $('rcHelp').textContent = `Tocca a ${col.num} ${col.name}: scegli dove andare.`;
 }
 
 async function pick(mark) {
-  if (busy || !race || !mark) return;
+  if (busy || !race) return;
+  if (!mark) {
+    // tocco fuori dai dischi: annulla la scelta
+    if (chosen) { chosen = null; scene.clearPreview(); helpTurn(); }
+    return;
+  }
   if (race.phase === 'place') {
     const r = R.placeCar(race, mark);
     if (r.error) return banner(r.error);
@@ -210,6 +228,17 @@ async function pick(mark) {
   if (race.phase !== 'race') return;
   const opt = race.opts.find((o) => o.x === mark.x && o.y === mark.y);
   if (!opt) return;
+  // primo tocco: anteprima. Secondo tocco sullo stesso disco: si parte.
+  if (chosen !== opt) {
+    chosen = opt;
+    const car = race.cars[race.turn];
+    scene.showPreview(race.turn, car.pos, opt);
+    $('rcHelp').textContent = opt.crash
+      ? `Attenzione: così esci di pista e resti fermo 2 turni. Tocca di nuovo la ✕ per confermare.`
+      : `Marcia ${opt.gear}. Tocca di nuovo il disco per partire, oppure scegline un altro.`;
+    return;
+  }
+  chosen = null;
   busy = true;
   scene.clearMarks();
   $('rcHelp').textContent = '';
