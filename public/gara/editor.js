@@ -1,13 +1,13 @@
 // Disegno della pista in 2D sulla griglia. Un dito disegna, due dita spostano e ingrandiscono.
 import { finishNormals } from './rules.js';
 
-export const BOARD = 160; // area di disegno: 160 x 160 caselle
-
 export class Editor {
   constructor(canvas) {
     this.c = canvas;
     this.x = canvas.getContext('2d');
-    this.cx = BOARD / 2; this.cy = BOARD / 2; // centro della vista, in caselle
+    this.board = 160; // area di disegno, in caselle per lato: cresce con il numero di auto
+    this.cx = this.board / 2; this.cy = this.board / 2; // centro della vista, in caselle
+    this.finishCheck = null; this.preview = null;
     this.s = 14; // pixel per casella
     this.outer = null; this.inner = null; this.finish = null; this.normalIdx = -1;
     this.stroke = null; this.error = null; this.mode = 'outer';
@@ -37,20 +37,23 @@ export class Editor {
   toCell(px, py) { return { x: (px - this.w / 2) / this.s + this.cx, y: (py - this.h / 2) / this.s + this.cy }; }
   toPx(p) { return { x: (p.x - this.cx) * this.s + this.w / 2, y: (p.y - this.cy) * this.s + this.h / 2 }; }
 
+  setBoard(n) { this.board = n; this.cx = this.cy = n / 2; this.clamp(); this.draw(); }
+
   setZoom(cellsAcross) { this.s = this.w / cellsAcross; this.clamp(); this.draw(); }
   cellsAcross() { return Math.round(this.w / this.s); }
   zoomAt(px, py, f) {
     const before = this.toCell(px, py);
-    this.s = Math.min(60, Math.max(this.w / BOARD, this.s * f));
+    this.s = Math.min(60, Math.max(this.w / this.board, this.s * f));
     const after = this.toCell(px, py);
     this.cx += before.x - after.x; this.cy += before.y - after.y;
     this.clamp(); this.draw();
     this.onZoom && this.onZoom();
   }
   clamp() {
-    this.s = Math.min(60, Math.max(this.w / BOARD, this.s));
-    this.cx = Math.min(BOARD, Math.max(0, this.cx));
-    this.cy = Math.min(BOARD, Math.max(0, this.cy));
+    if (!this.w) return;
+    this.s = Math.min(60, Math.max(this.w / this.board, this.s));
+    this.cx = Math.min(this.board, Math.max(0, this.cx));
+    this.cy = Math.min(this.board, Math.max(0, this.cy));
   }
 
   pos(e) { const r = this.c.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -70,6 +73,7 @@ export class Editor {
       if (this.mode === 'outer' || this.mode === 'inner' || this.mode === 'finish') {
         this.error = null;
         this.stroke = [this.toCell(p.x, p.y)];
+        this.preview = null;
         this.draw();
       }
     }
@@ -91,7 +95,12 @@ export class Editor {
     }
     if (this.stroke) {
       const c = this.toCell(p.x, p.y), l = this.stroke[this.stroke.length - 1];
-      if (Math.hypot(c.x - l.x, c.y - l.y) * this.s > 4) { this.stroke.push(c); this.draw(); }
+      if (Math.hypot(c.x - l.x, c.y - l.y) * this.s > 4) {
+        this.stroke.push(c);
+        // linea di partenza: controllo dal vivo dei posti, verde se ci stanno tutte le auto, rossa se no
+        if (this.mode === 'finish' && this.finishCheck) this.preview = this.finishCheck(this.stroke);
+        this.draw();
+      }
     }
   }
 
@@ -100,7 +109,7 @@ export class Editor {
     this.pan = null;
     if (this.pointers.size < 2) this.pinch = null;
     if (this.stroke && this.pointers.size === 0) {
-      const s = this.stroke; this.stroke = null;
+      const s = this.stroke; this.stroke = null; this.preview = null;
       if (!cancel && s.length > 1 && this.onStroke) this.onStroke(s);
       this.draw();
     }
@@ -139,19 +148,19 @@ export class Editor {
     if (!w) return;
     g.fillStyle = '#f4f1ea'; g.fillRect(0, 0, w, h);
     // fuori dall'area di disegno
-    const o0 = this.toPx({ x: 0, y: 0 }), o1 = this.toPx({ x: BOARD, y: BOARD });
+    const B = this.board, o0 = this.toPx({ x: 0, y: 0 }), o1 = this.toPx({ x: B, y: B });
     g.fillStyle = '#e3ded2';
     g.fillRect(0, 0, w, Math.max(0, o0.y)); g.fillRect(0, o1.y, w, h); g.fillRect(0, 0, Math.max(0, o0.x), h); g.fillRect(o1.x, 0, w, h);
     // griglia: sempre visibile nel disegno
     const c0 = this.toCell(0, 0), c1 = this.toCell(w, h);
     const step = s < 5 ? 5 : 1;
     g.lineWidth = 1;
-    for (let x = Math.max(0, Math.floor(c0.x / step) * step); x <= Math.min(BOARD, c1.x); x += step) {
+    for (let x = Math.max(0, Math.floor(c0.x / step) * step); x <= Math.min(B, c1.x); x += step) {
       const px = Math.round(this.toPx({ x, y: 0 }).x) + 0.5;
       g.strokeStyle = x % 5 ? '#e2ddd0' : '#c9c1ae';
       g.beginPath(); g.moveTo(px, Math.max(0, o0.y)); g.lineTo(px, Math.min(h, o1.y)); g.stroke();
     }
-    for (let y = Math.max(0, Math.floor(c0.y / step) * step); y <= Math.min(BOARD, c1.y); y += step) {
+    for (let y = Math.max(0, Math.floor(c0.y / step) * step); y <= Math.min(B, c1.y); y += step) {
       const py = Math.round(this.toPx({ x: 0, y }).y) + 0.5;
       g.strokeStyle = y % 5 ? '#e2ddd0' : '#c9c1ae';
       g.beginPath(); g.moveTo(Math.max(0, o0.x), py); g.lineTo(Math.min(w, o1.x), py); g.stroke();
@@ -168,8 +177,17 @@ export class Editor {
       g.strokeStyle = '#16a34a'; g.lineWidth = 5; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
     }
     if (this.stroke && this.stroke.length > 1) {
+      const pv = this.mode === 'finish' ? this.preview : null, good = pv && pv.finish && pv.cap >= pv.need;
       g.beginPath(); this.path(this.stroke, false);
-      g.strokeStyle = this.mode === 'finish' ? '#16a34a' : '#2563eb'; g.lineWidth = 3; g.stroke();
+      g.strokeStyle = this.mode !== 'finish' ? '#2563eb' : good ? 'rgba(22,163,74,.45)' : 'rgba(220,38,38,.45)'; g.lineWidth = 3; g.stroke();
+      if (pv && pv.finish) {
+        const a = this.toPx(pv.finish.a), b = this.toPx(pv.finish.b);
+        g.strokeStyle = good ? '#16a34a' : '#dc2626'; g.lineWidth = 6; g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+        const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 22 }, txt = `${pv.cap} / ${pv.need} posti`;
+        g.font = 'bold 14px system-ui, sans-serif'; const tw = g.measureText(txt).width + 16;
+        g.fillStyle = good ? '#15803d' : '#b91c1c'; g.beginPath(); g.roundRect(m.x - tw / 2, m.y - 13, tw, 26, 8); g.fill();
+        g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(txt, m.x, m.y + 1);
+      }
       if (this.mode !== 'finish') {
         const f = this.toPx(this.stroke[0]);
         g.setLineDash([4, 4]); g.strokeStyle = 'rgba(37,99,235,.6)'; g.beginPath(); g.arc(f.x, f.y, 16, 0, 7); g.stroke(); g.setLineDash([]);

@@ -314,7 +314,7 @@ export class Race3D {
   }
 
   // ---------- auto ----------
-  makeCar(hex) {
+  makeCar(hex, num) {
     const g = new THREE.Group(), body = new THREE.Group();
     const paint = new THREE.MeshStandardMaterial({ color: hex, metalness: 0.45, roughness: 0.32 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.4, roughness: 0.15 });
@@ -327,12 +327,25 @@ export class Race3D {
     add(new THREE.BoxGeometry(0.06, 0.12, 0.44), paint, -0.36, 0.33, 0);
     const wg = new THREE.CylinderGeometry(0.1, 0.1, 0.09, 14);
     for (const [x, z] of [[0.24, 0.22], [0.24, -0.22], [-0.24, 0.24], [-0.24, -0.24]]) { const w = add(wg, tyre, x, 0.1, z); w.rotation.x = Math.PI / 2; }
+    // numero di gara sul cofano
+    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.2, 0.2), new THREE.MeshBasicMaterial({ map: this.numTex(num), transparent: true }));
+    nm.rotation.x = -Math.PI / 2; nm.rotation.z = -Math.PI / 2; nm.position.set(0.18, 0.252, 0); body.add(nm);
     g.add(body);
     g.userData.body = body;
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.gearTex('N', hex), depthTest: false, transparent: true }));
     label.scale.set(0.55, 0.55, 1); label.position.y = 0.95; label.renderOrder = 10;
     g.add(label); g.userData.label = label;
     return g;
+  }
+
+  numTex(n) {
+    const k = 'n' + n;
+    if (!this.texCache.has(k))
+      this.texCache.set(k, texCanvas(64, 64, (c) => {
+        c.fillStyle = '#fff'; c.beginPath(); c.arc(32, 32, 30, 0, 7); c.fill();
+        c.fillStyle = '#111'; c.font = `bold ${n > 9 ? 30 : 40}px sans-serif`; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(String(n), 32, 35);
+      }));
+    return this.texCache.get(k);
   }
 
   gearTex(txt, hex) {
@@ -349,7 +362,7 @@ export class Race3D {
   setCars(race, colors) {
     for (const c of this.cars) this.scene.remove(c);
     this.cars = race.cars.map((car, i) => {
-      const m = this.makeCar(colors[i].hex);
+      const m = this.makeCar(colors[i].hex, colors[i].num);
       m.visible = !!car.pos;
       if (car.pos) m.position.set(car.pos.x, 0, car.pos.y);
       m.rotation.y = Math.atan2(-car.dir.y, car.dir.x);

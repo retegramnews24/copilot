@@ -1,7 +1,12 @@
 // Gara a quadretti: regole pure, senza disegno. Le unità sono caselle (1 = un quadretto).
 // Tutto lo stato è un oggetto semplice (JSON), così più avanti si può giocare online.
 
-export const MIN_WIDTH = 3; // larghezza minima della pista, in caselle
+export const MIN_WIDTH = 3; // larghezza minima della pista con 2 auto, in caselle
+export const MAX_CARS = 16;
+// più auto, pista più larga: mezza casella in più per ogni auto oltre la seconda
+export const minWidth = (n) => MIN_WIDTH + Math.max(0, n - 2) * 0.5;
+// spazio di disegno, in caselle per lato
+export const boardSize = (n) => Math.min(480, 160 + Math.max(0, n - 2) * 30);
 export const SAFE = 0.6; // distanza minima dal bordo per una casella buona
 export const MAX_GEAR = 7;
 export const CRASH_TURNS = 2;
@@ -116,15 +121,15 @@ function polyCross(p, q) {
 }
 
 // Il bordo interno deve stare tutto dentro l'esterno, senza toccarlo.
-export function checkInner(outer, inner) {
+export function checkInner(outer, inner, minW = MIN_WIDTH) {
   const x = polyCross(outer, inner);
   if (x) return { error: 'I due bordi si incrociano.', at: x };
   if (!inner.every((p) => pointInPoly(p, outer))) return { error: 'Il bordo interno deve stare dentro quello esterno.', at: inner[0] };
-  return checkWidth(outer, inner);
+  return checkWidth(outer, inner, minW);
 }
 
 // Strettoie: due punti di bordo troppo vicini con la pista in mezzo.
-function checkWidth(outer, inner) {
+function checkWidth(outer, inner, MIN_WIDTH) {
   const polys = [outer, inner];
   const inTrack = (p) => pointInPoly(p, outer) && !pointInPoly(p, inner);
   for (let pi = 0; pi < 2; pi++) {
@@ -139,7 +144,7 @@ function checkWidth(outer, inner) {
             if (k * 0.5 < MIN_WIDTH * 1.6) continue; // vicini sullo stesso bordo
           }
           const { d, q } = distToSeg(v, Q[j], Q[(j + 1) % n]);
-          if (d < MIN_WIDTH && d > 1e-6 && inTrack(lerp(v, q, 0.5))) return { error: `Pista troppo stretta qui: servono almeno ${MIN_WIDTH} caselle.`, at: lerp(v, q, 0.5) };
+          if (d < MIN_WIDTH && d > 1e-6 && inTrack(lerp(v, q, 0.5))) return { error: `Pista troppo stretta qui: servono almeno ${String(MIN_WIDTH).replace('.', ',')} caselle.`, at: lerp(v, q, 0.5) };
         }
       }
     }
@@ -183,15 +188,16 @@ export function finishNormals(f) {
 }
 
 // ---------- pista completa ----------
-export function buildTrack(outer, inner, finish, normal) {
-  const t = { outer, inner, finish, normal };
+export function buildTrack(outer, inner, finish, normal, players = 2) {
+  const t = { outer, inner, finish, normal, players };
   // verso di percorrenza di ciascun bordo (per sapere dov'è "avanti" lungo la pista)
   t.outerSign = sideSign(outer, finish.outerSeg, normal);
   t.innerSign = sideSign(inner, finish.innerSeg, normal);
   const bb = bbox(outer);
   t.bbox = bb;
   t.startSlots = startSlots(t);
-  if (t.startSlots.length < 2) return { error: 'Sulla linea di partenza non c’è posto per due auto: allargala.', at: lerp(finish.a, finish.b, 0.5) };
+  const cap = capacity(t.startSlots);
+  if (cap < players) return { error: `Sulla linea ci stanno ${cap} auto, ne servono ${players}: allarga la pista alla partenza.`, at: lerp(finish.a, finish.b, 0.5) };
   const lap = checkLapPossible(t);
   if (!lap) return { error: 'Non si riesce a fare un giro intero: controlla strettoie e linea di partenza.', at: lerp(finish.a, finish.b, 0.5) };
   return { track: t };
@@ -248,7 +254,7 @@ export function finishCross(t, p, q) {
   return 0;
 }
 
-// Caselle di partenza: subito dietro la linea, dentro la pista.
+// Caselle di partenza: una sola fila, subito dietro la linea, dentro la pista. Tutte le auto partono affiancate.
 function startSlots(t) {
   const f = t.finish, out = [];
   const minX = Math.floor(Math.min(f.a.x, f.b.x)) - 2, maxX = Math.ceil(Math.max(f.a.x, f.b.x)) + 2;
@@ -258,10 +264,23 @@ function startSlots(t) {
     for (let y = minY; y <= maxY; y++) {
       const p = { x, y }, s = side(t, p);
       const along = (x - f.a.x) * ux + (y - f.a.y) * uy;
-      if (s < -1.5 || s >= 0 || along < 0 || along > L) continue;
-      if (goodCell(t, p) && !crossesBorder(t, p, { x: p.x + t.normal.x * 1.6, y: p.y + t.normal.y * 1.6 })) out.push(p);
+      if (s < -1 || s >= 0 || along < 0 || along > L) continue;
+      if (goodCell(t, p) && !crossesBorder(t, p, { x: p.x + t.normal.x * 1.6, y: p.y + t.normal.y * 1.6 })) out.push({ x, y, along });
     }
-  return out;
+  return out.sort((a, b) => a.along - b.along).map(({ x, y }) => ({ x, y }));
+}
+
+// quante auto ci stanno sulla linea, lasciando una casella libera tra due auto
+export function capacity(slots) {
+  const taken = [];
+  for (const s of slots) if (taken.every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= 1.5)) taken.push(s);
+  return taken.length;
+}
+
+// posti sulla linea appena disegnata, nel verso peggiore (il verso si sceglie dopo)
+export function finishCapacity(outer, inner, finish) {
+  const base = { outer, inner, finish };
+  return Math.min(...finishNormals(finish).map((normal) => capacity(startSlots({ ...base, normal }))));
 }
 
 // Prova che esista un giro: dalle caselle davanti alla linea, a passi di una casella, senza ripassare la linea,
@@ -327,25 +346,51 @@ function allowedGears(g) {
 }
 
 // ---------- gara ----------
-export const COLORS = [
-  { name: 'Giallo', hex: '#facc15', role: 'ospite' },
-  { name: 'Rosso', hex: '#ef4444', role: 'creatore' }
+// 10 auto pronte; dall'11ª i colori li crea il gioco
+const BASE_COLORS = [
+  ['Giallo', '#facc15'], ['Rosso', '#ef4444'], ['Blu', '#2563eb'], ['Verde', '#16a34a'], ['Arancio', '#f97316'],
+  ['Viola', '#9333ea'], ['Azzurro', '#06b6d4'], ['Rosa', '#ec4899'], ['Bianco', '#f1f5f9'], ['Nero', '#27272a']
 ];
 
-export function newRace(track, laps) {
+function hsl(h, s, l) {
+  const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))));
+  return '#' + [f(0), f(8), f(4)].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+// colori delle auto: il primo è l'ospite che mette l'auto per primo, l'ultimo chi ha creato la pista
+export function carColors(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const [name, hex] = BASE_COLORS[i] || [`Auto ${i + 1}`, hsl((i * 137.508 + 20) % 360, 0.72, i % 2 ? 0.42 : 0.6)];
+    out.push({ name, hex, num: i + 1, role: i === n - 1 ? 'creatore' : 'ospite' });
+  }
+  return out;
+}
+export const COLORS = carColors(2);
+
+export function newRace(track, laps, n = 2) {
   const d = dir8(track.normal.x, track.normal.y);
   return {
-    track, laps, turn: 0, moves: 0, winner: null, phase: 'place',
-    cars: COLORS.map((c, i) => ({ id: i, pos: null, gear: 0, dir: d, last: { x: 0, y: 0 }, progress: 0, crash: 0, path: [], moves: 0 }))
+    track, laps, turn: 0, moves: 0, winner: null, phase: 'place', colors: carColors(n),
+    cars: Array.from({ length: n }, (_, i) => ({ id: i, pos: null, gear: 0, dir: d, last: { x: 0, y: 0 }, progress: 0, crash: 0, path: [], moves: 0 }))
   };
+}
+
+// caselle di partenza dove l'auto di turno può andare: libere e tali che le auto ancora da mettere ci stiano tutte
+export function placeable(race) {
+  const placed = race.cars.filter((c) => c.pos).map((c) => c.pos);
+  const left = race.cars.length - placed.length - 1;
+  const freeOf = (list) => race.track.startSlots.filter((s) => list.every((q) => Math.hypot(q.x - s.x, q.y - s.y) >= 1.5));
+  return freeOf(placed).filter((s) => capacity(freeOf([...placed, s])) >= left);
 }
 
 export function placeCar(race, p) {
   const car = race.cars[race.turn];
   const slot = race.track.startSlots.find((s) => s.x === p.x && s.y === p.y);
   if (!slot) return { error: 'Metti l’auto su una casella di partenza.' };
-  const other = race.cars.find((c) => c !== car && c.pos);
-  if (other && Math.hypot(other.pos.x - p.x, other.pos.y - p.y) < 1.5) return { error: 'Troppo vicina all’altra auto.' };
+  if (!placeable(race).some((s) => s.x === p.x && s.y === p.y)) return { error: 'Lì non va bene: lascia posto alle altre auto.' };
+  if (race.cars.some((c) => c !== car && c.pos && Math.hypot(c.pos.x - p.x, c.pos.y - p.y) < 1.5)) return { error: 'Troppo vicina a un’altra auto.' };
   car.pos = { x: p.x, y: p.y };
   car.path.push({ x: p.x, y: p.y, lap: 0 });
   if (race.cars.every((c) => c.pos)) { race.phase = 'race'; race.turn = 0; }
@@ -419,7 +464,7 @@ export function applyMove(race, opt) {
 // al secondo si gira nel verso della pista; poi riparte in prima.
 export function nextTurn(race) {
   const ev = [];
-  for (let guard = 0; guard < 10; guard++) {
+  for (let guard = 0; guard < race.cars.length * (CRASH_TURNS + 1) + 1; guard++) {
     race.turn = (race.turn + 1) % race.cars.length;
     const car = race.cars[race.turn];
     if (!car.crash) break;

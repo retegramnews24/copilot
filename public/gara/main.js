@@ -32,21 +32,41 @@ function toast(msg, ok) {
 
 // ---------- disegno ----------
 const ed = new Editor($('c2'));
-const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3 };
+const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2 };
 let step = 1;
+const widthTxt = () => String(R.minWidth(draft.players)).replace('.', ',');
 
 const HELP = {
-  1: 'Per una pista grande allontana prima la vista (−). Poi disegna col dito il bordo esterno e finisci vicino al punto di partenza.',
-  2: 'Ora disegna il bordo interno, tutto dentro quello esterno. Lascia almeno 3 caselle di asfalto.',
-  3: 'Traccia la linea di partenza: un tratto che va dal bordo interno a quello esterno.',
-  4: 'Tocca la freccia del verso di gara e scegli quanti giri.'
+  1: () => 'Per una pista grande allontana prima la vista (−). Poi disegna col dito il bordo esterno e finisci vicino al punto di partenza.',
+  2: () => `Ora disegna il bordo interno, tutto dentro quello esterno. Lascia almeno ${widthTxt()} caselle di asfalto.`,
+  3: () => `Traccia la linea di partenza da un bordo all'altro: deve avere posto per ${draft.players} auto affiancate. Verde va bene, rossa no.`,
+  4: () => 'Tocca la freccia del verso di gara e scegli quanti giri.'
 };
+
+// ---------- scelta iniziale: quante auto ----------
+function setupInfo() {
+  const n = draft.players, b = R.boardSize(n);
+  $('carN').textContent = n;
+  $('carDots').innerHTML = R.carColors(n).map((c) => `<span style="--c:${c.hex}">${c.num}</span>`).join('');
+  $('setupInfo').textContent = `Spazio per disegnare ${b} × ${b} caselle · pista larga almeno ${widthTxt()} caselle · ${n} posti sulla linea di partenza.`;
+}
+$('carM').onclick = () => { draft.players = Math.max(2, draft.players - 1); setupInfo(); };
+$('carP').onclick = () => { draft.players = Math.min(R.MAX_CARS, draft.players + 1); setupInfo(); };
+$('startDraw').onclick = () => {
+  $('setup').hidden = true;
+  const b = R.boardSize(draft.players);
+  ed.setBoard(b);
+  $('zoom').max = b;
+  ed.setZoom(Math.min(b, 40 + (draft.players - 2) * 12));
+  setStep(1); syncZoom();
+};
+setupInfo();
 
 function setStep(n) {
   step = n;
   ed.mode = ['outer', 'outer', 'inner', 'finish', 'dir'][n];
   $('edStep').textContent = `Passo ${n} di 4`;
-  $('edHelp').textContent = HELP[n];
+  $('edHelp').textContent = HELP[n]();
   $('laps').hidden = n !== 4;
   $('go').hidden = n !== 4;
   ed.outer = draft.outer; ed.inner = draft.inner; ed.finish = draft.finish; ed.normalIdx = draft.normal;
@@ -54,14 +74,20 @@ function setStep(n) {
 }
 
 function syncZoom() {
-  $('zoom').value = Math.min(160, Math.max(14, ed.cellsAcross()));
+  $('zoom').value = Math.min(ed.board, Math.max(14, ed.cellsAcross()));
   $('edCells').textContent = `${ed.cellsAcross()} × ${Math.round(ed.h / ed.s)} caselle`;
 }
 ed.onZoom = syncZoom;
 $('zoom').addEventListener('input', (e) => { ed.setZoom(+e.target.value); syncZoom(); });
 $('zOut').onclick = () => { ed.zoomAt(ed.w / 2, ed.h / 2, 0.8); };
 $('zIn').onclick = () => { ed.zoomAt(ed.w / 2, ed.h / 2, 1.25); };
-$('fit').onclick = () => { if (draft.outer) ed.fit(); else { ed.cx = ed.cy = 80; ed.draw(); } syncZoom(); };
+$('fit').onclick = () => { if (draft.outer) ed.fit(); else { ed.cx = ed.cy = ed.board / 2; ed.draw(); } syncZoom(); };
+
+ed.finishCheck = (pts) => {
+  const r = R.makeFinish(pts, draft.outer, draft.inner);
+  if (r.error) return null;
+  return { finish: r.finish, cap: R.finishCapacity(draft.outer, draft.inner, r.finish), need: draft.players };
+};
 
 ed.onStroke = (pts) => {
   ed.error = null;
@@ -72,12 +98,14 @@ ed.onStroke = (pts) => {
   } else if (step === 2) {
     const r = R.closeBorder(pts);
     if (r.error) return fail(r);
-    const c = R.checkInner(draft.outer, r.poly);
+    const c = R.checkInner(draft.outer, r.poly, R.minWidth(draft.players));
     if (c.error) return fail(c);
     draft.inner = r.poly; toast('Bordo interno ok', true); setStep(3);
   } else if (step === 3) {
     const r = R.makeFinish(pts, draft.outer, draft.inner);
     if (r.error) return fail(r);
+    const cap = R.finishCapacity(draft.outer, draft.inner, r.finish);
+    if (cap < draft.players) return fail({ error: `Sulla linea ci stanno ${cap} auto, ne servono ${draft.players}. Tracciala dove la pista è più larga.`, at: { x: (r.finish.a.x + r.finish.b.x) / 2, y: (r.finish.a.y + r.finish.b.y) / 2 } });
     draft.finish = r.finish; draft.normal = -1; setStep(4);
   }
 };
@@ -99,50 +127,59 @@ $('lapP').onclick = () => { draft.laps = Math.min(9, draft.laps + 1); showLaps()
 $('go').onclick = () => {
   if (draft.normal < 0) return toast('Prima tocca una delle due frecce: è il verso di gara.');
   // controllo finale di tutta la pista prima del 3D
-  const c = R.checkInner(draft.outer, draft.inner);
+  const c = R.checkInner(draft.outer, draft.inner, R.minWidth(draft.players));
   if (c.error) return fail(c);
   const n = R.finishNormals(draft.finish)[draft.normal];
-  const b = R.buildTrack(draft.outer, draft.inner, draft.finish, n);
+  const b = R.buildTrack(draft.outer, draft.inner, draft.finish, n, draft.players);
   if (b.error) return fail(b);
-  startRace(b.track, draft.laps);
+  startRace(b.track, draft.laps, draft.players);
 };
 
 // ---------- gara ----------
-let scene = null, race = null, busy = false, lastTrack = null, lastLaps = 3;
+let scene = null, race = null, busy = false, lastTrack = null, lastLaps = 3, lastN = 2;
+let COL = R.carColors(2);
 
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
 
-function startRace(track, laps) {
-  lastTrack = track; lastLaps = laps;
+function startRace(track, laps, n) {
+  lastTrack = track; lastLaps = laps; lastN = n;
   show('rc');
   if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; }
   scene.resize();
   scene.build(track);
-  race = R.newRace(track, laps);
-  scene.setCars(race, R.COLORS);
+  race = R.newRace(track, laps, n);
+  COL = race.colors;
+  scene.setCars(race, COL);
   busy = false;
   $('over').hidden = true;
   refresh();
 }
 
+// barra in alto: l'auto di turno per esteso, le altre compatte (numero, marcia, fermo)
 function chips() {
   $('chips').innerHTML = race.cars.map((c, i) => {
-    const col = R.COLORS[i], lap = Math.min(race.laps, R.currentLap(c));
+    const col = COL[i], lap = Math.min(race.laps, R.currentLap(c)), turn = i === race.turn && race.phase !== 'over';
     const st = c.crash ? ` · fermo ${c.crash}` : '';
-    return `<div class="chip ${i === race.turn && race.phase !== 'over' ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${col.name} <span class="g">${c.gear ? c.gear : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
+    if (!turn) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${c.gear ? c.gear : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
+    return `<div class="chip turn" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${c.gear ? c.gear : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
   }).join('');
+  const box = $('chips'), t = box.querySelector('.turn');
+  if (t) box.scrollLeft = t.offsetLeft - box.clientWidth / 2 + t.offsetWidth / 2;
   document.documentElement.style.setProperty('--topH', $('rcTop').offsetHeight + 'px');
 }
 
 function refresh() {
   chips();
-  const car = race.cars[race.turn], col = R.COLORS[race.turn];
+  const car = race.cars[race.turn], col = COL[race.turn];
   if (race.phase === 'place') {
-    $('rcHelp').textContent = `${col.name} (${col.role}): tocca una casella bianca sulla linea per mettere l'auto.`;
+    $('rcHelp').textContent = `${col.num} ${col.name} (${col.role}): tocca una casella bianca sulla linea per mettere l'auto.`;
     $('legend').hidden = true;
-    const other = race.cars.find((c) => c.pos);
-    scene.showMarks(race.track.startSlots.filter((s) => !other || Math.hypot(other.pos.x - s.x, other.pos.y - s.y) >= 1.5).map((s) => ({ ...s, kind: 'slot' })));
-    if (!refresh.placed) { scene.focus(race.track.startSlots[0], true); refresh.placed = true; }
+    scene.showMarks(R.placeable(race).map((s) => ({ ...s, kind: 'slot' })));
+    if (!refresh.placed) {
+      const f = race.track.finish;
+      scene.focus({ x: (f.a.x + f.b.x) / 2, y: (f.a.y + f.b.y) / 2 }, true);
+      refresh.placed = true;
+    }
     return;
   }
   if (race.phase === 'over') return;
@@ -185,7 +222,7 @@ async function pick(mark) {
   scene.trailFade(i, R.currentLap(car));
   chips();
   for (const e of ev) {
-    const c = R.COLORS[e.car];
+    const c = COL[e.car];
     if (e.type === 'crash') await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${c.name} fermo per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700);
     else if (e.type === 'line' && race.cars[e.car].progress > 1) await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100);
     else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
@@ -212,8 +249,8 @@ function win(i) {
   chips();
   scene.clearMarks();
   $('legend').hidden = true;
-  const c = R.COLORS[i];
-  $('winT').textContent = `Vince il ${c.name}`;
+  const c = COL[i];
+  $('winT').textContent = `Vince l'auto ${c.num} · ${c.name}`;
   $('winT').style.color = c.hex;
   $('winS').textContent = `${race.laps} ${race.laps === 1 ? 'giro' : 'giri'} · ${race.cars[i].moves} mosse`;
   scene.focus(race.cars[i].pos, true);
@@ -225,12 +262,12 @@ $('view').onclick = (e) => { const top = scene.view !== 'top'; scene.setView(top
 $('center').onclick = () => { const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true); else if (race) scene.focus(race.track.startSlots[0], true); };
 $('menuB').onclick = () => { $('menu').hidden = false; };
 $('close').onclick = () => { $('menu').hidden = true; };
-const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps); };
+const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps, lastN); };
 $('again').onclick = again; $('again2').onclick = again;
 const newTrack = () => {
   $('menu').hidden = true; $('over').hidden = true;
   draft.outer = draft.inner = draft.finish = null; draft.normal = -1; ed.error = null;
-  show('ed'); setStep(1); requestAnimationFrame(() => { ed.resize(); syncZoom(); });
+  show('ed'); ed.resize(); setStep(1); setupInfo(); $('setup').hidden = false;
 };
 $('newT').onclick = newTrack; $('newT2').onclick = newTrack;
 
