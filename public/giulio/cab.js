@@ -104,6 +104,7 @@ if(embedded){
       const value=event.data.insets?.[side];
       const px=x=>Number.isFinite(x)?clamp(x,0,180):0;
       document.documentElement.style.setProperty('--cab-safe-'+side,px(value?.system)+px(value?.content)+'px');
+      document.documentElement.style.setProperty('--cab-sys-'+side,px(value?.system)+'px');
     }
   });
   parent.postMessage({type:'arcade:ready'},location.origin);

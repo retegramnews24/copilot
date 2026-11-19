@@ -92,7 +92,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.57', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.58', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);

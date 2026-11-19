@@ -137,3 +137,27 @@ body>header .actions button,.hud-bottom button{background:none!important;box-sha
   .lever-brake .lever-handle{top:calc(var(--lever,0) * (100% - 18px))!important}
   .lever-name{font-size:9.5px}
 }
+
+/* ===== Placement (portrait and landscape):
+   top row under Telegram's buttons: Esci + Pausa on the left, Cabina + Audio on the right;
+   speed dial top-right under that row; levers on the sides; at the bottom the buttons in the corners and the
+   next-stop info between them (landscape) or just above them (portrait).
+   Messages: landscape in the free middle of Telegram's own top band; portrait just under our top row. ===== */
+body>header{justify-content:stretch!important}
+body>header .actions{width:100%;display:flex;align-items:center}
+#exit{order:1}#pause{order:2;margin-right:auto!important}#view-mode{order:3}#sound{order:4}#full{order:5}
+.cab-hud{justify-content:flex-end!important}
+.cab-hud .route-label{position:fixed!important;z-index:4;left:50%!important;transform:translateX(-50%);bottom:calc(var(--cab-safe-bottom,0px) + 72px);top:auto!important;max-width:calc(100% - 24px)!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap;justify-content:center;align-items:baseline;gap:2px 10px;text-align:center;pointer-events:none}
+.cab-hud .route-label strong{font-size:15px!important}
+.cab-hud .route-label .eyebrow{font-size:9.5px}
+/* Portrait: under the speed dial, between the two levers. */
+.route-message{top:calc(var(--cab-safe-top,0px) + 142px)!important;max-width:calc(100% - 140px)!important}
+.lever{top:calc(var(--cab-safe-top,0px) + 150px)!important;bottom:calc(var(--cab-safe-bottom,0px) + 124px)!important}
+@media (orientation:landscape) and (max-height:560px){
+  /* Exactly the space between the two button groups, up to two lines. */
+  .cab-hud .route-label{bottom:calc(var(--cab-safe-bottom,0px) + 30px);left:calc(var(--cab-safe-left,0px) + 232px)!important;right:calc(var(--cab-safe-right,0px) + 150px)!important;transform:none!important;max-width:none!important;flex-wrap:wrap;gap:0 10px;line-height:1.15}
+  .cab-hud .route-label .eyebrow{display:none}
+  .cab-hud .route-label strong{font-size:13.5px!important}
+  .route-message{top:calc(var(--cab-sys-top,0px) + 6px)!important;max-width:min(42%,420px)!important;font-size:12px!important}
+  .lever{top:calc(var(--cab-safe-top,0px) + 46px)!important;bottom:calc(var(--cab-safe-bottom,0px) + 76px)!important}
+}

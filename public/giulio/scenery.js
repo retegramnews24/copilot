@@ -731,33 +731,61 @@ for(const stop of stops){
 // Villages: houses around every station and a few farms along the line (walls, two-slope roof, windows lit at night).
 const HOUSE_COLORS=[['#d8c7a4','#b7a581','#9c4a3a'],['#e2d6c0','#c0b39b','#6e4b3c'],['#c9b48e','#a8946f','#7f3f33'],['#e6dccb','#c4b9a6','#4f5b5e']];
 function house(s,x,h){
-  const ground=terrainLevel(s,x),hw=h.w/2,hd=h.d/2,rh=h.w*.42;
+  // Ridge along the track direction; gables at the two ends; long walls facing the track and the fields.
+  const ground=terrainLevel(s,x),hw=h.w/2,hd=h.d/2,rh=h.w*.42,ht=h.ht;
   const P=(ds,dx,y)=>point(s+ds,x+dx,ground+y);
-  const parts=[];
-  const corners=[[-hd,-hw],[-hd,hw],[hd,hw],[hd,-hw]];
-  for(let i=0;i<4;i++){
-    const [s1,x1]=corners[i],[s2,x2]=corners[(i+1)%4],gable=i%2===1;
-    const pts=[P(s1,x1,0),P(s2,x2,0),P(s2,x2,h.ht),P(s1,x1,h.ht)];
-    if(gable)pts.splice(3,0,P(s2,0,h.ht+rh));
-    parts.push({pts,color:i%2?h.wall:h.shade,z:local(P((s1+s2)/2,(x1+x2)/2,1)).z,face:i});
-  }
-  const roofL=[P(-hd-.3,-hw-.35,h.ht-.1),P(hd+.3,-hw-.35,h.ht-.1),P(hd+.3,0,h.ht+rh),P(-hd-.3,0,h.ht+rh)];
-  const roofR=[P(-hd-.3,hw+.35,h.ht-.1),P(hd+.3,hw+.35,h.ht-.1),P(hd+.3,0,h.ht+rh),P(-hd-.3,0,h.ht+rh)];
-  parts.push({pts:roofL,color:h.roof,z:local(P(0,-hw*.5,h.ht+rh*.5)).z-.01},{pts:roofR,color:mix(h.roof,'#000',.18),z:local(P(0,hw*.5,h.ht+rh*.5)).z-.01});
-  parts.sort((a,b)=>b.z-a.z);
   const night=phase.night||phaseName==='tramonto';
-  for(const part of parts){
-    polygon(part.pts,part.color);
-    // Two windows and a door on the long walls.
-    if(part.face===0||part.face===2){
-      const side=part.face===0?-hd-.01:hd+.01;
-      for(const [u,y0,y1,c] of [[-hw*.55,1.1,1.9,night?'#ffd98a':'#3d4f57'],[hw*.55,1.1,1.9,night?'#ffd98a':'#3d4f57'],[0,0,1.7,'#5a3d2c']]){
-        polygon([P(side,u-.35,y0),P(side,u+.35,y0),P(side,u+.35,y1),P(side,u-.35,y1)],c);
+  // Light: walls facing the sun are brighter, the others cooler.
+  const yaw=trackAt(s).yaw,sun=[Math.sin(.57),Math.cos(.57)];
+  const lit=(nx,nz)=>nx*sun[0]+nz*sun[1];
+  const right=[Math.cos(yaw),-Math.sin(yaw)],ahead=[Math.sin(yaw),Math.cos(yaw)];
+  const tone=(color,d)=>d>0?mix(color,'#fff4dc',.18*d):mix(color,'#24323c',.28*-d);
+  const toward=-Math.sign(x)||1; // the long wall that faces the track
+  const parts=[];
+  const quadAt=(pts,color,z,draw)=>parts.push({pts,color,z,draw});
+  const depth=(ds,dx,y)=>local(P(ds,dx,y)).z;
+  for(const side of [-1,1]){
+    // Long wall at x = side*hw.
+    const n=lit(right[0]*side,right[1]*side),wall=tone(h.wall,n);
+    quadAt([P(-hd,side*hw,0),P(hd,side*hw,0),P(hd,side*hw,ht),P(-hd,side*hw,ht)],wall,depth(0,side*hw,ht/2),()=>{
+      const X=side*(hw+.02);
+      polygon([P(-hd,X,0),P(hd,X,0),P(hd,X,.55),P(-hd,X,.55)],mix(wall,'#3a3530',.35));
+      const floors=ht>4.5?2:1,count=Math.max(2,Math.round(h.d/3.2));
+      for(let f=0;f<floors;f++)for(let k=0;k<count;k++){
+        const u=-hd+(k+.5)*h.d/count,y0=1.05+f*2.5,y1=y0+1.05;
+        if(f===0&&side===toward&&k===Math.floor(count/2)){
+          polygon([P(u-.55,X,0),P(u+.55,X,0),P(u+.55,X,2.15),P(u-.55,X,2.15)],'#e8e0cc');
+          polygon([P(u-.45,X+side*.01,0),P(u+.45,X+side*.01,0),P(u+.45,X+side*.01,2.05),P(u-.45,X+side*.01,2.05)],'#5a3b28');
+          continue;
+        }
+        polygon([P(u-.5,X,y0-.08),P(u+.5,X,y0-.08),P(u+.5,X,y1+.08),P(u-.5,X,y1+.08)],'#ece4d0');
+        polygon([P(u-.4,X+side*.01,y0),P(u+.4,X+side*.01,y0),P(u+.4,X+side*.01,y1),P(u-.4,X+side*.01,y1)],night?'#ffd98a':'#33464f');
+        for(const sh of [-1,1])polygon([P(u+sh*.5,X+side*.015,y0),P(u+sh*.86,X+side*.015,y0),P(u+sh*.86,X+side*.015,y1),P(u+sh*.5,X+side*.015,y1)],'#3f6b4a');
       }
-    }
+    });
+    // Gable at s = side*hd.
+    const g=lit(ahead[0]*side,ahead[1]*side),gwall=tone(h.shade,g);
+    quadAt([P(side*hd,-hw,0),P(side*hd,hw,0),P(side*hd,hw,ht),P(side*hd,0,ht+rh),P(side*hd,-hw,ht)],gwall,depth(side*hd,0,ht/2),()=>{
+      const S=side*(hd+.02);
+      polygon([P(S,-hw,0),P(S,hw,0),P(S,hw,.55),P(S,-hw,.55)],mix(gwall,'#3a3530',.35));
+      polygon([P(S,-.35,ht+.35),P(S,.35,ht+.35),P(S,.35,ht+1.05),P(S,-.35,ht+1.05)],night?'#ffd98a':'#33464f');
+    });
   }
-}
-const villageScenery=[];
+  // Roof: two slopes with tile rows, overhanging eaves.
+  for(const side of [-1,1]){
+    const n=lit(right[0]*side,right[1]*side),roof=tone(h.roof,n*.8);
+    quadAt([P(-hd-.35,side*(hw+.4),ht-.12),P(hd+.35,side*(hw+.4),ht-.12),P(hd+.35,0,ht+rh),P(-hd-.35,0,ht+rh)],roof,depth(0,side*hw*.5,ht+rh*.5)-.02,()=>{
+      for(let r=1;r<4;r++){const f=r/4,xr=side*(hw+.4)*(1-f),yr=ht-.12+(rh+.12)*f;
+        polygon([P(-hd-.35,xr,yr),P(hd+.35,xr,yr),P(hd+.35,xr-side*.06,yr+.03),P(-hd-.35,xr-side*.06,yr+.03)],mix(roof,'#000',.22));}
+    });
+  }
+  parts.sort((a,b)=>b.z-a.z);
+  for(const part of parts){polygon(part.pts,part.color);part.draw?.();}
+  // Chimney near one end of the ridge.
+  const cs=hd*.55,cx=hw*.25;
+  polygon([P(cs-.3,cx-.3,ht+rh*.5),P(cs+.3,cx-.3,ht+rh*.5),P(cs+.3,cx-.3,ht+rh+.7),P(cs-.3,cx-.3,ht+rh+.7)],tone(h.shade,.2));
+  polygon([P(cs-.3,cx-.3,ht+rh+.7),P(cs+.3,cx-.3,ht+rh+.7),P(cs+.3,cx+.3,ht+rh+.7),P(cs-.3,cx+.3,ht+rh+.7)],'#3a2f2a');
+}const villageScenery=[];
 for(const [index,stop] of stops.entries()){
   const away=stop.side==='left'?1:-1;
   for(let k=0;k<7;k++){
