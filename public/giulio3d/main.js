@@ -1,6 +1,7 @@
 // Giuliosim 3D (test page): the Linea dei Due Laghi in real 3D with three.js. The train physics, stops and track
 // come unchanged from ../giulio/line.js (classic script loaded first: train, tick, command, trackAt, stops…).
 import * as THREE from '../vendor/three/three.module.min.js';
+import { buildCab } from './cab3d.js?v=e2666062a3';
 
 const $ = id => document.getElementById(id);
 const noise = n => {
@@ -351,79 +352,38 @@ for (let s = 600; s < TERMINUS; s += 640 + noise(s) * 300) {
   house(s, (noise(s * 3) > 0.5 ? 1 : -1) * (26 + noise(s * 7) * 40), s);
 }
 
-// ---- Cab: a closed cab you can look around in, driver's desk with dials, levers and screen.
-const rig = new THREE.Group();
+// ---- Cab (see cab3d.js): instruments, handles, timetable, displays; the camera sits at the driver's eye.
+const cab = buildCab({ stops });
+const rig = cab.rig,
+  eye = cab.eye;
 scene.add(rig);
-const cabMat = new THREE.MeshStandardMaterial({ color: '#4a5d55', roughness: 0.8 });
-const darkMat = new THREE.MeshStandardMaterial({ color: '#232b28', roughness: 0.7 });
-const roofMat = new THREE.MeshStandardMaterial({ color: '#9aa29a', roughness: 0.9 });
-const cabBox = (w, h, d, x, y, z, mat) => {
-  const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  b.position.set(x, y, z);
-  b.receiveShadow = true;
-  rig.add(b);
-  return b;
-};
-// Shell: floor, roof, back wall; walls below and above the windows, pillars.
-cabBox(2.7, 0.06, 3.5, 0, 0.93, 0.15, darkMat);
-cabBox(2.7, 0.06, 3.5, 0, 3.44, 0.15, roofMat);
-cabBox(2.7, 2.5, 0.06, 0, 2.2, 1.9, cabMat);
-cabBox(2.7, 0.98, 0.06, 0, 1.45, -1.86, cabMat);
-cabBox(2.7, 0.44, 0.06, 0, 3.2, -1.86, cabMat);
-for (const x of [-1.31, 1.31]) {
-  cabBox(0.06, 0.98, 3.5, x, 1.45, 0.15, cabMat);
-  cabBox(0.06, 0.44, 3.5, x, 3.2, 0.15, cabMat);
-  cabBox(0.12, 1.04, 0.14, x, 2.46, -1.82, darkMat);
-  cabBox(0.06, 1.04, 0.2, x, 2.46, 0.2, darkMat);
-}
-cabBox(0.1, 1.04, 0.1, 0, 2.46, -1.85, darkMat);
-// Desk and slanted instrument panel on the driver's side (left).
-cabBox(2.6, 0.06, 0.72, 0, 1.8, -1.48, new THREE.MeshStandardMaterial({ color: '#2d3532', roughness: 0.6 }));
-cabBox(2.6, 0.84, 0.06, 0, 1.38, -1.12, cabMat);
-const panel = cabBox(1.2, 0.05, 0.48, -0.62, 2.0, -1.62, darkMat);
-panel.rotation.x = 0.7;
-const dialFace = new THREE.MeshStandardMaterial({ color: '#ece8da', roughness: 0.5 });
-const needleMat = new THREE.MeshBasicMaterial({ color: '#d8452f' });
-function dial(x, r) {
-  const g = new THREE.Group();
-  g.position.set(x, 2.02, -1.6);
-  g.rotation.x = -Math.PI / 2 + 0.7;
-  const face = new THREE.Mesh(new THREE.CircleGeometry(r, 28), dialFace);
-  face.position.z = 0.032;
-  const needle = new THREE.Mesh(new THREE.BoxGeometry(0.008, r * 0.85, 0.004), needleMat);
-  needle.geometry.translate(0, r * 0.42, 0);
-  needle.position.z = 0.036;
-  g.add(face, needle);
-  rig.add(g);
-  return needle;
-}
-const speedNeedle = dial(-0.88, 0.12),
-  pipeNeedle = dial(-0.55, 0.09);
-const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.28, 0.17), new THREE.MeshBasicMaterial({ color: '#1f8f6c' }));
-screen.position.set(-0.22, 2.03, -1.6);
-screen.rotation.x = -Math.PI / 2 + 0.7;
-rig.add(screen);
-function handle(x, color) {
-  const pivot = new THREE.Group();
-  pivot.position.set(x, 1.83, -1.32);
-  const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 8), darkMat);
-  stick.position.y = 0.15;
-  const knob = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 10), new THREE.MeshStandardMaterial({ color, roughness: 0.4 }));
-  knob.position.y = 0.31;
-  pivot.add(stick, knob);
-  rig.add(pivot);
-  return pivot;
-}
-const brakeHandle = handle(-1.12, '#e0902f'),
-  tractionHandle = handle(-0.06, '#6fbf5a');
-const cabLight = new THREE.PointLight('#fff2d8', 0.6, 4);
-cabLight.position.set(0, 3.3, 0);
-rig.add(cabLight);
-const eye = new THREE.Object3D();
-eye.position.set(-0.6, 2.3, -0.55);
-rig.add(eye);
 eye.add(camera);
 
+// ---- Settings (pause menu), kept on this device: interface full / essential / hidden, invert look, cab lights.
+const settings = { hud: 'full', invertX: false, invertY: false, lights: true };
+try {
+  Object.assign(settings, JSON.parse(localStorage.getItem('giuliosim3d-settings') || '{}'));
+} catch {}
+function applySettings() {
+  document.body.dataset.hud = settings.hud;
+  cab.setLights(settings.lights);
+  for (const b of document.querySelectorAll('[data-hud]')) b.setAttribute('aria-pressed', String(b.dataset.hud === settings.hud));
+  $('invert-x').checked = settings.invertX;
+  $('invert-y').checked = settings.invertY;
+  $('cab-lights').checked = settings.lights;
+  try {
+    localStorage.setItem('giuliosim3d-settings', JSON.stringify(settings));
+  } catch {}
+}
+for (const b of document.querySelectorAll('[data-hud]'))
+  b.onclick = () => {
+    settings.hud = b.dataset.hud;
+    applySettings();
+  };
+$('invert-x').onchange = e => ((settings.invertX = e.target.checked), applySettings());
+$('invert-y').onchange = e => ((settings.invertY = e.target.checked), applySettings());
+$('cab-lights').onchange = e => ((settings.lights = e.target.checked), applySettings());
+applySettings();
 // ---- Look around (drag), zoom (pinch / wheel).
 let lookYaw = 0,
   lookPitch = -0.04,
@@ -448,8 +408,8 @@ canvas.addEventListener('pointermove', e => {
     return;
   }
   if (drag?.id !== e.pointerId) return;
-  lookYaw = drag.yaw + ((e.clientX - drag.x) / innerWidth) * Math.PI * 1.4;
-  lookPitch = Math.max(-1.3, Math.min(1.3, drag.pitch + ((e.clientY - drag.y) / innerHeight) * 1.8));
+  lookYaw = drag.yaw + (settings.invertX ? -1 : 1) * ((e.clientX - drag.x) / innerWidth) * Math.PI * 1.4;
+  lookPitch = Math.max(-1.3, Math.min(1.3, drag.pitch + (settings.invertY ? -1 : 1) * ((e.clientY - drag.y) / innerHeight) * 1.8));
 });
 for (const type of ['pointerup', 'pointercancel', 'lostpointercapture'])
   canvas.addEventListener(type, e => {
@@ -571,6 +531,7 @@ if (window.parent !== window) {
 }
 
 // ---- HUD and main loop.
+const cabInfo = { name: '', detail: '' };
 const fmt = (v, d = 0) => v.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 function hud() {
   const t = train,
@@ -610,6 +571,8 @@ function hud() {
     fmt(t.pipe, 2) +
     ' bar';
   $('info').append(name, detail);
+  cabInfo.name = name.textContent;
+  cabInfo.detail = docking ? (t.dwell < DWELL ? 'sosta ' + Math.ceil(DWELL - t.dwell) + ' s' : 'chiudi porte') : diff < -STOP_TOL ? 'oltre STOP' : fmt(Math.max(0, diff)) + ' m';
   let hint = t.elapsed < noteUntil ? note : '';
   if (!hint && v > limit + 2) hint = 'Limite superato · riduci la velocità.';
   if (!hint && !docking && diff <= STOP_TOL && diff >= -STOP_TOL && v < 0.22 && next) hint = 'Fermata valida · apri le porte a ' + sideName(next.side) + '.';
@@ -650,11 +613,8 @@ function loop(now) {
     camera.fov = wanted;
     camera.updateProjectionMatrix();
   }
-  // Instruments and handles.
-  speedNeedle.rotation.z = Math.PI * 0.75 - Math.min(1, (Math.abs(train.v) * 3.6) / 120) * Math.PI * 1.5;
-  pipeNeedle.rotation.z = Math.PI * 0.75 - Math.min(1, train.pipe / 6) * Math.PI * 1.5;
-  brakeHandle.rotation.x = -(((train.emergency ? 5 : train.brake) / 5) * 2 - 1) * 0.5;
-  tractionHandle.rotation.x = -((train.traction / 4) * 2 - 1) * 0.5;
+  // Instruments, handles, lamps, clock and next-stop display.
+  cab.update(train, cabInfo);
   // Sun and its shadow box follow the train.
   const c = at(train.s);
   sun.target.position.copy(c);

@@ -46,3 +46,17 @@ button:active{transform:scale(.97)}
   .g3-message{top:calc(var(--g3-safe-top,0px) + 50px);max-width:44%}
   .g3-info{margin-bottom:6px}
 }
+
+/* Settings in the pause panel. Interface modes: essential hides the text info (the cab instruments show it);
+   hidden keeps only levers and buttons, faded. */
+.g3-settings{display:grid;gap:6px;margin:0 0 12px;font-size:13px}
+.g3-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.g3-row span{min-width:6.5em}
+.g3-row button{min-height:32px;padding:0 10px;font-size:12px}
+.g3-row button[aria-pressed=true]{border-color:var(--green);color:var(--green)}
+.g3-settings label{display:flex;align-items:center;gap:8px}
+.g3-settings input{accent-color:var(--green);width:18px;height:18px}
+body[data-hud=essential] .g3-info,body[data-hud=essential] .g3-speed{display:none}
+body[data-hud=none] .g3-info,body[data-hud=none] .g3-speed,body[data-hud=none] .g3-message,body[data-hud=none] .g3-lever>span{display:none}
+body[data-hud=none] .g3-group button,body[data-hud=none] .g3-slot{opacity:.5}
+@media (orientation:landscape) and (max-height:560px){.g3-card{width:min(100%,640px)}.g3-card p{font-size:12.5px;margin-bottom:8px}.g3-settings{grid-template-columns:1fr 1fr;gap:4px 12px}.g3-row{grid-column:1/-1}}
