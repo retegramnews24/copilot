@@ -18,9 +18,12 @@
   "env": {
     "staging": {
       "name": "binottoland-motore-staging",
+      // Staging is a blank page to try one project at a time: minimal Worker, no tests before publishing.
+      "main": "staging-worker.js",
+      "build": { "command": "node -e \"console.log('prova: niente test')\"" },
       "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
       "triggers": { "crons": [] },
-      "vars": { "TURN_NOTIFY": "false", "APP_ENV": "staging", "LAB_TRAVEL": "true" }
+      "vars": { "TURN_NOTIFY": "false", "APP_ENV": "staging" }
     }
   }
 }

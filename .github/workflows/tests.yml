@@ -3,8 +3,11 @@
 name: Test
 
 on:
+  # Only the real app: staging is a blank test page without tests.
   push:
+    branches: [main]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
