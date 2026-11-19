@@ -1,6 +1,7 @@
 // La pista in 3D, costruita dagli stessi punti usati dalle regole.
 // Mondo: x = colonna della casella, z = riga della casella, y = altezza. 1 unità = 1 casella.
-import * as THREE from '../vendor/three/three.module.min.js';
+import * as THREE from 'three';
+import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { inTrack, clearance, pointInPoly } from './rules.js';
 
 const GEAR_COL = { down: '#ef4444', same: '#22c55e', up: '#3b82f6' };
@@ -58,6 +59,11 @@ export class Race3D {
     new ResizeObserver(() => this.resize()).observe(host);
     this.resize();
     this.clock = new THREE.Clock();
+    this.fx = [];
+    // auto fatta in Blender (public/gara/models/auto.glb, sorgente in blender/auto.blend)
+    this.ready = new GLTFLoader().loadAsync('gara/models/auto.glb')
+      .then((g) => { this.carProto = g.scene; })
+      .catch((e) => { console.warn('auto.glb non caricata, uso l’auto semplice', e); });
     r.setAnimationLoop(() => this.frame());
   }
 
@@ -315,6 +321,7 @@ export class Race3D {
 
   // ---------- auto ----------
   makeCar(hex, num) {
+    if (this.carProto) return this.makeModelCar(hex, num);
     const g = new THREE.Group(), body = new THREE.Group();
     const paint = new THREE.MeshStandardMaterial({ color: hex, metalness: 0.45, roughness: 0.32 });
     const dark = new THREE.MeshStandardMaterial({ color: 0x0f172a, metalness: 0.4, roughness: 0.15 });
@@ -336,6 +343,45 @@ export class Race3D {
     label.scale.set(0.55, 0.55, 1); label.position.y = 0.95; label.renderOrder = 10;
     g.add(label); g.userData.label = label;
     return g;
+  }
+
+  // auto dal modello di Blender: la vernice ("Paint") prende il colore dell'auto, le ruote girano e sterzano
+  makeModelCar(hex, num) {
+    const g = new THREE.Group(), body = new THREE.Group(), model = this.carProto.clone(true);
+    const paint = new THREE.Color(hex);
+    const light = paint.getHSL({}).l > 0.75; // auto chiara: alettoni e paratie scure
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = true; o.receiveShadow = true;
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      const fix = mats.map((m) => {
+        if (m.name === 'Paint') { const c = m.clone(); c.color.copy(paint); return c; }
+        if (m.name === 'Accent' && light) { const c = m.clone(); c.color.set(0x1f2937); return c; }
+        return m;
+      });
+      o.material = Array.isArray(o.material) ? fix : fix[0];
+    });
+    const wheels = { front: [], rear: [] };
+    model.traverse((o) => { if (/^Ruota_A/.test(o.name)) wheels.front.push(o); else if (/^Ruota_P/.test(o.name)) wheels.rear.push(o); });
+    body.add(model);
+    // numero di gara sul muso
+    const nm = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.11), new THREE.MeshBasicMaterial({ map: this.numTex(num), transparent: true, depthWrite: false }));
+    nm.rotation.x = -Math.PI / 2; nm.rotation.z = -Math.PI / 2; nm.position.set(0.3, 0.142, 0); nm.renderOrder = 2;
+    body.add(nm);
+    g.add(body);
+    g.userData.body = body; g.userData.wheels = wheels;
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.gearTex('N', hex), depthTest: false, transparent: true }));
+    label.scale.set(0.5, 0.5, 1); label.position.y = 0.85; label.renderOrder = 10;
+    g.add(label); g.userData.label = label;
+    return g;
+  }
+
+  // ruote: girano in base alla strada fatta, le anteriori sterzano
+  rollWheels(car, dist, steer) {
+    const w = car.userData.wheels;
+    if (!w) return;
+    for (const o of w.front) { o.rotation.z -= dist / 0.085; o.rotation.y = steer; }
+    for (const o of w.rear) o.rotation.z -= dist / 0.095;
   }
 
   numTex(n) {
@@ -384,13 +430,18 @@ export class Race3D {
     let yaw1 = Math.atan2(-aim.y, aim.x);
     while (yaw1 - yaw0 > Math.PI) yaw1 -= Math.PI * 2;
     while (yaw1 - yaw0 < -Math.PI) yaw1 += Math.PI * 2;
-    const steps = Math.max(1, Math.hypot(to.x - from.x, to.y - from.y));
-    const dur = 260 + steps * 70;
+    const len = Math.hypot(to.x - from.x, to.y - from.y), steps = Math.max(1, len);
+    const dur = 260 + steps * 70, turn = yaw1 - yaw0;
+    let lastE = 0;
     return this.tween(dur, (k) => {
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       m.position.set(from.x + (to.x - from.x) * e, 0, from.y + (to.y - from.y) * e);
-      m.rotation.y = yaw0 + (yaw1 - yaw0) * Math.min(1, k * 2.5);
-    }).then(() => crash ? this.shake(i) : null);
+      m.rotation.y = yaw0 + turn * Math.min(1, k * 2.5);
+      // sterzo: forte all'inizio della curva, torna dritto mentre l'auto si allinea
+      const steer = Math.max(-0.5, Math.min(0.5, turn * 0.9)) * (k < 0.4 ? 1 : Math.max(0, 1 - (k - 0.4) / 0.4));
+      this.rollWheels(m, (e - lastE) * len, steer);
+      lastE = e;
+    }).then(() => { this.rollWheels(m, 0, 0); return crash ? this.shake(i) : null; });
   }
 
   turnCar(i, dir) {
@@ -398,12 +449,55 @@ export class Race3D {
     let yaw1 = Math.atan2(-dir.y, dir.x);
     while (yaw1 - yaw0 > Math.PI) yaw1 -= Math.PI * 2;
     while (yaw1 - yaw0 < -Math.PI) yaw1 += Math.PI * 2;
-    return this.tween(600, (k) => { m.rotation.y = yaw0 + (yaw1 - yaw0) * k; });
+    const turn = yaw1 - yaw0;
+    return this.tween(600, (k) => { m.rotation.y = yaw0 + turn * k; this.rollWheels(m, 0, Math.max(-0.5, Math.min(0.5, turn)) * Math.sin(k * Math.PI)); });
   }
 
   shake(i) {
-    const b = this.cars[i].userData.body;
+    const car = this.cars[i], b = car.userData.body;
+    this.crashFx(car.position, car.rotation.y);
     return this.tween(650, (k) => { const a = Math.sin(k * 40) * (1 - k); b.rotation.y = a * 0.35; b.rotation.z = a * 0.12; }).then(() => { b.rotation.set(0, 0, 0); });
+  }
+
+  // urto: scintille arancioni e sbuffi di fumo davanti all'auto
+  crashFx(p, yaw) {
+    const fx = new THREE.Group(); this.scene.add(fx);
+    const fwd = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), at = p.clone().addScaledVector(fwd, 0.4);
+    if (!this.puffTex) this.puffTex = texCanvas(64, 64, (c) => { const g = c.createRadialGradient(32, 32, 2, 32, 32, 30); g.addColorStop(0, 'rgba(235,235,235,.9)'); g.addColorStop(1, 'rgba(200,200,200,0)'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); });
+    const parts = [];
+    for (let k = 0; k < 9; k++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.puffTex, transparent: true, depthWrite: false, opacity: 0.8 }));
+      s.position.copy(at).add(new THREE.Vector3((Math.random() - 0.5) * 0.3, 0.15 + Math.random() * 0.1, (Math.random() - 0.5) * 0.3));
+      s.scale.setScalar(0.25);
+      parts.push({ o: s, v: new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.5 + Math.random() * 0.4, (Math.random() - 0.5) * 0.4), grow: 1.6 + Math.random(), life: 1.4 + Math.random() * 0.6, smoke: true });
+      fx.add(s);
+    }
+    const sg = new THREE.BoxGeometry(0.03, 0.03, 0.03);
+    for (let k = 0; k < 26; k++) {
+      const s = new THREE.Mesh(sg, new THREE.MeshBasicMaterial({ color: k % 3 ? 0xffb020 : 0xfff3b0, transparent: true }));
+      s.position.copy(at).setY(0.12);
+      const a = Math.random() * Math.PI * 2;
+      parts.push({ o: s, v: new THREE.Vector3(Math.cos(a) * 1.6, 1 + Math.random() * 1.6, Math.sin(a) * 1.6).addScaledVector(fwd, -1), life: 0.5 + Math.random() * 0.4, spark: true });
+      fx.add(s);
+    }
+    this.fx.push({ group: fx, parts, t: 0 });
+  }
+
+  stepFx(dt) {
+    this.fx = this.fx.filter((f) => {
+      f.t += dt;
+      let alive = false;
+      for (const p of f.parts) {
+        const k = f.t / p.life;
+        if (k >= 1) { p.o.visible = false; continue; }
+        alive = true;
+        p.o.position.addScaledVector(p.v, dt);
+        if (p.spark) { p.v.y -= 6 * dt; if (p.o.position.y < 0.02) { p.o.position.y = 0.02; p.v.y *= -0.3; p.v.x *= 0.6; p.v.z *= 0.6; } p.o.material.opacity = 1 - k; }
+        else { p.o.scale.setScalar(0.25 + k * p.grow); p.o.material.opacity = 0.75 * (1 - k); p.v.multiplyScalar(0.97); }
+      }
+      if (!alive) { f.group.traverse((o) => { if (o.material) o.material.dispose(); }); this.scene.remove(f.group); }
+      return alive;
+    });
   }
 
   tween(ms, fn) {
@@ -583,6 +677,7 @@ export class Race3D {
   frame() {
     const dt = Math.min(0.05, this.clock.getDelta()), now = performance.now();
     this.anims = this.anims.filter((a) => { const k = Math.min(1, (now - a.t0) / a.ms); a.fn(k); if (k >= 1) { a.res(); return false; } return true; });
+    if (this.fx.length) this.stepFx(dt);
     if (this.wheel) { this.wheel.rotation.z += dt * 0.25; for (const c of this.cabins || []) c.rotation.z = -this.wheel.rotation.z; }
     const pulse = 1 + Math.sin(now * 0.006) * 0.08;
     if (this.markers) for (const m of this.markers.children) m.scale.set(pulse, pulse, 1);

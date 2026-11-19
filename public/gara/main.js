@@ -141,12 +141,13 @@ let COL = R.carColors(2);
 
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
 
-function startRace(track, laps, n) {
+async function startRace(track, laps, n) {
   lastTrack = track; lastLaps = laps; lastN = n;
   show('rc');
   if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; }
   scene.resize();
   scene.build(track);
+  await scene.ready;
   race = R.newRace(track, laps, n);
   COL = race.colors;
   scene.setCars(race, COL);
