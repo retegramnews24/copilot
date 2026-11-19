@@ -137,6 +137,7 @@ export function createArcadeLink({
     ['number-connect', 'Number Connect'],
     ['pong', 'Pong'],
     ['giulio-simulator', 'Giulio Simulator'],
+    ['giuliosim-3d', 'Giuliosim 3D'],
     ['binotto-simulator', 'Binotto Simulator']
   ]) {
     const button = $('play-' + game);

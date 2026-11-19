@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<title>Giuliosim 3D · prova</title>
+<link rel="stylesheet" href="../giulio3d/style.css?v=006f88fca2">
+</head>
+<body>
+<canvas id="view" aria-label="Vista 3D dalla cabina. Trascina per guardarti intorno, due dita per lo zoom."></canvas>
+<header class="g3-top">
+  <div class="g3-group"><button id="exit" type="button" hidden>← Esci</button><button id="pause" type="button">Pausa</button></div>
+  <div class="g3-group"><button id="quality" type="button" title="Qualità grafica">HD</button></div>
+</header>
+<div class="g3-speed" aria-live="off"><output id="speed">0</output><span>km/h</span><small>limite <b id="limit">45</b></small></div>
+<p class="g3-message" id="message" role="status"></p>
+<div class="g3-lever g3-brake"><span>Freno <output id="brake">3 / 5</output></span><div id="brake-lever" class="g3-slot" role="slider" aria-label="Freno: trascina in giù per frenare"><i></i></div></div>
+<div class="g3-lever g3-traction"><span>Trazione <output id="traction">0 / 4</output></span><div id="traction-lever" class="g3-slot" role="slider" aria-label="Trazione: trascina in su per accelerare"><i></i></div></div>
+<div class="g3-bottom">
+  <div class="g3-group"><button id="doors" type="button">Apri porte</button></div>
+  <p class="g3-info" id="info"></p>
+  <div class="g3-group"><button id="reverser" type="button">Avanti</button><button id="emergency" type="button" class="g3-stop">STOP</button></div>
+</div>
+<div class="g3-overlay" id="overlay">
+  <section class="g3-card">
+    <span class="g3-kicker" id="kicker">Pagina di prova · grafica 3D</span>
+    <h1 id="title">Giuliosim 3D</h1>
+    <p id="text">La Linea dei Due Laghi in vero 3D: luce del sole, ombre, alberi e case veri. Stessa guida di Giulio Simulator: chiudi le porte, allenta il freno e dai trazione. Trascina per guardarti intorno, due dita per lo zoom.</p>
+    <div class="g3-buttons"><button id="restart" type="button" hidden>Nuova corsa</button><button id="continue" type="button" class="g3-primary">Entra in cabina</button></div>
+  </section>
+</div>
+<script src="../giulio/line.js?v=3bc8f089ad"></script>
+<script type="module" src="../giulio3d/main.js?v=8aa769c79b"></script>
+</body>
+</html>

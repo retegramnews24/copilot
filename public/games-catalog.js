@@ -16,6 +16,7 @@ const COVERS = {
   labyrinth: '#7d6bd6',
   'golf-with-your-gay-friends': '#4caf50',
   'giulio-simulator': '#3a7bd5',
+  'giuliosim-3d': '#2a9d8f',
   'binotto-simulator': '#ffd236',
   'number-connect': '#f0a202',
   'cinema-streamer': '#d64575',

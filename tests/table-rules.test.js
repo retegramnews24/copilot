@@ -21,7 +21,9 @@ assert.throws(() => newTable(ROOM, { game: 'uno', mode: 'ai', seats: 11, name: '
 // Privacy: each viewer sees only their own hand; tokens never leave the server.
 const own = publicTable(solo, 'tg:1'),
   stranger = publicTable(solo, 'tg:9');
-assert.equal(own.uno.hand.length, 7);
+// 7 cards dealt; a starting +2 / +4 card adds more to the first player, so compare with the real hand.
+assert.equal(own.uno.hand.length, solo.uno.hands[0].length);
+assert.ok(own.uno.hand.length >= 7);
 assert.deepEqual(stranger.uno.hand, []);
 assert.ok(!JSON.stringify(own).includes('tok'), 'player token not exposed');
 
