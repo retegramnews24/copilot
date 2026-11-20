@@ -1718,6 +1718,19 @@ export class Race3D {
     car.add(beam);
   }
 
+  // auto subito al suo posto, senza animazione (entrando in una gara online già iniziata): posizione,
+  // direzione, marcia e scia degli ultimi due giri
+  jumpCar(i, car) {
+    const m = this.cars[i];
+    if (!car.pos) return;
+    m.visible = true; m.position.set(car.pos.x, 0, car.pos.y);
+    m.rotation.y = Math.atan2(-car.dir.y, car.dir.x);
+    this.setGear(i, car.gear);
+    const lap = Math.max(1, car.progress);
+    for (let k = 1; k < car.path.length; k++) if (car.path[k].lap >= lap - 1) this.addTrail(i, car.path[k - 1], car.path[k], car.path[k].lap);
+    this.trailFade(i, lap);
+  }
+
   setGear(i, gear) { this.cars[i].userData.label.material.map = this.gearTex(gear ? String(gear) : 'N', this.colors[i].hex); }
 
   placeCar(i, p, normal) {
@@ -1873,7 +1886,7 @@ export class Race3D {
     for (const [k, m] of this.trailMats) {
       const [ci, l] = k.split(':').map(Number);
       if (ci !== i) continue;
-      m.opacity = l >= lap ? 1 : l === lap - 1 ? 0.5 : 0;
+      m.opacity = l >= lap ? 1 : l === lap - 1 ? 0.25 : 0;
     }
     for (const c of [...this.trails.children]) {
       const [ci, l] = c.userData.key.split(':').map(Number);

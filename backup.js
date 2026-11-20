@@ -14,7 +14,7 @@ export const SINGLETONS = [
 ];
 export const KEEP = 8;
 const CHUNK = 900000;
-const ARCADE_PREFIX = { labyrinth: 'lab:', golf: 'golf:', pong: 'pong:', 'moto-trial': 'moto:' };
+const ARCADE_PREFIX = { labyrinth: 'lab:', golf: 'golf:', pong: 'pong:', 'moto-trial': 'moto:', f1: 'f1:' };
 const json = (data, status = 200) =>
   Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 

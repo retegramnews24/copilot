@@ -10,8 +10,19 @@ import { gameTitle } from './public/game-info.js';
 
 // Game notices stored by the server, so everyone finds them also later: a table opened to people, a win.
 // Kept in their own list (not in the chat); the app shows them in the Lobby bell, each with a button.
-export function tableNotice(user, game, number, room) {
-  const where = isArcade(game) ? ' · sala ' + number : ' · Tavolo ' + number;
+export function tableNotice(user, game, number, room, summary = null) {
+  let where = isArcade(game) ? ' · sala ' + number : ' · Tavolo ' + number;
+  // F1 on paper!: how many drivers the race is waiting for, and how many laps
+  if (game === 'f1' && summary?.capacity)
+    where +=
+      ' · cerca ' +
+      (summary.capacity - 1) +
+      (summary.capacity === 2 ? ' pilota' : ' piloti') +
+      ' (' +
+      summary.capacity +
+      ' auto, ' +
+      summary.laps +
+      (summary.laps === 1 ? ' giro)' : ' giri)');
   return {
     id: id(),
     notice: 'table',
@@ -79,7 +90,9 @@ export class LobbyHub {
                       ? 'Golf '
                       : watching.game === 'pong'
                         ? 'Pong '
-                        : 'Guarda ') + watching.number
+                        : watching.game === 'f1'
+                          ? 'F1 on paper! '
+                          : 'Guarda ') + watching.number
               : 'In Lobby',
           game: own?.room || null,
           viewingRoom: watching?.room || null
@@ -337,12 +350,13 @@ export class LobbyHub {
           'labyrinth',
           'moto-trial',
           'golf',
-          'pong'
+          'pong',
+          'f1'
         ].includes(body.game)
       )
         return json({ error: 'Gioco non disponibile.' }, 400);
       const active = (await this.lobbyList()).filter(activeTable);
-      if (body.game !== 'moto-trial' && body.game !== 'golf' && body.game !== 'pong') {
+      if (!['moto-trial', 'golf', 'pong', 'f1'].includes(body.game)) {
         const limit = seatLimit(active, user.player, {
           room: null,
           game: body.game || 'chess',
@@ -372,7 +386,9 @@ export class LobbyHub {
                 ? 'golf:'
                 : body.game === 'pong'
                   ? 'pong:'
-                  : 'moto:';
+                  : body.game === 'f1'
+                    ? 'f1:'
+                    : 'moto:';
         const stub = this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix + room));
         const response = await stub.fetch(
           new Request('https://internal/' + body.game + '/init', {
@@ -385,6 +401,8 @@ export class LobbyHub {
               appearance: body.game === 'golf' ? body.appearance : undefined,
               campaign: body.game === 'golf' ? body.campaign : undefined,
               collisions: body.game === 'golf' ? body.collisions === true : undefined,
+              // F1 on paper!: the drawn track, laps, time of day (the number of drivers is in the track)
+              ...(body.game === 'f1' ? { track: body.track, laps: body.laps, time: body.time } : {}),
               seed: body.game === 'moto-trial' ? 1 : crypto.getRandomValues(new Uint32Array(1))[0]
             })
           })
@@ -394,7 +412,7 @@ export class LobbyHub {
         await this.ctx.storage.put('game:' + room, result.summary);
         // Shared rooms open to others (not single-player Pong, not the retired Labyrinth) appear in the chat.
         if (body.game !== 'labyrinth' && !(body.game === 'pong' && body.mode === 'solo'))
-          await this.addNotice(tableNotice(user, body.game, number, room));
+          await this.addNotice(tableNotice(user, body.game, number, room, result.summary));
         await this.lobbyBroadcast();
         return json(result);
       }

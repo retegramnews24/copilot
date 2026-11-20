@@ -39,6 +39,8 @@ export class Tutorial {
     this.seen = new Set((saved && saved.seen) || []);
     el.querySelector('[data-tut-ok]').onclick = () => this.close();
     el.querySelector('[data-tut-skip]').onclick = () => this.finish();
+    // la X chiude solo questo fumetto: il tutorial continua con i prossimi
+    el.querySelector('[data-tut-x]').onclick = () => this.close();
   }
   save() { try { localStorage.setItem(KEY, JSON.stringify({ done: this.done, seen: [...this.seen] })); } catch (e) { /* niente */ } }
 

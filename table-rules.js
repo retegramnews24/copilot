@@ -324,12 +324,14 @@ export function tableSummary(s) {
               holes: s.holes,
               collisions: s.collisions === true
             }
-          : {})
+          : s.game === 'f1'
+            ? { capacity: s.capacity, laps: s.laps }
+            : {})
   };
 }
 // Which tables count where (Lobby list, one-table rule, finished tables).
 export const isArcade = game =>
-  game === 'labyrinth' || game === 'moto-trial' || game === 'golf' || game === 'pong';
+  game === 'labyrinth' || game === 'moto-trial' || game === 'golf' || game === 'pong' || game === 'f1';
 // One open table per person, except long-turn tables (Scacchi, Dama, Forza 4, Scarabeo between people):
 // up to LONG_LIMIT of those at once, alongside the one other table. Returns 'long', 'other' or null.
 export function seatLimit(tables, player, target) {

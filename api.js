@@ -92,7 +92,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.31', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.32', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
@@ -144,6 +144,11 @@ async function route(req, env) {
       new Request(u.origin + '/cinema/youtube' + u.search, req)
     );
 
+  const f1 = u.pathname.match(/^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|start|play|close)$/);
+  if (f1)
+    return env.ROOMS.get(env.ROOMS.idFromName('f1:' + f1[1])).fetch(
+      new Request(u.origin + '/f1/' + f1[2] + u.search, req)
+    );
   const golf = u.pathname.match(/^\/api\/golf\/([a-f0-9-]{36})\/(state|join|start|shot|close)$/);
   if (golf)
     return env.ROOMS.get(env.ROOMS.idFromName('golf:' + golf[1])).fetch(
@@ -199,7 +204,9 @@ async function route(req, env) {
     return lobby.fetch(new Request(u.origin + '/lobby/ws', req));
   if (req.method === 'POST' && u.pathname === '/api/create') {
     const raw = await req.text();
-    if (raw.length > 4096) return json({ error: 'Richiesta troppo grande.' }, 413);
+    // F1 on paper! sends the drawn track with the race (up to 400 kB); every other game a few settings.
+    if (raw.length > (/^\{"game":"f1"/.test(raw) ? 400000 : 4096))
+      return json({ error: 'Richiesta troppo grande.' }, 413);
     return lobby.fetch(
       new Request(u.origin + '/lobby/create', {
         method: 'POST',

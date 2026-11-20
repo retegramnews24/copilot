@@ -6,7 +6,7 @@
 <title>F1 on paper!</title>
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-512.png">
-<link rel="stylesheet" href="gara.css?v=c5b0f595a3">
+<link rel="stylesheet" href="gara.css?v=0e1cfd67ae">
 </head>
 <body>
 <div id="app">
@@ -34,15 +34,16 @@
     </div>
     <div id="banner" class="banner"></div>
     <div class="bar bottom">
-      <div class="row"><button id="grid" class="on">Griglia</button><button id="view">Vista alta</button><button id="center">Centra</button><span class="sp"></span><button id="snd" class="ico" aria-label="Togli audio">🔊</button><button id="menuB" class="ico" aria-label="Menu">☰</button></div>
+      <div class="row"><button id="grid" class="on">Griglia</button><button id="view">Vista alta</button><button id="center">Centra</button><span class="sp"></span><button id="netGo" class="pri" hidden>Parti ora</button><button id="snd" class="ico" aria-label="Togli audio">🔊</button><button id="menuB" class="ico" aria-label="Menu">☰</button></div>
     </div>
   </section>
 
   <div id="setup" class="sheet">
     <div class="card">
       <div class="brand">F1 on paper!</div>
+      <div id="who" class="muted" hidden></div>
       <b class="big">Nuova gara</b>
-      <div class="row"><button class="seg on" data-m="ai">Contro l'IA</button><button class="seg" data-m="local">Stesso telefono</button></div>
+      <div class="row"><button class="seg on" data-m="ai">Contro l'IA</button><button class="seg" data-m="local">Stesso telefono</button><button class="seg" data-m="net" hidden>Multiplayer</button></div>
       <div id="modeInfo" class="muted"></div>
       <div class="row" id="carRow"><span>Auto in gara</span><span class="sp"></span><button class="ico" id="carM" aria-label="Meno auto">−</button><b id="carN" class="num">2</b><button class="ico" id="carP" aria-label="Più auto">+</button></div>
       <div id="carDots" class="dots"></div>
@@ -64,6 +65,7 @@
       <button id="tutAgain2">Rifai il tutorial</button>
       <button id="newT">Nuova pista</button>
       <button id="close">Chiudi</button>
+      <button id="netClose" hidden>Chiudi la gara online</button>
       <button id="exitB2" hidden>Esci dal gioco</button>
     </div>
   </div>
@@ -71,6 +73,7 @@
   <!-- fumetto del tutorial -->
   <div id="tut" class="tut" hidden>
     <div class="tut-card">
+      <button data-tut-x class="tut-x" aria-label="Chiudi il fumetto">✕</button>
       <div class="tut-title" data-tut-title></div>
       <div class="tut-text" data-tut-text></div>
       <div class="row"><button data-tut-skip class="link">Salta il tutorial</button><span class="sp"></span><button data-tut-ok class="pri">Ho capito</button></div>
@@ -87,6 +90,6 @@
   </div>
 </div>
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
-<script type="module" src="main.js?v=1a2a01facd"></script>
+<script type="module" src="main.js?v=3f562ff9a9"></script>
 </body>
 </html>
