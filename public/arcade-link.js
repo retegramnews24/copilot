@@ -111,6 +111,10 @@ export function createArcadeLink({
       'allow-scripts allow-same-origin' + (game === 'binotto-simulator' ? ' allow-forms' : '')
     );
     arcadeFrame.title = title;
+    const standalonePages = {
+      blackboard: '/blackboard/index.html?v=6',
+      'lunar-lander-3d': '/lunar-lander-3d/'
+    };
     arcadeFrame.src =
       standalonePages[game] ??
       '/arcade/' + game + '.html' + (game === 'pong' ? (online ? '?v=3&online=1' : '?v=3') : '?v=2');
