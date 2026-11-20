@@ -277,8 +277,7 @@ export function createArcadeLink({
         else if (kind === 'notification' && ['error', 'success', 'warning'].includes(style))
           hf?.notificationOccurred(style);
       } catch {}
-    }
-    else if (arcadeFrame.title === 'Blackboard spazio libero') blackboard.receive(event.data);
+    } else if (arcadeFrame.title === 'Blackboard spazio libero') blackboard.receive(event.data);
     else if (arcadeFrame.title === 'Number Connect') {
       const source = event.source,
         data = event.data;
