@@ -1,6 +1,6 @@
 // IA della gara: cerca la sequenza di mosse più corta fino al traguardo, con le stesse regole del giocatore
 // (inerzia, marce che salgono o scendono di una, partenza in prima). Non ha livelli: gioca sempre al meglio che trova.
-import { goodCell, crossesBorder, finishCross, dir8, MAX_GEAR } from './rules.js';
+import { goodCell, crossesBorder, finishCross, dir8, MAX_GEAR } from './rules.js?v=b5d4680e25';
 
 const key = (x, y) => x + ',' + y;
 const FIELD = new WeakMap();

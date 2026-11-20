@@ -82,6 +82,21 @@ input[type=range] { flex: 1; accent-color: var(--blue); }
 .tut-card::after { content: ''; position: absolute; left: 34px; bottom: -14px; border: 12px solid transparent; border-top-color: #111827; border-bottom: 0; }
 .tut-title { font: italic 900 18px/1.2 "Arial Black", Impact, system-ui, sans-serif; color: #b91c1c; margin-bottom: 6px; }
 .tut-text { font-size: 15px; line-height: 1.45; margin-bottom: 8px; }
+/* scelta della modalità: quattro tasti, vanno a capo se lo schermo è stretto */
+.row.modes { flex-wrap: wrap; }
+.row.modes .seg { flex: 1 1 40%; }
+/* Sprint: metà sinistra e metà destra dello schermo per sterzare (le due insieme frenano) */
+.pad { position: absolute; left: 0; right: 0; top: calc(var(--st) + var(--topH, 96px) + 8px); bottom: calc(64px + var(--sb)); display: flex; z-index: 2; touch-action: none; }
+.pad[hidden] { display: none; }
+.pad > div { flex: 1; display: flex; align-items: flex-end; padding: 0 22px 14px; }
+.pad .pr { justify-content: flex-end; }
+.pad span { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; color: #fff; background: rgba(15, 23, 42, 0.35); border: 2px solid rgba(255, 255, 255, 0.35); transition: background 0.1s, transform 0.1s; }
+.pad > div.on span { background: rgba(37, 99, 235, 0.75); transform: scale(1.08); }
+/* X in alto a destra: chiude solo questo fumetto (il tutorial continua; «Salta il tutorial» lo spegne tutto) */
+.tut-x { position: absolute; top: 4px; right: 4px; min-height: 0; min-width: 0; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: transparent; color: #374151; font-size: 16px; line-height: 30px; }
+.tut-x:active { background: rgba(0, 0, 0, 0.08); }
+.tut.free .tut-x { width: 24px; height: 24px; line-height: 24px; font-size: 13px; top: 2px; right: 2px; }
+.tut-title { padding-right: 26px; }
 .tut-card .link, .card .link { background: transparent; color: #64748b; padding: 6px 4px; min-height: 0; text-decoration: underline; }
 .card .link { color: #9fb3c8; align-self: center; }
 /* nome del gioco: corsivo inclinato rosso, come le scritte delle corse */

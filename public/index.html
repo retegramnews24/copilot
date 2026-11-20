@@ -7,7 +7,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="icon" type="image/png" href="gara/icon-192.png">
 <link rel="apple-touch-icon" href="gara/icon-512.png">
-<link rel="stylesheet" href="gara/gara.css">
+<link rel="stylesheet" href="gara/gara.css?v=e609d551c2">
 </head>
 <body>
 <div id="app">
@@ -34,16 +34,18 @@
       <div id="rcHelp" class="help"></div>
     </div>
     <div id="banner" class="banner"></div>
+    <div id="pad" class="pad" hidden><div class="pl"><span>◀</span></div><div class="pr"><span>▶</span></div></div>
     <div class="bar bottom">
-      <div class="row"><button id="grid" class="on">Griglia</button><button id="view">Vista alta</button><button id="center">Centra</button><span class="sp"></span><button id="snd" class="ico" aria-label="Togli audio">🔊</button><button id="menuB" class="ico" aria-label="Menu">☰</button></div>
+      <div class="row"><button id="grid" class="on">Griglia</button><button id="view">Vista alta</button><button id="center">Centra</button><span class="sp"></span><button id="netGo" class="pri" hidden>Parti ora</button><button id="snd" class="ico" aria-label="Togli audio">🔊</button><button id="menuB" class="ico" aria-label="Menu">☰</button></div>
     </div>
   </section>
 
   <div id="setup" class="sheet">
     <div class="card">
       <div class="brand">F1 on paper!</div>
+      <div id="who" class="muted" hidden></div>
       <b class="big">Nuova gara</b>
-      <div class="row"><button class="seg on" data-m="ai">Contro l'IA</button><button class="seg" data-m="local">Stesso telefono</button></div>
+      <div class="row modes"><button class="seg on" data-m="ai">Contro l'IA</button><button class="seg" data-m="local">Stesso telefono</button><button class="seg" data-m="sprint">Sprint</button><button class="seg" data-m="net" hidden>Multiplayer</button></div>
       <div id="modeInfo" class="muted"></div>
       <div class="row" id="carRow"><span>Auto in gara</span><span class="sp"></span><button class="ico" id="carM" aria-label="Meno auto">−</button><b id="carN" class="num">2</b><button class="ico" id="carP" aria-label="Più auto">+</button></div>
       <div id="carDots" class="dots"></div>
@@ -51,6 +53,7 @@
       <div id="setupInfo" class="muted"></div>
       <button id="startDraw" class="pri">Disegna la pista</button>
       <button id="tutAgain" class="link">Rifai il tutorial</button>
+      <button id="exitB" class="link" hidden>Torna a Binottoland</button>
     </div>
   </div>
 
@@ -64,12 +67,15 @@
       <button id="tutAgain2">Rifai il tutorial</button>
       <button id="newT">Nuova pista</button>
       <button id="close">Chiudi</button>
+      <button id="netClose" hidden>Chiudi la gara online</button>
+      <button id="exitB2" hidden>Esci dal gioco</button>
     </div>
   </div>
 
   <!-- fumetto del tutorial -->
   <div id="tut" class="tut" hidden>
     <div class="tut-card">
+      <button data-tut-x class="tut-x" aria-label="Chiudi il fumetto">✕</button>
       <div class="tut-title" data-tut-title></div>
       <div class="tut-text" data-tut-text></div>
       <div class="row"><button data-tut-skip class="link">Salta il tutorial</button><span class="sp"></span><button data-tut-ok class="pri">Ho capito</button></div>
@@ -86,6 +92,6 @@
   </div>
 </div>
 <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
-<script type="module" src="gara/main.js"></script>
+<script type="module" src="gara/main.js?v=00bc9600fb"></script>
 </body>
 </html>

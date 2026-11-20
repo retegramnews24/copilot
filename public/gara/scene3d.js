@@ -17,7 +17,7 @@ export const QUALITY = {
   media: { post: false, ratio: 1.5, shadow: 1024, grass: 0.45, water: false, flare: false },
   bassa: { post: false, ratio: 1, shadow: 512, grass: 0, water: false, flare: false }
 };
-import { inTrack, clearance, pointInPoly } from './rules.js';
+import { inTrack, clearance, pointInPoly } from './rules.js?v=b5d4680e25';
 
 const GEAR_COL = { down: '#ef4444', same: '#22c55e', up: '#3b82f6' };
 
@@ -128,7 +128,7 @@ const SPONSOR_TEX = new Map();
 // logo del club Binotto Corsa Competizione: la scritta ritagliata dall'avatar del club (public/gara/binotto-corsa.png)
 let LOGO = null;
 function withLogo(cb) {
-  if (!LOGO) { LOGO = new Image(); LOGO.src = 'gara/binotto-corsa.png'; LOGO.cbs = []; LOGO.onload = () => LOGO.cbs.forEach((f) => f(LOGO)); }
+  if (!LOGO) { LOGO = new Image(); LOGO.src = new URL('./binotto-corsa.png', import.meta.url).href; LOGO.cbs = []; LOGO.onload = () => LOGO.cbs.forEach((f) => f(LOGO)); }
   if (LOGO.complete && LOGO.naturalWidth) cb(LOGO); else LOGO.cbs.push(cb);
 }
 // disegna il logo al centro di una texture, il più grande possibile, sul suo rosso scuro
@@ -383,7 +383,7 @@ export class Race3D {
     this.quality = 'alta';
     this.resize();
     // auto fatta in Blender (public/gara/models/auto.glb, sorgente in blender/auto.blend)
-    this.ready = new GLTFLoader().loadAsync('gara/models/auto.glb')
+    this.ready = new GLTFLoader().loadAsync(new URL('./models/auto.glb', import.meta.url).href)
       .then((g) => { this.carProto = g.scene; })
       .catch((e) => { console.warn('auto.glb non caricata, uso l’auto semplice', e); });
     r.setAnimationLoop(() => this.frame());
@@ -674,7 +674,7 @@ export class Race3D {
   // tifoso in prima fila che sventola la bandiera con la sua immagine (public/gara/tifoso.png)
   // tex: immagine del telo; yaw: il telo va verso il +z del tifoso ruotato di yaw (cioè lontano dalla pista)
   fan(parent, x, y, z, shirt, tex = null, yaw = 0, h = 2.0, w = 1.7, hh = 1.05) {
-    if (!tex) { tex = new THREE.TextureLoader().load('gara/tifoso.png'); tex.colorSpace = THREE.SRGBColorSpace; }
+    if (!tex) { tex = new THREE.TextureLoader().load(new URL('./tifoso.png', import.meta.url).href); tex.colorSpace = THREE.SRGBColorSpace; }
     const man = new THREE.Group(); man.rotation.y = yaw;
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.13, 0.26, 3, 8), new THREE.MeshStandardMaterial({ color: shirt, roughness: 0.8 })); body.position.y = 0.26; body.castShadow = true; man.add(body);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshStandardMaterial({ color: 0xf1c27d })); head.position.y = 0.55; man.add(head);
@@ -1718,6 +1718,19 @@ export class Race3D {
     car.add(beam);
   }
 
+  // auto subito al suo posto, senza animazione (entrando in una gara online già iniziata): posizione,
+  // direzione, marcia e scia degli ultimi due giri
+  jumpCar(i, car) {
+    const m = this.cars[i];
+    if (!car.pos) return;
+    m.visible = true; m.position.set(car.pos.x, 0, car.pos.y);
+    m.rotation.y = Math.atan2(-car.dir.y, car.dir.x);
+    this.setGear(i, car.gear);
+    const lap = Math.max(1, car.progress);
+    for (let k = 1; k < car.path.length; k++) if (car.path[k].lap >= lap - 1) this.addTrail(i, car.path[k - 1], car.path[k], car.path[k].lap);
+    this.trailFade(i, lap);
+  }
+
   setGear(i, gear) { this.cars[i].userData.label.material.map = this.gearTex(gear ? String(gear) : 'N', this.colors[i].hex); }
 
   placeCar(i, p, normal) {
@@ -1873,7 +1886,7 @@ export class Race3D {
     for (const [k, m] of this.trailMats) {
       const [ci, l] = k.split(':').map(Number);
       if (ci !== i) continue;
-      m.opacity = l >= lap ? 1 : l === lap - 1 ? 0.5 : 0;
+      m.opacity = l >= lap ? 1 : l === lap - 1 ? 0.25 : 0;
     }
     for (const c of [...this.trails.children]) {
       const [ci, l] = c.userData.key.split(':').map(Number);
@@ -2066,6 +2079,7 @@ export class Race3D {
     const dt = Math.min(0.05, this.clock.getDelta()), now = performance.now();
     this.anims = this.anims.filter((a) => { const k = Math.min(1, (now - a.t0) / a.ms); a.fn(k); if (k >= 1) { a.res(); return false; } return true; });
     if (this.fx.length) this.stepFx(dt);
+    if (this.onFrame) this.onFrame(dt, now); // modalità Sprint: la corsa in tempo reale avanza a ogni fotogramma
     this.animCrowd(now, dt);
     this.animTalk(now);
     if (this.flags.length) this.waveFlags(now);
