@@ -641,6 +641,8 @@ export class Race3D {
     const len = Math.hypot(to.x - from.x, to.y - from.y), steps = Math.max(1, len);
     const dur = 260 + steps * 70, turn = yaw1 - yaw0;
     let lastE = 0;
+    // la telecamera segue l'auto finché si muove (se tocchi lo schermo smette)
+    this.follow = m; this.rig.goal = null;
     return this.tween(dur, (k) => {
       const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
       m.position.set(from.x + (to.x - from.x) * e, 0, from.y + (to.y - from.y) * e);
@@ -649,7 +651,7 @@ export class Race3D {
       const steer = Math.max(-0.5, Math.min(0.5, turn * 0.9)) * (k < 0.4 ? 1 : Math.max(0, 1 - (k - 0.4) / 0.4));
       this.rollWheels(m, (e - lastE) * len, steer);
       lastE = e;
-    }).then(() => { this.rollWheels(m, 0, 0); return crash ? this.shake(i) : null; });
+    }).then(() => { this.rollWheels(m, 0, 0); return crash ? this.shake(i) : null; }).then(() => { if (this.follow === m) this.follow = null; });
   }
 
   turnCar(i, dir) {
@@ -815,7 +817,8 @@ export class Race3D {
     for (const m of this.markers.children) m.material.opacity = m.userData.x === opt.x && m.userData.y === opt.y ? 0.25 : 0.55;
     ghost.position.set(opt.stop.x, 0, opt.stop.y);
     const aim = { x: opt.x - from.x, y: opt.y - from.y };
-    ghost.rotation.y = Math.atan2(-aim.y, aim.x);
+    // rotazione impostata per intero: la copia dell'auto girata di 180° porta con sé x e z capovolti
+    ghost.rotation.set(0, Math.atan2(-aim.y, aim.x), 0);
     g.add(ghost);
     // anello attorno al disco scelto
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.6, 32), new THREE.MeshBasicMaterial({ color: opt.crash ? 0xf87171 : 0xffffff, transparent: true, depthWrite: false }));
@@ -856,7 +859,7 @@ export class Race3D {
     el.addEventListener('pointerdown', (e) => {
       try { el.setPointerCapture(e.pointerId); } catch (err) { /* alcuni browser rifiutano: si va avanti lo stesso */ }
       P.set(e.pointerId, pos(e));
-      this.rig.goal = null;
+      this.rig.goal = null; this.follow = null;
       // mouse: tasto destro, rotellina premuta o Maiusc + sinistro = gira e inclina la vista
       this.tap = P.size === 1 ? { p: pos(e), moved: 0, btn: e.button, rot: e.button === 2 || e.button === 1 || (e.button === 0 && e.shiftKey) } : null;
       if (P.size === 2) { const [a, b] = [...P.values()]; this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x), m: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }; }
@@ -946,6 +949,11 @@ export class Race3D {
     if (this.markers) for (const m of this.markers.children) m.scale.set(pulse, pulse, 1);
     if (this.ring) { const k = 1 + Math.sin(now * 0.01) * 0.12; this.ring.scale.set(k, k, 1); }
     const R = this.rig;
+    // inseguimento morbido dell'auto in movimento, un po' avanti nel verso in cui va
+    if (this.follow) {
+      const f = this.follow, y = f.rotation.y, ax = f.position.x + Math.cos(y) * 1.2, az = f.position.z - Math.sin(y) * 1.2;
+      R.tx += (ax - R.tx) * 0.12; R.tz += (az - R.tz) * 0.12;
+    }
     if (R.goal) { R.tx += (R.goal.tx - R.tx) * 0.08; R.tz += (R.goal.tz - R.tz) * 0.08; R.dist += (R.goal.dist - R.dist) * 0.08; if (Math.hypot(R.goal.tx - R.tx, R.goal.tz - R.tz) < 0.02) R.goal = null; }
     const pitchGoal = this.view === 'top' ? 1.5 : this.userPitch ?? 0.95;
     if (this.view === 'top' || !(this.tap && this.tap.rot)) R.pitch += (pitchGoal - R.pitch) * 0.08;
