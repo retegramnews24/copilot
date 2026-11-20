@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0a1017">
+  <title>Lunar Lander 3D · Binottoland</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main>
+    <div id="scene" aria-hidden="true"></div>
+    <header>
+      <div class="toolbar">
+        <button id="exit" type="button" hidden>‹ Playground</button>
+        <select id="levels" aria-label="Livello"></select>
+      </div>
+      <div class="toolbar">
+        <button id="sound" type="button" aria-label="Suono" aria-pressed="true">Suono</button>
+        <button id="pause" type="button" aria-label="Pausa" hidden>Ⅱ</button>
+      </div>
+    </header>
+    <section id="briefing" aria-labelledby="mission">
+      <h1 id="mission">Lunar Lander 3D</h1>
+      <p id="message">Atterra nel cerchio luminoso.</p>
+      <button id="launch" type="button">Gioca</button>
+      <button id="secondary" type="button" hidden>Rigioca</button>
+    </section>
+    <footer id="controls" hidden>
+      <div class="toolbar">
+        <button type="button" data-control="ArrowLeft" aria-label="Inclina a sinistra">←</button>
+        <button type="button" data-control="ArrowRight" aria-label="Inclina a destra">→</button>
+      </div>
+      <div class="toolbar">
+        <button type="button" data-control="ArrowDown" aria-label="Riduci la spinta">↓</button>
+        <button type="button" data-control="ArrowUp" aria-label="Aumenta la spinta">↑</button>
+      </div>
+    </footer>
+  </main>
+  <script type="module" src="./game.js"></script>
+</body>
+</html>

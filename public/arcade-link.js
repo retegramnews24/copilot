@@ -3,6 +3,7 @@
 import { blackboardLink } from './blackboard/link.js?v=ed710cda29';
 import { renderNumberLeaders } from './leaderboard.js?v=f70039368d';
 const $ = id => document.getElementById(id);
+const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
 
 export function createArcadeLink({
   tg,
@@ -111,9 +112,8 @@ export function createArcadeLink({
     );
     arcadeFrame.title = title;
     arcadeFrame.src =
-      game === 'blackboard'
-        ? '/blackboard/index.html?v=6'
-        : '/arcade/' + game + '.html' + (game === 'pong' ? (online ? '?v=3&online=1' : '?v=3') : '?v=2');
+      standalonePages[game] ??
+      '/arcade/' + game + '.html' + (game === 'pong' ? (online ? '?v=3&online=1' : '?v=3') : '?v=2');
     tg?.BackButton?.show();
   }
   function closeArcade() {
@@ -136,6 +136,7 @@ export function createArcadeLink({
   for (const [game, title] of [
     ['number-connect', 'Number Connect'],
     ['acquedotto', 'Acquedotto!'],
+    ['lunar-lander-3d', 'Lunar Lander 3D'],
     ['pong', 'Pong'],
     ['giulio-simulator', 'Giulio Simulator'],
     ['binotto-simulator', 'Binotto Simulator']
