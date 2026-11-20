@@ -1,12 +1,16 @@
 // Gara a quadretti: regole pure, senza disegno. Le unità sono caselle (1 = un quadretto).
 // Tutto lo stato è un oggetto semplice (JSON), così più avanti si può giocare online.
 
-export const MIN_WIDTH = 3; // larghezza minima della pista con 2 auto, in caselle
+// La pista si approva dalla linea verde di partenza: ci devono stare tutte le auto affiancate.
+// La larghezza tra i bordi ha solo un minimo piccolo e fisso, per far passare le auto.
+export const MIN_WIDTH = 2.5;
 export const MAX_CARS = 16;
-// più auto, pista più larga: mezza casella in più per ogni auto oltre la seconda
-export const minWidth = (n) => MIN_WIDTH + Math.max(0, n - 2) * 0.5;
-// spazio di disegno, in caselle per lato
-export const boardSize = (n) => Math.min(480, 160 + Math.max(0, n - 2) * 30);
+export const minWidth = () => MIN_WIDTH;
+// griglia di disegno quasi infinita
+export const BOARD = 2000;
+export const boardSize = () => BOARD;
+// vista iniziale del disegno: più auto, più larga (caselle da un lato all'altro dello schermo)
+export const startCells = (n) => Math.min(400, 40 + Math.max(0, n - 2) * 18);
 export const SAFE = 0.6; // distanza minima dal bordo per una casella buona
 export const MAX_GEAR = 7;
 export const CRASH_TURNS = 2;
@@ -43,6 +47,44 @@ export function pointInPoly(p, poly) {
 }
 
 const segsOf = (poly) => poly.map((p, i) => [p, poly[(i + 1) % poly.length]]);
+
+// Indice a "secchi" dei segmenti di bordo: ogni controllo guarda solo i segmenti vicini,
+// così anche le piste enormi (griglia quasi infinita) restano veloci.
+const BUCKET = 4;
+const bkey = (x, y) => (x + 20000) * 40000 + (y + 20000);
+function makeIndex(polys) {
+  const map = new Map();
+  let stamp = 0;
+  polys.forEach((poly, pi) => poly.forEach((a, i) => {
+    const b = poly[(i + 1) % poly.length], s = { a, b, pi, i, m: 0 };
+    const x0 = Math.floor(Math.min(a.x, b.x) / BUCKET), x1 = Math.floor(Math.max(a.x, b.x) / BUCKET);
+    const y0 = Math.floor(Math.min(a.y, b.y) / BUCKET), y1 = Math.floor(Math.max(a.y, b.y) / BUCKET);
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+      const k = bkey(x, y);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(s);
+    }
+  }));
+  return {
+    query(minX, minY, maxX, maxY) {
+      const out = [];
+      stamp++;
+      const x0 = Math.floor(minX / BUCKET), x1 = Math.floor(maxX / BUCKET), y0 = Math.floor(minY / BUCKET), y1 = Math.floor(maxY / BUCKET);
+      for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) {
+        const l = map.get(bkey(x, y));
+        if (l) for (const s of l) if (s.m !== stamp) { s.m = stamp; out.push(s); }
+      }
+      return out;
+    }
+  };
+}
+// un indice per pista, tenuto fuori dallo stato (che resta JSON semplice)
+const IDX = new WeakMap();
+function trackIndex(t) {
+  let e = IDX.get(t.outer);
+  if (!e || e.inner !== t.inner) { e = { inner: t.inner, idx: makeIndex([t.outer, t.inner]) }; IDX.set(t.outer, e); }
+  return e.idx;
+}
 
 function polyLength(poly) {
   let l = 0;
@@ -99,22 +141,26 @@ export function closeBorder(raw) {
 }
 
 function selfCross(poly) {
-  const s = segsOf(poly), n = s.length;
-  for (let i = 0; i < n; i++)
-    for (let j = i + 2; j < n; j++) {
-      if (i === 0 && j === n - 1) continue;
-      const t = segHit(s[i][0], s[i][1], s[j][0], s[j][1]);
-      if (t >= 0) return lerp(s[i][0], s[i][1], t);
+  const idx = makeIndex([poly]), n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    for (const s of idx.query(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y))) {
+      const j = s.i;
+      if (j <= i + 1 || (i === 0 && j === n - 1)) continue;
+      const t = segHit(a, b, s.a, s.b);
+      if (t >= 0) return lerp(a, b, t);
     }
+  }
   return null;
 }
 
 const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
 
 function polyCross(p, q) {
+  const idx = makeIndex([q]);
   for (const [a, b] of segsOf(p))
-    for (const [c, d] of segsOf(q)) {
-      const t = segHit(a, b, c, d);
+    for (const s of idx.query(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.max(a.x, b.x), Math.max(a.y, b.y))) {
+      const t = segHit(a, b, s.a, s.b);
       if (t >= 0) return lerp(a, b, t);
     }
   return null;
@@ -130,22 +176,19 @@ export function checkInner(outer, inner, minW = MIN_WIDTH) {
 
 // Strettoie: due punti di bordo troppo vicini con la pista in mezzo.
 function checkWidth(outer, inner, MIN_WIDTH) {
-  const polys = [outer, inner];
+  const polys = [outer, inner], idx = makeIndex(polys);
   const inTrack = (p) => pointInPoly(p, outer) && !pointInPoly(p, inner);
   for (let pi = 0; pi < 2; pi++) {
     const P = polys[pi];
     for (let i = 0; i < P.length; i++) {
       const v = P[i];
-      for (let qi = 0; qi < 2; qi++) {
-        const Q = polys[qi], n = Q.length;
-        for (let j = 0; j < n; j++) {
-          if (pi === qi) {
-            const k = Math.min(Math.abs(i - j), n - Math.abs(i - j));
-            if (k * 0.5 < MIN_WIDTH * 1.6) continue; // vicini sullo stesso bordo
-          }
-          const { d, q } = distToSeg(v, Q[j], Q[(j + 1) % n]);
-          if (d < MIN_WIDTH && d > 1e-6 && inTrack(lerp(v, q, 0.5))) return { error: `Pista troppo stretta qui: servono almeno ${String(MIN_WIDTH).replace('.', ',')} caselle.`, at: lerp(v, q, 0.5) };
+      for (const s of idx.query(v.x - MIN_WIDTH, v.y - MIN_WIDTH, v.x + MIN_WIDTH, v.y + MIN_WIDTH)) {
+        if (s.pi === pi) {
+          const n = P.length, k = Math.min(Math.abs(i - s.i), n - Math.abs(i - s.i));
+          if (k * 0.5 < MIN_WIDTH * 1.6) continue; // vicini sullo stesso bordo
         }
+        const { d, q } = distToSeg(v, s.a, s.b);
+        if (d < MIN_WIDTH && d > 1e-6 && inTrack(lerp(v, q, 0.5))) return { error: `Pista troppo stretta qui: servono almeno ${String(MIN_WIDTH).replace('.', ',')} caselle.`, at: lerp(v, q, 0.5) };
       }
     }
   }
@@ -221,18 +264,22 @@ export function inTrack(t, p) {
   return pointInPoly(p, t.outer) && !pointInPoly(p, t.inner);
 }
 
-export function clearance(t, p) {
-  let m = Infinity;
-  for (const poly of [t.outer, t.inner]) for (const [a, b] of segsOf(poly)) m = Math.min(m, distToSeg(p, a, b).d);
+// distanza dal bordo più vicino, guardando fino a maxR caselle (oltre restituisce maxR)
+export function clearance(t, p, maxR = 8) {
+  let m = maxR;
+  for (const s of trackIndex(t).query(p.x - maxR, p.y - maxR, p.x + maxR, p.y + maxR)) m = Math.min(m, distToSeg(p, s.a, s.b).d);
   return m;
 }
 
+const nearBorder = (t, p) => clearance(t, p, SAFE + 0.05) < SAFE;
+
 export function goodCell(t, p) {
-  return inTrack(t, p) && clearance(t, p) >= SAFE;
+  return !nearBorder(t, p) && inTrack(t, p);
 }
 
 export function crossesBorder(t, p, q) {
-  for (const poly of [t.outer, t.inner]) for (const [a, b] of segsOf(poly)) if (segHit(p, q, a, b) >= 0) return true;
+  for (const s of trackIndex(t).query(Math.min(p.x, q.x), Math.min(p.y, q.y), Math.max(p.x, q.x), Math.max(p.y, q.y)))
+    if (segHit(p, q, s.a, s.b) >= 0) return true;
   return false;
 }
 
@@ -265,7 +312,7 @@ function startSlots(t) {
       const p = { x, y }, s = side(t, p);
       const along = (x - f.a.x) * ux + (y - f.a.y) * uy;
       if (s < -1 || s >= 0 || along < 0 || along > L) continue;
-      if (goodCell(t, p) && !crossesBorder(t, p, { x: p.x + t.normal.x * 1.6, y: p.y + t.normal.y * 1.6 })) out.push({ x, y, along });
+      if (goodCell(t, p) && !crossesBorder(t, p, { x: p.x + t.normal.x, y: p.y + t.normal.y })) out.push({ x, y, along });
     }
   return out.sort((a, b) => a.along - b.along).map(({ x, y }) => ({ x, y }));
 }
@@ -277,10 +324,14 @@ export function capacity(slots) {
   return taken.length;
 }
 
-// posti sulla linea appena disegnata, nel verso peggiore (il verso si sceglie dopo)
+// posti sulla linea in un verso di gara
+export function capacityFor(outer, inner, finish, normal) {
+  return capacity(startSlots({ outer, inner, finish, normal }));
+}
+
+// posti sulla linea appena disegnata, nel verso migliore (il verso si sceglie dopo, e lì si ricontrolla)
 export function finishCapacity(outer, inner, finish) {
-  const base = { outer, inner, finish };
-  return Math.min(...finishNormals(finish).map((normal) => capacity(startSlots({ ...base, normal }))));
+  return Math.max(...finishNormals(finish).map((normal) => capacityFor(outer, inner, finish, normal)));
 }
 
 // Prova che esista un giro: dalle caselle davanti alla linea, a passi di una casella, senza ripassare la linea,
@@ -295,11 +346,12 @@ function checkLapPossible(t) {
     const q = { x: s.x + fw.x, y: s.y + fw.y };
     if (goodCell(t, q) && !crossesBorder(t, s, q) && !seen.has(key(q))) { queue.push(q); seen.add(key(q)); }
   }
-  const b = t.bbox, cache = new Map();
-  const good = (p) => { const k = key(p); if (!cache.has(k)) cache.set(k, goodCell(t, p)); return cache.get(k); };
-  let guard = 0;
-  while (queue.length && guard++ < 200000) {
-    const p = queue.shift();
+  const b = t.bbox;
+  // si parte dentro la pista e non si attraversano mai i bordi: basta controllare la distanza dal bordo
+  const good = (p) => !nearBorder(t, p);
+  let head = 0;
+  while (head < queue.length && head < 4000000) {
+    const p = queue[head++];
     for (let dx = -1; dx <= 1; dx++)
       for (let dy = -1; dy <= 1; dy++) {
         if (!dx && !dy) continue;

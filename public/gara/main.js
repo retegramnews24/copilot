@@ -45,19 +45,17 @@ const HELP = {
 
 // ---------- scelta iniziale: quante auto ----------
 function setupInfo() {
-  const n = draft.players, b = R.boardSize(n);
+  const n = draft.players;
   $('carN').textContent = n;
   $('carDots').innerHTML = R.carColors(n).map((c) => `<span style="--c:${c.hex}">${c.num}</span>`).join('');
-  $('setupInfo').textContent = `Spazio per disegnare ${b} × ${b} caselle · pista larga almeno ${widthTxt()} caselle · ${n} posti sulla linea di partenza.`;
+  $('setupInfo').textContent = `Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
 }
 $('carM').onclick = () => { draft.players = Math.max(2, draft.players - 1); setupInfo(); };
 $('carP').onclick = () => { draft.players = Math.min(R.MAX_CARS, draft.players + 1); setupInfo(); };
 $('startDraw').onclick = () => {
   $('setup').hidden = true;
-  const b = R.boardSize(draft.players);
-  ed.setBoard(b);
-  $('zoom').max = b;
-  ed.setZoom(Math.min(b, 40 + (draft.players - 2) * 12));
+  ed.setBoard(R.boardSize());
+  ed.setZoom(R.startCells(draft.players));
   setStep(1); syncZoom();
 };
 setupInfo();
@@ -73,12 +71,16 @@ function setStep(n) {
   ed.draw();
 }
 
+// cursore dello zoom a scala: a sinistra poche caselle, a destra tutta la griglia
+const ZMIN = 10;
+const zoomToCells = (v) => ZMIN * Math.pow(ed.board / ZMIN, v / 1000);
+const cellsToZoom = (c) => Math.round((1000 * Math.log(c / ZMIN)) / Math.log(ed.board / ZMIN));
 function syncZoom() {
-  $('zoom').value = Math.min(ed.board, Math.max(14, ed.cellsAcross()));
+  $('zoom').value = Math.max(0, Math.min(1000, cellsToZoom(Math.max(ZMIN, ed.cellsAcross()))));
   $('edCells').textContent = `${ed.cellsAcross()} × ${Math.round(ed.h / ed.s)} caselle`;
 }
 ed.onZoom = syncZoom;
-$('zoom').addEventListener('input', (e) => { ed.setZoom(+e.target.value); syncZoom(); });
+$('zoom').addEventListener('input', (e) => { ed.setZoom(zoomToCells(+e.target.value)); syncZoom(); });
 $('zOut').onclick = () => { ed.zoomAt(ed.w / 2, ed.h / 2, 0.8); };
 $('zIn').onclick = () => { ed.zoomAt(ed.w / 2, ed.h / 2, 1.25); };
 $('fit').onclick = () => { if (draft.outer) ed.fit(); else { ed.cx = ed.cy = ed.board / 2; ed.draw(); } syncZoom(); };
@@ -111,7 +113,11 @@ ed.onStroke = (pts) => {
 };
 function fail(r) { ed.error = r; ed.draw(); toast(r.error); }
 
-ed.onArrow = (i) => { draft.normal = i; };
+ed.onArrow = (i) => {
+  const cap = R.capacityFor(draft.outer, draft.inner, draft.finish, R.finishNormals(draft.finish)[i]);
+  if (cap < draft.players) { toast(`In questo verso sulla linea ci stanno ${cap} auto, ne servono ${draft.players}.`); return false; }
+  draft.normal = i;
+};
 
 $('undo').onclick = () => {
   ed.error = null;
@@ -304,5 +310,5 @@ $('newT').onclick = newTrack; $('newT2').onclick = newTrack;
 
 // avvio
 setStep(1);
-ed.resize(); ed.setZoom(40); syncZoom();
+ed.setBoard(R.boardSize()); ed.resize(); ed.setZoom(R.startCells(draft.players)); syncZoom();
 window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, pick };

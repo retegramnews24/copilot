@@ -43,7 +43,7 @@ export class Editor {
   cellsAcross() { return Math.round(this.w / this.s); }
   zoomAt(px, py, f) {
     const before = this.toCell(px, py);
-    this.s = Math.min(60, Math.max(this.w / this.board, this.s * f));
+    this.s = Math.min(60, Math.max(Math.max(this.w, this.h) / this.board, this.s * f));
     const after = this.toCell(px, py);
     this.cx += before.x - after.x; this.cy += before.y - after.y;
     this.clamp(); this.draw();
@@ -51,7 +51,7 @@ export class Editor {
   }
   clamp() {
     if (!this.w) return;
-    this.s = Math.min(60, Math.max(this.w / this.board, this.s));
+    this.s = Math.min(60, Math.max(Math.max(this.w, this.h) / this.board, this.s));
     this.cx = Math.min(this.board, Math.max(0, this.cx));
     this.cy = Math.min(this.board, Math.max(0, this.cy));
   }
@@ -126,7 +126,8 @@ export class Editor {
     const arr = this.arrows();
     let best = -1, bd = 44;
     arr.forEach((a, i) => { const q = this.toPx(a.p), d = Math.hypot(q.x - px.x, q.y - px.y); if (d < bd) { bd = d; best = i; } });
-    if (best >= 0) { this.normalIdx = best; this.onArrow && this.onArrow(best); this.draw(); }
+    // il gioco può rifiutare un verso (per esempio se in quel verso non ci stanno tutte le auto)
+    if (best >= 0 && (!this.onArrow || this.onArrow(best) !== false)) { this.normalIdx = best; this.draw(); }
   }
 
   fit() {
@@ -153,16 +154,19 @@ export class Editor {
     g.fillRect(0, 0, w, Math.max(0, o0.y)); g.fillRect(0, o1.y, w, h); g.fillRect(0, 0, Math.max(0, o0.x), h); g.fillRect(o1.x, 0, w, h);
     // griglia: sempre visibile nel disegno
     const c0 = this.toCell(0, 0), c1 = this.toCell(w, h);
-    const step = s < 5 ? 5 : 1;
+    // passo delle righe che si adatta allo zoom: 1, 5, 25, 125... caselle, mai più fitte di 6 pixel
+    let step = 1;
+    while (step * s < 6) step *= 5;
+    const major = step * 5;
     g.lineWidth = 1;
     for (let x = Math.max(0, Math.floor(c0.x / step) * step); x <= Math.min(B, c1.x); x += step) {
       const px = Math.round(this.toPx({ x, y: 0 }).x) + 0.5;
-      g.strokeStyle = x % 5 ? '#e2ddd0' : '#c9c1ae';
+      g.strokeStyle = x % major ? '#e2ddd0' : '#c9c1ae';
       g.beginPath(); g.moveTo(px, Math.max(0, o0.y)); g.lineTo(px, Math.min(h, o1.y)); g.stroke();
     }
     for (let y = Math.max(0, Math.floor(c0.y / step) * step); y <= Math.min(B, c1.y); y += step) {
       const py = Math.round(this.toPx({ x: 0, y }).y) + 0.5;
-      g.strokeStyle = y % 5 ? '#e2ddd0' : '#c9c1ae';
+      g.strokeStyle = y % major ? '#e2ddd0' : '#c9c1ae';
       g.beginPath(); g.moveTo(Math.max(0, o0.x), py); g.lineTo(Math.min(w, o1.x), py); g.stroke();
     }
     // pista: asfalto tra i bordi
