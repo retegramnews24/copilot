@@ -5,6 +5,7 @@ import * as R from './rules.js';
 import { Race3D } from './scene3d.js';
 import { Sfx } from './sound.js';
 import { AiDriver, distField } from './ai.js';
+import { Tutorial } from './tutorial.js';
 
 // suoni: il browser li accende solo dopo un tocco
 const sfx = new Sfx();
@@ -13,6 +14,8 @@ const sndLabel = () => { const b = document.getElementById('snd'); if (b) { b.te
 addEventListener('DOMContentLoaded', sndLabel);
 
 const $ = (id) => document.getElementById(id);
+// tutorial a fumetti (la prima volta, poi si può rifare)
+const tut = new Tutorial($('tut'));
 
 // ---------- margini di Telegram e del telefono ----------
 const tg = window.Telegram && window.Telegram.WebApp;
@@ -25,10 +28,26 @@ function insets() {
   s.setProperty('--sr', (a.right || 0) + (b.right || 0) + 'px');
 }
 if (tg) {
+  const v = (n) => tg.isVersionAtLeast && tg.isVersionAtLeast(n);
   tg.ready(); tg.expand();
-  tg.disableVerticalSwipes && tg.disableVerticalSwipes();
-  tg.onEvent && ['safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged'].forEach((e) => tg.onEvent(e, insets));
+  if (v('7.7')) tg.disableVerticalSwipes(); // trascinare il dito per disegnare non deve chiudere la mini app
+  tg.onEvent && ['safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged', 'fullscreenChanged'].forEach((e) => tg.onEvent(e, insets));
+  // colori della barra di Telegram uguali al gioco
+  if (v('6.1')) { tg.setHeaderColor('#0f172a'); tg.setBackgroundColor('#0f172a'); }
+  if (v('7.10')) tg.setBottomBarColor('#0f172a');
+  // sul telefono a tutto schermo: la pista si vede meglio (i margini li danno safeAreaInset e contentSafeAreaInset)
+  if (v('8.0') && /android|ios/.test(tg.platform || '')) { try { tg.requestFullscreen(); } catch (e) { /* non supportato: resta così */ } }
   insets();
+  // vibrazione leggera con i suoni principali
+  const hf = v('6.1') && tg.HapticFeedback;
+  if (hf) {
+    const wrap = (name, fn) => { const o = sfx[name].bind(sfx); sfx[name] = (...a) => { try { fn(...a); } catch (e) { /* niente */ } return o(...a); }; };
+    wrap('tick', () => hf.selectionChanged());
+    wrap('crash', () => hf.notificationOccurred('error'));
+    wrap('light', (green) => hf.impactOccurred(green ? 'heavy' : 'light'));
+    wrap('line', () => hf.impactOccurred('medium'));
+    wrap('win', () => hf.notificationOccurred('success'));
+  }
 }
 
 let toastT = 0;
@@ -85,12 +104,14 @@ $('startDraw').onclick = () => {
   setStep(1); syncZoom();
 };
 setupInfo();
+tut.show('setup');
 
 function setStep(n) {
   step = n;
   ed.mode = ['outer', 'outer', 'inner', 'finish', 'dir'][n];
   $('edStep').textContent = `Passo ${n} di 4`;
   $('edHelp').textContent = HELP[n]();
+  if ($('setup').hidden) tut.show('draw' + n);
   $('laps').hidden = n !== 4;
   $('go').hidden = n !== 4;
   ed.outer = draft.outer; ed.inner = draft.inner; ed.finish = draft.finish; ed.normalIdx = draft.normal;
@@ -143,6 +164,7 @@ ed.onArrow = (i) => {
   const cap = R.capacityFor(draft.outer, draft.inner, draft.finish, R.finishNormals(draft.finish)[i]);
   if (cap < draft.players) { toast(`In questo verso sulla linea ci stanno ${cap} auto, ne servono ${draft.players}.`); return false; }
   draft.normal = i;
+  tut.show('create3d');
 };
 
 $('undo').onclick = () => {
@@ -157,6 +179,7 @@ $('lapM').onclick = () => { draft.laps = Math.max(1, draft.laps - 1); showLaps()
 $('lapP').onclick = () => { draft.laps = Math.min(9, draft.laps + 1); showLaps(); };
 
 $('go').onclick = () => {
+  tut.hide();
   if (draft.normal < 0) return toast('Prima tocca una delle due frecce: è il verso di gara.');
   // controllo finale di tutta la pista prima del 3D
   const c = R.checkInner(draft.outer, draft.inner, R.minWidth(draft.players));
@@ -175,11 +198,22 @@ const isAi = () => race && race.mode === 'ai';
 
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
 
+// qualità grafica, ricordata dal browser
+let quality = 'alta';
+try { quality = localStorage.getItem('gara.qualita') || 'alta'; } catch (e) { /* niente memoria: alta */ }
+const qButtons = () => { for (const b of document.querySelectorAll('[data-q]')) b.classList.toggle('on', b.dataset.q === quality); };
+for (const b of document.querySelectorAll('[data-q]')) b.onclick = () => {
+  quality = b.dataset.q; qButtons();
+  try { localStorage.setItem('gara.qualita', quality); } catch (e) { /* niente */ }
+  if (scene) scene.setQuality(quality);
+};
+qButtons();
+
 async function startRace(track, laps, n, mode = 'local') {
   lastTrack = track; lastLaps = laps; lastN = n; lastMode = mode;
   if (mode === 'ai') n = 2;
   show('rc');
-  if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; }
+  if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk')); }
   scene.resize();
   scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
   scene.build(track, draft.time);
@@ -202,12 +236,14 @@ function chips() {
   $('chips').innerHTML = race.cars.map((c, i) => {
     const col = COL[i], lap = Math.min(race.laps, R.currentLap(c)), turn = i === race.turn && race.phase !== 'over';
     const st = c.crash ? ` · fermo ${c.crash}` : '';
-    if (!turn && !isAi()) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${c.gear ? c.gear : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
-    return `<div class="chip ${turn ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${c.gear ? c.gear : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
+    // con una mossa scelta al primo tocco, la marcia mostrata è già quella nuova
+    const gv = c.gear;
+    if (!turn && !isAi()) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${gv ? gv : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
+    return `<div class="chip ${turn ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${gv ? gv : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
   }).join('');
   const box = $('chips'), t = box.querySelector('.turn');
   if (t) box.scrollLeft = t.offsetLeft - box.clientWidth / 2 + t.offsetWidth / 2;
-  document.documentElement.style.setProperty('--topH', $('rcTop').offsetHeight + 'px');
+  setTopH();
 }
 
 function refresh() {
@@ -218,6 +254,7 @@ function refresh() {
       ? 'Tocca una casella bianca sulla linea per mettere la tua auto: poi l’IA mette la sua.'
       : `${col.num} ${col.name} (${col.role}): tocca una casella bianca sulla linea per mettere l'auto.`;
     scene.showMarks(R.placeable(race).map((s) => ({ ...s, kind: 'slot' })));
+    tut.show('place');
     if (!refresh.placed) {
       const f = race.track.finish;
       scene.focus({ x: (f.a.x + f.b.x) / 2, y: (f.a.y + f.b.y) / 2 }, true);
@@ -226,7 +263,6 @@ function refresh() {
     return;
   }
   if (race.phase === 'over') return;
-  chosen = null;
   // contro l'IA: se la tua auto è ferma per l'urto, l'IA muove da sola
   if (isAi() && race.cars[0].crash) {
     scene.clearMarks();
@@ -249,9 +285,12 @@ function refresh() {
 }
 
 // gli avvisi stanno sempre sotto la barra in alto, anche quando il testo va su due righe
-new ResizeObserver(() => document.documentElement.style.setProperty('--topH', $('rcTop').offsetHeight + 'px')).observe($('rcTop'));
+// (vale per la barra visibile: quella della gara o quella dell'editor; serve anche ai fumetti del tutorial)
+const topBars = [$('rcTop'), document.querySelector('#ed .bar.top')];
+const setTopH = () => document.documentElement.style.setProperty('--topH', Math.max(...topBars.map((b) => b.offsetHeight)) + 'px');
+const topObs = new ResizeObserver(setTopH);
+topBars.forEach((b) => topObs.observe(b));
 
-let chosen = null; // mossa scelta col primo tocco, in attesa di conferma
 
 function helpTurn() {
   const col = COL[race.turn];
@@ -281,7 +320,8 @@ async function play(list, ev) {
     }
     if (opt.crash) setTimeout(() => sfx.crash(), ms);
     if (ev.some((e) => e.type === 'line' && e.car === i)) setTimeout(() => sfx.line(), ms * 0.6);
-    return scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash).then(() => {
+    // contro l'IA la telecamera segue sempre e solo la tua auto
+    return scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash, !isAi() || i === 0).then(() => {
       scene.addTrail(i, from, car.pos, car.path[car.path.length - 1].lap);
       scene.setGear(i, car.gear);
       scene.trailFade(i, R.currentLap(car));
@@ -290,8 +330,8 @@ async function play(list, ev) {
   chips();
   for (const e of ev) {
     const c = COL[e.car], me = isAi() && e.car === 0;
-    if (e.type === 'crash') await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${me ? 'Sei fermo' : c.name + ' fermo'} per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700);
-    else if (e.type === 'line' && race.cars[e.car].progress > 1) await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100);
+    if (e.type === 'crash') { await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${me ? 'Sei fermo' : c.name + ' fermo'} per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700); if (!isAi() || me) tut.show('crash'); }
+    else if (e.type === 'line' && race.cars[e.car].progress > 1) { await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100); if (!isAi() || me) tut.show('lap'); }
     else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
     else if (e.type === 'skip') {
       sfx.skip();
@@ -329,11 +369,7 @@ async function runRound(myOpt) {
 
 async function pick(mark) {
   if (busy || !race) return;
-  if (!mark) {
-    // tocco fuori dai dischi: annulla la scelta
-    if (chosen) { chosen = null; scene.clearPreview(); helpTurn(); }
-    return;
-  }
+  if (!mark) return;
   if (race.phase === 'place') {
     const r = R.placeCar(race, mark);
     if (r.error) return banner(r.error);
@@ -342,23 +378,27 @@ async function pick(mark) {
     sfx.tick(true);
     if (isAi() && race.phase === 'place') aiPlace();
     refresh.placed = race.phase === 'race' ? false : refresh.placed;
+    if (race.phase === 'race') {
+      // tutte le auto sulla linea: semaforo, prima i rossi uno alla volta, poi verde e si parte
+      busy = true;
+      scene.clearMarks();
+      $('rcHelp').textContent = 'Pronti…';
+      chips();
+      // tutorial: tutti i consigli della gara insieme, prima del semaforo
+      await tut.show('race');
+      await scene.startLights(() => sfx.light(false));
+      sfx.light(true);
+      $('rcHelp').textContent = 'Via!';
+      busy = false;
+    }
     refresh();
     return;
   }
   if (race.phase !== 'race') return;
   const opt = race.opts.find((o) => o.x === mark.x && o.y === mark.y);
   if (!opt) return;
-  // primo tocco: anteprima. Secondo tocco sullo stesso disco: si parte.
-  if (chosen !== opt) {
-    chosen = opt;
-    const car = race.cars[race.turn];
-    scene.showPreview(race.turn, car.pos, opt);
-    $('rcHelp').textContent = opt.crash
-      ? `Attenzione: così esci di pista e resti fermo 2 turni. Tocca di nuovo la ✕ per confermare.`
-      : `Marcia ${opt.gear}. Tocca di nuovo il disco per partire, oppure scegline un altro.`;
-    return;
-  }
-  chosen = null;
+  // un tocco: la marcia cambia subito e l'auto parte
+  scene.setGear(race.turn, opt.crash ? 0 : opt.gear);
   if (isAi()) return runRound(opt);
   busy = true;
   scene.clearMarks();
@@ -379,6 +419,7 @@ function banner(html, ms = 1600) {
 }
 
 function win(i) {
+  setTimeout(() => tut.show('end'), 1600);
   sfx.win();
   chips();
   scene.clearMarks();
@@ -392,7 +433,8 @@ function win(i) {
 
 $('grid').onclick = (e) => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); scene.setGrid(on); };
 $('view').onclick = (e) => { const top = scene.view !== 'top'; scene.setView(top ? 'top' : 'tilt'); e.target.textContent = top ? 'Vista inclinata' : 'Vista alta'; };
-$('center').onclick = () => { const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true); else if (race) scene.focus(race.track.startSlots[0], true); };
+// "Centra" riporta la vista sulla tua auto (o sulla linea) e da lì la vista torna a seguire il gioco
+$('center').onclick = () => { const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true, true); else if (race) scene.focus(race.track.startSlots[0], true, true); };
 $('menuB').onclick = () => { $('menu').hidden = false; };
 $('snd').onclick = () => { sfx.unlock(); sfx.setOn(!sfx.on); sndLabel(); if (sfx.on) sfx.tick(true); };
 sndLabel();
@@ -405,6 +447,24 @@ const newTrack = () => {
   show('ed'); ed.resize(); setStep(1); setupInfo(); $('setup').hidden = false;
 };
 $('newT').onclick = newTrack; $('newT2').onclick = newTrack;
+// rifare il tutorial: dalla schermata Nuova gara, oppure dal menu (si riparte da una pista nuova)
+$('tutAgain').onclick = () => { tut.restart(); tut.show('setup'); };
+$('tutAgain2').onclick = () => { tut.restart(); newTrack(); tut.show('setup'); };
+
+// Telegram: tasto Indietro (chiude il menu, in gara apre il menu) e conferma prima di chiudere durante la gara
+if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
+  const inRace = () => $('rc').classList.contains('on');
+  const sync = () => {
+    const open = !$('menu').hidden;
+    if (open || inRace()) tg.BackButton.show(); else tg.BackButton.hide();
+    if (inRace() && race && race.phase !== 'over') tg.enableClosingConfirmation(); else tg.disableClosingConfirmation();
+  };
+  tg.BackButton.onClick(() => { if (!$('menu').hidden) $('menu').hidden = true; else if (inRace()) $('menu').hidden = false; sync(); });
+  const mo = new MutationObserver(sync);
+  mo.observe($('menu'), { attributes: true, attributeFilter: ['hidden'] });
+  mo.observe($('over'), { attributes: true, attributeFilter: ['hidden'] });
+  mo.observe($('rc'), { attributes: true, attributeFilter: ['class'] });
+}
 
 // avvio
 setStep(1);

@@ -121,6 +121,12 @@ export class Sfx {
     this.tone(880, t0, 0.1, 'sine', 0.2); this.tone(1320, t0 + 0.12, 0.16, 'sine', 0.2);
   }
 
+  // semaforo: bip basso per ogni luce rossa, bip alto e lungo quando diventa verde
+  light(green) {
+    if (!this.ready()) return;
+    this.tone(green ? 880 : 440, this.ctx.currentTime, green ? 0.5 : 0.16, 'square', 0.12);
+  }
+
   // turno saltato: due note che scendono
   skip() {
     if (!this.ready()) return;

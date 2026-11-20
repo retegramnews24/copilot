@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-<title>Gara a quadretti · prova</title>
+<title>F1 on paper! · prova</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <link rel="stylesheet" href="gara/gara.css">
 </head>
@@ -26,6 +26,7 @@
 
   <section id="rc" class="screen">
     <div id="gl"></div>
+    <div id="talk" class="talk" hidden></div>
     <div class="bar top" id="rcTop">
       <div class="row cars" id="chips"></div>
       <div id="rcHelp" class="help"></div>
@@ -38,6 +39,7 @@
 
   <div id="setup" class="sheet">
     <div class="card">
+      <div class="brand">F1 on paper!</div>
       <b class="big">Nuova gara</b>
       <div class="row"><button class="seg on" data-m="ai">Contro l'IA</button><button class="seg" data-m="local">Stesso telefono</button></div>
       <div id="modeInfo" class="muted"></div>
@@ -46,15 +48,29 @@
       <div class="row"><span>Ora</span><span class="sp"></span><button class="seg on" data-t="day">Giorno</button><button class="seg" data-t="sunset">Tramonto</button><button class="seg" data-t="night">Notte</button></div>
       <div id="setupInfo" class="muted"></div>
       <button id="startDraw" class="pri">Disegna la pista</button>
+      <button id="tutAgain" class="link">Rifai il tutorial</button>
     </div>
   </div>
 
   <div id="menu" class="sheet" hidden>
     <div class="card">
+      <b>Grafica</b>
+      <div class="row"><button class="seg" data-q="alta">Alta</button><button class="seg" data-q="media">Media</button><button class="seg" data-q="bassa">Bassa</button></div>
+      <div class="muted">Alta: bagliori, acqua che riflette, erba fitta al vento. Se il telefono va a scatti, scegli Media o Bassa.</div>
       <b>Partita</b>
       <button id="again">Rigioca su questa pista</button>
+      <button id="tutAgain2">Rifai il tutorial</button>
       <button id="newT">Nuova pista</button>
       <button id="close">Chiudi</button>
+    </div>
+  </div>
+
+  <!-- fumetto del tutorial -->
+  <div id="tut" class="tut" hidden>
+    <div class="tut-card">
+      <div class="tut-title" data-tut-title></div>
+      <div class="tut-text" data-tut-text></div>
+      <div class="row"><button data-tut-skip class="link">Salta il tutorial</button><span class="sp"></span><button data-tut-ok class="pri">Ho capito</button></div>
     </div>
   </div>
 
