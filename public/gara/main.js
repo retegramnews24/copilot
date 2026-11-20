@@ -32,7 +32,13 @@ function toast(msg, ok) {
 
 // ---------- disegno ----------
 const ed = new Editor($('c2'));
-const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2 };
+const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2, time: 'day' };
+
+// ora della gara: giorno, tramonto, notte
+for (const b of document.querySelectorAll('[data-t]')) b.onclick = () => {
+  draft.time = b.dataset.t;
+  for (const o of document.querySelectorAll('[data-t]')) o.classList.toggle('on', o === b);
+};
 let step = 1;
 const widthTxt = () => String(R.minWidth(draft.players)).replace('.', ',');
 
@@ -152,7 +158,8 @@ async function startRace(track, laps, n) {
   show('rc');
   if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; }
   scene.resize();
-  scene.build(track);
+  scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
+  scene.build(track, draft.time);
   await scene.ready;
   race = R.newRace(track, laps, n);
   COL = race.colors;
@@ -227,7 +234,7 @@ async function pick(mark) {
     const r = R.placeCar(race, mark);
     if (r.error) return banner(r.error);
     const car = race.cars.find((c) => c.pos && c.pos.x === mark.x && c.pos.y === mark.y);
-    scene.placeCar(car.id, car.pos, car.dir);
+    scene.placeCar(car.id, car.pos, race.track.normal);
     refresh.placed = race.phase === 'race' ? false : refresh.placed;
     refresh();
     return;
