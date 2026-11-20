@@ -3,6 +3,13 @@
 import { Editor } from './editor.js';
 import * as R from './rules.js';
 import { Race3D } from './scene3d.js';
+import { Sfx } from './sound.js';
+
+// suoni: il browser li accende solo dopo un tocco
+const sfx = new Sfx();
+document.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
+const sndLabel = () => { const b = document.getElementById('snd'); if (b) { b.textContent = sfx.on ? '🔊' : '🔇'; b.setAttribute('aria-label', sfx.on ? 'Togli audio' : 'Metti audio'); } };
+addEventListener('DOMContentLoaded', sndLabel);
 
 const $ = (id) => document.getElementById(id);
 
@@ -235,6 +242,7 @@ async function pick(mark) {
     if (r.error) return banner(r.error);
     const car = race.cars.find((c) => c.pos && c.pos.x === mark.x && c.pos.y === mark.y);
     scene.placeCar(car.id, car.pos, race.track.normal);
+    sfx.tick(true);
     refresh.placed = race.phase === 'race' ? false : refresh.placed;
     refresh();
     return;
@@ -245,6 +253,7 @@ async function pick(mark) {
   // primo tocco: anteprima. Secondo tocco sullo stesso disco: si parte.
   if (chosen !== opt) {
     chosen = opt;
+    sfx.tick(!opt.crash);
     const car = race.cars[race.turn];
     scene.showPreview(race.turn, car.pos, opt);
     $('rcHelp').textContent = opt.crash
@@ -260,6 +269,12 @@ async function pick(mark) {
   const ev = R.applyMove(race, opt);
   if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
   const lap = car.path[car.path.length - 1].lap;
+  // suoni: motore per tutta la mossa, gomme se si scala, botto all'arrivo se si sbatte, bip se si passa la linea
+  const ms = 260 + Math.max(1, Math.hypot(car.pos.x - from.x, car.pos.y - from.y)) * 70;
+  sfx.engine(opt.crash ? Math.max(1, prevGear) : opt.gear, ms);
+  if (opt.crash || opt.gear < prevGear) sfx.skid(ms);
+  if (opt.crash) setTimeout(() => sfx.crash(), ms);
+  if (ev.some((e) => e.type === 'line')) setTimeout(() => sfx.line(), ms * 0.6);
   await scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash);
   scene.addTrail(i, from, car.pos, lap);
   scene.setGear(i, car.gear);
@@ -271,6 +286,7 @@ async function pick(mark) {
     else if (e.type === 'line' && race.cars[e.car].progress > 1) await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100);
     else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
     else if (e.type === 'skip') {
+      sfx.skip();
       scene.focus(race.cars[e.car].pos);
       if (e.turned) { await Promise.all([scene.turnCar(e.car, race.cars[e.car].dir), banner(`${c.name} salta il turno<br>e si gira verso la pista`, 1400)]); }
       else await banner(`${c.name} salta il turno<div class="pips" style="color:${c.hex}">○ ●</div>`, 1300);
@@ -290,6 +306,7 @@ function banner(html, ms = 1600) {
 }
 
 function win(i) {
+  sfx.win();
   chips();
   scene.clearMarks();
   $('legend').hidden = true;
@@ -305,6 +322,8 @@ $('grid').onclick = (e) => { const on = !e.target.classList.contains('on'); e.ta
 $('view').onclick = (e) => { const top = scene.view !== 'top'; scene.setView(top ? 'top' : 'tilt'); e.target.textContent = top ? 'Vista inclinata' : 'Vista alta'; };
 $('center').onclick = () => { const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true); else if (race) scene.focus(race.track.startSlots[0], true); };
 $('menuB').onclick = () => { $('menu').hidden = false; };
+$('snd').onclick = () => { sfx.unlock(); sfx.setOn(!sfx.on); sndLabel(); if (sfx.on) sfx.tick(true); };
+sndLabel();
 $('close').onclick = () => { $('menu').hidden = true; };
 const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps, lastN); };
 $('again').onclick = again; $('again2').onclick = again;
