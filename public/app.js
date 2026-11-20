@@ -5,7 +5,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=4b40a70e69';
 import {readAppearance} from './appearance.js?v=3bf8d2e2ca';
 import './labyrinth/avatar.js?v=5318415024';
-import {initCatalog,renderCatalog} from './games-catalog.js?v=8748203dc7';
+import {initCatalog,renderCatalog} from './games-catalog.js?v=106994e972';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
@@ -28,13 +28,14 @@ import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
 import {createArcadeLink} from './arcade-link.js?v=ddb6eb9096';
+import {createF1Link} from './f1-link.js?v=77a06942fe';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.30',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.31',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -55,6 +56,8 @@ const alerts=initTurnAlerts({tg,request:(path,data)=>request(path,data),onError:
 const labyrinth=createLabyrinthLink({...linkBase,trace,leaveTable:()=>{stopRoom();room=null;state=null;$('draw-dialog').hidden=true;$('draw-response').hidden=true}});
 const golf=createGolfLink({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
 const arcade=createArcadeLink({...linkBase,readAppearance,refreshSession:()=>refreshSession(),renderNow:()=>renderNow(),selectPage:page=>selectPage(page)});
+// F1 on paper! (public/gara/): draw a track and race it in 3D, vs the AI or on the same phone (see f1-link.js).
+const f1=createF1Link(linkBase);
 initCatalog();
 let simSummary=null,simSummaryAt=0;
 // Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
@@ -477,6 +480,7 @@ function fitViewport(){
  moto.insets(insets);
  arcade.insets(insets);
  golf.insets(insets);
+ f1.insets(insets);
  cinema.post('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
@@ -699,6 +703,7 @@ window.binottolandRadioMetadata=stationId=>request('/api/radio/now-playing?stati
 // Telegram Back: closes whichever overlay is open (the Binotto Simulator handles it itself once ready).
 tg?.onEvent('backButtonClicked',()=>{
  if(arcade.visible())arcade.back();
+ else if(f1.visible())f1.back();
  else if(cinema.visible())cinema.leave();
  else if(golf.visible())golf.close();
  else if(moto.visible())moto.close();

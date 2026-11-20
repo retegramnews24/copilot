@@ -12,6 +12,7 @@ const COVERS = {
   briscola: '#8c4b8a',
   'briscola-in-cinque': '#6b4a9a',
   'moto-trial': '#e07b39',
+  'f1-on-paper': '#0b6b3a',
   pong: '#5bc0be',
   labyrinth: '#7d6bd6',
   'golf-with-your-gay-friends': '#4caf50',
