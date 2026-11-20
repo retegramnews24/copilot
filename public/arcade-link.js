@@ -1,4 +1,4 @@
-// Arcade overlay seen from the app: Number Connect, Pong (solo or online), Giulio Simulator, Binotto Simulator and
+// Arcade overlay seen from the app: Number Connect, Acquedotto!, Pong (solo or online), Giulio Simulator, Binotto Simulator and
 // the Blackboard rooms share one iframe. Online Pong and the Blackboard keep their authenticated sockets here.
 import { blackboardLink } from './blackboard/link.js?v=ed710cda29';
 import { renderNumberLeaders } from './leaderboard.js?v=f70039368d';
@@ -135,6 +135,7 @@ export function createArcadeLink({
   }
   for (const [game, title] of [
     ['number-connect', 'Number Connect'],
+    ['acquedotto', 'Acquedotto!'],
     ['pong', 'Pong'],
     ['giulio-simulator', 'Giulio Simulator'],
     ['binotto-simulator', 'Binotto Simulator']
@@ -267,6 +268,16 @@ export function createArcadeLink({
       simulatorBackReady = arcadeFrame.title === 'Binotto Simulator';
       sendArcadeInsets();
     } else if (event.data?.type === 'arcade:exit') closeArcade();
+    else if (event.data?.type === 'arcade:haptic') {
+      // games in the arcade frame (Acquedotto!) ask the app for Telegram's vibration
+      const { kind, style } = event.data,
+        hf = tg?.HapticFeedback;
+      try {
+        if (kind === 'impact' && ['light', 'medium', 'heavy'].includes(style)) hf?.impactOccurred(style);
+        else if (kind === 'notification' && ['error', 'success', 'warning'].includes(style))
+          hf?.notificationOccurred(style);
+      } catch {}
+    }
     else if (arcadeFrame.title === 'Blackboard spazio libero') blackboard.receive(event.data);
     else if (arcadeFrame.title === 'Number Connect') {
       const source = event.source,

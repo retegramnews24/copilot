@@ -13,6 +13,7 @@ Gira su Cloudflare Workers (Worker `binottoland-motore`, Durable Objects con SQL
 | Labyrinth · spedizioni multiplayer in prima persona (ritirato: non compare più nella pagina Giochi) | [docs/labyrinth.md](docs/labyrinth.md) |
 | Golf with your gay friends | [docs/golf.md](docs/golf.md) |
 | Moto Trial · platform 2D | [docs/moto-trial.md](docs/moto-trial.md) |
+| Acquedotto! · puzzle 3D con l'acqua | [docs/acquedotto.md](docs/acquedotto.md) |
 | Binotto Simulator · manager di scuderia | [docs/binotto-simulator.md](docs/binotto-simulator.md), [docs/circuit-pits.md](docs/circuit-pits.md) |
 | Cinema Streamer | [docs/cinema.md](docs/cinema.md) |
 | Radio | [docs/radio.md](docs/radio.md) |

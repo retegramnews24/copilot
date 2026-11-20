@@ -19,6 +19,7 @@ const COVERS = {
   'giulio-simulator': '#3a7bd5',
   'binotto-simulator': '#ffd236',
   'number-connect': '#f0a202',
+  acquedotto: '#2f8fd8',
   'cinema-streamer': '#d64575',
   'blackboard-spazio-libero': '#6c8a6b'
 };
