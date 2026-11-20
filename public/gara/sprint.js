@@ -6,6 +6,11 @@ import * as R from './rules.js?v=b5d4680e25';
 import { distField } from './ai.js?v=e75e4102f6';
 
 export const SPRINT = { vmax: 8.5, accel: 5.5, brake: 14, drag: 0.15, steer: 3.1, grip: 7, radius: 0.33 };
+// cambio automatico a 7 marce, uguale per tutte le auto: ogni marcia ha la sua velocità massima e la sua spinta
+export const GEARS = 7;
+const TOP = Array.from({ length: GEARS + 1 }, (_, g) => SPRINT.vmax * (0.16 + (0.84 * g) / GEARS) * 1.04);
+const PULL = [0, 1.5, 1.32, 1.17, 1.04, 0.93, 0.84, 0.76];
+export const rpmOf = (v, g) => Math.max(0, Math.min(1.05, v / TOP[g]));
 const key = (x, y) => x + ',' + y;
 
 // traiettoria dell'IA: dalla linea si scende la mappa delle distanze fino a ripassarla (un giro intero),
@@ -80,7 +85,7 @@ export class Sprint {
     const h = Math.atan2(track.normal.y, track.normal.x);
     this.cars = race.cars.map((c, i) => ({
       id: i, x: c.pos.x, y: c.pos.y, vx: 0, vy: 0, h, steer: 0, progress: 0, finished: null, best: null, lapStart: 0,
-      ai: i > 0, idx: 0, rank: 0, bump: 0, look: 2.2 + (i % 3) * 0.35, care: 0.92 + ((i * 37) % 7) / 100
+      ai: i > 0, idx: 0, rank: 0, bump: 0, gear: 1, rpm: 0, load: 0, shiftT: 0, look: 2.2 + (i % 3) * 0.35, care: 0.92 + ((i * 37) % 7) / 100
     }));
     for (const c of this.cars) c.idx = this.nearestIdx(c, 0, this.line.length);
   }
@@ -127,9 +132,16 @@ export class Sprint {
       c.h = wrap(c.h + c.steer * S.steer * Math.min(1, 0.25 + v / 4) * dt);
       const fx = Math.cos(c.h), fy = Math.sin(c.h);
       let fwd = c.vx * fx + c.vy * fy, lat = -c.vx * fy + c.vy * fx;
+      // cambio: sale quasi al limite dei giri, scala quando i giri calano; durante il cambio niente spinta
+      c.shiftT = Math.max(0, (c.shiftT || 0) - dt);
+      const rpm = rpmOf(Math.max(0, fwd), c.gear);
+      if (rpm > 0.93 && c.gear < GEARS && !ctl.brake) { c.gear++; c.shiftT = 0.12; ev.push({ type: 'shift', car: c.id, gear: c.gear, up: true }); }
+      else if (c.gear > 1 && rpmOf(Math.max(0, fwd), c.gear - 1) < (ctl.brake ? 0.8 : 0.62)) { c.gear--; ev.push({ type: 'shift', car: c.id, gear: c.gear, up: false }); }
       if (ctl.brake) fwd = Math.max(0, fwd - S.brake * dt);
-      else if (ctl.gas !== false) fwd += S.accel * dt * (1 - fwd / S.vmax);
+      else if (ctl.gas !== false && !c.shiftT) fwd += S.accel * PULL[c.gear] * dt * Math.max(0, 1 - fwd / S.vmax);
       fwd -= fwd * S.drag * dt;
+      c.rpm = rpmOf(Math.max(0, fwd), c.gear);
+      c.load = ctl.brake ? 0.1 : c.shiftT ? 0.3 : ctl.gas !== false ? 1 : 0.2;
       lat *= Math.exp(-S.grip * dt); // le gomme tengono: la scivolata laterale si spegne in fretta
       c.vx = fx * fwd - fy * lat; c.vy = fy * fwd + fx * lat;
       // movimento, con il controllo dei muri
