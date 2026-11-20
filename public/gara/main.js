@@ -4,6 +4,7 @@ import { Editor } from './editor.js';
 import * as R from './rules.js';
 import { Race3D } from './scene3d.js';
 import { Sfx } from './sound.js';
+import { AiDriver, distField } from './ai.js';
 
 // suoni: il browser li accende solo dopo un tocco
 const sfx = new Sfx();
@@ -39,7 +40,15 @@ function toast(msg, ok) {
 
 // ---------- disegno ----------
 const ed = new Editor($('c2'));
-const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2, time: 'day' };
+const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2, time: 'day', mode: 'ai' };
+
+// modalità: contro l'IA (una tua auto e una dell'IA, mosse insieme) oppure tutti sullo stesso telefono a turno
+for (const b of document.querySelectorAll('[data-m]')) b.onclick = () => {
+  draft.mode = b.dataset.m;
+  for (const o of document.querySelectorAll('[data-m]')) o.classList.toggle('on', o === b);
+  if (draft.mode === 'ai') draft.players = 2;
+  setupInfo();
+};
 
 // ora della gara: giorno, tramonto, notte
 for (const b of document.querySelectorAll('[data-t]')) b.onclick = () => {
@@ -58,7 +67,11 @@ const HELP = {
 
 // ---------- scelta iniziale: quante auto ----------
 function setupInfo() {
-  const n = draft.players;
+  const n = draft.players, ai = draft.mode === 'ai';
+  $('carRow').hidden = ai;
+  $('modeInfo').textContent = ai
+    ? 'Una tua auto contro una dell’IA. Muovete nello stesso momento: tu scegli, l’IA sceglie, e le auto partono insieme.'
+    : 'Giocate tutti sullo stesso telefono, a turno.';
   $('carN').textContent = n;
   $('carDots').innerHTML = R.carColors(n).map((c) => `<span style="--c:${c.hex}">${c.num}</span>`).join('');
   $('setupInfo').textContent = `Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
@@ -151,17 +164,20 @@ $('go').onclick = () => {
   const n = R.finishNormals(draft.finish)[draft.normal];
   const b = R.buildTrack(draft.outer, draft.inner, draft.finish, n, draft.players);
   if (b.error) return fail(b);
-  startRace(b.track, draft.laps, draft.players);
+  startRace(b.track, draft.laps, draft.players, draft.mode);
 };
 
 // ---------- gara ----------
-let scene = null, race = null, busy = false, lastTrack = null, lastLaps = 3, lastN = 2;
+let scene = null, race = null, busy = false, lastTrack = null, lastLaps = 3, lastN = 2, lastMode = 'ai';
 let COL = R.carColors(2);
+let driver = null; // pilota dell'IA
+const isAi = () => race && race.mode === 'ai';
 
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
 
-async function startRace(track, laps, n) {
-  lastTrack = track; lastLaps = laps; lastN = n;
+async function startRace(track, laps, n, mode = 'local') {
+  lastTrack = track; lastLaps = laps; lastN = n; lastMode = mode;
+  if (mode === 'ai') n = 2;
   show('rc');
   if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; }
   scene.resize();
@@ -169,7 +185,12 @@ async function startRace(track, laps, n) {
   scene.build(track, draft.time);
   await scene.ready;
   race = R.newRace(track, laps, n);
+  race.mode = mode;
   COL = race.colors;
+  if (mode === 'ai') {
+    COL = race.colors = [{ ...COL[0], name: 'Tu', role: 'tu' }, { ...COL[1], name: 'IA', role: 'IA' }];
+    driver = new AiDriver(track, laps);
+  } else driver = null;
   scene.setCars(race, COL);
   busy = false;
   $('over').hidden = true;
@@ -181,8 +202,8 @@ function chips() {
   $('chips').innerHTML = race.cars.map((c, i) => {
     const col = COL[i], lap = Math.min(race.laps, R.currentLap(c)), turn = i === race.turn && race.phase !== 'over';
     const st = c.crash ? ` · fermo ${c.crash}` : '';
-    if (!turn) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${c.gear ? c.gear : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
-    return `<div class="chip turn" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${c.gear ? c.gear : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
+    if (!turn && !isAi()) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${c.gear ? c.gear : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
+    return `<div class="chip ${turn ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${c.gear ? c.gear : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
   }).join('');
   const box = $('chips'), t = box.querySelector('.turn');
   if (t) box.scrollLeft = t.offsetLeft - box.clientWidth / 2 + t.offsetWidth / 2;
@@ -193,8 +214,9 @@ function refresh() {
   chips();
   const car = race.cars[race.turn], col = COL[race.turn];
   if (race.phase === 'place') {
-    $('rcHelp').textContent = `${col.num} ${col.name} (${col.role}): tocca una casella bianca sulla linea per mettere l'auto.`;
-    $('legend').hidden = true;
+    $('rcHelp').textContent = isAi()
+      ? 'Tocca una casella bianca sulla linea per mettere la tua auto: poi l’IA mette la sua.'
+      : `${col.num} ${col.name} (${col.role}): tocca una casella bianca sulla linea per mettere l'auto.`;
     scene.showMarks(R.placeable(race).map((s) => ({ ...s, kind: 'slot' })));
     if (!refresh.placed) {
       const f = race.track.finish;
@@ -204,10 +226,16 @@ function refresh() {
     return;
   }
   if (race.phase === 'over') return;
-  $('legend').hidden = false;
   chosen = null;
+  // contro l'IA: se la tua auto è ferma per l'urto, l'IA muove da sola
+  if (isAi() && race.cars[0].crash) {
+    scene.clearMarks();
+    $('rcHelp').textContent = 'Sei fermo per l’urto: l’IA va avanti.';
+    setTimeout(() => runRound(null), 700);
+    return;
+  }
   helpTurn();
-  let opts = R.options(race);
+  let opts = isAi() ? R.roundOptions(race, 0) : R.options(race);
   if (!opts.length) opts = [{ x: car.pos.x + car.dir.x, y: car.pos.y + car.dir.y, gear: 1, crash: true, stop: { ...car.pos } }];
   race.opts = opts;
   scene.showMarks(opts.map((o) => ({
@@ -220,14 +248,83 @@ function refresh() {
   scene.focus({ x: (car.pos.x + cx) / 2, y: (car.pos.y + cy) / 2 }, race.moves === 0);
 }
 
-// la legenda sta sempre sotto la barra in alto, anche quando il testo va su due righe
+// gli avvisi stanno sempre sotto la barra in alto, anche quando il testo va su due righe
 new ResizeObserver(() => document.documentElement.style.setProperty('--topH', $('rcTop').offsetHeight + 'px')).observe($('rcTop'));
 
 let chosen = null; // mossa scelta col primo tocco, in attesa di conferma
 
 function helpTurn() {
   const col = COL[race.turn];
-  $('rcHelp').textContent = `Tocca a ${col.num} ${col.name}: scegli dove andare.`;
+  $('rcHelp').textContent = isAi() ? 'Scegli la tua mossa: l’IA muove insieme a te.' : `Tocca a ${col.num} ${col.name}: scegli dove andare.`;
+}
+
+// l'IA mette la sua auto: la casella della linea più vicina alla strada più corta
+function aiPlace() {
+  const F = distField(race.track), slots = R.placeable(race);
+  const d = (s) => F.D.get(s.x + ',' + s.y) ?? 1e9;
+  const s = slots.slice().sort((a, b) => d(a) - d(b))[0];
+  R.placeCar(race, s);
+  const car = race.cars[1];
+  scene.placeCar(1, car.pos, race.track.normal);
+}
+
+// anima una o più mosse insieme e poi mostra cosa è successo
+async function play(list, ev) {
+  await Promise.all(list.map(({ i, from, opt, prevGear }) => {
+    const car = race.cars[i];
+    if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
+    // suoni: motore, gomme se si scala, botto all'arrivo se si sbatte, bip se si passa la linea (solo per la tua auto contro l'IA)
+    const ms = 260 + Math.max(1, Math.hypot(car.pos.x - from.x, car.pos.y - from.y)) * 70;
+    if (!isAi() || i === 0) {
+      sfx.engine(opt.crash ? Math.max(1, prevGear) : opt.gear, ms);
+      if (opt.crash || opt.gear < prevGear) sfx.skid(ms);
+    }
+    if (opt.crash) setTimeout(() => sfx.crash(), ms);
+    if (ev.some((e) => e.type === 'line' && e.car === i)) setTimeout(() => sfx.line(), ms * 0.6);
+    return scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash).then(() => {
+      scene.addTrail(i, from, car.pos, car.path[car.path.length - 1].lap);
+      scene.setGear(i, car.gear);
+      scene.trailFade(i, R.currentLap(car));
+    });
+  }));
+  chips();
+  for (const e of ev) {
+    const c = COL[e.car], me = isAi() && e.car === 0;
+    if (e.type === 'crash') await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${me ? 'Sei fermo' : c.name + ' fermo'} per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700);
+    else if (e.type === 'line' && race.cars[e.car].progress > 1) await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100);
+    else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
+    else if (e.type === 'skip') {
+      sfx.skip();
+      if (!isAi()) scene.focus(race.cars[e.car].pos);
+      if (e.turned) { await Promise.all([scene.turnCar(e.car, race.cars[e.car].dir), banner(`${me ? 'Salti' : c.name + ' salta'} il turno<br>e ${me ? 'ti giri' : 'si gira'} verso la pista`, 1400)]); }
+      else await banner(`${me ? 'Salti' : c.name + ' salta'} il turno<div class="pips" style="color:${c.hex}">○ ●</div>`, 1300);
+      chips();
+    } else if (e.type === 'win') { win(e.car); return true; }
+  }
+  return false;
+}
+
+// contro l'IA: tu hai scelto (o sei fermo), l'IA sceglie, e le due auto si muovono insieme
+async function runRound(myOpt) {
+  if (!race || race.phase !== 'race') return;
+  busy = true;
+  scene.clearMarks();
+  const ai = race.cars[1];
+  let aiOpt = null;
+  if (!ai.crash) {
+    // l'IA non si ferma dove hai deciso di andare tu
+    const avoid = myOpt ? [myOpt.stop] : race.cars[0].crash ? [race.cars[0].pos] : [];
+    if (!driver.planned) { $('rcHelp').textContent = 'L’IA studia la pista…'; await new Promise((r) => setTimeout(r, 60)); driver.planned = true; }
+    aiOpt = driver.choose(race, 1, avoid, R.roundOptions(race, 1, avoid));
+  }
+  $('rcHelp').textContent = '';
+  const list = [];
+  const from = race.cars.map((c) => ({ ...c.pos })), gears = race.cars.map((c) => c.gear), still = race.cars.map((c) => c.crash);
+  const ev = R.applyRound(race, [myOpt, aiOpt]);
+  [myOpt, aiOpt].forEach((opt, i) => { if (opt && !still[i]) list.push({ i, from: from[i], opt, prevGear: gears[i] }); });
+  const done = await play(list, ev);
+  busy = false;
+  if (!done) refresh();
 }
 
 async function pick(mark) {
@@ -243,6 +340,7 @@ async function pick(mark) {
     const car = race.cars.find((c) => c.pos && c.pos.x === mark.x && c.pos.y === mark.y);
     scene.placeCar(car.id, car.pos, race.track.normal);
     sfx.tick(true);
+    if (isAi() && race.phase === 'place') aiPlace();
     refresh.placed = race.phase === 'race' ? false : refresh.placed;
     refresh();
     return;
@@ -253,7 +351,6 @@ async function pick(mark) {
   // primo tocco: anteprima. Secondo tocco sullo stesso disco: si parte.
   if (chosen !== opt) {
     chosen = opt;
-    sfx.tick(!opt.crash);
     const car = race.cars[race.turn];
     scene.showPreview(race.turn, car.pos, opt);
     $('rcHelp').textContent = opt.crash
@@ -262,39 +359,15 @@ async function pick(mark) {
     return;
   }
   chosen = null;
+  if (isAi()) return runRound(opt);
   busy = true;
   scene.clearMarks();
   $('rcHelp').textContent = '';
   const i = race.turn, car = race.cars[i], from = { ...car.pos }, prevGear = car.gear;
   const ev = R.applyMove(race, opt);
-  if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
-  const lap = car.path[car.path.length - 1].lap;
-  // suoni: motore per tutta la mossa, gomme se si scala, botto all'arrivo se si sbatte, bip se si passa la linea
-  const ms = 260 + Math.max(1, Math.hypot(car.pos.x - from.x, car.pos.y - from.y)) * 70;
-  sfx.engine(opt.crash ? Math.max(1, prevGear) : opt.gear, ms);
-  if (opt.crash || opt.gear < prevGear) sfx.skid(ms);
-  if (opt.crash) setTimeout(() => sfx.crash(), ms);
-  if (ev.some((e) => e.type === 'line')) setTimeout(() => sfx.line(), ms * 0.6);
-  await scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash);
-  scene.addTrail(i, from, car.pos, lap);
-  scene.setGear(i, car.gear);
-  scene.trailFade(i, R.currentLap(car));
-  chips();
-  for (const e of ev) {
-    const c = COL[e.car];
-    if (e.type === 'crash') await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${c.name} fermo per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700);
-    else if (e.type === 'line' && race.cars[e.car].progress > 1) await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100);
-    else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
-    else if (e.type === 'skip') {
-      sfx.skip();
-      scene.focus(race.cars[e.car].pos);
-      if (e.turned) { await Promise.all([scene.turnCar(e.car, race.cars[e.car].dir), banner(`${c.name} salta il turno<br>e si gira verso la pista`, 1400)]); }
-      else await banner(`${c.name} salta il turno<div class="pips" style="color:${c.hex}">○ ●</div>`, 1300);
-      chips();
-    } else if (e.type === 'win') { win(e.car); busy = false; return; }
-  }
+  const done = await play([{ i, from, opt, prevGear }], ev);
   busy = false;
-  refresh();
+  if (!done) refresh();
 }
 
 let bannerT = 0;
@@ -309,9 +382,8 @@ function win(i) {
   sfx.win();
   chips();
   scene.clearMarks();
-  $('legend').hidden = true;
   const c = COL[i];
-  $('winT').textContent = `Vince l'auto ${c.num} · ${c.name}`;
+  $('winT').textContent = isAi() ? (i === 0 ? 'Hai vinto!' : 'Vince l’IA') : `Vince l'auto ${c.num} · ${c.name}`;
   $('winT').style.color = c.hex;
   $('winS').textContent = `${race.laps} ${race.laps === 1 ? 'giro' : 'giri'} · ${race.cars[i].moves} mosse`;
   scene.focus(race.cars[i].pos, true);
@@ -325,7 +397,7 @@ $('menuB').onclick = () => { $('menu').hidden = false; };
 $('snd').onclick = () => { sfx.unlock(); sfx.setOn(!sfx.on); sndLabel(); if (sfx.on) sfx.tick(true); };
 sndLabel();
 $('close').onclick = () => { $('menu').hidden = true; };
-const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps, lastN); };
+const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps, lastN, lastMode); };
 $('again').onclick = again; $('again2').onclick = again;
 const newTrack = () => {
   $('menu').hidden = true; $('over').hidden = true;

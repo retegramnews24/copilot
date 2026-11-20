@@ -48,8 +48,9 @@ input[type=range] { flex: 1; accent-color: var(--blue); }
 .legend .d { width: 10px; height: 10px; border-radius: 50%; background: var(--c); margin-left: 4px; }
 .legend .x { margin-left: 6px; font-weight: 700; }
 .legend[hidden] { display: none; }
-.banner { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(0.9); background: rgba(15, 23, 42, 0.92); border-radius: 16px; padding: 14px 20px; text-align: center; font-size: 15px; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; z-index: 6; max-width: 80%; }
-.banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+/* avvisi: in alto sotto la barra, senza riquadro (solo testo con l'ombra per leggerlo su ogni sfondo) */
+.banner { position: absolute; left: 50%; top: calc(var(--st) + var(--topH, 96px) + 12px); transform: translate(-50%, -6px); background: transparent; padding: 4px 12px; text-align: center; font-size: 15px; font-weight: 600; opacity: 0; transition: opacity 0.25s, transform 0.25s; pointer-events: none; z-index: 6; max-width: 86%; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9), 0 0 10px rgba(0, 0, 0, 0.75); }
+.banner.show { opacity: 1; transform: translate(-50%, 0); }
 .banner .t { font-size: 19px; font-weight: 700; margin-bottom: 4px; }
 .banner .pips { margin-top: 8px; letter-spacing: 6px; }
 

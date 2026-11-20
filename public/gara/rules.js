@@ -457,7 +457,14 @@ const occupied = (race, car, p) => race.cars.some((c) => c !== car && c.pos && c
 
 // Mosse possibili per l'auto di turno. Ogni mossa: {x, y, gear, crash, stop}
 export function options(race) {
-  const car = race.cars[race.turn], t = race.track, P = car.pos;
+  const car = race.cars[race.turn];
+  return carOptions(race.track, car, (p) => occupied(race, car, p));
+}
+
+// Mosse possibili per un'auto qualsiasi (stato: pos, gear, dir, last). blocked(p) dice se una casella è occupata.
+// Serve anche all'IA, che così gioca con le stesse identiche regole.
+export function carOptions(t, car, blocked = () => false) {
+  const P = car.pos;
   const gears = allowedGears(car.gear);
   const cand = new Map();
   const add = (q, needGear) => {
@@ -474,35 +481,31 @@ export function options(race) {
   }
   const out = [];
   for (const o of cand.values()) {
-    if (occupied(race, car, o)) continue;
+    if (blocked(o)) continue;
     if (goodCell(t, o) && !crossesBorder(t, P, o)) out.push({ ...o, crash: false, stop: { x: o.x, y: o.y } });
-    else out.push({ ...o, crash: true, stop: crashStop(race, car, o) });
+    else out.push({ ...o, crash: true, stop: crashStop(t, P, o, blocked) });
   }
   return out;
 }
 
 // ultima casella buona prima del bordo, lungo la mossa
-function crashStop(race, car, q) {
-  const P = car.pos, n = cheb(P, q), t = race.track;
+function crashStop(t, P, q, blocked) {
+  const n = cheb(P, q);
   let last = { x: P.x, y: P.y };
   for (let k = 1; k <= n; k++) {
     const c = { x: Math.round(P.x + ((q.x - P.x) * k) / n), y: Math.round(P.y + ((q.y - P.y) * k) / n) };
-    if (!goodCell(t, c) || crossesBorder(t, P, c) || occupied(race, car, c)) break;
+    if (!goodCell(t, c) || crossesBorder(t, P, c) || blocked(c)) break;
     last = c;
   }
   return last;
 }
 
-// Applica la mossa scelta. Restituisce gli eventi per l'interfaccia.
-export function applyMove(race, opt) {
-  const car = race.cars[race.turn], t = race.track, P = car.pos, Q = opt.stop;
-  const ev = [];
+// Muove un'auto (stato puro) con la mossa scelta: nuova posizione, marcia, direzione, giri. Restituisce gli eventi.
+export function stepCar(t, car, opt) {
+  const P = car.pos, Q = opt.stop, ev = [];
   const fc = finishCross(t, P, Q);
   if (fc) { car.progress += fc; ev.push({ type: fc > 0 ? 'line' : 'lineBack', car: car.id }); }
-  const lap = Math.max(1, car.progress);
   car.pos = { x: Q.x, y: Q.y };
-  car.moves++; race.moves++;
-  car.path.push({ x: Q.x, y: Q.y, lap });
   const mv = { x: opt.x - P.x, y: opt.y - P.y };
   if (opt.crash) {
     car.gear = 0; car.last = { x: 0, y: 0 }; car.crash = CRASH_TURNS;
@@ -511,6 +514,53 @@ export function applyMove(race, opt) {
   } else {
     car.gear = opt.gear; car.last = mv; car.dir = dir8(mv.x, mv.y);
   }
+  return ev;
+}
+
+// ---------- gara con mosse insieme (contro l'IA) ----------
+// Tutte le auto scelgono, poi si muovono nello stesso momento. moves[i] = mossa dell'auto i (null se è ferma per urto).
+// Un'auto ferma salta il giro di mosse: al primo resta com'è, al secondo si gira nel verso della pista, poi riparte in prima.
+export function applyRound(race, moves) {
+  const t = race.track, ev = [], over = [];
+  race.cars.forEach((car, i) => {
+    if (car.crash) {
+      car.crash--;
+      if (car.crash === 0) car.dir = trackDir(t, car.pos);
+      ev.push({ type: 'skip', car: car.id, left: car.crash, turned: car.crash === 0 });
+      return;
+    }
+    const opt = moves[i];
+    if (!opt) return;
+    const from = { ...car.pos };
+    ev.push(...stepCar(t, car, opt));
+    car.moves++;
+    car.path.push({ x: car.pos.x, y: car.pos.y, lap: Math.max(1, car.progress) });
+    // chi finisce: conta quanto è andato oltre la linea (in caso di arrivo nello stesso momento vince chi è più avanti)
+    if (car.progress > race.laps) over.push({ id: car.id, beyond: side(t, car.pos), from });
+  });
+  race.moves++;
+  if (over.length) {
+    over.sort((a, b) => b.beyond - a.beyond || a.id - b.id);
+    race.winner = over[0].id; race.phase = 'over';
+    ev.push({ type: 'win', car: race.winner });
+  }
+  return ev;
+}
+
+// mosse dell'auto i in un giro di mosse insieme: non può fermarsi dove c'è un'auto ferma
+export function roundOptions(race, i, avoid = []) {
+  const car = race.cars[i];
+  const still = race.cars.filter((c) => c !== car && c.crash && c.pos).map((c) => c.pos);
+  const bad = [...still, ...avoid];
+  return carOptions(race.track, car, (p) => bad.some((q) => q.x === p.x && q.y === p.y));
+}
+
+// Applica la mossa scelta. Restituisce gli eventi per l'interfaccia.
+export function applyMove(race, opt) {
+  const car = race.cars[race.turn];
+  const ev = stepCar(race.track, car, opt);
+  car.moves++; race.moves++;
+  car.path.push({ x: car.pos.x, y: car.pos.y, lap: Math.max(1, car.progress) });
   if (car.progress > race.laps) { race.winner = car.id; race.phase = 'over'; ev.push({ type: 'win', car: car.id }); return ev; }
   return ev.concat(nextTurn(race));
 }
