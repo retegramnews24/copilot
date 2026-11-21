@@ -46,11 +46,18 @@ const call = async (id, path, body) => {
 };
 
 try {
-  const made = await call(9001, '/api/create', { game: 'biliardo', variant: 'italiana', points: 25 });
+  const made = await call(9001, '/api/create', {
+    game: 'biliardo',
+    variant: 'italiana',
+    points: 25,
+    cloth: 'blu'
+  });
   assert.equal(made.status, 200, JSON.stringify(made.data));
   const room = made.data.state.room;
   assert.equal(made.data.state.phase, 'waiting');
   assert.equal(made.data.state.opts.target, 25);
+  // il panno scelto da chi crea arriva a tutti (anche a chi guarda)
+  assert.equal((await call(9003, '/api/biliardo/' + room + '/state')).data.state.opts.cloth, 'blu');
   // bad specialty refused
   assert.notEqual((await call(9001, '/api/create', { game: 'biliardo', variant: 'bowling' })).status, 200);
   // the bell notice and the Lobby
@@ -64,7 +71,11 @@ try {
   const joined = await call(9002, '/api/biliardo/' + room + '/join', {});
   assert.equal(joined.status, 200, JSON.stringify(joined.data));
   assert.equal(joined.data.state.phase, 'playing');
-  assert.equal((await call(9003, '/api/biliardo/' + room + '/join', {})).status, 409, 'third one only watches');
+  assert.equal(
+    (await call(9003, '/api/biliardo/' + room + '/join', {})).status,
+    409,
+    'third one only watches'
+  );
   // a shot from who is on turn, replayed by the server like on the phone
   const st = joined.data.state,
     shooter = st.seats[st.match.cur],
@@ -87,7 +98,9 @@ try {
   assert.equal((await call(owner, '/api/biliardo/' + room + '/close', {})).status, 200);
   assert.equal((await call(owner, '/api/biliardo/' + room + '/state')).status, 404);
   assert.ok(!(await call(9002, '/api/lobby')).data.games.some(g => g.room === room));
-  console.log('PASS Biliardo runtime: create with specialty, notice, join and auto start, turn guard, server replay, close.');
+  console.log(
+    'PASS Biliardo runtime: create with specialty, notice, join and auto start, turn guard, server replay, close.'
+  );
 } finally {
   await mf.dispose();
   await rm(directory, { recursive: true, force: true });

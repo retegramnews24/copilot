@@ -424,7 +424,13 @@ export class LobbyHub {
               // Biliardo: the specialty, the points to win (5 birilli, boccette) or the reds (snooker), and the
               // players (2, or 3 / 4 in two teams). "points", not "target": that is the tournament format of other games
               ...(body.game === 'biliardo'
-                ? { variant: body.variant, target: body.points, reds: body.reds, players: body.players }
+                ? {
+                    variant: body.variant,
+                    target: body.points,
+                    reds: body.reds,
+                    players: body.players,
+                    cloth: body.cloth
+                  }
                 : {}),
               seed: body.game === 'moto-trial' ? 1 : crypto.getRandomValues(new Uint32Array(1))[0]
             })

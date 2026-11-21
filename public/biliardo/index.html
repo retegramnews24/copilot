@@ -7,7 +7,7 @@
 <title>Biliardo</title>
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-512.png">
-<link rel="stylesheet" href="biliardo.css?v=5c143f84c0">
+<link rel="stylesheet" href="biliardo.css?v=2f074fbd2c">
 </head>
 <body>
 <div id="app">
@@ -61,6 +61,7 @@
       <input id="bright2" type="range" min="30" max="150" step="5" aria-label="Luminosità della scena">
       <button id="play" class="pri">Gioca</button>
       <button id="rulesB" class="link">Regole e comandi</button>
+      <button id="startExit" hidden>Esci</button>
     </div>
   </div>
 
@@ -80,6 +81,8 @@
       <button id="resume" class="pri">Riprendi</button>
       <button id="restart">Ricomincia la partita</button>
       <button id="toStart">Cambia modalità</button>
+      <button id="closeAll" class="danger" hidden>Chiudi la partita per tutti</button>
+      <button id="exitB">Esci</button>
       <button id="rulesB2">Regole e comandi</button>
       <b>Impostazioni</b>
       <div class="row"><span>Sensibilità mira</span><span class="sp"></span><b id="sensV" class="num"></b></div>
@@ -89,7 +92,6 @@
       <div class="row"><span>Grafica</span><span class="sp"></span><button class="seg" data-q="bassa">Bassa</button><button class="seg" data-q="media">Media</button><button class="seg" data-q="alta">Alta</button></div>
       <div class="row"><span>Linea di mira lunga</span><span class="sp"></span><button id="guideB" class="seg on">Sì</button></div>
       <div class="row"><span>Suono</span><span class="sp"></span><button id="sndB" class="seg on">Sì</button></div>
-      <button id="exitB" class="link" hidden>Torna a Binottoland</button>
     </div>
   </div>
 
@@ -114,11 +116,12 @@
     <div class="card">
       <div id="overT" class="big center"></div>
       <div id="overS" class="muted center"></div>
-      <div class="row"><button id="overMode">Cambia modalità</button><span class="sp"></span><button id="overAgain" class="pri">Rivincita</button></div>
+      <button id="overAgain" class="pri">Rivincita</button>
+      <div class="row"><button id="overExit">Esci</button><span class="sp"></span><button id="overMode">Cambia modalità</button></div>
     </div>
   </div>
 </div>
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
-<script type="module" src="main.js?v=4c67f150ea"></script>
+<script type="module" src="main.js?v=34fceb26e9"></script>
 </body>
 </html>

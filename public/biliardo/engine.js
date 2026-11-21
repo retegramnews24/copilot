@@ -17,6 +17,8 @@ export const VARIANTS = {
 export const TARGETS = { italiana: [25, 50, 60], boccette: [50, 80, 100] };
 export const DEFAULT_TARGET = { italiana: 60, boccette: 80 };
 export const REDS = [6, 10, 15];
+// colori del panno (online li sceglie chi crea la partita e li vedono uguali tutti)
+export const CLOTH_KEYS = ['verde', 'blu', 'rosso', 'grigio', 'viola'];
 
 const tables = {};
 export const tableOf = (m) => tables[VARIANTS[m.variant].table] || (tables[VARIANTS[m.variant].table] = P.makeTable(VARIANTS[m.variant].table));

@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=f23fc1fa03';
-import { plan } from './ai.js?v=5b59c07863';
+import * as E from './engine.js?v=7a6dafd8ad';
+import { plan } from './ai.js?v=3a95875adb';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
@@ -80,7 +80,12 @@ const falling = new Map();
 const aim = { angle: 0, power: 0, spinX: 0, spinY: 0, call: -1 };
 const shotFrom = { x: 0, z: 0 };
 let strikeT = 0, strikeFrom = 0, pending = null, cueHideT = 0;
-const clothColor = () => (cfg.variant === 'snooker' && cfg.cloth === 'verde' ? '#0e6a35' : (CLOTHS[cfg.cloth] || CLOTHS.verde).c);
+// colore del panno: online è quello scelto da chi ha creato la partita (uguale per tutti), altrimenti il tuo
+const clothKey = () => (net && net.opts && E.CLOTH_KEYS.includes(net.opts.cloth) ? net.opts.cloth : cfg.cloth);
+const clothColor = () => {
+  const k = clothKey(), v = m ? m.variant : cfg.variant;
+  return v === 'snooker' && k === 'verde' ? '#0e6a35' : (CLOTHS[k] || CLOTHS.verde).c;
+};
 
 // online
 let me = null;          // { player, name } da Binottoland
@@ -284,7 +289,12 @@ function gameOver() {
     $('overT').textContent = net ? (myWin ? (net.seats.length > 2 ? 'Avete vinto!' : 'Hai vinto!') : `Vince ${w.name}`) : cfg.mode === '1' ? (w.cpu ? 'Ha vinto il computer' : 'Hai vinto!') : `Vince ${w.name}!`;
     const sc = m.variant === 'otto' ? '' : ` · ${m.scores[0]} a ${m.scores[1]}`;
     $('overS').textContent = (m.msg || '') + sc + ` · ${m.shots} colpi`;
-    $('overAgain').hidden = !!net;
+    // rivincita: in locale si riparte subito; online si apre una partita nuova con le stesse scelte
+    // (gli altri la trovano negli avvisi); chi guardava soltanto non la offre
+    $('overAgain').hidden = !!net && mySide() < 0;
+    $('overAgain').textContent = net ? 'Rivincita online' : 'Rivincita';
+    $('overMode').hidden = !!net;
+    $('overExit').textContent = exitLabel();
     $('over').hidden = false;
   }, 900);
 }
@@ -537,22 +547,57 @@ $('viewB').onclick = () => {
 
 // ---------- schermate ----------
 function hideSheets() { for (const id of ['start', 'menu', 'rules', 'over', 'wait']) $(id).hidden = true; }
+// Uscire: dentro Binottoland si torna all'app; aperto da Telegram si chiude la mini app; nel browser si torna
+// alla schermata iniziale. Online la partita continua senza di te (tira il pilota automatico).
+const exitLabel = () => (embedded ? 'Esci e torna a Binottoland' : tg && tg.initData ? 'Esci dal gioco' : net ? 'Esci dalla partita' : 'Esci');
+function leaveGame() {
+  hideSheets();
+  if (embedded) { toApp('exit'); return; }
+  if (tg && tg.initData && tg.close) { try { tg.close(); return; } catch (e) { /* vecchie versioni */ } }
+  net = null; toStart();
+}
+function syncMenu() {
+  // ripartire e cambiare modalità valgono solo per le partite su questo telefono: una partita online è di tutti
+  $('restart').hidden = !!net;
+  $('toStart').hidden = !!net;
+  const owner = !!(net && me && net.owner === me.player);
+  $('closeAll').hidden = !(owner && net.phase === 'playing');
+  $('closeAll').textContent = 'Chiudi la partita per tutti';
+  $('closeAll').dataset.sure = '';
+  $('exitB').textContent = exitLabel();
+}
 function toggleMenu() {
   if (!m || phase === 'menu') return;
+  syncMenu();
   $('menu').hidden = !$('menu').hidden;
 }
 $('menuB').onclick = toggleMenu;
 $('resume').onclick = () => { $('menu').hidden = true; };
 $('restart').onclick = () => { if (!net) newGame(); };
 const toStart = () => {
-  if (net) { toApp('action', { kind: net.phase === 'waiting' && net.owner !== (me && me.player) ? 'leave' : 'close' }); return; }
   hideSheets(); phase = 'menu'; $('hud').hidden = true; $('start').hidden = false; showStart();
 };
-$('toStart').onclick = toStart;
-$('overMode').onclick = toStart;
-$('overAgain').onclick = () => newGame();
-$('exitB').hidden = !embedded;
-$('exitB').onclick = () => toApp('exit');
+$('toStart').onclick = () => { if (!net) toStart(); };
+$('overMode').onclick = () => { if (!net) toStart(); };
+$('overAgain').onclick = () => {
+  if (!net) return newGame();
+  // online: nuova partita con le stesse scelte (specialità, giocatori, punti/rosse, panno)
+  const o = net.opts || {};
+  $('over').hidden = true;
+  toast('Apro la rivincita online…');
+  toApp('create', { variant: net.variant, players: net.capacity || 2, cloth: o.cloth || cfg.cloth, ...(net.variant === 'snooker' ? { reds: o.reds } : { target: o.target }) });
+};
+$('exitB').onclick = leaveGame;
+$('overExit').onclick = leaveGame;
+$('startExit').hidden = !(embedded || (tg && tg.initData));
+$('startExit').onclick = leaveGame;
+// chi ha creato la partita online può chiuderla per tutti (secondo tocco per confermare)
+$('closeAll').onclick = () => {
+  const b = $('closeAll');
+  if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sicuro? Tocca di nuovo per chiuderla'; return; }
+  $('menu').hidden = true;
+  toApp('action', { kind: 'close' });
+};
 let rulesBack = 'start';
 const openRules = (from) => {
   rulesBack = from; $(from).hidden = true; $('rules').hidden = false;
@@ -623,7 +668,7 @@ $('play').onclick = () => {
   if (cfg.mode !== 'net') return newGame();
   if (!me) return toast('Apri il gioco da Binottoland per giocare online.', true);
   toast('Apro la partita online…');
-  toApp('create', { variant: cfg.variant, players: cfg.netPlayers, ...gameOpts(cfg.variant) });
+  toApp('create', { variant: cfg.variant, players: cfg.netPlayers, cloth: cfg.cloth, ...gameOpts(cfg.variant) });
 };
 
 // impostazioni
@@ -674,6 +719,7 @@ function netState(d) {
   if (!st) return;
   net = st;
   netSkew = d.skew || 0;
+  if (T) table.setCloth(clothColor()); // il panno della partita, non quello scelto su questo telefono
   hideSheetsFor(st);
   if (st.phase === 'waiting') { showWait(st); return; }
   if (!st.match) return;

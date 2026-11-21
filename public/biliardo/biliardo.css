@@ -20,6 +20,7 @@ button:disabled { opacity: 0.4; cursor: default; }
 button.pri { background: linear-gradient(180deg, #f0cf7f, #c99a3c); color: #1b1305; border: 0; font-weight: 700; }
 button.seg.on { background: rgba(232, 194, 106, 0.25); border-color: var(--gold); color: #ffe7ad; }
 button.link { background: none; border: 0; color: #c8b89a; text-decoration: underline; }
+button.danger { background: rgba(127, 29, 29, 0.55); border-color: #b4483d; }
 button.ico { width: 44px; padding: 0; font-size: 18px; }
 input { font: inherit; font-size: 14px; color: #fff; background: rgba(255, 255, 255, 0.08); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; min-width: 0; flex: 1; }
 .row { display: flex; align-items: center; gap: 8px; }

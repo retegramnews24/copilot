@@ -25,6 +25,8 @@ export function makeMatch(room, number, user, now, body) {
   const opts = {};
   if (TARGETS[variant]) opts.target = TARGETS[variant].includes(body.target) ? body.target : DEFAULT_TARGET[variant];
   if (variant === 'snooker') opts.reds = REDS.includes(body.reds) ? body.reds : 6;
+  // il panno è della partita: lo sceglie chi la crea e tutti (giocatori e spettatori) lo vedono uguale
+  opts.cloth = E.CLOTH_KEYS.includes(body.cloth) ? body.cloth : 'verde';
   return {
     room,
     number,

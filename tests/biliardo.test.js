@@ -87,6 +87,10 @@ assert.equal(m.phase, 'waiting');
 assert.equal(makeMatch('r', 1, anna, now, { variant: 'italiana', target: 999 }).opts.target, 60);
 assert.equal(makeMatch('r', 1, anna, now, { variant: 'boccette', target: 50 }).opts.target, 50);
 assert.equal(makeMatch('r', 1, anna, now, { variant: 'snooker', reds: 15 }).opts.reds, 15);
+// il panno è della partita: quello di chi crea, uguale per tutti; un valore strano diventa verde
+assert.equal(makeMatch('r', 1, anna, now, { variant: 'otto', cloth: 'viola' }).opts.cloth, 'viola');
+assert.equal(makeMatch('r', 1, anna, now, { variant: 'otto', cloth: '<rosa>' }).opts.cloth, 'verde');
+assert.equal(makeMatch('r', 1, anna, now, { variant: 'otto' }).opts.cloth, 'verde');
 
 // ingresso: una volta sola, non oltre due; chi entra può uscire, chi crea no
 assert.equal(joinMatch(m, anna), false);

@@ -137,7 +137,13 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
       } catch {}
     } else if (data?.type === 'bil:create') {
       // apre la partita online con la specialità scelta (il server controlla di nuovo le opzioni)
-      if (pending || room || !me()) return;
+      if (pending || !me()) return;
+      // la rivincita: dopo una partita finita se ne apre una nuova (quella vecchia si lascia andare)
+      if (room && snapshot?.phase !== 'finished') return;
+      if (room) {
+        clearInterval(sync);
+        room = snapshot = null;
+      }
       pending = true;
       try {
         const result = await request('/api/create', {
@@ -145,7 +151,8 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
           variant: data.variant,
           players: data.players, // 2, oppure 3 o 4 a squadre
           points: data.target, // la Lobby usa "target" per i tornei degli altri giochi
-          reds: data.reds
+          reds: data.reds,
+          cloth: data.cloth // il colore del panno, uguale per tutti
         });
         clock(result);
         room = result.state.room;
