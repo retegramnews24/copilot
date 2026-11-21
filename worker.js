@@ -686,7 +686,15 @@ export class Room extends DurableObject {
               // personaggio a blocchi della Lobby 3D: dettagli, capelli, pelle
               accent: /^#[0-9a-f]{6}$/i.test(pose.accent) ? pose.accent : '#d62828',
               hair: /^#[0-9a-f]{6}$/i.test(pose.hair) ? pose.hair : '#4a2a17',
-              skin: /^#[0-9a-f]{6}$/i.test(pose.skin) ? pose.skin : '#d79a6b'
+              skin: /^#[0-9a-f]{6}$/i.test(pose.skin) ? pose.skin : '#d79a6b',
+              // in giro per il club (station 'walk'): posizione e direzione, arrotondate
+              ...(pose.station === 'walk' && Number.isFinite(pose.x) && Number.isFinite(pose.z)
+                ? {
+                    x: Math.round(Math.max(-30, Math.min(30, pose.x)) * 20) / 20,
+                    z: Math.round(Math.max(-30, Math.min(30, pose.z)) * 20) / 20,
+                    yaw: Number.isFinite(pose.yaw) ? Math.round(pose.yaw * 20) / 20 : 0
+                  }
+                : {})
             }
           : null;
       ws.serializeAttachment(a);

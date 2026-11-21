@@ -65,6 +65,15 @@ try{
  const spectator={ws:lobbyRes.webSocket,packets:[],waiters:[]};spectator.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);spectator.packets.push(p);for(const fn of [...spectator.waiters])fn(p)});spectator.ws.accept();sockets.push(spectator.ws);
  for(const table of [chess.data.state,dama.data.state]){spectator.ws.send(JSON.stringify({type:'presence',room:table.room,away:false}));const packet=await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.viewingRoom===table.room));assert.equal(packet.users.filter(u=>u.id==='21').length,1)}
  spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.viewingRoom===null));
+ // Lobby 3D: chi cammina nel club manda posizione e direzione, gli altri la ricevono (arrotondata e dentro il club);
+ // ai cabinati a più posti il quinto posto (slot 4) è valido.
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:3.21,z:-99,yaw:1.234,shirt:'#112233',shorts:'#445566',accent:'#d62828',hair:'#4a2a17',skin:'#d79a6b'}}));
+ let walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.station==='walk'))).users.find(u=>u.id==='21').clubPose;
+ assert.equal(walker.x,3.2);assert.equal(walker.z,-30);assert.equal(walker.yaw,1.25);assert.equal(walker.shirt,'#112233');assert.equal(walker.accent,'#d62828');
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'f1-on-paper',slot:4,shirt:'#112233',shorts:'#445566'}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.station==='f1-on-paper'))).users.find(u=>u.id==='21').clubPose;
+ assert.equal(walker.slot,4);assert.equal(walker.x,undefined);
+ spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false,pose:null}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&!u.clubPose));
  spectator.ws.send(JSON.stringify({type:'presence',room:dama.data.state.room,away:true}));await until(spectator,p=>p.users&&!p.users.some(u=>u.id==='21'));
  console.log('PASS spectator presence: live chess/checkers table changes, unique identity, Lobby return and away removal.');
  const four=await call(30,'/api/create',{game:'connect4'});assert.equal(four.status,200);const fourRoom=four.data.state.room;
