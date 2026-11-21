@@ -409,6 +409,11 @@
         if (station.down) row.classList.add('down');
         pick.append(name, info);
         pick.onclick = () => {
+          if (selector) {
+            if (!selector(station.id)) { status.textContent='Radio condivisa scollegata.'; return; }
+            sharedCache.set(station.id,station);
+            closeScreen(); return;
+          }
           current = station;
           saveLocal('binottoland-radio-last', current);
           streamIndex = 0;
@@ -621,6 +626,10 @@
     loadList(tab);
   }
   function closeScreen() {
+    if (selector) {
+      selector=null; dialog.close(); panelAnchor.after(screen);
+      screen.querySelector('h2').textContent='Radio';
+    }
     screen.hidden = true;
     toggle.setAttribute('aria-expanded', 'false');
     document.documentElement.classList.remove('radio-open');
@@ -766,6 +775,7 @@
     startStream();
   }
   const playPause = () => {
+    if(selector){if(selector(null))closeScreen();return;}
     if (!allowed()) return;
     if (wantsPlay) {
       stop();
@@ -849,6 +859,41 @@
       navigator.mediaSession.setActionHandler('stop', () => stop());
     } catch {}
   }
+  let selector=null, sharedMode=false, sharedId, savedPersonal, generation=0;
+  const sharedCache=new Map(), panelAnchor=document.createComment('radio'), dialog=document.createElement('dialog');
+  screen.before(panelAnchor);document.body.append(dialog);
+  dialog.style.cssText='border:0;padding:0;background:transparent;color:inherit;max-width:none;max-height:none';
+  const unlockShared=()=>{
+    if(sharedMode && current && sharedId===current.id && !wantsPlay && !selector)resume();
+  };
+  document.addEventListener('pointerdown',unlockShared);document.addEventListener('keydown',unlockShared);
+  dialog.oncancel=e=>{e.preventDefault();closeScreen()};
+  window.binottolandClubRadio={
+    choose(send){
+      if(!allowed()||!sharedMode||selector)return;
+      selector=send;dialog.append(screen);dialog.showModal();openScreen();
+      screen.querySelector('h2').textContent='Radio del bancone';
+      bigPlay.textContent='■';bigPlay.setAttribute('aria-label','Spegni la radio condivisa');
+    },
+    async sync(active,id){
+      if(active===sharedMode && (!active||id===sharedId))return;
+      const serial=++generation;
+      if(active&&!sharedMode){savedPersonal={current,playing:wantsPlay};stop()}
+      sharedMode=active;sharedId=id;
+      if(!active){
+        if(selector)closeScreen();
+        stop();current=savedPersonal?.current??null;if(savedPersonal?.playing)resume();savedPersonal=null;update();return;
+      }
+      stop();current=null;update();
+      if(!id)return;
+      try{
+        const station=sharedCache.get(id)||favorites.find(s=>s.id===id)||(await query('/json/stations/byuuid/'+encodeURIComponent(id)))[0];
+        if(serial!==generation||!station)return;
+        sharedCache.set(id,station);current=station;resume();
+      }catch{if(serial===generation){sharedId=undefined;status.textContent='Stazione condivisa non raggiungibile.'}}
+    },
+    loadHls
+  };
   update();
   renderList();
   // Last station is HLS: fetch hls.js now, so Play starts right away.

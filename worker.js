@@ -642,7 +642,14 @@ export class Room extends DurableObject {
     try {
       if (typeof message !== 'string' || message.length > 512) return;
       const b = JSON.parse(message);
+      if (b.type === 'club-radio' && a.inClub && !a.closed) {
+        if (b.station !== null && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(b.station)) return;
+        await this.ctx.storage.put('clubRadio', b.station);
+        await this.lobbyHub.lobbyBroadcast();
+        return;
+      }
       if (b.type !== 'presence') return;
+      a.inClub = b.inClub === true && !b.away;
       a.room = typeof b.room === 'string' && /^[a-f0-9-]{36}$/.test(b.room) ? b.room : null;
       a.seen = Date.now();
       a.closed = !!b.away;

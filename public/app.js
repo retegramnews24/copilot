@@ -16,7 +16,7 @@ import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} fro
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=6f9a6958a5';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=56908653f4';
-import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
+import {createCinemaLobby} from './cinema-lobby.js?v=b7ac5fac47';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
 import {createLobbyChips} from './lobby-chips.js?v=34f547ad4a';
@@ -66,9 +66,18 @@ initCatalog();
 // cabinati = giochi arcade: apre le schermate che ci sono già e torna da sola quando le chiudi.
 const LOBBY3D_KEY='binottoland-lobby3d';let lobby3d=null,lobby3dBack=0,lobby3dIdle=0;
 const lobbyIdle=()=>!$('page-game').hidden&&!$('lobby').hidden&&![...document.querySelectorAll('[id$="-overlay"]')].some(o=>!o.hidden)&&$('game-sheet')?.hidden!==false&&!document.querySelector('dialog[open]');
+let clubStation=null;
+function clubAudio(){
+ window.binottolandClubRadio?.sync(!!lobby3d?.active && !document.hidden,clubStation);
+}
+function clubVisibility(){sendPresence();clubAudio()}
+document.addEventListener('visibilitychange',clubVisibility);
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=2c9c56801e');lobby3d=m.createLobby3D({me:()=>identity,games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}}})}
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=811a7a7e6c');lobby3d=m.createLobby3D({me:()=>identity,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(lobbyWS?.readyState!==1)return false;
+ lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
+}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}}})}
  lobby3d.show();
 }
 $('lobby3d-open').onclick=()=>openLobby3D().catch(e=>err('Lobby 3D: '+e.message));
@@ -376,9 +385,9 @@ function connectLobby(){
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
- socket.onmessage=e=>{try{const data=JSON.parse(e.data);games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
+ socket.onmessage=e=>{try{const data=JSON.parse(e.data);clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
- socket.onclose=()=>{trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
+ socket.onclose=()=>{clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>selectPage('debug');
@@ -693,7 +702,7 @@ async function startSession(){
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||labyrinth.room()||room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',inClub:!!lobby3d?.active,room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||labyrinth.room()||room,away}));
 }
 
 function renderSpectators(){

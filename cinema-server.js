@@ -171,7 +171,8 @@ export class Cinema {
       seats.get(room).set(user.player,{id:user.player,name:user.name,appearance:normalizeAppearance(appearance)});
     }
     const shares=new Map(clients.filter(({info})=>info.screen).map(entry=>[entry.info.room,entry]));
-    const rooms=data.rooms.map(({id,number,channel})=>({
+    const rooms=data.rooms.map(({id,number,channel,playback})=>({
+      projection: !shares.has(id) && channel && !channel.inbox && !channel.group && !channel.file && !channel.image ? {url:channel.url,youtube:channel.youtube||null,live:!!channel.live,playback} : null,
       id,number,channel:shares.has(id)?'Finestra condivisa':channel?.inbox?'Coda Telegram':channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
     }));
     const viewScreen=(sharing,socket)=>sharing?{id:sharing.info.screen.id,peer:sharing.info.client,name:sharing.info.user.name,local:sharing.socket===socket}:null;

@@ -346,6 +346,8 @@ export function createCinemaLobby({
     return items;
   }
   return {
+    projection: () => cinemaSocket?.readyState === 1
+      ? cinemaRooms.rooms.find(r => r.projection) || cinemaRooms.rooms.find(r => r.channel) || cinemaRooms.rooms[0] : null,
     connect: connectCinema,
     post: cinemaPost,
     open: openCinema,

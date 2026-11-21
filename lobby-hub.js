@@ -124,6 +124,7 @@ export class LobbyHub {
     const records = [...(await this.ctx.storage.list({ prefix: 'result:' })).values()];
     return {
       games,
+      clubRadio: (await this.ctx.storage.get('clubRadio')) ?? null,
       users,
       // Chat: messages only (notices stored there by 1.0.41 are dropped).
       messages: ((await this.ctx.storage.get('chat')) || []).filter(m => !m.notice),

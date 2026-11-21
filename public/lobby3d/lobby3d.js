@@ -202,9 +202,10 @@ function cabinetScreen(title, color) {
 function nameTag(text) {
   return canvasTex(512, 96, (g, w, h) => {
     g.font = 'bold 44px system-ui, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    const tw = Math.min(w - 8, g.measureText(text).width + 40);
-    g.fillStyle = 'rgba(10,8,20,.62)'; g.beginPath(); g.roundRect((w - tw) / 2, 10, tw, h - 20, 30); g.fill();
-    g.fillStyle = '#fff'; g.fillText(text, w / 2, h / 2 + 2);
+    g.font='900 76px Arial,sans-serif';g.lineJoin='round';g.strokeStyle='#19191c';g.lineWidth=7;
+    g.strokeText(text,w/2,h/2,w-12);
+
+    g.fillStyle = '#fff'; g.fillText(text, w / 2, h / 2,w-12);
   });
 }
 function blobTex() {
@@ -286,7 +287,7 @@ export function createLobby3D(app) {
   stick.hidden = !touch;
   hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+  const renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true, powerPreference: 'high-performance' });
   const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -330,7 +331,9 @@ export function createLobby3D(app) {
     if(x0===-7){
       wallX(x0,-1.45,-6.15,finish);wallX(1.45,x1,-6.15,finish);
       box(2.9,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,-6.15);
-    }else wallX(x0, x1, -6.15, finish); wallX(x0, x1, 6.15, finish);
+    }else wallX(x0, x1, -6.15, finish);
+    if(x0===-7){wallX(-7,-1.65,6.15,finish);wallX(1.65,7,6.15,finish);wallMeshes.push(box(3.3,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,6.15))}
+    else wallX(x0,x1,6.15,finish);
     // zoccolo
     const sk = std('#2a1a12', 0.6);
     box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, -5.98); box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, 5.98);
@@ -366,8 +369,8 @@ export function createLobby3D(app) {
       g.beginPath();g.moveTo(0,h);for(let x=0;x<=w;x+=8)g.lineTo(x,112+i*29+28*Math.sin(x*.011+i)+16*Math.sin(x*.027+i*4)+8*Math.cos(x*.059+i));g.lineTo(w,h);g.fillStyle=c;g.fill();
     });
   });
-  box(7.5,1.55,.07,std('#84663e',.38,.55),0,2.12,5.94);
-  plane(7.38,1.43,new THREE.MeshStandardMaterial({map:panorama,roughness:.92}),0,2.12,5.895,Math.PI);
+  box(4.15,1.55,.07,std('#84663e',.38,.55),-4,2.12,5.94);
+  plane(4.04,1.43,new THREE.MeshStandardMaterial({map:panorama,roughness:.92}),-4,2.12,5.895,Math.PI);
   // lampadari
   for (const x of [-3.5, 3.5]) {
     box(0.02, 0.5, 0.02, std('#222', 0.4, 0.8), x, H - 0.25, 0);
@@ -411,8 +414,8 @@ export function createLobby3D(app) {
     solid(sx * 3.6 - 1.12, sx * 3.6 + 1.12, 4.85, 5.8);
   }
   const table = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 32), new THREE.MeshPhysicalMaterial({ color: '#6b4226', roughness: 0.35, clearcoat: 0.8 }));
-  table.position.set(0, 0.45, 4.6); scene.add(table);
-  box(0.08, 0.44, 0.08, legM, 0, 0.22, 4.6); solid(-0.58, 0.58, 4.02, 5.18);
+  table.position.set(-2, 0.45, 4.6); scene.add(table);
+  box(0.08, 0.44, 0.08, legM, -2, 0.22, 4.6); solid(-2.58, -1.42, 4.02, 5.18);
   const plant = (x, z) => {
     const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.5, 20), std('#b5633d', 0.8)); pot.position.set(x, 0.25, z); scene.add(pot);
     // Lance-shaped leaves grow in fans from the crown.
@@ -587,13 +590,107 @@ export function createLobby3D(app) {
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
   doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.52,-5.94);
-  for(const [key,title,z,motif] of [['cinema-streamer','CINEMA',-3.6,'film'],['blackboard-spazio-libero','LAVAGNA',3.6,'chalk']]){
+  for(const [key,title,z,motif] of [['blackboard-spazio-libero','LAVAGNA',3.6,'chalk']]){
     if(!avail.has(key))continue;
     poster(6.78,z,-Math.PI/2,title,'BINOTTOLAND',motif==='film'?['#342f43','#f1cf99','#b95858']:['#22443d','#e5d9b0','#cfad73'],motif);
     spots.push({x:6.65,z,hx:.12,hz:.66,pad:1,label:title,act:()=>app.open(key)});
   }
   poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
+  // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
+  const velvet=std('#862c43',.94), piping=std('#ab5860',.85), cinemaWall=std('#34232d',.96);
+  plane(14,12.4,std('#4c2935',.98),0,0,12.26,0,-Math.PI/2);
+  plane(14,12.4,std('#29252e',.96),0,H,12.26,0,Math.PI/2);
+  wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
+  wallX(-7.3,7.3,18.55,cinemaWall);
+  doorSign('CINEMA','#ffd496',0,Math.PI).position.set(0,2.93,5.95);
+  const amber=glow('#ffbb6b',1.5);
+  for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
+  for(let row=0;row<5;row++){
+    const z=8.1+row*1.63;
+    for(const side of [-1,1]){
+      const x=side*2.66;
+      groundTint(x,z,3.3,1.46,contact);
+      box(2.72,.22,.95,darkWood,x,.17,z);
+      box(2.61,.66,.20,velvet,x,.56,z-.44);
+      for(const off of [-.59,.59]){
+        box(1.14,.18,.77,velvet,x+off,.37,z+.02);
+        const back=box(1.13,.46,.16,piping,x+off,.65,z-.31);back.rotation.x=-.10;
+      }
+      for(const off of [-1.27,1.27])box(.19,.42,.91,velvet,x+off,.45,z);
+      solid(x-1.37,x+1.37,z-.55,z+.50);
+      spots.push({x,z,hx:1.37,hz:.5,pad:.68,label:'Siediti · Cinema',sit:true,act:()=>app.sit?app.sit(app.projection()?.id):app.open('cinema-streamer')});
+    }
+    for(const side of [-1,1]){
+      box(.11,.54,.20,brassTrim,side*6.94,1.9,z);
+      box(.13,.37,.15,amber,side*6.86,1.91,z);
+    }
+  }
+  point('#ffc086',10,0,2.8,10,13);point('#adc8f3',10,0,2.9,16,11);
+  for(const side of [-1,1])for(let i=0;i<8;i++)box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12);
+  box(5.16,2.97,.12,darkWood,0,1.77,18.08);
+  const standby=new THREE.MeshBasicMaterial({map:neonText('BINOTTOLAND CINEMA','#f3c485',1024,576,'bold 69px Georgia'),color:0xccb99b});
+  const screenMesh=plane(5.04,2.835,standby,0,1.77,17.99,Math.PI);
+  const aperture=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0,blending:THREE.NoBlending,depthWrite:false});
+  const projection=document.createElement('div');
+  projection.style.cssText='position:absolute;left:0;top:0;width:960px;height:540px;background:black;overflow:hidden;transform-origin:0 0;pointer-events:none';
+  projection.hidden=true;host.prepend(projection);
+  let previewKey='',hls=null,previewVideo=null;
+  function stopProjection(){
+    previewKey='';screenMesh.material=standby;projection.hidden=true;
+    hls?.destroy();hls=null;
+    if(previewVideo){previewVideo.pause();previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
+    projection.replaceChildren();
+  }
+  function playProjection(data){
+    const p=data?.projection;
+    const play=p?.playback;
+    const key=p?JSON.stringify([data.id,p.url,play?.playing,play?.seek,play?.playRevision]):'';
+    if(key===previewKey)return;
+    stopProjection();if(!key)return;
+    previewKey=key;
+    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5}};
+    if(p.youtube&&/^[\w-]{11}$/.test(p.youtube)){
+      const frame=document.createElement('iframe');
+      const position=(play?.position||0)+(play?.playing?Math.max(0,(Date.now()-play.updated)/1000):0);
+      frame.allow='autoplay';frame.title='Proiezione cinema';frame.style.cssText='width:100%;height:100%;border:0';
+      frame.src='https://www.youtube.com/embed/'+p.youtube+'?playsinline=1&mute=1&controls=0&autoplay='+(play?.playing===false?0:1)+'&start='+Math.max(0,Math.floor(position)||0);
+      frame.onload=ready;projection.append(frame);return;
+    }
+    const v=document.createElement('video');previewVideo=v;v.muted=true;v.playsInline=true;v.autoplay=true;
+    v.style.cssText='width:100%;height:100%;object-fit:contain';projection.append(v);
+    v.onloadeddata=ready;
+    if(/\.m3u8?(?:[?#]|$)/i.test(p.url)&&!v.canPlayType('application/vnd.apple.mpegurl')){
+      window.binottolandClubRadio?.loadHls().then(Hls=>{
+        if(previewVideo!==v||!Hls.isSupported())return;
+        hls=new Hls({backBufferLength:10});hls.loadSource(p.url);hls.attachMedia(v);
+      }).catch(()=>{});
+    }else v.src=p.url;
+  }
+  const mediaTransform=new THREE.Matrix4(),pixelPlane=new THREE.Matrix4(),viewport=new THREE.Matrix4();
+  function alignProjection(){
+    if(projection.hidden)return;
+    const w=host.clientWidth/2,h=host.clientHeight/2;
+    pixelPlane.set(5.04/960,0,0,-2.52,0,-2.835/540,0,1.4175,0,0,1,0,0,0,0,1);
+    viewport.set(w,0,0,w,0,-h,0,h,0,0,1,0,0,0,0,1);
+    camera.updateMatrixWorld();screenMesh.updateMatrixWorld();
+    mediaTransform.copy(viewport).multiply(camera.projectionMatrix).multiply(camera.matrixWorldInverse).multiply(screenMesh.matrixWorld).multiply(pixelPlane);
+    projection.style.transform='matrix3d('+mediaTransform.elements.join(',')+')';
+  }
+
+  poster(-6.94,12,Math.PI/2,'CINEMA','PROIEZIONE IN SALA',['#442333','#ffe2ab','#c58461'],'film');
+  // Reception counter and tabletop receiver on the east side of the atrium.
+  const counterX=5.95,counterZ=-3.35;
+  box(1.14,.9,2.15,walnut,counterX,.45,counterZ);
+  box(1.25,.09,2.29,brassTrim,counterX,.94,counterZ);
+  solid(counterX-.63,counterX+.63,counterZ-1.15,counterZ+1.15);
+  const receiver=new THREE.Group();receiver.position.set(counterX,1.00,counterZ);receiver.rotation.y=-Math.PI/2;scene.add(receiver);
+  box(.89,.44,.25,walnut,0,.22,0,receiver);box(.83,.38,.025,darkWood,0,.22,.134,receiver);
+  for(let n=0;n<10;n++)box(.024,.28,.018,brassTrim,-.36+n*.041,.22,.155,receiver);
+  box(.31,.095,.016,amber,.22,.29,.152,receiver);
+  for(const x of [.13,.32]){const knob=new THREE.Mesh(new THREE.CylinderGeometry(.046,.046,.04,16),brassTrim);knob.rotation.x=Math.PI/2;knob.position.set(x,.145,.165);receiver.add(knob)}
+  const aerial=box(.012,.46,.012,brassTrim,.29,.64,0,receiver);aerial.rotation.z=-.28;
+  spots.push({x:counterX-.64,z:counterZ,hx:.05,hz:.97,pad:.88,label:'Radio del bancone',radio:true,act:()=>app.tune?.()});
   // ========== SALA ARCADE (x -19…-7) ==========
   const list = ARCADE.filter(([k]) => avail.has(k));
   list.push(['ruggine-89','Ruggine 89','#ffb448']);
@@ -686,11 +783,18 @@ export function createLobby3D(app) {
     const n = (app.me && app.me()?.name) || '';
     if (n === tagName) return;
     tagName = n;
-    if (tag) { me.root.remove(tag); tag.material.map.dispose(); tag.material.dispose(); }
+    if (tag) { me.root.remove(tag); tag.geometry.dispose(); tag.material.map.dispose(); tag.material.dispose(); }
     tag = null;
     if (!n) return;
-    tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTag(n.slice(0, 22)), depthWrite: false, transparent: true }));
-    tag.scale.set(1.1, 0.21, 1); tag.position.y = 1.95; me.root.add(tag);
+    const cloth=new THREE.PlaneGeometry(.36,.077,20,4),points=cloth.attributes.position;
+    for(let i=0;i<points.count;i++){
+      const x=points.getX(i),y=1.115+points.getY(i);
+      const depth=.143*Math.sqrt(Math.max(0,1-(x/.235)**2-((y-1.12)/.15)**2));
+      points.setXYZ(i,x,y,depth+.004);
+    }
+    cloth.computeVertexNormals();
+    tag=new THREE.Mesh(cloth,new THREE.MeshBasicMaterial({map:nameTag(n),transparent:true,depthWrite:false}));
+    me.root.add(tag);
   };
   // anello che indica cosa si può aprire
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.3, 0.38, 40), new THREE.MeshBasicMaterial({ color: new THREE.Color('#ffcf4a').multiplyScalar(1.6), transparent: true, opacity: 0.85, depthWrite: false }));
@@ -712,7 +816,7 @@ export function createLobby3D(app) {
   const drags = new Map();
   let pinch = 0;
   const onKey = (e) => {
-    if (!active) return;
+    if (!active || document.querySelector('dialog[open]')) return;
     if (e.code === 'Space') {
       e.preventDefault();
       if (e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
@@ -795,7 +899,7 @@ export function createLobby3D(app) {
     if (joy.id !== null) { ix += joy.x; iz += joy.y; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     let speed = 0;
-    if (mag > 0.12) {
+    if (!seating && mag > 0.12) {
       // avanti = lontano dalla telecamera
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
@@ -819,6 +923,10 @@ export function createLobby3D(app) {
       me.root.position.y += jumpHeight;
     }
     blob.scale.setScalar(1 - jumpHeight * .24);
+    if(seating){
+      me.root.position.y=-.22;
+      for(const leg of me.legs)leg.rotation.x=1.25;
+    }
     blob.position.set(pos.x, 0.008, pos.z);
     // cosa c'è vicino
     let best = null, bd = 1e9;
@@ -826,7 +934,7 @@ export function createLobby3D(app) {
     if (best !== near) {
       near = best;
       actB.hidden = !near;
-      if (near) actB.textContent = 'Apri · ' + near.label + (touch ? '' : '  (E)');
+      if (near) actB.textContent = (near.sit?'':'Apri · ') + near.label + (touch ? '' : '  (E)');
     }
     ring.visible = !!near && !!near.mq;
     for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
@@ -839,7 +947,7 @@ export function createLobby3D(app) {
       if(reducedMotion||Math.abs(pos.x-demo.x)>12)continue;
       demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
     }
-    const where = pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala arcade' : 'Atrio';
+    const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala arcade' : 'Atrio';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, 1.45 + jumpHeight * .42, pos.z);
@@ -849,6 +957,7 @@ export function createLobby3D(app) {
     const d = hit ? Math.max(0.6, hit.distance - 0.25) : cam.dist;
     camera.position.copy(tgt).addScaledVector(tmp, d);
     camera.position.y = Math.min(H - 0.15, camera.position.y);
+    if(pos.z>6.45)camera.position.z=Math.max(6.43,camera.position.z);
     camera.lookAt(tgt);
   }
 
@@ -858,7 +967,8 @@ export function createLobby3D(app) {
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
     step(dt);
-    renderer.render(scene, camera);
+    playProjection((pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65)) && camera.getWorldDirection(tmp).z>.1 ? app.projection?.():null);
+    alignProjection();renderer.render(scene, camera);
   }
   function resize() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -871,7 +981,16 @@ export function createLobby3D(app) {
   addEventListener('resize', resize);
 
   // ---------- apri, mostra, nascondi ----------
+  let seating=false,seatTimer=0;
   function launch(s) {
+    if(seating)return;
+    if(s.sit){
+      resetMovement();seating=true;
+      pos.x=s.x;pos.z=s.z;heading=Math.PI;cam.yaw=Math.PI;
+      seatTimer=setTimeout(()=>{hide();s.act();app.launched?.(s)},420);
+      return;
+    }
+    if(s.radio){resetMovement();s.act();return}
     hide();
     s.act();
     if (app.launched && s.label!=='Ruggine 89') app.launched(s);
@@ -879,7 +998,7 @@ export function createLobby3D(app) {
   function show() {
     if (active) return;
     el.hidden = false; active = true; last = 0;
-    setTag();
+    app.clubVisibility?.();setTag();
     // l'aspetto può essere cambiato in Settings
     const look = readAppearance();
     me.root.traverse((o) => { if (o.isMesh && o.material.userData.part) o.material.color.set(look[o.material.userData.part]); });
@@ -889,11 +1008,12 @@ export function createLobby3D(app) {
     raf = requestAnimationFrame(frame);
   }
   function hide() {
-    active = false; cancelAnimationFrame(raf);
+    if(seating){clearTimeout(seatTimer);seating=false;pos.z+=.95;collide(pos)}
+    active = false; app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { resetMovement(); cancelAnimationFrame(raf); last = 0; } else if (active) raf = requestAnimationFrame(frame); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopProjection();resetMovement(); cancelAnimationFrame(raf); last = 0; } else if (active) raf = requestAnimationFrame(frame); });
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
   const api = { show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
