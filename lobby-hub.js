@@ -99,7 +99,7 @@ export class LobbyHub {
         const watching = tables.find(g => g.room === a.room);
         return {
           ...a.user,
-          clubPose:a.clubPose??null,
+          clubPose: a.clubPose ?? null,
           status: own
             ? 'In partita ' + own.number
             : watching

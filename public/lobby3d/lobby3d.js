@@ -11,11 +11,12 @@ import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnviron
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
 import * as E from '../biliardo/engine.js?v=2db7d98a7f';
 import { readAppearance } from '../appearance.js?v=3bf8d2e2ca';
+import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
+import { makeCharacter, animateCharacter, SPEED } from './character.js?v=1e25649222';
 
 const H = 3.4; // altezza delle stanze
 const DOOR = 1.3, DOOR_H = 2.5; // mezza larghezza e altezza delle porte
 const R = 0.3; // ingombro del personaggio
-const SPEED = 3.1;
 // cabinati della sala arcade: chiave del gioco nel catalogo (games-catalog.js), nome, colore
 const ARCADE = [
   ['pong', 'Pong', '#5bc0be'],
@@ -53,237 +54,6 @@ const CSS = `
 .l3d-load[hidden]{display:none}
 .l3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:#cfc6e6;pointer-events:none}
 `;
-
-// ---------- texture disegnate al volo ----------
-function canvasTex(w, h, draw) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  draw(c.getContext('2d'), w, h);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4;
-  return t;
-}
-function neonText(text, color, w = 1024, h = 256, font = 'bold 140px "Arial Black", Arial, sans-serif') {
-  return canvasTex(w, h, (g) => {
-    g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.shadowColor = color; g.shadowBlur = 36; g.fillStyle = color; g.fillText(text, w / 2, h / 2);
-    g.shadowBlur = 10; g.fillStyle = '#fff'; g.globalAlpha = 0.85; g.fillText(text, w / 2, h / 2);
-  });
-}
-function parquet() {
-  return canvasTex(512, 512, (g) => {
-    for (let row = 0; row < 8; row++) {
-      for (let col = -1; col < 4; col++) {
-        const x = col * 192 + (row % 3) * 64, y = row * 64;
-        g.fillStyle = 'hsl(29,38%,' + (36 + ((row * 7 + col + 4) % 8)) + '%)';
-        g.fillRect(x, y, 192, 64);
-        g.save(); g.beginPath(); g.rect(x, y, 192, 64); g.clip();
-        for (let k = 0; k < 36; k++) {
-          const v = y + (k * 17 % 64);
-          g.strokeStyle = k % 4 ? '#edd5ac25' : '#351d1533';
-          g.beginPath(); g.moveTo(x, v); g.bezierCurveTo(x+70,v-4,x+106,v+9,x+192,v+1); g.stroke();
-        }
-        g.restore(); g.fillStyle='#38291e80'; g.fillRect(x,y,192,1.5); g.fillRect(x,y,1.5,64);
-      }
-    }
-  });
-}
-
-// A single painted surface per long wall keeps the mouldings and murals inexpensive on phones.
-function wallFinish(room) {
-  return canvasTex(2048, 512, (g,w,h) => {
-    const atrium=room==='atrium', pool=room==='pool';
-    const wash=g.createLinearGradient(0,0,0,h);
-    const colors=atrium?['#c3af91','#f1e1c4','#b79e80']:pool?['#102a28','#315550','#142f2d']:['#10132b','#31214a','#16132a'];
-    colors.forEach((c,i)=>wash.addColorStop(i/2,c));g.fillStyle=wash;g.fillRect(0,0,w,h);
-    if(!atrium&&!pool){
-      // A sunset and layered vector mountains behind the cabinets.
-      const sky=g.createLinearGradient(0,45,0,260);sky.addColorStop(0,'#ffbc64');sky.addColorStop(1,'#d14688');
-      g.fillStyle=sky;g.beginPath();g.arc(1010,205,114,0,Math.PI*2);g.fill();
-      g.fillStyle='#392040';for(let y=195;y<320;y+=11)g.fillRect(892,y,236,(y-170)/23);
-      for(let layer=0;layer<2;layer++){
-        g.beginPath();g.moveTo(0,h);
-        for(let x=0;x<=w;x+=32){const y=228+layer*52+Math.sin(x*.011+layer)*40+Math.cos(x*.041+layer)*17;g.lineTo(x,y)}
-        g.lineTo(w,h);g.closePath();g.fillStyle=layer?'#17182d':'#48325b';g.fill();g.lineWidth=2;g.strokeStyle=layer?'#36899b':'#af65a5';g.stroke();
-      }
-      g.fillStyle='#c7b3d0';for(let i=0;i<100;i++)g.fillRect((i*349)%w,(i*83)%123,2,2);
-      return;
-    }
-    const base=atrium?370:325;
-    g.fillStyle=atrium?'#614636':'#483025';g.fillRect(0,base,w,h-base);
-    for(let x=0;x<w;x+=128){
-      g.fillStyle=atrium?'#775640':'#51392b';g.fillRect(x+6,base+11,116,h-base-20);
-      g.strokeStyle='#281e18';g.lineWidth=3;g.strokeRect(x+12,base+18,104,h-base-36);
-      g.strokeStyle='#a17a50';g.lineWidth=1;g.strokeRect(x+15,base+21,98,h-base-42);
-    }
-    g.fillStyle='#392b21';g.fillRect(0,base-7,w,8);g.fillStyle='#c69b60';g.fillRect(0,base-9,w,3);
-    for(let i=0;i<16000;i++){g.fillStyle=i%2?'#fff4db12':'#30201812';g.fillRect((i*499)%w,(i*73+Math.floor(i/512)*37)%h,2,1)}
-  });
-}
-function tiles(hue, l1, l2) {
-  return canvasTex(512, 512, (g, w) => {
-    const n = 8, s = w / n;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
-      g.fillStyle = `hsl(${hue},14%,${((i + j) % 2 ? l1 : l2) + Math.random() * 2}%)`; g.fillRect(i * s, j * s, s, s);
-      g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 3; g.strokeRect(i * s, j * s, s, s);
-    }
-  });
-}
-function neonGrid() {
-  return canvasTex(512, 512, (g, w, h) => {
-    g.fillStyle = '#0a0614'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = '#53317d'; g.lineWidth = 2; g.shadowColor = '#a855f7'; g.shadowBlur = 12;
-    for (let x = 0; x <= w; x += 128) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
-    for (let y = 0; y <= h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
-  });
-}
-function blackboard() {
-  return canvasTex(1024, 640, (g, w, h) => {
-    const gr = g.createLinearGradient(0, 0, w, h);
-    gr.addColorStop(0, '#1f3a2c'); gr.addColorStop(1, '#17291f');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    // polvere di gesso
-    for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 10, 1 + Math.random() * 3); }
-    g.fillStyle = '#f3f1e6'; g.textBaseline = 'top';
-    g.font = 'bold 96px "Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive';
-    g.fillText('⚙ Settings', 60, 46);
-    g.font = '52px "Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive';
-    ['• Tema e colori', '• Il tuo personaggio', '• Avvisi e notifiche', '• Archivio · Informazioni'].forEach((t, i) => g.fillText(t, 80, 200 + i * 86));
-    g.strokeStyle = 'rgba(243,241,230,.8)'; g.lineWidth = 5;
-    g.beginPath(); g.moveTo(60, 168); g.bezierCurveTo(300, 158, 520, 176, 640, 162); g.stroke();
-    // un disegnino: la palla 8
-    g.beginPath(); g.arc(860, 470, 80, 0, 7); g.stroke();
-    g.beginPath(); g.arc(860, 470, 32, 0, 7); g.stroke();
-    g.font = 'bold 44px "Segoe Print", "Comic Sans MS", cursive'; g.fillText('8', 846, 444);
-  });
-}
-function gamesPoster() {
-  const list = [['Scacchi', '#c9b27c'], ['Dama', '#b0745a'], ['Forza 4', '#d9534f'], ['UNO', '#e94b3c'], ['Scarabeo', '#d6a648'], ['Scopa', '#3f8f5c'], ['Briscola', '#8c4b8a'], ['Navale', '#2f6f9f'], ['Cinema', '#d64575']];
-  return canvasTex(640, 900, (g, w, h) => {
-    g.fillStyle = '#f6efe1'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#2b2140'; g.font = 'bold 76px "Arial Black", Arial, sans-serif'; g.textAlign = 'center';
-    g.fillText('Tutti', w / 2, 110); g.fillText('i giochi', w / 2, 196);
-    list.forEach(([t, c], i) => {
-      const x = 60 + (i % 3) * 180, y = 260 + Math.floor(i / 3) * 200;
-      g.fillStyle = c; g.beginPath(); g.roundRect(x, y, 160, 150, 26); g.fill();
-      g.fillStyle = '#fff'; g.font = 'bold 30px Arial, sans-serif'; g.fillText(t, x + 80, y + 88);
-    });
-  });
-}
-function cabinetScreen(title, color) {
-  return canvasTex(256, 200, (g, w, h) => {
-    const c = new THREE.Color(color);
-    const hsl = {}; c.getHSL(hsl);
-    const hue = Math.round(hsl.h * 360);
-    const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, `hsl(${hue},70%,22%)`); gr.addColorStop(1, `hsl(${hue + 50},70%,7%)`);
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    g.save();g.beginPath();g.rect(0,54,w,106);g.clip();g.fillStyle=color;g.strokeStyle=color;g.lineWidth=3;
-    if(/Ruggine|F1|Binotto|Moto/.test(title)){
-      for(let n=0;n<5;n++){g.beginPath();g.moveTo(108+n*10,75);g.lineTo(n*78-35,160);g.stroke()}
-      for(let n=0;n<4;n++){const x=42+n*48,y=129-(n%3)*16;g.fillStyle='#ffc16f';g.fillRect(x,y,21,8);g.fillStyle='#232739';g.fillRect(x+5,y-4,10,5)}
-    }else if(title==='Pong'){
-      g.fillRect(25,100,6,31);g.fillRect(224,73,6,31);g.fillRect(173,92,7,7);
-      for(let y=58;y<155;y+=13)g.fillRect(127,y,2,6);
-    }else if(/Lunar|Giulio|Golf/.test(title)){
-      g.beginPath();g.moveTo(0,155);for(let x=0;x<=w;x+=8)g.lineTo(x,119+Math.sin(x*.045)*16+7*Math.cos(x*.09));g.lineTo(w,160);g.fill();
-      g.fillStyle='#ffdc9e';g.beginPath();g.arc(193,75,12,0,7);g.fill();
-      if(/Lunar/.test(title)){g.fillRect(95,91,19,10);g.fillRect(99,86,11,6);g.fillRect(93,101,3,7);g.fillRect(113,101,3,7)}
-      if(/Giulio/.test(title))for(let x=0;x<4;x++){g.fillRect(50+35*x,104,32,14);g.fillStyle='#efbd84'}
-      if(title==='Golf'){g.fillRect(171,96,2,32);g.fillRect(172,96,12,7)}
-    }else{
-      for(let n=0;n<30;n++){const x=29+(n%10)*20,y=73+Math.floor(n/10)*23;g.strokeRect(x,y,16,18);if((n*7)%5<2)g.fillRect(x+4,y+4,8,10)}
-    }
-    g.restore();
-    g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.font = `bold ${title.length > 12 ? 24 : 30}px "Arial Black", Arial, sans-serif`;
-    g.shadowColor = color; g.shadowBlur = 12; g.fillText(title.toUpperCase(), w / 2, 32);
-    g.shadowBlur = 0; g.font = 'bold 18px monospace'; g.fillText('▶ PREMI APRI', w / 2, h - 22);
-    for (let y = 0; y < h; y += 3) { g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(0, y, w, 1); }
-  });
-}
-function nameTag(text) {
-  return canvasTex(512, 96, (g, w, h) => {
-    g.font = 'bold 44px system-ui, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.font='900 76px Arial,sans-serif';g.lineJoin='round';g.strokeStyle='#19191c';g.lineWidth=7;
-    g.strokeText(text,w/2,h/2,w-12);
-
-    g.fillStyle = '#fff'; g.fillText(text, w / 2, h / 2,w-12);
-  });
-}
-function blobTex() {
-  return canvasTex(64, 64, (g, w, h) => {
-    const gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
-    gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, w, h);
-  });
-}
-
-// ---------- il personaggio (lo stesso del Labyrinth: maglia e pantaloncini scelti in Settings) ----------
-function makeCharacter(look) {
-  const root = new THREE.Group();
-  const ball = new THREE.SphereGeometry(1, 20, 14);
-  const mat = (c, r = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
-  const skin = mat('#dc9f88', 0.65), shirt = mat(look.shirt, 0.8), shorts = mat(look.shorts, 0.8);
-  // maglia e pantaloncini si ricolorano se li cambi in Settings
-  shirt.userData.part = 'shirt'; shorts.userData.part = 'shorts';
-  const hairM = mat('#3a2a1e', 0.9), shoeM = mat('#232b28', 0.6), soleM = mat('#a5a189', 0.8), white = mat('#f5f1e4', 0.4), dark = mat('#1b1512', 0.3);
-  const blob = (parent, m, x, y, z, rx, ry, rz) => { const o = new THREE.Mesh(ball, m); o.position.set(x, y, z); o.scale.set(rx, ry, rz); parent.add(o); return o; };
-  const legs = [], arms = [];
-  for (const s of [-1, 1]) {
-    const hip = new THREE.Group(); hip.position.set(s * 0.119, 0.66, 0); root.add(hip);
-    blob(hip, shorts, 0, -0.15, 0.008, 0.115, 0.19, 0.135);
-    blob(hip, skin, 0, -0.42, 0, 0.068, 0.25, 0.075);
-    blob(hip, shoeM, 0, -0.62, -0.06, 0.085, 0.062, 0.16);
-    blob(hip, soleM, 0, -0.655, -0.06, 0.088, 0.02, 0.165);
-    blob(hip, white, 0, -0.52, -0.01, 0.072, 0.03, 0.08); // calzino
-    legs.push(hip);
-    const sh = new THREE.Group(); sh.position.set(s * 0.27, 1.22, 0); root.add(sh);
-    blob(sh, shirt, 0, -0.09, 0, 0.088, 0.14, 0.088);
-    blob(sh, skin, 0, -0.33, 0, 0.056, 0.2, 0.058);
-    blob(sh, skin, 0, -0.55, -0.01, 0.055, 0.07, 0.048);
-    arms.push(sh);
-  }
-  blob(root, shorts, 0, 0.66, 0.01, 0.22, 0.11, 0.135);
-  blob(root, shirt, 0, 0.9, 0.008, 0.24, 0.3, 0.15);
-  blob(root, shirt, 0, 1.12, 0, 0.235, 0.15, 0.143);
-  blob(root, skin, 0, 1.27, 0, 0.07, 0.08, 0.07);
-  const brows = [], eyes = [];
-  const head = new THREE.Group(); head.position.y = 1.47; root.add(head);
-  blob(head, skin, 0, 0, 0, 0.165, 0.195, 0.155);
-  for (const s of [-1, 1]) {
-    blob(head, skin, s * 0.16, -0.01, 0.01, 0.028, 0.055, 0.026); // orecchie
-    eyes.push(blob(head, white, s * 0.059, 0.02, -0.14, 0.032, 0.025, 0.014));
-    eyes.push(blob(head, dark, s * 0.059, 0.02, -0.152, 0.015, 0.016, 0.006));
-    brows.push(blob(head, hairM, s * 0.062, 0.08, -0.142, 0.032, 0.008, 0.008)); // sopracciglia
-  }
-  blob(head, skin, 0, -0.04, -0.155, 0.024, 0.034, 0.03); // naso
-  const mouth = blob(head, mat('#7b3939', 0.5), 0, -0.1, -0.135, 0.045, 0.01, 0.012); // bocca
-  blob(head, hairM, 0, 0.065, 0.02, 0.178, 0.16, 0.168);
-  blob(head, hairM, -0.04, 0.17, -0.1, 0.07, 0.035, 0.04); // ciuffo
-  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { root, legs, arms, head, eyes, brows, mouth, expressionEnd: 0, phase: 0 };
-}
-function animateCharacter(c, speed, dt, t) {
-  const amt = Math.min(1, speed / SPEED);
-  c.phase += dt * (4 + 6 * speed / SPEED);
-  const sw = Math.sin(c.phase) * 0.65 * amt;
-  c.legs[0].rotation.x = sw; c.legs[1].rotation.x = -sw;
-  c.arms[0].rotation.x = -sw * 0.8; c.arms[1].rotation.x = sw * 0.8;
-  c.arms[0].rotation.z = -0.06; c.arms[1].rotation.z = 0.06;
-  // fermo: respira e si guarda un po' intorno
-  c.root.position.y = Math.abs(Math.cos(c.phase)) * 0.035 * amt + (1 - amt) * Math.sin(t * 2) * 0.004;
-  const remaining = Math.max(0, c.expressionEnd - t);
-  const envelope = Math.min(1, remaining * 4, Math.max(0, (1.2 - remaining) * 7));
-  const laugh = c.expression === 'laugh';
-  const pulse = laugh ? .68 + .32 * Math.cos(remaining * 24) : 1;
-  c.mouth.scale.set(.045 + envelope * (laugh ? .028 : -.019), .01 + envelope * pulse * .034, .012 + envelope * .012);
-  for (const brow of c.brows) brow.position.y = .08 + envelope * (laugh ? .008 : .034);
-  for (const eye of c.eyes) eye.scale.y = (eye.material === c.eyes[0].material ? .025 : .016) * (1 + envelope * (laugh ? -.7 : .4));
-  c.head.rotation.x = envelope * (laugh ? -.09 * pulse : -.12);
-  c.head.rotation.y = (1 - amt) * Math.sin(t * 0.6) * 0.25;
-}
 
 // ---------- il mondo ----------
 export function createLobby3D(app) {
@@ -328,7 +98,7 @@ export function createLobby3D(app) {
   const doorWall = (x, mA, mB) => {
     for (const [m, off] of [[mA, -0.08], [mB, 0.08]]) {
       for (const [z0, z1] of [[-6, -DOOR], [DOOR, 6]]) { const o = box(0.16, H, z1 - z0, m, x + off, H / 2, (z0 + z1) / 2); wallMeshes.push(o); }
-      box(0.16, H - DOOR_H, DOOR * 2, m, x + off, DOOR_H + (H - DOOR_H) / 2, 0);
+      wallMeshes.push(box(0.16, H - DOOR_H, DOOR * 2, m, x + off, DOOR_H + (H - DOOR_H) / 2, 0));
     }
     solid(x - 0.16, x + 0.16, -6, -DOOR); solid(x - 0.16, x + 0.16, DOOR, 6);
     const frame = std('#3b2416', 0.5);
@@ -343,7 +113,8 @@ export function createLobby3D(app) {
     const finish = new THREE.MeshStandardMaterial({ map: wallFinish(x0 === -7 ? 'atrium' : x0 > 0 ? 'pool' : 'arcade'), roughness: 0.84 });
     if(x0===-7){
       wallX(x0,-1.45,-6.15,finish);wallX(1.45,x1,-6.15,finish);
-      box(2.9,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,-6.15);
+      // architrave della porta della sala tavoli: anche lui ferma la telecamera
+      wallMeshes.push(box(2.9,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,-6.15));
     }else wallX(x0, x1, -6.15, finish);
     if(x0===-7){wallX(-7,-1.65,6.15,finish);wallX(1.65,7,6.15,finish);wallMeshes.push(box(3.3,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,6.15))}
     else wallX(x0,x1,6.15,finish);
@@ -1281,6 +1052,7 @@ export function createLobby3D(app) {
     }
     const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Atrio';
     if (whereEl.textContent !== where) whereEl.textContent = where;
+    lightRoom(where);
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
     tmp.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -1454,9 +1226,11 @@ export function createLobby3D(app) {
     const look = readAppearance();
     me.root.traverse((o) => { if (o.isMesh && o.material.userData.part) o.material.color.set(look[o.material.userData.part]); });
     resize();
+    lightRoom(roomOf(pos.x, pos.z));
     renderer.render(scene, camera);
     $('.l3d-load').hidden = true;
     raf = requestAnimationFrame(frame);
+    setTimeout(prepareLights, 1500);
   }
   function hide() {
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
@@ -1468,6 +1242,34 @@ export function createLobby3D(app) {
     else {playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}} });
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
+  // Luci per stanza: ogni luce in più pesa su ogni oggetto disegnato (sui telefoni si sente). Si accendono solo
+  // quelle della stanza dove sei e dell'atrio; dall'atrio, che vede tutte le porte, la luce principale di ogni sala.
+  // Le combinazioni si preparano subito dopo l'apertura, così cambiare stanza non dà scatti.
+  const roomOf = (x, z) => (z > 6.15 ? 'Sala cinema' : z < -6.15 ? 'Sala tavoli' : x > 7 ? 'Sala biliardo' : x < -7 ? 'Sala giochi' : 'Atrio');
+  const roomLights = [];
+  scene.traverse((o) => { if (o.isLight && !o.isHemisphereLight) roomLights.push({ light: o, room: roomOf(o.getWorldPosition(new THREE.Vector3()).x, o.getWorldPosition(new THREE.Vector3()).z) }); });
+  const mainLight = new Map();
+  for (const r of roomLights) if (r.room !== 'Atrio' && !r.light.isSpotLight && (!mainLight.has(r.room) || r.light.intensity > mainLight.get(r.room).intensity)) mainLight.set(r.room, r.light);
+  let litRoom = '';
+  function lightRoom(where) {
+    if (where === litRoom) return;
+    litRoom = where;
+    for (const { light, room } of roomLights) light.visible = room === where || room === 'Atrio' || (where === 'Atrio' && mainLight.get(room) === light);
+  }
+  let lightsReady = false;
+  async function prepareLights() {
+    if (lightsReady || !renderer.compileAsync) return;
+    lightsReady = true;
+    const keep = litRoom;
+    for (const room of ['Atrio', 'Sala biliardo', 'Sala giochi', 'Sala tavoli', 'Sala cinema']) {
+      if (room === keep) continue;
+      // compileAsync legge le luci subito: si rimettono quelle giuste prima di aspettare, così non si vede niente
+      lightRoom(room);
+      const done = renderer.compileAsync(scene, camera);
+      lightRoom(keep);
+      try { await done; } catch (e) { /* si compila al primo passaggio */ }
+    }
+  }
   const api = { setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
   el.lobby3d = api;
   return api;

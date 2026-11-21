@@ -117,7 +117,10 @@ export function createArcadeLink({
     };
     arcadeFrame.src =
       standalonePages[game] ??
-      '/arcade/' + game + '.html' + (game === 'pong' ? (cabinet?'?v=3&cabinet=1':online ? '?v=3&online=1' : '?v=3') : '?v=2');
+      '/arcade/' +
+        game +
+        '.html' +
+        (game === 'pong' ? (cabinet ? '?v=3&cabinet=1' : online ? '?v=3&online=1' : '?v=3') : '?v=2');
     tg?.BackButton?.show();
   }
   function closeArcade() {
@@ -350,9 +353,9 @@ export function createArcadeLink({
         action: button => openBlackboard(button, entry.id)
       }));
   return {
-    gallery:blackboard.gallery,
-    enterGallery:id=>id?openBlackboard($('open-blackboard'),id):$('open-blackboard').click(),
-    cabinetPong:()=>openArcade($('play-pong'),'pong','Pong',false,true),
+    gallery: blackboard.gallery,
+    enterGallery: id => (id ? openBlackboard($('open-blackboard'), id) : $('open-blackboard').click()),
+    cabinetPong: () => openArcade($('play-pong'), 'pong', 'Pong', false, true),
     visible: () => !arcadeOverlay.hidden,
     back,
     openPong,
