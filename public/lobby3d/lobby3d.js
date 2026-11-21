@@ -40,6 +40,7 @@ const CSS = `
 .l3d-stick{position:absolute;left:calc(var(--ui-safe-left,0px) + 26px);bottom:calc(var(--ui-safe-bottom,0px) + 26px);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:none}
 .l3d-stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6)}
 .l3d-stick[hidden]{display:none}
+.l3d-load[hidden]{display:none}
 .l3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:#cfc6e6;pointer-events:none}
 `;
 
@@ -61,15 +62,53 @@ function neonText(text, color, w = 1024, h = 256, font = 'bold 140px "Arial Blac
   });
 }
 function parquet() {
-  return canvasTex(512, 512, (g, w, h) => {
-    const n = 8, s = w / n;
-    for (let i = 0; i < n; i++) for (let j = 0; j < n * 2; j++) {
-      const l = 34 + Math.random() * 10;
-      g.fillStyle = `hsl(${26 + Math.random() * 6},45%,${l}%)`;
-      const off = (i % 2) * s;
-      g.fillRect(i * s, j * s - off, s, s * 2);
-      g.strokeStyle = 'rgba(40,20,8,.55)'; g.lineWidth = 2; g.strokeRect(i * s, j * s - off, s, s * 2);
+  return canvasTex(512, 512, (g) => {
+    for (let row = 0; row < 8; row++) {
+      for (let col = -1; col < 4; col++) {
+        const x = col * 192 + (row % 3) * 64, y = row * 64;
+        g.fillStyle = 'hsl(29,38%,' + (36 + ((row * 7 + col + 4) % 8)) + '%)';
+        g.fillRect(x, y, 192, 64);
+        g.save(); g.beginPath(); g.rect(x, y, 192, 64); g.clip();
+        for (let k = 0; k < 36; k++) {
+          const v = y + (k * 17 % 64);
+          g.strokeStyle = k % 4 ? '#edd5ac25' : '#351d1533';
+          g.beginPath(); g.moveTo(x, v); g.bezierCurveTo(x+70,v-4,x+106,v+9,x+192,v+1); g.stroke();
+        }
+        g.restore(); g.fillStyle='#38291e80'; g.fillRect(x,y,192,1.5); g.fillRect(x,y,1.5,64);
+      }
     }
+  });
+}
+
+// A single painted surface per long wall keeps the mouldings and murals inexpensive on phones.
+function wallFinish(room) {
+  return canvasTex(2048, 512, (g,w,h) => {
+    const atrium=room==='atrium', pool=room==='pool';
+    const wash=g.createLinearGradient(0,0,0,h);
+    const colors=atrium?['#c3af91','#f1e1c4','#b79e80']:pool?['#102a28','#315550','#142f2d']:['#10132b','#31214a','#16132a'];
+    colors.forEach((c,i)=>wash.addColorStop(i/2,c));g.fillStyle=wash;g.fillRect(0,0,w,h);
+    if(!atrium&&!pool){
+      // A sunset and layered vector mountains behind the cabinets.
+      const sky=g.createLinearGradient(0,45,0,260);sky.addColorStop(0,'#ffbc64');sky.addColorStop(1,'#d14688');
+      g.fillStyle=sky;g.beginPath();g.arc(1010,205,114,0,Math.PI*2);g.fill();
+      g.fillStyle='#392040';for(let y=195;y<320;y+=11)g.fillRect(892,y,236,(y-170)/23);
+      for(let layer=0;layer<2;layer++){
+        g.beginPath();g.moveTo(0,h);
+        for(let x=0;x<=w;x+=32){const y=228+layer*52+Math.sin(x*.011+layer)*40+Math.cos(x*.041+layer)*17;g.lineTo(x,y)}
+        g.lineTo(w,h);g.closePath();g.fillStyle=layer?'#17182d':'#48325b';g.fill();g.lineWidth=2;g.strokeStyle=layer?'#36899b':'#af65a5';g.stroke();
+      }
+      g.fillStyle='#c7b3d0';for(let i=0;i<100;i++)g.fillRect((i*349)%w,(i*83)%123,2,2);
+      return;
+    }
+    const base=atrium?370:325;
+    g.fillStyle=atrium?'#614636':'#483025';g.fillRect(0,base,w,h-base);
+    for(let x=0;x<w;x+=128){
+      g.fillStyle=atrium?'#775640':'#51392b';g.fillRect(x+6,base+11,116,h-base-20);
+      g.strokeStyle='#281e18';g.lineWidth=3;g.strokeRect(x+12,base+18,104,h-base-36);
+      g.strokeStyle='#a17a50';g.lineWidth=1;g.strokeRect(x+15,base+21,98,h-base-42);
+    }
+    g.fillStyle='#392b21';g.fillRect(0,base-7,w,8);g.fillStyle='#c69b60';g.fillRect(0,base-9,w,3);
+    for(let i=0;i<16000;i++){g.fillStyle=i%2?'#fff4db12':'#30201812';g.fillRect((i*499)%w,(i*73+Math.floor(i/512)*37)%h,2,1)}
   });
 }
 function tiles(hue, l1, l2) {
@@ -84,7 +123,7 @@ function tiles(hue, l1, l2) {
 function neonGrid() {
   return canvasTex(512, 512, (g, w, h) => {
     g.fillStyle = '#0a0614'; g.fillRect(0, 0, w, h);
-    g.strokeStyle = '#7c3aed'; g.lineWidth = 4; g.shadowColor = '#a855f7'; g.shadowBlur = 12;
+    g.strokeStyle = '#53317d'; g.lineWidth = 2; g.shadowColor = '#a855f7'; g.shadowBlur = 12;
     for (let x = 0; x <= w; x += 128) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, h); g.stroke(); }
     for (let y = 0; y <= h; y += 128) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
   });
@@ -265,7 +304,8 @@ export function createLobby3D(app) {
     const f = plane(x1 - x0, 12, new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.45, metalness: 0.05 }), (x0 + x1) / 2, 0, 0, 0, -Math.PI / 2);
     f.receiveShadow = true;
     plane(x1 - x0, 12, std(ceilC, 1), (x0 + x1) / 2, H, 0, 0, Math.PI / 2);
-    wallX(x0, x1, -6.15, wallM); wallX(x0, x1, 6.15, wallM);
+    const finish = new THREE.MeshStandardMaterial({ map: wallFinish(x0 === -7 ? 'atrium' : x0 > 0 ? 'pool' : 'arcade'), roughness: 0.84 });
+    wallX(x0, x1, -6.15, finish); wallX(x0, x1, 6.15, finish);
     // zoccolo
     const sk = std('#2a1a12', 0.6);
     box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, -5.98); box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, 5.98);
@@ -280,11 +320,29 @@ export function createLobby3D(app) {
   const billiardWall = new THREE.MeshStandardMaterial({ color: '#2a1c26', roughness: 0.85 });
   const arcadeWall = new THREE.MeshStandardMaterial({ color: '#16112a', roughness: 0.85 });
   room(-7, 7, parquet(), [3.5, 3], atriumWall, '#efe6d6');
-  room(7, 19, tiles(250, 9, 14), [3, 3], billiardWall, '#0b070d');
+  room(7, 19, tiles(158, 19, 21), [3, 3], billiardWall, '#0b070d');
   room(-19, -7, neonGrid(), [3, 3], arcadeWall, '#07050c');
   wallZ(-6.3, 6.3, 19.15, billiardWall); wallZ(-6.3, 6.3, -19.15, arcadeWall);
   doorWall(7, atriumWall, billiardWall); doorWall(-7, arcadeWall, atriumWall);
   point('#ffe2b8', 9, -3.5, 3.0, 0, 13); point('#ffe2b8', 9, 3.5, 3.0, 0, 13); point('#fff1dd', 5, 0, 3.0, -4, 9);
+  const shadeMap = canvasTex(128,128,(g)=>{
+    const shade=g.createRadialGradient(64,64,7,64,64,62);
+    shade.addColorStop(0,'rgba(255,255,255,.85)');shade.addColorStop(.58,'rgba(255,255,255,.38)');shade.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=shade;g.fillRect(0,0,128,128);
+  });
+  const contact = new THREE.MeshBasicMaterial({map:shadeMap,color:0x211b18,transparent:true,opacity:.52,depthWrite:false});
+  const groundTint = (x,z,w,d,material) => plane(w,d,material,x,.003,z,0,-Math.PI/2);
+  for(const x of [-3.6,3.6])groundTint(x,5.22,3.15,1.75,contact);
+  // A continuous, framed mountain landscape above the seating.
+  const panorama=canvasTex(1024,256,(g,w,h)=>{
+    const sky=g.createLinearGradient(0,0,0,h);sky.addColorStop(0,'#617c88');sky.addColorStop(1,'#efd09d');
+    g.fillStyle=sky;g.fillRect(0,0,w,h);g.fillStyle='#f5cf90';g.beginPath();g.arc(710,76,35,0,Math.PI*2);g.fill();
+    ['#939f99','#677f78','#3c5c59','#293f40'].forEach((c,i)=>{
+      g.beginPath();g.moveTo(0,h);for(let x=0;x<=w;x+=8)g.lineTo(x,112+i*29+28*Math.sin(x*.011+i)+16*Math.sin(x*.027+i*4)+8*Math.cos(x*.059+i));g.lineTo(w,h);g.fillStyle=c;g.fill();
+    });
+  });
+  box(7.5,1.55,.07,std('#84663e',.38,.55),0,2.12,5.94);
+  plane(7.38,1.43,new THREE.MeshStandardMaterial({map:panorama,roughness:.92}),0,2.12,5.895,Math.PI);
   // lampadari
   for (const x of [-3.5, 3.5]) {
     box(0.02, 0.5, 0.02, std('#222', 0.4, 0.8), x, H - 0.25, 0);
@@ -332,11 +390,27 @@ export function createLobby3D(app) {
   box(0.08, 0.44, 0.08, legM, 0, 0.22, 4.6); solid(-0.58, 0.58, 4.02, 5.18);
   const plant = (x, z) => {
     const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.5, 20), std('#b5633d', 0.8)); pot.position.set(x, 0.25, z); scene.add(pot);
-    const leafM = std('#2f7a3d', 0.8);
-    for (let i = 0; i < 7; i++) {
-      const l = new THREE.Mesh(new THREE.SphereGeometry(0.22 + Math.random() * 0.1, 10, 8), leafM);
-      l.position.set(x + (Math.random() - 0.5) * 0.35, 0.75 + Math.random() * 0.6, z + (Math.random() - 0.5) * 0.35); scene.add(l);
+    // Lance-shaped leaves grow in fans from the crown.
+    const vertices=[], indices=[], colors=[];
+    for(let i=0;i<22;i++){
+      const angle=i*2.4, spread=.19+.27*(i%5)/4, height=.53+.48*((i*7)%11)/10;
+      const dx=Math.cos(angle), dz=Math.sin(angle);
+      const tint=new THREE.Color(['#456d43','#63834b','#385d42','#739156'][i%4]);
+      const start=vertices.length/3;
+      for(let ring=0;ring<=6;ring++){
+        const t=ring/6, r=t*t*spread, half=.065*Math.sin(Math.PI*t)+.001;
+        const y=.44+height*Math.sin(t*1.85);
+        for(const side of [-1,0,1]){
+          vertices.push(dx*r-dz*side*half,y+(side===0?.024:0)*Math.sin(Math.PI*t),dz*r+dx*side*half);
+          const light=side===0?1.14:.82;colors.push(tint.r*light,tint.g*light,tint.b*light);
+        }
+        if(ring>0){const n=start+ring*3;indices.push(n-3,n,n-2,n-2,n,n+1,n-2,n+1,n-1,n-1,n+1,n+2)}
+      }
     }
+    const foliage=new THREE.BufferGeometry();
+    foliage.setAttribute('position',new THREE.Float32BufferAttribute(vertices,3));foliage.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));foliage.setIndex(indices);foliage.computeVertexNormals();
+    const leaves=new THREE.Mesh(foliage,new THREE.MeshStandardMaterial({vertexColors:true,side:THREE.DoubleSide,roughness:.81}));
+    leaves.position.set(x,0,z);scene.add(leaves);groundTint(x,z,.85,.85,contact);
     solid(x - 0.3, x + 0.3, z - 0.3, z + 0.3);
   };
   plant(-6.4, -5.4); plant(6.4, -5.4); plant(-6.4, 5.4); plant(6.4, 5.4);
@@ -365,24 +439,32 @@ export function createLobby3D(app) {
     spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', where: 'Sala biliardo', act: () => app.open('biliardo') });
     // lampada sopra il tavolo
     const lampW = hx * 1.6;
-    box(lampW, 0.1, 0.44, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
-    const pan = plane(lampW - 0.1, 0.34, glow('#fff3dc', 2.2), x, 2.198, z, 0, Math.PI / 2);
-    pan.rotation.x = Math.PI / 2;
+    box(lampW, 0.065, 0.095, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
     for (const sx of [-1, 1]) box(0.01, H - 2.25, 0.01, std('#b08d57', 0.3, 1), x + sx * lampW * 0.4, (H + 2.25) / 2, z);
     for (const lx of [-0.55, 0.55]) {
       const sp = new THREE.SpotLight('#fff2df', 9, 4, Math.PI / 3.6, 0.7, 1.3);
       sp.position.set(x + lx * hx, 2.15, z); sp.target.position.set(x + lx * hx, 0.78, z); scene.add(sp, sp.target);
     }
+    const enamel=new THREE.MeshStandardMaterial({color:'#1b5647',metalness:.35,roughness:.32,side:THREE.DoubleSide});
+    const shadeGeometry=new THREE.CylinderGeometry(.13,.35,.23,24,1,true);
+    const lipGeometry=new THREE.TorusGeometry(.35,.014,6,32);
+    const brass=std('#c19855',.32,.63);
+    for(const offset of [-.32,.32]){
+      const shade=new THREE.Mesh(shadeGeometry,enamel);shade.position.set(x+offset*lampW,2.14,z);scene.add(shade);
+      const lip=new THREE.Mesh(lipGeometry,brass);lip.rotation.x=Math.PI/2;lip.position.set(shade.position.x,2.025,z);scene.add(lip);
+      plane(.39,.25,glow('#fff1c9',2),shade.position.x,2.06,z,0,Math.PI/2);
+    }
+    groundTint(x,z,2.9*hx,3.1*hz,contact);
     pools.push(view);
   };
   addTable('otto', CLOTHS.verde.c, 13, -2.6);
   addTable('italiana', CLOTHS.blu.c, 13, 2.7);
-  point('#ff2bd6', 7, 9, 2.6, -5.2, 10); point('#22d3ee', 7, 18, 2.6, 0, 10); point('#8b5cf6', 6, 9, 2.6, 5.2, 10);
-  plane(3.2, 0.8, new THREE.MeshBasicMaterial({ map: neonText('Biliardo', '#ff3fd8', 1024, 256, 'bold 150px "Brush Script MT", "Segoe Script", cursive'), transparent: true, depthWrite: false, color: new THREE.Color(2, 2, 2) }), 13, 2.6, -5.99);
+  point('#ffd598', 10, 9, 2.6, -5.2, 10); point('#c4efdc', 9, 18, 2.6, 0, 10); point('#ffc992', 9, 9, 2.6, 5.2, 10);
+  plane(3.2, 0.8, new THREE.MeshBasicMaterial({ map: neonText('Biliardo', '#ffe1a5', 1024, 256, 'bold 150px "Brush Script MT", "Segoe Script", cursive'), transparent: true, depthWrite: false, color: new THREE.Color(2, 2, 2) }), 13, 2.6, -5.99);
   plane(0.7, 0.7, new THREE.MeshBasicMaterial({ map: neonText('8', '#ffd23f', 256, 256, 'bold 190px Arial, sans-serif'), transparent: true, depthWrite: false, color: new THREE.Color(2, 2, 2) }), 15.8, 2.6, -5.99);
   // strisce LED, rastrelliera delle stecche, jukebox
-  for (const [c, z] of [['#ff2bd6', -5.96], ['#8b5cf6', 5.96]]) box(11.8, 0.03, 0.03, glow(c, 3), 13, H - 0.12, z);
-  box(0.03, 0.03, 11.8, glow('#22d3ee', 3), 18.96, H - 0.12, 0);
+  for (const [c, z] of [['#ffc880', -5.96], ['#cca272', 5.96]]) box(11.8, 0.03, 0.03, glow(c, 3), 13, H - 0.12, z);
+  box(0.03, 0.03, 11.8, glow('#eac481', 2), 18.96, H - 0.12, 0);
   const rack = new THREE.Group();
   box(0.05, 1.3, 1.3, std('#3b1608', 0.5), 0, 1.4, 0, rack);
   const cueM = std('#d8b77f', 0.4);
@@ -401,8 +483,16 @@ export function createLobby3D(app) {
     const c = new THREE.Color(color), hsl = {}; c.getHSL(hsl);
     const bodyM = std(new THREE.Color().setHSL(hsl.h, 0.5, 0.13), 0.5);
     box(0.8, 1.9, 0.75, bodyM, 0, 0.95, 0, g);
+    // Coin door, return slot and screen hood on the front of each cabinet.
+    const coinMetal=std('#343744',.38,.56);
+    box(.36,.45,.035,coinMetal,0,.55,.386,g);
+    box(.13,.055,.018,glow('#ed8252',1.4),-.07,.66,.411,g);
+    box(.13,.08,.022,bodyM,.07,.42,.411,g);
+    box(.76,.065,.15,bodyM,0,1.63,.4,g);
+    const spill = new THREE.MeshBasicMaterial({map:shadeMap,color,transparent:true,opacity:.24,blending:THREE.AdditiveBlending,depthWrite:false});
+    groundTint(x+Math.sin(ry)*.42,z+Math.cos(ry)*.42,1.6,1.6,spill);
     // fianchi colorati
-    for (const sx of [-1, 1]) box(0.02, 1.7, 0.6, glow(color, 0.9), sx * 0.41, 1.0, 0, g);
+    for (const sx of [-1, 1]) box(0.025, 1.7, 0.035, glow(color, 1.6), sx * 0.403, 1.0, .36, g);
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.47), new THREE.MeshBasicMaterial({ map: cabinetScreen(title, color), color: new THREE.Color(1.5, 1.5, 1.5) }));
     scr.position.set(0, 1.36, 0.385); scr.rotation.x = -0.12; g.add(scr);
     const mq = new THREE.Mesh(new THREE.PlaneGeometry(0.74, 0.2), new THREE.MeshBasicMaterial({ map: neonText(title, color, 768, 208, `bold ${title.length > 12 ? 92 : 120}px "Arial Black", Arial, sans-serif`), transparent: true, color: new THREE.Color(1.8, 1.8, 1.8) }));
