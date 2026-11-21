@@ -275,3 +275,12 @@ window.addEventListener('message',event=>{
 let lastUI='';
 update();
 if(parent!==window)send('ready');
+
+if(new URLSearchParams(location.search).get('cabinet')==='1'){
+  document.body.classList.add('cabinet-play');
+  const bar=document.createElement('nav');bar.className='cabinet-controls';
+  const exit=document.querySelector('[data-arcade-back]');exit.textContent='Esci';
+  for(const control of [exit,primary,modeSelect,$('online')])bar.append(control);
+  document.body.append(bar);
+  if(!online&&phase==='ready')primary.click();
+}

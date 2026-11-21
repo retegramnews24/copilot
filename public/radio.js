@@ -796,7 +796,7 @@
     const value = Number(volume.value);
     if (!Number.isFinite(value)) return;
     plain.volume = fx.volume = Math.min(1, Math.max(0, value));
-    saveLocal('binottoland-radio-volume', plain.volume);
+    if(sharedMode){saveLocal('club3d-radio-volume',plain.volume);window.dispatchEvent(new Event('club-volume-change'))}else saveLocal('binottoland-radio-volume', plain.volume);
   };
   // Events from the player that is not in use are ignored.
   for (const el of [plain, fx]) {
@@ -869,20 +869,21 @@
   document.addEventListener('pointerdown',unlockShared);document.addEventListener('keydown',unlockShared);
   dialog.oncancel=e=>{e.preventDefault();closeScreen()};
   window.binottolandClubRadio={
+    setClubVolume(value){if(sharedMode){plain.volume=fx.volume=Math.max(0,Math.min(1,value));volume.value=String(plain.volume)}},
     choose(send){
       if(!allowed()||!sharedMode||selector)return;
       selector=send;dialog.append(screen);dialog.showModal();openScreen();
-      screen.querySelector('h2').textContent='Radio del bancone';
+      screen.querySelector('h2').textContent='Radio del bancone';volume.value=String(plain.volume);
       bigPlay.textContent='■';bigPlay.setAttribute('aria-label','Spegni la radio condivisa');
     },
     async sync(active,id){
       if(active===sharedMode && (!active||id===sharedId))return;
       const serial=++generation;
-      if(active&&!sharedMode){savedPersonal={current,playing:wantsPlay};stop()}
+      if(active&&!sharedMode){savedPersonal={current,playing:wantsPlay,volume:plain.volume};stop();plain.volume=fx.volume=Math.max(0,Math.min(1,Number(readLocal('club3d-radio-volume',.7))))}
       sharedMode=active;sharedId=id;
       if(!active){
         if(selector)closeScreen();
-        stop();current=savedPersonal?.current??null;if(savedPersonal?.playing)resume();savedPersonal=null;update();return;
+        stop();plain.volume=fx.volume=savedPersonal?.volume??startVolume;volume.value=String(plain.volume);current=savedPersonal?.current??null;if(savedPersonal?.playing)resume();savedPersonal=null;update();return;
       }
       stop();current=null;update();
       if(!id)return;

@@ -1,5 +1,6 @@
 export function blackboardLink(frame, sessionToken, appearance, onRooms, onDeleted) {
   let socket = null, retry, lastSequence = 0;
+  let galleryHandler=null;
   let mode = 'free';
   let room = null, frameReady = false, joined = false, rooms = [];
 
@@ -27,6 +28,7 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms, onDelet
     connection.onmessage = event => {
       if (socket !== connection) return;
       const packet = JSON.parse(event.data);
+      if(packet.type==='gallery'){const handler=galleryHandler;galleryHandler=null;handler?.(packet);return}
       if (packet.type === 'rooms') {
         rooms = packet.rooms;
         onRooms(rooms, 'online');
@@ -52,7 +54,7 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms, onDelet
     };
     connection.onclose = event => {
       if (socket !== connection) return;
-      socket = null;
+      socket = null;galleryHandler=null;
       joined = false;
       const expired = event.code === 4001;
       onRooms(rooms, expired ? 'expired' : 'offline');
@@ -63,6 +65,10 @@ export function blackboardLink(frame, sessionToken, appearance, onRooms, onDelet
 
   return {
     connect,
+    gallery(cursor,handler){
+      if(room||socket?.readyState!==WebSocket.OPEN||galleryHandler)return;
+      galleryHandler=handler;send({type:'gallery',...cursor});
+    },
     open(id) { room = id; },
     receive(data) {
       if (data?.type === 'blackboard:ready') {

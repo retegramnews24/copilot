@@ -3,6 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import * as THREE from 'three';
+import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
 import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
@@ -591,10 +592,35 @@ export function createLobby3D(app) {
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
   doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.52,-5.94);
-  for(const [key,title,z,motif] of [['blackboard-spazio-libero','LAVAGNA',3.6,'chalk']]){
-    if(!avail.has(key))continue;
-    poster(6.78,z,-Math.PI/2,title,'BINOTTOLAND',motif==='film'?['#342f43','#f1cf99','#b95858']:['#22443d','#e5d9b0','#cfad73'],motif);
-    spots.push({x:6.65,z,hx:.12,hz:.66,pad:1,label:title,act:()=>app.open(key)});
+  let boardRoom=null,boardEpoch=-1,boardSeq=0,nextBoard=0;
+  const artwork=canvasTex(576,432,g=>{g.fillStyle='#233f37';g.fillRect(0,0,576,432)});
+  const paint=artwork.image.getContext('2d');
+  function drawGallery(packet){
+    if(!active)return;
+    if(boardRoom!==packet.room||boardEpoch!==packet.epoch){
+      boardSeq=0;paint.fillStyle='#233f37';paint.fillRect(0,0,576,432);artwork.needsUpdate=true;
+    }
+    boardRoom=packet.room;boardEpoch=packet.epoch;
+    if(!boardRoom){
+      paint.fillStyle='#233f37';paint.fillRect(0,0,576,432);
+      paint.fillStyle='#ecd7ad';paint.textAlign='center';paint.font='italic 44px Georgia';paint.fillText('Lavagna',288,224);artwork.needsUpdate=true;return;
+    }
+    paint.save();paint.scale(576/BOARD_WIDTH,432/BOARD_HEIGHT);
+    for(const stroke of packet.strokes){
+      if(stroke.seq<=boardSeq)continue;
+      const color=stroke.color===ERASER?'#233f37':CHALKS[stroke.color]?.[1];
+      if(!color||!stroke.points.length)continue;
+      paint.strokeStyle=color;paint.lineWidth=(stroke.size||DEFAULT_SIZE)*(stroke.color===ERASER?3:.72);paint.lineCap=paint.lineJoin='round';paint.beginPath();
+      const [x,y]=stroke.points[0];paint.moveTo(x,y);paint.lineTo(x+.01,y);
+      for(const [px,py] of stroke.points.slice(1))paint.lineTo(px,py);
+      paint.stroke();boardSeq=stroke.seq;artwork.needsUpdate=true;
+    }
+    paint.restore();if(packet.more)nextBoard=0;
+  }
+  if(avail.has('blackboard-spazio-libero')){
+    box(.075,1.52,2.00,brassTrim,6.78,1.75,3.6);
+    plane(1.91,1.433,new THREE.MeshBasicMaterial({map:artwork}),6.73,1.75,3.6,-Math.PI/2);
+    spots.push({x:6.65,z:3.6,hx:.12,hz:.95,pad:1,label:'Lavagna',act:()=>app.enterGallery?app.enterGallery(boardRoom):app.open('blackboard-spazio-libero')});
   }
   poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
@@ -688,6 +714,21 @@ export function createLobby3D(app) {
     if(yt){if(soundEnabled){yt.unMute();yt.playVideo()}else yt.mute()}
   };
   updateSoundButton();
+  function volumeControl(label,key,fallback,onInput){
+    const wrap=document.createElement('label'),input=document.createElement('input'),out=document.createElement('span');
+    wrap.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 9px;background:#18151ded;color:white;border-radius:8px;font:12px system-ui';
+    wrap.append(document.createTextNode(label),input,out);input.type='range';input.min=0;input.max=100;input.style.width='80px';
+    function read(){try{const v=localStorage.getItem(key);return v===null?fallback:Math.max(0,Math.min(1,Number(v)))}catch{return fallback}}
+    function sync(){input.value=String(Math.round(read()*100));out.textContent=input.value+'%'}
+    input.oninput=()=>{const v=Number(input.value)/100;try{localStorage.setItem(key,String(v))}catch{}out.textContent=input.value+'%';onInput(v)};
+    sync();return {wrap,input,read,sync};
+  }
+  let cinemaLevel=1,heard=0,lastYT=-1;
+  const mixPanel=document.createElement('div');mixPanel.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
+  const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
+  const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
+  cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
+  window.addEventListener('club-volume-change',radioVolume.sync);
   // Keep direct sound in stereo; short, asymmetric reflections widen the room.
   function cinemaMix(video){
     if(!audioContext||mediaNodes.length)return;
@@ -707,7 +748,7 @@ export function createLobby3D(app) {
   function stopProjection(){
     mixEligible=false;disposeYT?.();disposeYT=null;yt=null;audioButton.hidden=true;
     mediaNodes.forEach(node=>node.disconnect());mediaNodes=[];projection.style.zIndex='';
-    previewKey='';screenMesh.material=standby;projection.hidden=true;
+    lastYT=-1;previewKey='';screenMesh.material=standby;projection.hidden=true;
     hls?.destroy();hls=null;
     if(previewVideo){previewVideo.pause();previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
     projection.replaceChildren();
@@ -724,14 +765,14 @@ export function createLobby3D(app) {
       disposeYT=embedYouTube(projection,p.youtube,{
         ready(player){
           yt=player;const frame=projection.querySelector('iframe');if(frame)frame.style.cssText='width:100%;height:100%;border:0';
-          ready();if(soundEnabled&&audibleZone)player.unMute();else player.mute();
+          ready();player.setVolume(Math.round(heard*100));if(soundEnabled&&audibleZone)player.unMute();else player.mute();
           if(!p.live&&play)player.seekTo((play.position||0)+(play.playing?Math.max(0,(Date.now()-play.updated)/1000):0),true);
           if(play?.playing!==false)player.playVideo();
         },
         state(){},blocked(){if(!soundEnabled)return;soundEnabled=false;updateSoundButton();yt?.mute();if(play?.playing!==false)yt?.playVideo()},error(){screenMesh.material=standby}
       });return;
     }
-    const v=document.createElement('video');previewVideo=v;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=true;
+    const v=document.createElement('video');previewVideo=v;v.volume=heard;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=true;
     v.style.cssText='width:100%;height:100%;object-fit:contain';projection.append(v);
     v.onloadeddata=()=>{
       ready();v.play().catch(error=>{
@@ -853,7 +894,7 @@ export function createLobby3D(app) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - 0.42, z + 0.42); else solid(x - 0.42, x + 0.42, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', pong:key==='pong',crt:new THREE.Vector3(x+.42*Math.sin(ry),1.36,z+.42*Math.cos(ry)),eye:new THREE.Vector3(x+.74*Math.sin(ry),1.36,z+.74*Math.cos(ry)),act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
   };
   // in fila lungo le pareti, rivolti verso il centro della sala
   const north = list.slice(0, 4), south = list.slice(4, 8), west = list.slice(8);
@@ -908,9 +949,11 @@ export function createLobby3D(app) {
   let pinch = 0;
   const onKey = (e) => {
     if (!active || document.querySelector('dialog[open]')) return;
+    if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
+    if(e.target?.matches?.('input,select'))return;
     if (e.code === 'Space') {
       e.preventDefault();
-      if (e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
+      if (!seating && e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
       return;
     }
     const k = e.code === 'ShiftLeft' ? 'sprint' : e.key.toLowerCase();
@@ -952,7 +995,7 @@ export function createLobby3D(app) {
     }
     const k = e.pointerType === 'mouse' ? 0.006 : 0.008;
     cam.yaw -= (e.clientX - d.x) * k;
-    cam.pitch = Math.max(0.08, Math.min(1.25, cam.pitch + (e.clientY - d.y) * k * 0.7));
+    cam.pitch = Math.max(seating?-.65:.08, Math.min(1.25, cam.pitch + (e.clientY - d.y) * k * 0.7));
     d.x = e.clientX; d.y = e.clientY;
   });
   const up = (e) => {
@@ -990,7 +1033,7 @@ export function createLobby3D(app) {
     if (joy.id !== null) { ix += joy.x; iz += joy.y; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     let speed = 0;
-    if (!seating && mag > 0.12) {
+    if (!seating && !cabinetEntry && mag > 0.12) {
       // avanti = lontano dalla telecamera
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
@@ -1050,6 +1093,20 @@ export function createLobby3D(app) {
     camera.position.y = Math.min(H - 0.15, camera.position.y);
     if(pos.z>6.45)camera.position.z=Math.max(6.43,camera.position.z);
     camera.lookAt(tgt);
+    if(seating){
+      actB.hidden=true;
+      cam.yaw+=(Number(keys.has('arrowleft'))-Number(keys.has('arrowright')))*dt*1.7;
+      cam.pitch=THREE.MathUtils.clamp(cam.pitch+(Number(keys.has('arrowdown'))-Number(keys.has('arrowup')))*dt,-.65,.8);
+      stick.hidden=true;camera.position.set(pos.x,1.12,pos.z+.06);
+      camera.lookAt(pos.x-Math.sin(cam.yaw)*Math.cos(cam.pitch),1.12-Math.sin(cam.pitch),camera.position.z-Math.cos(cam.yaw)*Math.cos(cam.pitch));
+    }
+    if(cabinetEntry){
+      const entry=cabinetEntry;entry.time+=dt;
+      const f=reducedMotion?1:Math.min(1,entry.time/.37),ease=f*f*(3-2*f);
+      camera.position.lerpVectors(entry.from,entry.spot.eye,ease);camera.lookAt(entry.spot.crt);
+      camera.quaternion.slerp(entry.orientation,1-ease);
+      if(f===1){hide();app.cabinetPong();app.launched?.(entry.spot)}
+    }
   }
 
   function frame(now) {
@@ -1058,14 +1115,28 @@ export function createLobby3D(app) {
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
     step(dt);
+    if(!active)return;
     const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
     for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
     const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
-    cinemaVisited ||= inRange;
-    if(audibleZone!==inRange){
-      audibleZone=inRange;
-      if(previewVideo)previewVideo.muted=!(inRange&&soundEnabled);
-      if(yt){if(inRange&&soundEnabled)yt.unMute();else yt.mute()}
+    const distance=Math.hypot(Math.max(0,Math.abs(pos.x)-1.45),Math.max(0,6.15-pos.z));
+    const fraction=THREE.MathUtils.clamp(distance/12,0,1);
+    const target=cinemaLevel*(1-fraction*fraction*(3-2*fraction));
+    heard+=(target-heard)*(1-Math.exp(-dt*9));
+    if(previewVideo)previewVideo.volume=THREE.MathUtils.clamp(heard,0,1);
+    const ytLevel=Math.round(heard*100);
+    if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
+    const audible=heard>.001 || target>.001;
+    cinemaVolume.wrap.style.display=inRange&&previewKey?'flex':'none';
+    radioVolume.wrap.style.display=(Math.hypot(pos.x-counterX,pos.z-counterZ)<3)?'flex':'none';
+    if(avail.has('blackboard-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
+      nextBoard=t+2;app.gallery?.({room:boardRoom,epoch:boardEpoch,since:boardSeq},drawGallery);
+    }
+    cinemaVisited ||= audible;
+    if(audibleZone!==audible){
+      audibleZone=audible;
+      if(previewVideo)previewVideo.muted=!(audible&&soundEnabled);
+      if(yt){if(audible&&soundEnabled)yt.unMute();else yt.mute()}
     }
     playProjection(cinemaVisited ? app.projection?.():null);
     audioButton.hidden=!inRange||!previewKey;
@@ -1082,13 +1153,25 @@ export function createLobby3D(app) {
   addEventListener('resize', resize);
 
   // ---------- apri, mostra, nascondi ----------
-  let seating=false,seatTimer=0;
+  let seating=null,returnPoint=null,cabinetEntry=null;
+  const seatActions=document.createElement('div');
+  seatActions.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  const enterButton=document.createElement('button'),standButton=document.createElement('button');
+  enterButton.textContent='Entra nel cinema';standButton.textContent='Alzati';seatActions.append(enterButton,standButton);el.append(seatActions);seatActions.hidden=true;
+  function stand(){
+    if(!seating)return;
+    seating=null;seatActions.hidden=true;Object.assign(pos,returnPoint);collide(pos);me.root.visible=true;
+    stick.hidden=!touch;near=null;resetMovement();
+  }
+  enterButton.onclick=()=>{if(seating){const seat=seating;hide();seat.act();app.launched?.(seat)}};
+  standButton.onclick=stand;
   function launch(s) {
-    if(seating)return;
+    if(seating||cabinetEntry)return;
+    if(s.pong && app.cabinetPong){resetMovement();cabinetEntry={spot:s,time:0,from:camera.position.clone(),orientation:camera.quaternion.clone()};return}
     if(s.sit){
-      resetMovement();seating=true;
+      resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;actB.hidden=true;stick.hidden=true;cam.pitch=.03;
       pos.x=s.x;pos.z=s.z;heading=Math.PI;cam.yaw=Math.PI;
-      seatTimer=setTimeout(()=>{hide();s.act();app.launched?.(s)},420);
+      me.root.visible=false;
       return;
     }
     if(s.radio){resetMovement();s.act();return}
@@ -1109,7 +1192,7 @@ export function createLobby3D(app) {
     raf = requestAnimationFrame(frame);
   }
   function hide() {
-    if(seating){clearTimeout(seatTimer);seating=false;pos.z+=.95;collide(pos)}
+    stand();cabinetEntry=null;heard=0;
     active = false; cinemaVisited=false;audibleZone=false;app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
