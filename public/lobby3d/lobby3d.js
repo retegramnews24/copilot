@@ -2,6 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
+import {buildBalilla} from './balilla.js?v=11f1d1a1c2';
+import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
 import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
@@ -653,6 +655,11 @@ export function createLobby3D(app) {
     fabric.computeVertexNormals();const panel=new THREE.Mesh(fabric,curtainMat);
     panel.position.set(side*1.62,0,6.23);scene.add(panel);curtains.push(panel);
   }
+  for(let i=0;i<7;i++){
+    const drape=new THREE.Mesh(new THREE.SphereGeometry(1,24,12),curtainMat);
+    drape.position.set((i-3)*.48,DOOR_H+.10,6.13);drape.scale.set(.39,.16+(i%2)*.04,.13);scene.add(drape);
+  }
+  for(const side of [-1,1])box(.42,.045,.25,brassTrim,side*1.50,1.10,6.23);
   box(3.55,.17,.24,velvet,0,DOOR_H+.05,6.23);
   // Dark acoustic lining on the entrance wall, either side of the passage.
   for(const side of [-1,1]){
@@ -668,21 +675,41 @@ export function createLobby3D(app) {
   });
   rugMap.wrapT=THREE.RepeatWrapping;rugMap.repeat.y=5;
   const aisleMat=new THREE.MeshStandardMaterial({map:rugMap,roughness:1});
+  function cinemaFloor(x,z){
+    if(Math.abs(x)>=7||z<=6.4||z>=15.44)return 0;
+    if(z<7.285)return Math.min(.6,(z-6.4)*.68);
+    return Math.max(0,(4-Math.floor((z-7.285)/1.63))*.15);
+  }
+  const tierCarpet=std('#482435',.98);
+  for(let i=0;i<6;i++){
+    const h=(i+1)*.10,z=6.4+(i+.5)*.1475;
+    box(13.95,h,.148,tierCarpet,0,h/2,z);
+    box(1.85,.012,.021,brassTrim,0,h+.006,z-.06);
+  }
   for(const x of [0,-5.12,5.12])plane(x===0?2.13:1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
   const amber=glow('#ffbb6b',1.5);
   for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
   for(let row=0;row<5;row++){
-    const z=8.1+row*1.63;
+    const z=8.1+row*1.63,level=(4-row)*.15;
+    if(level)box(13.94,level,1.631,tierCarpet,0,level/2,z);
+    for(const x of [-5.12,0,5.12]){
+      plane(x===0?2.13:1.27,1.626,aisleMat,x,level+.009,z,0,-Math.PI/2);
+      box(x===0?1.96:1.12,.014,.025,amber,x,level+.014,z+.79);
+    }
     for(const side of [-1,1]){
       const x=side*2.66;
-      groundTint(x,z,1.9,1.5,contact);
-      box(1.18,.21,.85,darkWood,x,.16,z);
-      box(1.22,.24,.90,velvet,x,.39,z);
-      const back=box(1.16,.69,.20,velvet,x,.66,z-.42);back.rotation.x=-.10;
-      const cushion=box(.91,.41,.13,piping,x,.71,z-.30);cushion.rotation.x=-.10;
-      for(const off of [-.64,.64]){
-        box(.18,.42,.91,velvet,x+off,.48,z);
-        box(.17,.055,.63,walnut,x+off,.7,z+.04);
+      const sofa=new THREE.Group();sofa.position.set(x,level,z);scene.add(sofa);
+      box(1.28,.19,.88,darkWood,0,.18,0,sofa);
+      for(const off of [-.30,.30]){
+        const cushion=new THREE.Mesh(new THREE.SphereGeometry(1,24,16),velvet);
+        cushion.scale.set(.326,.145,.46);cushion.position.set(off,.39,0);sofa.add(cushion);
+        const back=cushion.clone();back.scale.set(.33,.35,.13);back.position.set(off,.67,-.35);back.rotation.x=-.14;sofa.add(back);
+        for(const u of [-.09,.09])box(.022,.022,.013,piping,off+u,.67,-.224,sofa);
+      }
+      for(const off of [-.66,.66]){
+        box(.14,.36,.87,velvet,off,.44,0,sofa);box(.15,.045,.80,walnut,off,.636,0,sofa);
+        const cup=new THREE.Mesh(new THREE.RingGeometry(.035,.047,20),brassTrim);
+        cup.rotation.x=-Math.PI/2;cup.position.set(off,.66,.26);sofa.add(cup);
       }
       solid(x-.74,x+.74,z-.56,z+.51);
       spots.push({x,z,hx:.74,hz:.5,pad:.68,label:'Siediti · Cinema',sit:true,act:()=>app.sit?app.sit(app.projection()?.id):app.open('cinema-streamer')});
@@ -719,8 +746,8 @@ export function createLobby3D(app) {
   audioButton.onclick=()=>{
     soundEnabled=!soundEnabled;updateSoundButton();
     if(soundEnabled)unlockCinemaSound();
-    if(previewVideo){previewVideo.muted=!soundEnabled;if(soundEnabled)previewVideo.play().catch(()=>{})}
-    if(yt){if(soundEnabled){yt.unMute();yt.playVideo()}else yt.mute()}
+    if(previewVideo){previewVideo.muted=!(soundEnabled&&audibleZone);if(soundEnabled&&currentProgram?.playback?.playing!==false)previewVideo.play().catch(()=>{})}
+    if(yt){if(soundEnabled&&audibleZone){yt.unMute();if(currentProgram?.playback?.playing!==false)yt.playVideo()}else yt.mute()}
   };
   updateSoundButton();
   function volumeControl(label,key,fallback,onInput){
@@ -762,11 +789,36 @@ export function createLobby3D(app) {
     if(previewVideo){previewVideo.pause();previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
     projection.replaceChildren();
   }
+  let currentProgram=null,playbackVersion='';
+  function syncTransport(force=false){
+    const p=currentProgram;if(!p)return;
+    const play=p.playback;
+    const version=JSON.stringify([play?.playing,play?.seek,play?.playRevision,play?.updated]);
+    if(!force && playbackVersion===version)return;
+    const seconds=(play?.position||0)+(play?.playing&&play.updated?Math.max(0,(Date.now()-play.updated)/1000):0);
+    if(yt){
+      if(play&&!p.live && Math.abs((yt.getCurrentTime?.()||0)-seconds)>.8)yt.seekTo(seconds,true);
+      if(play?.playing===false)yt.pauseVideo();else yt.playVideo();
+    }else if(previewVideo?.readyState>=2){
+      const v=previewVideo;
+      if(play&&!p.live&&Math.abs(v.currentTime-seconds)>.8&&Number.isFinite(v.duration))v.currentTime=Math.min(seconds,v.duration);
+      if(play?.playing===false)v.pause();
+      else if(v.paused)v.play().catch(()=>{if(v===previewVideo){v.muted=true;v.play().catch(()=>{})}});
+    }else return;
+    playbackVersion=version;
+  }
+  function quietProjection(){
+    heard=0;audibleZone=false;
+    if(previewVideo){previewVideo.volume=0;previewVideo.muted=true}
+    if(yt){yt.setVolume(0);yt.mute();lastYT=0}
+  }
   function playProjection(data){
     const p=data?.projection;
     const play=p?.playback;
-    const key=p?JSON.stringify([data.id,p.url,play?.playing,play?.seek,play?.playRevision]):'';
-    if(key===previewKey)return;
+    currentProgram=p;
+    const key=p?JSON.stringify([data.id,p.url,p.youtube]):'';
+    if(key===previewKey){syncTransport();return}
+    playbackVersion='';
     stopProjection();if(!key)return;
     previewKey=key;audioButton.hidden=false;
     const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5}};
@@ -775,19 +827,14 @@ export function createLobby3D(app) {
         ready(player){
           yt=player;const frame=projection.querySelector('iframe');if(frame)frame.style.cssText='width:100%;height:100%;border:0';
           ready();player.setVolume(Math.round(heard*100));if(soundEnabled&&audibleZone)player.unMute();else player.mute();
-          if(!p.live&&play)player.seekTo((play.position||0)+(play.playing?Math.max(0,(Date.now()-play.updated)/1000):0),true);
-          if(play?.playing!==false)player.playVideo();
+          syncTransport(true);
         },
-        state(){},blocked(){if(!soundEnabled)return;soundEnabled=false;updateSoundButton();yt?.mute();if(play?.playing!==false)yt?.playVideo()},error(){screenMesh.material=standby}
+        state(){},blocked(){if(!soundEnabled)return;soundEnabled=false;updateSoundButton();yt?.mute();if(currentProgram?.playback?.playing!==false)yt?.playVideo()},error(){screenMesh.material=standby}
       });return;
     }
-    const v=document.createElement('video');previewVideo=v;v.volume=heard;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=true;
+    const v=document.createElement('video');previewVideo=v;v.volume=heard;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=play?.playing!==false;
     v.style.cssText='width:100%;height:100%;object-fit:contain';projection.append(v);
-    v.onloadeddata=()=>{
-      ready();v.play().catch(error=>{
-        if(error.name==='NotAllowedError'&&v===previewVideo){soundEnabled=false;updateSoundButton();v.muted=true;v.play().catch(()=>{})}
-      });
-    };
+    v.onloadeddata=()=>{if(v===previewVideo){ready();syncTransport(true)}};
     const canMix=()=>{mixEligible=true;try{if(audioContext?.state==='running')cinemaMix(v)}catch{}};
     if(new URL(p.url,location.href).origin===location.origin)canMix();
     if(/\.m3u8?(?:[?#]|$)/i.test(p.url)&&!v.canPlayType('application/vnd.apple.mpegurl')){
@@ -834,6 +881,23 @@ export function createLobby3D(app) {
   list.push(['ruggine-89','Ruggine 89','#ffb448']);
   const known = new Set([...ARCADE,...BOARD].map(([key])=>key).concat(['ruggine-89','biliardo','blackboard-spazio-libero','cinema-streamer']));
   for(const key of avail)if(key&&!known.has(key))list.push([key,key.replaceAll('-',' '),'#82becd']);
+  const tableFootball=buildBalilla(scene,el,app.balillaSend);
+  solid(-13.69,-12.31,-.40,.40);
+  spots.push({x:-13,z:0,hx:.69,hz:.4,pad:.94,label:'Calcio balilla',balilla:true});
+  const speakers=[];
+  const grille=std('#15171a',.88),cone=std('#333941',.55);
+  for(const [cx,cz,halfX,halfZ] of [[0,0,6.4,5.5],[-13,0,5.4,5.5],[13,0,5.4,5.5],[0,-12,6.4,5.4]]){
+    for(const side of [-1,1])for(const end of [-1,1]){
+      const x=cx+side*halfX,z=cz+end*halfZ;
+      const g=new THREE.Group();g.position.set(x,2.63,z);g.lookAt(cx,1.2,cz);scene.add(g);
+      box(.34,.53,.23,grille,0,0,0,g);
+      for(const [y,r] of [[-.085,.108],[.136,.05]]){
+        const driver=new THREE.Mesh(new THREE.CylinderGeometry(r,r*.82,.025,24),cone);
+        driver.rotation.x=Math.PI/2;driver.position.set(0,y,.123);g.add(driver);
+      }
+      box(.055,.012,.012,amber,.1,-.22,.12,g);speakers.push({x,z});
+    }
+  }
   const demoMaterials = [];
   // Overhead gantries lead from the doorway to the cabinets. Diffuse strips
   // share their materials, including the slow two-colour dimmer.
@@ -891,7 +955,7 @@ export function createLobby3D(app) {
     scr.position.set(0, 1.36, 0.385); scr.rotation.x = -.12; scr.position.z=.417;g.add(scr);
     // The CRT sweeps across the phosphor without repainting textures every frame.
     const sweep=new THREE.Mesh(new THREE.PlaneGeometry(.57,.011),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.32,depthWrite:false}));
-    sweep.position.set(0,1.36,.456);g.add(sweep);demoMaterials.push({sweep,x,z,offset:demoMaterials.length*.31});
+    sweep.position.set(0,1.36,.456);g.add(sweep);demoMaterials.push({sweep,x,z,ax:x+.48*Math.sin(ry),az:z+.48*Math.cos(ry),offset:demoMaterials.length*.31});
     const mq = new THREE.Mesh(new THREE.PlaneGeometry(0.74, 0.2), new THREE.MeshBasicMaterial({ map: neonText(title, color, 768, 208, `bold ${title.length > 12 ? 92 : 120}px "Arial Black", Arial, sans-serif`), transparent: true, color: new THREE.Color(1.8, 1.8, 1.8) }));
     mq.position.set(0, 1.78, .497); g.add(mq);
     const pan = box(0.76, 0.06, 0.3, std('#111', 0.5), 0, 1.0, 0.48, g); pan.rotation.x = 0.28;
@@ -903,7 +967,7 @@ export function createLobby3D(app) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - 0.42, z + 0.42); else solid(x - 0.42, x + 0.42, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', pong:key==='pong',screen:scr,sweep,act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', station:key,yaw:ry,pong:key==='pong',screen:scr,sweep,act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
   };
   // in fila lungo le pareti, rivolti verso il centro della sala
   const north = list.slice(0, 4), south = list.slice(4, 8), west = list.slice(8);
@@ -920,13 +984,7 @@ export function createLobby3D(app) {
   const blob = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), new THREE.MeshBasicMaterial({ map: blobTex(), transparent: true, depthWrite: false }));
   blob.rotation.x = -Math.PI / 2; scene.add(blob);
   let tag = null, tagName = '';
-  const setTag = () => {
-    const n = (app.me && app.me()?.name) || '';
-    if (n === tagName) return;
-    tagName = n;
-    if (tag) { me.root.remove(tag); tag.geometry.dispose(); tag.material.map.dispose(); tag.material.dispose(); }
-    tag = null;
-    if (!n) return;
+  function shirtName(n){
     const cloth=new THREE.PlaneGeometry(.36,.077,20,4),points=cloth.attributes.position;
     for(let i=0;i<points.count;i++){
       const x=points.getX(i),y=1.115+points.getY(i);
@@ -934,7 +992,16 @@ export function createLobby3D(app) {
       points.setXYZ(i,x,y,depth+.004);
     }
     cloth.computeVertexNormals();
-    tag=new THREE.Mesh(cloth,new THREE.MeshBasicMaterial({map:nameTag(n),transparent:true,depthWrite:false}));
+    return new THREE.Mesh(cloth,new THREE.MeshBasicMaterial({map:nameTag(n),transparent:true,depthWrite:false}));
+  }
+  const setTag = () => {
+    const n = (app.me && app.me()?.name) || '';
+    if (n === tagName) return;
+    tagName = n;
+    if (tag) { me.root.remove(tag); tag.geometry.dispose(); tag.material.map.dispose(); tag.material.dispose(); }
+    tag = null;
+    if (!n) return;
+    tag=shirtName(n);
     me.root.add(tag);
   };
   // anello che indica cosa si può aprire
@@ -947,8 +1014,64 @@ export function createLobby3D(app) {
 
   // ---------- comandi ----------
   const keys = new Set();
+  let firstPerson=false,parked=null,pongAnchor=null,localPose=null,lastPoseKey='',peerList=null;
+  const peers=new Map(),downArm=new THREE.Vector3(0,-1,0);
+  const viewButton=document.createElement('button');
+  $('.l3d-top').append(viewButton);
+  function setFirst(value){
+    firstPerson=value;viewButton.textContent=value?'Vista esterna (V)':'Vista dagli occhi (V)';
+    viewButton.setAttribute('aria-pressed',String(value));
+  }
+  setFirst(false);viewButton.onclick=()=>setFirst(!firstPerson);
+  function currentPose(){
+    if(parked)return parked;
+    if(!active)return null;
+    if(tableFootball.seat)return tableFootball.seat;
+    if(monitor&&pongAnchor&&Math.hypot(pos.x-pongAnchor.x,pos.z-pongAnchor.z)<.24)return {station:'pong'};
+    return null;
+  }
+  function descriptor(){
+    const pose=currentPose();if(!pose)return null;
+    const look=readAppearance();return {...pose,shirt:look.shirt,shorts:look.shorts};
+  }
+  function modelPose(c,p){
+    if(!p)return null;
+    let anchor;
+    if(p.station==='balilla')anchor=tableFootball.pose(p.slot,p.mode);
+    else{
+      const station=spots.find(s=>s.station===p.station);if(!station)return null;
+      const yaw=station.yaw,cs=Math.cos(yaw),sn=Math.sin(yaw);
+      anchor={x:station.x+.13*sn,z:station.z+.13*cs,yaw,handles:[[-.18,1.15],[.12,1.07]].map(([x,y])=>new THREE.Vector3(station.x+x*cs-.25*sn,y,station.z-x*sn-.25*cs))};
+    }
+    c.root.position.set(anchor.x,0,anchor.z);c.root.rotation.y=anchor.yaw;c.root.updateMatrixWorld(true);
+    c.arms.forEach((arm,i)=>{
+      const tip=c.root.worldToLocal(anchor.handles[i].clone()).sub(arm.position);
+      arm.quaternion.setFromUnitVectors(downArm,tip.clone().normalize());
+      arm.scale.y=tip.length()/.55;
+    });
+    return anchor;
+  }
+  function placePeers(){
+    const list=app.peers?.();if(!list)return;
+    if(peerList!==list){
+      peerList=list;const present=new Set();
+      for(const user of list){
+        if(!user.clubPose||String(user.id)===String(app.me?.()?.id))continue;
+        present.add(user.id);let c=peers.get(user.id);
+        if(!c){c=makeCharacter(user.clubPose);c.root.add(shirtName(user.name||''));scene.add(c.root);peers.set(user.id,c)}
+        c.pose=user.clubPose;
+      }
+      for(const [id,c] of peers)if(!present.has(id)){
+        c.root.removeFromParent();
+        const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);materials.add(o.material)}});
+        for(const g of geometries)g.dispose();for(const m of materials){m.map?.dispose();m.dispose()}peers.delete(id);
+      }
+    }
+    for(const c of peers.values())c.root.visible=!!modelPose(c,c.pose);
+  }
   let jumpHeight = 0, verticalSpeed = 0;
   function resetMovement() {
+    tableFootball.blur();
     monitor?.frame.contentWindow.cabinetMonitor?.clear();
     keys.clear();
     jumpHeight = verticalSpeed = moving = 0;
@@ -959,6 +1082,8 @@ export function createLobby3D(app) {
   let pinch = 0;
   const onKey = (e) => {
     if (!active || document.querySelector('dialog[open]')) return;
+    if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat)setFirst(!firstPerson);e.preventDefault();return}
+    if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
     if(e.target?.matches?.('input,select'))return;
     if(monitor && ['KeyI','KeyK'].includes(e.code)){
@@ -978,7 +1103,7 @@ export function createLobby3D(app) {
   addEventListener('keydown', onKey); addEventListener('keyup', onKey);
   addEventListener('blur', resetMovement);
   host.addEventListener('pointerdown', (e) => {
-    if (!active) return;
+    if (!active || tableFootball.active) return;
     const r = stick.getBoundingClientRect();
     const inStick = touch && e.pointerType !== 'mouse' && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.45 && joy.id === null;
     try { host.setPointerCapture(e.pointerId); } catch (err) { /* puntatore finto */ }
@@ -995,6 +1120,7 @@ export function createLobby3D(app) {
     knob.style.transform = `translate(${dx}px,${dy}px)`;
   };
   host.addEventListener('pointermove', (e) => {
+    if(tableFootball.active){tableFootball.move(e,host.getBoundingClientRect());return}
     if (e.pointerId === joy.id) return moveJoy(e);
     const d = drags.get(e.pointerId);
     if (!d) return;
@@ -1010,7 +1136,7 @@ export function createLobby3D(app) {
     }
     const k = e.pointerType === 'mouse' ? 0.006 : 0.008;
     cam.yaw -= (e.clientX - d.x) * k;
-    cam.pitch = Math.max(seating?-.65:.08, Math.min(1.25, cam.pitch + (e.clientY - d.y) * k * 0.7));
+    cam.pitch = Math.max(firstPerson?-.95:seating?-.65:.08, Math.min(1.25, cam.pitch + (e.clientY - d.y) * k * 0.7));
     d.x = e.clientX; d.y = e.clientY;
   });
   const up = (e) => {
@@ -1075,12 +1201,14 @@ export function createLobby3D(app) {
       verticalSpeed = jumpHeight > 0 ? verticalSpeed - gravity * dt : 0;
       me.root.position.y += jumpHeight;
     }
+    const floor=cinemaFloor(pos.x,pos.z);
+    me.root.position.y+=floor;
     blob.scale.setScalar(1 - jumpHeight * .24);
     if(seating){
       me.root.position.y=-.22;
       for(const leg of me.legs)leg.rotation.x=1.25;
     }
-    blob.position.set(pos.x, 0.008, pos.z);
+    blob.position.set(pos.x, floor+0.008, pos.z);
     // cosa c'è vicino
     let best = null, bd = 1e9;
     for (const s of spots) { const d = rectDist(s, pos.x, pos.z); if (d < s.pad && d < bd) { bd = d; best = s; } }
@@ -1104,7 +1232,7 @@ export function createLobby3D(app) {
     const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala arcade' : 'Atrio';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     // telecamera dietro il personaggio, che non passa i muri
-    tgt.set(pos.x, 1.45 + jumpHeight * .42, pos.z);
+    tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
     tmp.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
     ray.set(tgt, tmp); ray.far = cam.dist;
     const hit = ray.intersectObjects(wallMeshes, false)[0];
@@ -1117,8 +1245,8 @@ export function createLobby3D(app) {
       actB.hidden=true;
       cam.yaw+=(Number(keys.has('arrowleft'))-Number(keys.has('arrowright')))*dt*1.7;
       cam.pitch=THREE.MathUtils.clamp(cam.pitch+(Number(keys.has('arrowdown'))-Number(keys.has('arrowup')))*dt,-.65,.8);
-      stick.hidden=true;camera.position.set(pos.x,1.12,pos.z+.06);
-      camera.lookAt(pos.x-Math.sin(cam.yaw)*Math.cos(cam.pitch),1.12-Math.sin(cam.pitch),camera.position.z-Math.cos(cam.yaw)*Math.cos(cam.pitch));
+      stick.hidden=true;camera.position.set(pos.x,floor+1.12,pos.z+.06);
+      camera.lookAt(pos.x-Math.sin(cam.yaw)*Math.cos(cam.pitch),floor+1.12-Math.sin(cam.pitch),camera.position.z-Math.cos(cam.yaw)*Math.cos(cam.pitch));
     }
 
   }
@@ -1129,6 +1257,22 @@ export function createLobby3D(app) {
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
     step(dt);
+    const listenerYaw=Math.atan2(-camera.matrixWorld.elements[2],camera.matrixWorld.elements[0]);
+    window.binottolandClubRadio?.locate?.(speakers,pos,listenerYaw);
+    for(const [index,demo] of demoMaterials.entries()){
+      const dx=demo.ax-pos.x,dz=demo.az-pos.z;
+      const distance=Math.hypot(dx,dz),fall=Math.max(0,1-distance);
+      const gain=fall*fall*(3-2*fall);
+      const pan=THREE.MathUtils.clamp((dx*Math.cos(listenerYaw)-dz*Math.sin(listenerYaw))/Math.max(.25,distance),-1,1);
+      if(monitor?.spot.sweep===demo.sweep){monitor.frame.contentWindow.cabinetMonitor?.mix(gain,pan);continue}
+      if(gain<=0||!soundAllowed()||audioContext?.state!=='running'||now<(demo.nextTone||0))continue;
+      demo.nextTone=now+420+(index%5)*140;
+      const ac=audioContext,note=ac.createOscillator(),amp=ac.createGain(),stereo=ac.createStereoPanner();
+      note.type=index%2?'triangle':'sine';note.frequency.value=[196,262,330,392][(index+Math.floor(t*1.5))%4];
+      stereo.pan.value=pan;const at=ac.currentTime;amp.gain.setValueAtTime(.0001,at);
+      amp.gain.exponentialRampToValueAtTime(Math.max(.00011,gain*.034),at+.008);amp.gain.exponentialRampToValueAtTime(.0001,at+.10);
+      note.connect(amp).connect(stereo).connect(ac.destination);note.start();note.stop(at+.11);
+    }
     if(monitor?.texture && now-monitor.last>=32){monitor.texture.needsUpdate=true;monitor.last=now}
     if(!active)return;
     const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
@@ -1156,6 +1300,23 @@ export function createLobby3D(app) {
     }
     playProjection(app.projection?.());
     audioButton.hidden=!inRange||!previewKey;
+    tableFootball.update(camera,dt,Math.hypot(pos.x+13,pos.z)<4);placePeers();
+    localPose=currentPose();const poseKey=JSON.stringify(localPose);
+    if(poseKey!==lastPoseKey){lastPoseKey=poseKey;app.poseChanged?.()}
+    if(!localPose)for(const arm of me.arms){arm.scale.y=1;arm.rotation.y=0}
+    const anchor=modelPose(me,localPose);
+    me.head.visible=!firstPerson;
+    if(firstPerson&&!seating&&(!tableFootball.active||anchor)){
+      const yaw=anchor?.yaw??cam.yaw;
+      if(!anchor)me.root.rotation.y=yaw;
+      const eyeY=anchor?1.49:me.root.position.y+1.49;
+      camera.position.set(me.root.position.x-.09*Math.sin(yaw),eyeY,me.root.position.z-.09*Math.cos(yaw));
+      if(anchor){
+        const target=localPose.station==='balilla'?new THREE.Vector3(-13,.74,0):new THREE.Vector3(anchor.x-.55*Math.sin(yaw),1.34,anchor.z-.55*Math.cos(yaw));
+        camera.lookAt(target);
+      }else camera.lookAt(camera.position.x-Math.sin(yaw),eyeY-Math.tan(cam.pitch),camera.position.z-Math.cos(yaw));
+    }
+    if(tableFootball.active){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch;actB.hidden=!near}
     alignProjection();renderer.render(scene, camera);
   }
   function resize() {
@@ -1176,7 +1337,7 @@ export function createLobby3D(app) {
     frame.tabIndex=-1;frame.setAttribute('aria-hidden','true');
     frame.style.cssText='position:absolute;top:0;left:0;width:2px;height:2px;opacity:0;pointer-events:none;border:0';
     const session={frame,spot,idle:spot.screen.material.map,texture:null,last:-Infinity};
-    monitor=session;
+    monitor=session;pongAnchor={...pos};setFirst(true);
     frame.onload=()=>{
       if(monitor!==session)return;
       const canvas=frame.contentWindow.cabinetMonitor?.canvas;
@@ -1189,7 +1350,7 @@ export function createLobby3D(app) {
   }
   function stopMonitor(){
     if(!monitor)return;
-    const {frame,spot,idle,texture}=monitor;monitor=null;
+    const {frame,spot,idle,texture}=monitor;monitor=null;pongAnchor=null;
     spot.screen.material.map=idle;spot.sweep.visible=true;texture?.dispose();frame.remove();near=null;
   }
   const monitorRay=new THREE.Raycaster(),pointerNDC=new THREE.Vector2();
@@ -1214,7 +1375,8 @@ export function createLobby3D(app) {
   enterButton.onclick=()=>{if(seating){const seat=seating;hide();seat.act();app.launched?.(seat)}};
   standButton.onclick=stand;
   function launch(s) {
-    if(seating)return;
+    if(seating||tableFootball.active)return;
+    if(s.balilla){setFirst(true);resetMovement();tableFootball.open();return}
     if(s.pong){toggleMonitor(s);return}
     if(s.sit){
       resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;actB.hidden=true;stick.hidden=true;cam.pitch=.03;
@@ -1223,13 +1385,14 @@ export function createLobby3D(app) {
       return;
     }
     if(s.radio){resetMovement();s.act();return}
+    if(s.station)parked={station:s.station};
     hide();
     s.act();
     if (app.launched && s.label!=='Ruggine 89') app.launched(s);
   }
   function show() {
     if (active) return;
-    el.hidden = false; active = true; last = 0;
+    parked=null;playProjection(app.projection?.());syncTransport(true);el.hidden = false; active = true; last = 0;
     app.clubVisibility?.();setTag();
     // l'aspetto può essere cambiato in Settings
     const look = readAppearance();
@@ -1240,15 +1403,16 @@ export function createLobby3D(app) {
     raf = requestAnimationFrame(frame);
   }
   function hide() {
-    stand();stopMonitor();heard=0;
-    active = false;audibleZone=false;app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
+    tableFootball.close();stand();stopMonitor();heard=0;
+    active = false;audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { stopProjection();resetMovement(); cancelAnimationFrame(raf); last = 0; } else if (active) raf = requestAnimationFrame(frame); });
+  document.addEventListener('visibilitychange', () => { if(document.hidden){quietProjection();resetMovement();cancelAnimationFrame(raf);last=0}
+    else {playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}} });
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
-  const api = { show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
+  const api = { syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

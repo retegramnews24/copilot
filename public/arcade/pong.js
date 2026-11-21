@@ -20,6 +20,7 @@ function unlockAudio(){
     return audio.resume().catch(()=>{});
   }catch{}
 }
+let monitorBus=null,monitorPan=null,monitorLevel=0,monitorBalance=0;
 function beep(event){
   if(!sound||audio?.state!=='running')return;
   const note=audio.createOscillator(),volume=audio.createGain(),now=audio.currentTime;
@@ -28,7 +29,11 @@ function beep(event){
   if(event==='switch')note.frequency.exponentialRampToValueAtTime(66,now+.055);
   volume.gain.setValueAtTime(event==='switch' ? .16 : .055,now);
   volume.gain.exponentialRampToValueAtTime(.001,now+.085);
-  note.connect(volume);volume.connect(audio.destination);
+  note.connect(volume);
+  if(window.cabinetMonitor){
+    if(!monitorBus){monitorBus=audio.createGain();monitorPan=audio.createStereoPanner();monitorBus.connect(monitorPan).connect(audio.destination)}
+    monitorBus.gain.value=monitorLevel;monitorPan.pan.value=monitorBalance;volume.connect(monitorBus);
+  }else volume.connect(audio.destination);
   note.start(now);note.stop(now+.09);
 }
 function clickSound(){
@@ -276,6 +281,7 @@ let lastUI='';
 update();
 if(parent!==window && new URLSearchParams(location.search).get('monitor')==='1'){
   window.cabinetMonitor={
+    mix(level,pan){monitorLevel=level;monitorBalance=pan;if(monitorBus){monitorBus.gain.value=level;monitorPan.pan.value=pan}},
     canvas,
     aim(fraction){target=Math.max(0,Math.min(1,fraction))*height},
     key(code,down){

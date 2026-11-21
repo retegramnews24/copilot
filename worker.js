@@ -1,3 +1,4 @@
+import {BalillaHub} from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
 import { Blackboard } from './blackboard-server.js';
@@ -52,6 +53,7 @@ export default {
 export class Room extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.balilla=new BalillaHub();
     this.ctx = ctx;
     this.env = env;
     this.lab = new ExpeditionRoom(ctx, env, () => telegramAccessTag(env));
@@ -642,6 +644,7 @@ export class Room extends DurableObject {
     try {
       if (typeof message !== 'string' || message.length > 512) return;
       const b = JSON.parse(message);
+      if(b.type==='balilla' && a.inClub && !a.closed){this.balilla.message(ws,memberId,b);return}
       if (b.type === 'club-radio' && a.inClub && !a.closed) {
         if (b.station !== null && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(b.station)) return;
         await this.ctx.storage.put('clubRadio', b.station);
@@ -650,9 +653,14 @@ export class Room extends DurableObject {
       }
       if (b.type !== 'presence') return;
       a.inClub = b.inClub === true && !b.away;
+      if(!a.inClub)this.balilla.leave(ws);
       a.room = typeof b.room === 'string' && /^[a-f0-9-]{36}$/.test(b.room) ? b.room : null;
       a.seen = Date.now();
       a.closed = !!b.away;
+      const pose=b.pose;
+      a.clubPose=!a.closed && pose && typeof pose.station==='string' && /^[a-z0-9-]{1,48}$/.test(pose.station)
+        ? {station:pose.station,slot:Number.isInteger(pose.slot)&&pose.slot>=0&&pose.slot<4?pose.slot:0,mode:pose.mode===4?4:2,
+           shirt:/^#[0-9a-f]{6}$/i.test(pose.shirt)?pose.shirt:'#35618a',shorts:/^#[0-9a-f]{6}$/i.test(pose.shorts)?pose.shorts:'#303745'} : null;
       ws.serializeAttachment(a);
       await this.lobbyHub.lobbyBroadcast(false);
     } catch {}
@@ -669,6 +677,7 @@ export class Room extends DurableObject {
     } else if (attachment?.kind === 'pong') {
       await this.pong.close(ws);
     } else if (attachment?.kind === 'lobby') {
+      this.balilla.leave(ws);
       attachment.closed = true;
       ws.serializeAttachment(attachment);
       await this.lobbyHub.lobbyBroadcast();
@@ -691,6 +700,7 @@ export class Room extends DurableObject {
     } catch {}
   }
   webSocketError(ws) {
+    this.balilla.leave(ws);
     const kind = ws.deserializeAttachment()?.kind;
     if (kind === 'blackboard') return this.blackboard.close(ws);
     if (kind === 'cinema') return this.cinema.close(ws);

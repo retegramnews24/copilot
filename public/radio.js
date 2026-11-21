@@ -344,6 +344,29 @@
   }
   window.binottolandRadioLevels = () =>
     audio === fx && analyser ? (analyser.getByteFrequencyData(bins), [...bins]) : null;
+  let directBus,channels=[],fallbackLevel=1;
+  function routeClub(active){
+    if(directBus)directBus.gain.value=active?0:1;
+    if(!active)for(const channel of channels)channel.gain.gain.value=0;
+  }
+  function locate(points,listener,yaw){
+    if(!sharedMode)return;
+    let energy=0;
+    for(let i=0;i<points.length;i++){
+      const dx=points[i].x-listener.x,dz=points[i].z-listener.z;
+      const d=Math.hypot(dx,dz,1.1),level=.8/(1+(d/3)**2);
+      energy+=level*level;
+      if(!ctx||!analyser)continue;
+      if(!channels[i]){
+        const gain=ctx.createGain(),pan=ctx.createStereoPanner();
+        gain.gain.value=0;analyser.connect(gain).connect(pan).connect(ctx.destination);channels[i]={gain,pan};
+      }
+      channels[i].gain.gain.setTargetAtTime(level*.47,ctx.currentTime,.04);
+      channels[i].pan.pan.setTargetAtTime(Math.max(-1,Math.min(1,(dx*Math.cos(yaw)-dz*Math.sin(yaw))/d)),ctx.currentTime,.035);
+    }
+    fallbackLevel=Math.min(1,Math.sqrt(energy));
+    plain.volume=clubVolume*clubGain*fallbackLevel;
+  }
   function ensureGraph() {
     if (ctx) return true;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -355,7 +378,7 @@
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
-      analyser.connect(ctx.destination);
+      directBus=ctx.createGain();analyser.connect(directBus).connect(ctx.destination);routeClub(sharedMode);
       bins = new Uint8Array(analyser.frequencyBinCount);
       const hz = ctx.sampleRate / analyser.fftSize;
       bands = CENTERS.map(c => {
@@ -863,7 +886,7 @@
   let clubVolume=.7,clubGain=1;
   function setClubVolume(value){
     clubVolume=Math.max(0,Math.min(1,value));volume.value=String(clubVolume);
-    plain.volume=fx.volume=clubVolume*clubGain;
+    fx.volume=clubVolume*clubGain;plain.volume=fx.volume*fallbackLevel;
   }
   let selector=null, sharedMode=false, sharedId, savedPersonal, generation=0;
   const sharedCache=new Map(), panelAnchor=document.createComment('radio'), dialog=document.createElement('dialog');
@@ -876,7 +899,8 @@
   dialog.oncancel=e=>{e.preventDefault();closeScreen()};
   window.binottolandClubRadio={
     setClubVolume(value){if(sharedMode)setClubVolume(value)},
-    setClubGain(value){if(value===clubGain)return;clubGain=value;if(sharedMode)plain.volume=fx.volume=clubVolume*clubGain},
+    locate,
+    setClubGain(value){if(value===clubGain)return;clubGain=value;if(sharedMode){fx.volume=clubVolume*clubGain;plain.volume=fx.volume*fallbackLevel}},
     choose(send){
       if(!allowed()||!sharedMode||selector)return;
       selector=send;dialog.append(screen);dialog.showModal();openScreen();
@@ -887,7 +911,7 @@
       if(active===sharedMode && (!active||id===sharedId))return;
       const serial=++generation;
       if(active&&!sharedMode){savedPersonal={current,playing:wantsPlay,volume:plain.volume};stop();setClubVolume(Number(readLocal('club3d-radio-volume',.7)))}
-      sharedMode=active;sharedId=id;
+      sharedMode=active;sharedId=id;routeClub(active);
       if(!active){
         if(selector)closeScreen();
         stop();plain.volume=fx.volume=savedPersonal?.volume??startVolume;volume.value=String(plain.volume);current=savedPersonal?.current??null;if(savedPersonal?.playing)resume();savedPersonal=null;update();return;

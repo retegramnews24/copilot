@@ -69,15 +69,11 @@ export class Cinema {
     let changed=false;
     for(const room of data.rooms.filter(entry=>ids.includes(entry.id))){
       const occupied=this.connections().some(client=>client.info.room===room.id);
-      if(occupied&&!room.channel&&room.queue?.length){
+      if(occupied&&!room.powerOff&&!room.channel&&room.queue?.length){
         this.nextSubmission(room);changed=true;
-      }else if(occupied&&room.inboxHold){
+      }else if(room.inboxHold){
         room.playback={...room.playback,playing:true,updated:Date.now()};
         delete room.inboxHold;changed=true;
-      }else if(!occupied&&room.current&&room.playback?.playing){
-        const now=Date.now();
-        room.playback={...room.playback,position:room.current.loading?0:positionAt(room.playback,now),playing:false,updated:now};
-        room.inboxHold=true;changed=true;
       }else continue;
       await this.scheduleMetadata(this.queueDeadline(room));
     }
@@ -259,7 +255,7 @@ export class Cinema {
       return new Response(null,{status:204});
     }
     room.queue.push({...input.item,id:crypto.randomUUID()});
-    const starts=!room.channel&&!this.screenHost(room.id)&&this.connections().some(client=>client.info.room===room.id);
+    const starts=!room.powerOff&&!room.channel&&!this.screenHost(room.id)&&this.connections().some(client=>client.info.room===room.id);
     if(starts)this.nextSubmission(room);
     room.updated=Date.now();
     await this.scheduleMetadata(this.queueDeadline(room));
@@ -307,7 +303,7 @@ export class Cinema {
         if(input.type==='create'){
           if(room)throw Error('Esci dalla sala prima di aprirne un’altra.');
           const occupied=new Set(this.connections().map(c=>c.info.room));
-          const rooms=data.rooms.filter(r=>occupied.has(r.id)||Date.now()-r.updated<3_600_000);
+          const rooms=data.rooms.filter(r=>r.channel||r.queue?.length||occupied.has(r.id)||Date.now()-r.updated<3_600_000);
           if(rooms.length>=MAX_ROOMS)throw Error('Tutte le sale sono occupate.');
           let number=1;while(rooms.some(r=>r.number===number))number++;
           const next={id:crypto.randomUUID(),number,owner:info.user.player,channel:null,updated:Date.now()};
@@ -334,18 +330,24 @@ export class Cinema {
           }
           this.publish({...data,rooms});return;
         }
+        if(input.type==='projection-off'){
+          if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può spegnere la proiezione.');
+          if(!room.channel)return;
+          room.powerOff=true;room.current=null;room.channel=null;room.playback=null;delete room.inboxHold;room.updated=Date.now();
+          await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
+        }
         if(input.type==='channel'){
           const channel=cleanChannel(input.channel);
           if(!channel)throw Error('Canale non valido.');
           if(room.channel?.url===channel.url&&!channel.catalogUntil&&!!room.channel.live===!!channel.live)return;
-          room.current=null;delete room.inboxHold;room.channel=channel;room.updated=Date.now();
+          room.current=null;delete room.powerOff;delete room.inboxHold;room.channel=channel;room.updated=Date.now();
           room.playback=channel.youtube?{position:0,playing:true,updated:room.updated,seek:0}:null;
           await this.ctx.storage.put(ROOMS,data.rooms);await this.scheduleMetadata(channel.catalogUntil);this.publish(data);return;
         }
         if(input.type==='queue-next'){
           if(room.owner&&room.owner!==info.user.player)throw Error('Solo chi ha aperto la sala può cambiare il contenuto della coda.');
           if(!room.current&&!room.queue?.length)return;
-          this.nextSubmission(room);
+          delete room.powerOff;this.nextSubmission(room);
           await this.scheduleMetadata(this.queueDeadline(room));
           await this.ctx.storage.put(ROOMS,data.rooms);this.publish(data);return;
         }
