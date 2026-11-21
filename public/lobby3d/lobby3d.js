@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=11f1d1a1c2';
+import {buildBalilla} from './balilla.js?v=1dae6fde98';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -365,7 +365,14 @@ export function createLobby3D(app) {
   room(-19, -7, neonGrid(), [3, 3], arcadeWall, '#07050c');
   wallZ(-6.3, 6.3, 19.15, billiardWall); wallZ(-6.3, 6.3, -19.15, arcadeWall);
   doorWall(7, atriumWall, billiardWall); doorWall(-7, arcadeWall, atriumWall);
-  point('#ffe2b8', 9, -3.5, 3.0, 0, 13); point('#ffe2b8', 9, 3.5, 3.0, 0, 13); point('#fff1dd', 5, 0, 3.0, -4, 9);
+  point('#ffe0b3',7,-3.5,2.85,0,12);point('#ffe1ba',7,3.5,2.85,0,12);point('#ffd39b',4,0,2.85,-4,9);
+  const sconceBrass=std('#a58052',.32,.72),sconceGlass=glow('#ffd2a0',1.28);
+  for(const x of [-4.9,4.9])for(const end of [-1,1]){
+    const z=end*5.89;
+    box(.20,.53,.07,sconceBrass,x,2.12,z);
+    box(.115,.36,.13,sconceGlass,x,2.12,z-end*.05);
+    for(const y of [1.92,2.32])box(.17,.035,.16,sconceBrass,x,y,z-end*.05);
+  }
   const shadeMap = canvasTex(128,128,(g)=>{
     const shade=g.createRadialGradient(64,64,7,64,64,62);
     shade.addColorStop(0,'rgba(255,255,255,.85)');shade.addColorStop(.58,'rgba(255,255,255,.38)');shade.addColorStop(1,'rgba(255,255,255,0)');
@@ -410,13 +417,24 @@ export function createLobby3D(app) {
   plane(1.36, 1.92, new THREE.MeshStandardMaterial({ map: gamesPoster(), roughness: 0.7 }), gpX, 1.45, -5.92);
   spots.push({ x: gpX, z: -5.6, hx: 0.75, hz: 0.3, pad: 1.1, label: 'Tutti i giochi', where: 'Atrio', act: () => app.openGames() });
   // tappeto, divani, piante
-  const rug = new THREE.Mesh(new THREE.CircleGeometry(2.4, 48), new THREE.MeshStandardMaterial({ map: canvasTex(512, 512, (g, w, h) => {
-    g.fillStyle = '#7a2e3a'; g.beginPath(); g.arc(w / 2, h / 2, w / 2, 0, 7); g.fill();
-    g.strokeStyle = '#e2b866'; g.lineWidth = 14; g.beginPath(); g.arc(w / 2, h / 2, w / 2 - 24, 0, 7); g.stroke();
-    g.lineWidth = 5; g.beginPath(); g.arc(w / 2, h / 2, w / 2 - 54, 0, 7); g.stroke();
-    g.fillStyle = '#e2b866'; g.font = 'bold 230px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('B', w / 2, h / 2 + 12);
-  }), roughness: 1 }));
-  rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.006, 0.6); scene.add(rug);
+  const loader=new THREE.TextureLoader();
+  function loadPrint(file){
+    const map=loader.load(new URL(file,import.meta.url).href);
+    map.colorSpace=THREE.SRGBColorSpace;map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());return map;
+  }
+  const clubArt=loadPrint('binottoland.jpg'),racingArt=loadPrint('corsa-competizione.jpg');
+  const brassEdge=std('#ba935e',.36);
+  const rug=new THREE.Mesh(new THREE.CircleGeometry(2.32,96),new THREE.MeshStandardMaterial({map:clubArt,roughness:.81,emissiveMap:clubArt,emissive:0xffffff,emissiveIntensity:.18}));
+  rug.rotation.x=-Math.PI/2;rug.position.set(0,.012,.6);scene.add(rug);
+  const rim=new THREE.Mesh(new THREE.RingGeometry(2.32,2.39,96),brassEdge);
+  rim.rotation.copy(rug.rotation);rim.position.copy(rug.position);scene.add(rim);
+  function framedPrint(map,x,z,yaw){
+    const frame=new THREE.Group();frame.position.set(x,1.82,z);frame.rotation.y=yaw;scene.add(frame);
+    box(1.30,1.30,.055,brassEdge,0,0,0,frame);box(1.25,1.25,.034,std('#201d23',.76),0,0,.038,frame);
+    const print=new THREE.Mesh(new THREE.PlaneGeometry(1.13,1.13),new THREE.MeshBasicMaterial({map,toneMapped:false}));print.position.z=.058;frame.add(print);
+    box(.65,.04,.11,brassEdge,0,.72,.08,frame);box(.58,.014,.09,glow('#ffe0ad',1.3),0,.696,.08,frame);
+  }
+  framedPrint(clubArt,-18.88,3.25,Math.PI/2);framedPrint(racingArt,18.88,-3.25,-Math.PI/2);
   const sofaM = std('#3f5d7a', 0.9), legM = std('#2a1a12', 0.5);
   for (const sx of [-1, 1]) {
     const g = new THREE.Group();
@@ -456,9 +474,21 @@ export function createLobby3D(app) {
   };
   plant(-6.4, -5.4); plant(6.4, -5.4); plant(-6.4, 5.4); plant(6.4, 5.4);
   // cartelli sopra le porte
-  const doorSign = (text, color, x, ry) => plane(2.2, 0.5, new THREE.MeshBasicMaterial({ map: neonText(text, color, 1024, 232, 'bold 110px "Arial Black", Arial, sans-serif'), transparent: true, depthWrite: false, color: new THREE.Color(1.6, 1.6, 1.6) }), x, 2.92, 0, ry);
-  doorSign('Sala biliardo →', '#ff5fd8', 6.88, -Math.PI / 2);
-  doorSign('← Sala arcade', '#3ee7ff', -6.88, Math.PI / 2);
+  function doorSign(title,color,x,yaw){
+    const group=new THREE.Group();group.position.set(x,2.92,0);group.rotation.y=yaw;scene.add(group);
+    const board=box(2.78,.44,.055,std('#161723',.45),0,0,0,group);
+    const map=canvasTex(1024,164,(g,w,h)=>{
+      g.textAlign='center';g.textBaseline='middle';g.lineJoin='round';g.font='600 88px "Trebuchet MS", sans-serif';
+      g.shadowColor=color;g.shadowBlur=15;g.strokeStyle=color;g.lineWidth=4;g.strokeText(title.toUpperCase(),w/2,h/2);
+      g.shadowBlur=2;g.lineWidth=1.5;g.strokeStyle='#fff7eb';g.strokeText(title.toUpperCase(),w/2,h/2);
+    });
+    const letters=new THREE.Mesh(new THREE.PlaneGeometry(2.70,.42),new THREE.MeshBasicMaterial({map,transparent:true,depthWrite:false,toneMapped:false}));
+    letters.position.z=.035;board.add(letters);
+    for(const y of [-.206,.206])box(2.62,.012,.014,glow(color,1.45),0,y,.03,group);
+    return group;
+  }
+  doorSign('Sala biliardo','#82ddbd',6.87,-Math.PI/2);
+  doorSign('Sala giochi','#61d7ff',-6.87,Math.PI/2);
   doorSign('← Atrio', '#ffd23f', 7.12, Math.PI / 2);
   doorSign('Atrio →', '#ffd23f', -7.12, -Math.PI / 2);
 
@@ -602,7 +632,7 @@ export function createLobby3D(app) {
     plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),1.92,z+.033*Math.cos(angle),angle);
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
-  doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.52,-5.94);
+  doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.91,-5.94);
   let boardRoom=null,boardEpoch=-1,boardSeq=0,nextBoard=0;
   const artwork=canvasTex(576,432,g=>{g.fillStyle='#233f37';g.fillRect(0,0,576,432)});
   const paint=artwork.image.getContext('2d');
@@ -641,7 +671,7 @@ export function createLobby3D(app) {
   plane(14,12.4,std('#101118',1),0,H,12.26,0,Math.PI/2);
   wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
   wallX(-7.3,7.3,18.55,cinemaWall);
-  doorSign('CINEMA','#ffd496',0,Math.PI).position.set(0,2.93,5.95);
+  doorSign('Sala cinema','#ffd496',0,Math.PI).position.set(0,2.93,5.95);
   // A pleated velvet panel, gathered halfway up and fuller at the hem.
   const curtains=[];
   const curtainMat=new THREE.MeshStandardMaterial({color:'#791e38',roughness:.94,side:THREE.DoubleSide});
@@ -738,10 +768,10 @@ export function createLobby3D(app) {
     audioButton.setAttribute('aria-pressed',String(soundEnabled));
   }
   function unlockCinemaSound(){
-    if(!active||!soundEnabled)return;
+    if(!active)return;
     try{audioContext??=new AudioContext();if(audioContext.state==='suspended')audioContext.resume().then(()=>{if(mixEligible&&previewVideo)cinemaMix(previewVideo)}).catch(()=>{});else if(mixEligible&&previewVideo)cinemaMix(previewVideo)}catch{}
   }
-  host.addEventListener('pointerdown',unlockCinemaSound);
+  el.addEventListener('pointerdown',unlockCinemaSound);
   window.addEventListener('keydown',unlockCinemaSound);
   audioButton.onclick=()=>{
     soundEnabled=!soundEnabled;updateSoundButton();
@@ -754,10 +784,10 @@ export function createLobby3D(app) {
     const wrap=document.createElement('label'),input=document.createElement('input'),out=document.createElement('span');
     wrap.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 9px;background:#18151ded;color:white;border-radius:8px;font:12px system-ui';
     wrap.append(document.createTextNode(label),input,out);input.type='range';input.min=0;input.max=100;input.style.width='80px';
-    function read(){try{const v=localStorage.getItem(key);return v===null?fallback:Math.max(0,Math.min(1,Number(v)))}catch{return fallback}}
+    function read(){if(!key)return fallback;try{const v=localStorage.getItem(key);return v===null?fallback:Math.max(0,Math.min(1,Number(v)))}catch{return fallback}}
     function sync(){input.value=String(Math.round(read()*100));out.textContent=input.value+'%'}
-    input.oninput=()=>{const v=Number(input.value)/100;try{localStorage.setItem(key,String(v))}catch{}out.textContent=input.value+'%';onInput(v)};
-    sync();return {wrap,input,read,sync};
+    input.oninput=()=>{const v=Number(input.value)/100;try{if(key)localStorage.setItem(key,String(v))}catch{}out.textContent=input.value+'%';onInput(v)};
+    sync();return {wrap,input,out,read,sync};
   }
   let cinemaLevel=1,heard=0,lastYT=-1;
   const mixPanel=document.createElement('div');mixPanel.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
@@ -881,7 +911,27 @@ export function createLobby3D(app) {
   list.push(['ruggine-89','Ruggine 89','#ffb448']);
   const known = new Set([...ARCADE,...BOARD].map(([key])=>key).concat(['ruggine-89','biliardo','blackboard-spazio-libero','cinema-streamer']));
   for(const key of avail)if(key&&!known.has(key))list.push([key,key.replaceAll('-',' '),'#82becd']);
-  const tableFootball=buildBalilla(scene,el,app.balillaSend);
+  let tableLevel=.8,tableRoomGain=0,tableBus=null;
+  const tableVolume=volumeControl('Calcio balilla · tutti',null,.8,v=>{tableLevel=v;unlockCinemaSound()});
+  function setTableVolume(percent){
+    tableLevel=percent/100;tableVolume.input.value=String(percent);tableVolume.out.textContent=percent+'%';
+  }
+  setTableVolume(app.tableVolume?.()??80);
+  tableVolume.input.onchange=()=>app.balillaSend?.({type:'table-volume',percent:Number(tableVolume.input.value)});
+  mixPanel.append(tableVolume.wrap);
+  function tableSound(type){
+    const ctx=audioContext;if(!active||!tableRoomGain||!soundAllowed()||ctx?.state!=='running')return;
+    if(!tableBus){tableBus=ctx.createGain();tableBus.connect(ctx.destination)}
+    tableBus.gain.value=tableLevel*tableRoomGain;
+    const now=ctx.currentTime;
+    for(const [hz,decay,level] of type==='goal'?[[198,.19,.23],[326,.12,.16],[770,.06,.06]]:type==='kick'?[[550,.035,.17],[1460,.018,.09]]:[[298,.040,.16],[870,.022,.07]]){
+      const osc=ctx.createOscillator(),gain=ctx.createGain();osc.type='triangle';
+      osc.frequency.setValueAtTime(hz,now);osc.frequency.exponentialRampToValueAtTime(hz*.57,now+decay);
+      gain.gain.setValueAtTime(level,now);gain.gain.exponentialRampToValueAtTime(.0001,now+decay);
+      osc.connect(gain).connect(tableBus);osc.onended=()=>{osc.disconnect();gain.disconnect()};osc.start();osc.stop(now+decay);
+    }
+  }
+  const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
   solid(-13.69,-12.31,-.40,.40);
   spots.push({x:-13,z:0,hx:.69,hz:.4,pad:.94,label:'Calcio balilla',balilla:true});
   const speakers=[];
@@ -967,7 +1017,7 @@ export function createLobby3D(app) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - 0.42, z + 0.42); else solid(x - 0.42, x + 0.42, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', station:key,yaw:ry,pong:key==='pong',screen:scr,sweep,act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala giochi', station:key,yaw:ry,pong:key==='pong',screen:scr,sweep,act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
   };
   // in fila lungo le pareti, rivolti verso il centro della sala
   const north = list.slice(0, 4), south = list.slice(4, 8), west = list.slice(8);
@@ -1037,7 +1087,7 @@ export function createLobby3D(app) {
   function modelPose(c,p){
     if(!p)return null;
     let anchor;
-    if(p.station==='balilla')anchor=tableFootball.pose(p.slot,p.mode);
+    if(p.station==='balilla')anchor=tableFootball.pose(p.slot,p.mode,p.pair);
     else{
       const station=spots.find(s=>s.station===p.station);if(!station)return null;
       const yaw=station.yaw,cs=Math.cos(yaw),sn=Math.sin(yaw);
@@ -1229,7 +1279,7 @@ export function createLobby3D(app) {
       if(reducedMotion||Math.abs(pos.x-demo.x)>12)continue;
       demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
     }
-    const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala arcade' : 'Atrio';
+    const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Atrio';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
@@ -1300,7 +1350,13 @@ export function createLobby3D(app) {
     }
     playProjection(app.projection?.());
     audioButton.hidden=!inRange||!previewKey;
-    tableFootball.update(camera,dt,Math.hypot(pos.x+13,pos.z)<4);placePeers();
+    const insideArcade=pos.x< -7&&Math.abs(pos.z)<6.15;
+    const doorDepth=insideArcade?-7-pos.x:-Math.hypot(Math.max(0,pos.x+7),Math.max(0,Math.abs(pos.z)-1.3));
+    const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);
+    tableRoomGain=mix*mix*(3-2*mix);
+    if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
+    tableVolume.wrap.style.display=tableRoomGain>0?'flex':'none';
+    tableFootball.update(camera,dt,tableRoomGain>0);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     if(poseKey!==lastPoseKey){lastPoseKey=poseKey;app.poseChanged?.()}
     if(!localPose)for(const arm of me.arms){arm.scale.y=1;arm.rotation.y=0}
@@ -1403,7 +1459,7 @@ export function createLobby3D(app) {
     raf = requestAnimationFrame(frame);
   }
   function hide() {
-    tableFootball.close();stand();stopMonitor();heard=0;
+    tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
     active = false;audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
@@ -1412,7 +1468,7 @@ export function createLobby3D(app) {
     else {playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}} });
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
-  const api = { syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
+  const api = { setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

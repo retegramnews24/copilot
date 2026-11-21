@@ -11,6 +11,13 @@ export class BalillaHub{
       if(b.action!=='watch')return;
       member={id,slot:-1};this.viewers.set(ws,member);this.send(ws,member);return;
     }
+    if(b.action==='practice-sound'){
+      const now=Date.now();
+      if(this.timer||now-(member.lastSound??0)<110||!['kick','rail','goal'].includes(b.sound))return;
+      member.lastSound=now;
+      for(const [peer] of this.viewers)if(peer!==ws){try{peer.send(JSON.stringify({type:'balilla',sound:b.sound}))}catch{}}
+      return;
+    }
     if(b.action==='watch'){this.send(ws,member);return}
     if(b.action==='join'){
       if(member.slot>=0)return;
@@ -27,7 +34,10 @@ export class BalillaHub{
       else if(!serving && this.field.restart==='confirm')this.field.restart='';
       this.broadcast();
     }else if(b.action==='input' && member.slot>=0 && Number.isFinite(b.slide)&&[-1,0,1].includes(b.turn)){
-      rows.forEach((row,i)=>{if(this.controls(member,row))Object.assign(this.field.rods[i],{slide:Math.max(-1,Math.min(1,b.slide)),turn:b.turn*(row.team?1:-1)})});
+      rows.forEach((row,i)=>{if(!this.controls(member,row))return;
+        const rod=this.field.rods[i];
+        if(this.mode===2 && (b.pair===0||b.pair===1) && row.attack!==b.pair){rod.turn=0;return}
+        Object.assign(rod,{slide:Math.max(-1,Math.min(1,b.slide)),turn:b.turn*(row.team?1:-1)})});
     }else if(b.action==='again'&&member.slot>=0&&this.field.finished){this.field=newField();this.start();this.broadcast()}
   }
   start(){

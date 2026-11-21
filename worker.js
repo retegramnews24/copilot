@@ -644,6 +644,11 @@ export class Room extends DurableObject {
     try {
       if (typeof message !== 'string' || message.length > 512) return;
       const b = JSON.parse(message);
+      if(b.type==='table-volume'&&a.inClub&&!a.closed){
+        if(!Number.isInteger(b.percent)||b.percent<0||b.percent>100)return;
+        await this.ctx.storage.put('tableVolume',b.percent);
+        await this.lobbyHub.lobbyBroadcast();return;
+      }
       if(b.type==='balilla' && a.inClub && !a.closed){this.balilla.message(ws,memberId,b);return}
       if (b.type === 'club-radio' && a.inClub && !a.closed) {
         if (b.station !== null && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(b.station)) return;
@@ -659,7 +664,7 @@ export class Room extends DurableObject {
       a.closed = !!b.away;
       const pose=b.pose;
       a.clubPose=!a.closed && pose && typeof pose.station==='string' && /^[a-z0-9-]{1,48}$/.test(pose.station)
-        ? {station:pose.station,slot:Number.isInteger(pose.slot)&&pose.slot>=0&&pose.slot<4?pose.slot:0,mode:pose.mode===4?4:2,
+        ? {station:pose.station,slot:Number.isInteger(pose.slot)&&pose.slot>=0&&pose.slot<4?pose.slot:0,mode:pose.mode===4?4:2,pair:pose.pair===0?0:1,
            shirt:/^#[0-9a-f]{6}$/i.test(pose.shirt)?pose.shirt:'#35618a',shorts:/^#[0-9a-f]{6}$/i.test(pose.shorts)?pose.shorts:'#303745'} : null;
       ws.serializeAttachment(a);
       await this.lobbyHub.lobbyBroadcast(false);
