@@ -1017,19 +1017,32 @@ export function createLobby3D(app) {
     });
     return anchor;
   }
+  // nome sopra la testa degli altri (si legge da ogni lato)
+  function headName(n){
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:nameTag(String(n).slice(0,22)),depthWrite:false,transparent:true}));
+    tag.scale.set(.9,.17,1);tag.position.y=2.05;return tag;
+  }
   function placePeers(){
     const list=app.peers?.();if(!list)return;
     if(peerList!==list){
       peerList=list;const present=new Set();
       for(const user of list){
-        if(!user.clubPose||String(user.id)===String(app.me?.()?.id))continue;
+        if(String(user.id)===String(app.me?.()?.id))continue;
+        // chi è nella Lobby classica (senza 3D aperta) sta in piedi nell'atrio, attorno al tappeto, rivolto al centro
+        let pose=user.clubPose;
+        if(!pose&&user.status==='In Lobby'&&!user.game&&!user.viewingRoom){
+          let h=0;for(const ch of String(user.id))h=(h*31+ch.charCodeAt(0))>>>0;
+          const a=(h%360)*Math.PI/180,x=Math.cos(a)*3.1,z=.6+Math.sin(a)*2.7;
+          pose={station:'walk',x,z,yaw:Math.atan2(x,z-.6)};
+        }
+        if(!pose)continue;
         present.add(user.id);let c=peers.get(user.id);
-        if(!c){c=makeCharacter(user.clubPose);c.root.add(shirtName(user.name||''));scene.add(c.root);peers.set(user.id,c)}
-        c.pose=user.clubPose;setLook(c,user.clubPose);
+        if(!c){c=makeCharacter(pose);c.root.add(shirtName(user.name||''));c.root.add(headName(user.name||''));scene.add(c.root);peers.set(user.id,c)}
+        c.pose=pose;if(user.clubPose)setLook(c,user.clubPose);
       }
       for(const [id,c] of peers)if(!present.has(id)){
         c.root.removeFromParent();
-        const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);materials.add(o.material)}});
+        const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh||o.isSprite){geometries.add(o.geometry);materials.add(o.material)}});
         for(const g of geometries)g.dispose();for(const m of materials){m.map?.dispose();m.dispose()}peers.delete(id);
       }
     }
