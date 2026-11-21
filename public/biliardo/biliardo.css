@@ -101,6 +101,19 @@ input[type=range] { width: 100%; padding: 0; margin: 0; border: 0; background: n
 .timer.late { color: #fca5a5; }
 .pl .me { color: var(--gold); font-size: 11px; margin-left: 4px; }
 #waitList { margin: 0; padding-left: 18px; }
+/* schermi bassi (telefono in orizzontale): pannelli più piccoli, barra della forza più corta, niente riga d'aiuto */
+@media (max-height: 520px) {
+  .pl { padding: 4px 8px; }
+  .pl .grp { margin-top: 2px; }
+  .toast { top: calc(56px + var(--st)); }
+  .timer { top: calc(50px + var(--st)); }
+  .hint { display: none; }
+  .power { height: calc(100% - 140px - var(--st) - var(--sb)); max-height: 300px; min-height: 120px; }
+  .spinB { width: 42px; height: 42px; }
+  #hud .bottom button { min-height: 36px; padding: 6px 10px; }
+  .spinPad { bottom: calc(56px + var(--sb)); max-height: calc(100% - 70px - var(--st) - var(--sb)); overflow: auto; }
+  .banner { font-size: 22px; }
+}
 @media (max-width: 420px) {
   #hud .bottom { gap: 5px; }
   #hud .bottom .shoot { min-width: 80px; }

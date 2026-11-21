@@ -3,7 +3,7 @@ import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
 import * as E from './engine.js?v=851b24b204';
 import { plan } from './ai.js?v=72423e284c';
-import { Sfx } from './sound.js?v=7229cb9c05';
+import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
 const sfx = new Sfx();
@@ -15,7 +15,31 @@ document.addEventListener('keydown', () => sfx.unlock(), { capture: true });
 // con il gioco con postMessage (messaggi "bil:..."). Online la rete la fa l'app: qui si mostra e si chiede.
 const embedded = window.parent !== window;
 const tg = !embedded && window.Telegram && window.Telegram.WebApp;
-if (tg && tg.initData) { try { tg.ready(); tg.expand(); tg.disableVerticalSwipes && tg.disableVerticalSwipes(); } catch (e) { /* vecchie versioni */ } }
+// Margini del telefono e di Telegram (barra di stato, tasti "Indietro" e menu della mini app a schermo intero).
+// Binottoland li manda come { top: { system, content }, ... }; da soli si leggono da Telegram. Valori sempre numerici:
+// un valore non valido romperebbe i calc() del CSS e l'interfaccia finirebbe tutta in alto.
+const px = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(200, +v)) : 0);
+function setInsets(ins) {
+  const s = document.documentElement.style;
+  for (const k of ['top', 'bottom', 'left', 'right']) {
+    const o = ins[k];
+    const v = typeof o === 'object' && o ? px(o.system) + px(o.content) : px(o);
+    s.setProperty('--s' + k[0], v + 'px');
+  }
+}
+function tgInsets() {
+  if (!tg || !tg.initData) return;
+  const a = tg.safeAreaInset || {}, b = tg.contentSafeAreaInset || {};
+  setInsets(Object.fromEntries(['top', 'bottom', 'left', 'right'].map((k) => [k, { system: a[k], content: b[k] }])));
+}
+if (tg && tg.initData) {
+  try {
+    tg.ready(); tg.expand();
+    if (tg.disableVerticalSwipes) tg.disableVerticalSwipes(); // trascinare sul tavolo non deve chiudere la mini app
+    if (tg.onEvent) ['safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged', 'fullscreenChanged'].forEach((e) => tg.onEvent(e, tgInsets));
+    tgInsets();
+  } catch (e) { /* vecchie versioni */ }
+}
 const toApp = (type, data = {}) => { if (embedded) window.parent.postMessage({ type: 'bil:' + type, ...data }, location.origin); };
 const haptic = (kind, style) => {
   if (embedded) toApp('haptic', { kind, style });
@@ -678,10 +702,8 @@ addEventListener('message', (e) => {
   if (e.origin !== location.origin || e.source !== window.parent) return;
   const d = e.data;
   if (!d || typeof d.type !== 'string' || !d.type.startsWith('bil:')) return;
-  if (d.type === 'bil:insets' && d.insets) {
-    const s = document.documentElement.style;
-    for (const k of ['top', 'bottom', 'left', 'right']) s.setProperty('--s' + k[0], (d.insets[k] || 0) + 'px');
-  } else if (d.type === 'bil:back') { if (!$('menu').hidden || !m || phase === 'menu') toApp('exit'); else toggleMenu(); }
+  if (d.type === 'bil:insets' && d.insets) setInsets(d.insets);
+  else if (d.type === 'bil:back') { if (!$('menu').hidden || !m || phase === 'menu') toApp('exit'); else toggleMenu(); }
   else if (d.type === 'bil:identity' && typeof d.player === 'string') { me = { player: d.player, name: d.name }; cfg.n1 = cfg.n1 || d.name || ''; }
   else if (d.type === 'bil:state') netState(d);
   else if (d.type === 'bil:error') {
