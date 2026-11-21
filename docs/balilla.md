@@ -19,7 +19,13 @@ Si gioca **solo nella Lobby 3D**, al tavolo della sala giochi. Stato: realizzato
 - **Formati** scelti da chi apre il tavolo: 5, 8 o 10 gol; partita secca o al meglio di 3. Nel 2 contro 2 si cambia campo tra una partita e l'altra.
 
 ## Tavolo
-- **Italiano a portiere singolo** (tipo Garlando): per squadra 1-2-5-3, campo circa 120 × 70 cm, pallina 34 mm, aste telescopiche (non escono dall'altro lato).
+- **Italiano a portiere singolo** (tipo Garlando): per squadra 1-2-5-3, aste telescopiche (non escono dall'altro lato).
+- **Misure** (tavoli omologati ITSF): campo 120 × 70 cm, porta 20 cm, pallina 34 mm, aste da 16 mm ogni 15 cm
+  (portiere a 7,5 cm dal fondo), asse delle aste a 8,5 cm dal campo, piede a 7,8 cm dall'asse.
+  Figure: difesa a 23,5 cm, attacco a 20,5 cm, centrocampo a 12 cm. Corsa delle aste fino ai paracolpi (la spalla
+  dell'omino si ferma a mezzo centimetro dalla sponda): difesa 20 cm, attacco 11,3 cm, centrocampo 7,8 cm, portiere 12,5 cm.
+- **Omino** modellato in Blender (`blender/omino.blend` → `public/lobby3d/models/omino.glb`), alto 12,4 cm; maglia e calzettoni
+  si colorano per squadra (rossi con pantaloncini bianchi, blu con pantaloncini blu scuro).
 - **Fisica realistica**: pallina che rotola e rallenta, rimbalzi su sponde e omini, tiri fino a circa 10 m/s, palla che si può fermare sotto il piede e passare tra le aste, angoli in rilievo che la riportano in gioco.
 
 ## Modalità

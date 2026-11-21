@@ -2,8 +2,12 @@
 // Metri e secondi. Le aste sono in ordine dalla porta rossa (x negativa) alla porta blu (x positiva):
 // per squadra portiere 1, difesa 2, centrocampo 5, attacco 3. I rossi (squadra 0) attaccano verso +x.
 // Stesso codice sul server (partite online) e sul telefono (contro il computer, stesso telefono).
-export const L = 0.565; // mezza lunghezza del campo (113 cm)
+export const L = 0.6; // mezza lunghezza del campo (120 cm, tavoli omologati ITSF)
 export const W = 0.35; // mezza larghezza (70 cm)
+export const ROD_GAP = 0.15; // 15 cm tra un'asta e l'altra
+export const ROD_R = 0.008; // aste da 16 mm
+const BUMPER = 0.005; // gomma dei paracolpi: la figura esterna si ferma a mezzo centimetro dalla sponda
+const SHOULDER = 0.027; // mezza larghezza dell'omino alle spalle (modello in blender/omino.blend)
 export const GOAL = 0.1; // mezza larghezza della porta (20 cm)
 export const R = 0.017; // pallina da 34 mm
 export const ROD_H = 0.085; // altezza dell'asse delle aste sul campo
@@ -28,9 +32,11 @@ export const rows = [
   team,
   attack,
   count,
-  x: (i - 3.5) * 0.143,
-  spacing: count === 2 ? 0.24 : count === 3 ? 0.204 : 0.118,
-  travel: count === 1 ? 0.135 : count === 2 ? 0.208 : count === 3 ? 0.127 : 0.096
+  x: (i - 3.5) * ROD_GAP,
+  // distanza tra le figure: difesa 23,5 cm, attacco 20,5 cm, centrocampo 12 cm
+  spacing: count === 2 ? 0.235 : count === 3 ? 0.205 : 0.12,
+  // corsa dell'asta: la figura esterna arriva al paracolpi; il portiere copre la porta e poco più
+  travel: count === 1 ? GOAL + 0.025 : W - BUMPER - SHOULDER - ((count - 1) / 2) * (count === 2 ? 0.235 : count === 3 ? 0.205 : 0.12)
 }));
 export const figureZ = (row, n, shift) => (n - (row.count - 1) / 2) * row.spacing + shift;
 export const TARGETS = [5, 8, 10];
@@ -108,7 +114,8 @@ function reachable(f) {
     if (Math.abs(b.x - row.x) > FOOT * Math.sin(LOW) + R) return false;
     for (let n = 0; n < row.count; n++) {
       const z0 = figureZ(row, n, 0);
-      if (b.z > z0 - row.travel - 0.03 && b.z < z0 + row.travel + 0.03) return true;
+      // il centro del piede deve poter arrivare quasi in linea con la palla (contro la sponda non ci arriva)
+      if (b.z > z0 - row.travel - 0.008 && b.z < z0 + row.travel + 0.008) return true;
     }
     return false;
   });

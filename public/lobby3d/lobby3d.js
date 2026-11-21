@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=2d3cd87246';
+import {buildBalilla} from './balilla.js?v=f607d1ac95';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -169,14 +169,30 @@ export function createLobby3D(app) {
     shade.position.set(x, H - 0.62, 0); scene.add(shade);
     const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8), glow('#fff2d0', 3)); bulb.position.set(x, H - 0.68, 0); scene.add(bulb);
   }
-  // scritta sulla parete di fondo
-  plane(3.5, .78, new THREE.MeshBasicMaterial({ map: canvasTex(1024, 256, (g, w, h) => {
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillStyle = '#2b2140'; g.font = 'bold 120px "Arial Black", Arial, sans-serif'; g.fillText('BINOTTOLAND', w / 2, 96);
-    g.fillStyle = '#c07a2c'; g.font = 'bold 64px Arial, sans-serif'; g.fillText('P L A Y G R O U N D', w / 2, 206);
-  }), transparent: true }), 0, 2.98, -5.975);
   // lavagna = Settings
   const bbX = -3.6;
+  // sopra la lavagna: logo tondo di Binottoland e la scritta "Binottoland Playground" (la porta centrale resta libera)
+  {
+    // lo SVG non ha misure fisse: si disegna su una tela quadrata, ritagliato tondo
+    const logo = canvasTex(512, 512, (g) => { g.fillStyle = '#f4ead8'; g.fillRect(0, 0, 512, 512); });
+    const logoImg = new Image();
+    logoImg.onload = () => {
+      const g = logo.image.getContext('2d');
+      g.save(); g.beginPath(); g.arc(256, 256, 256, 0, 7); g.clip();
+      g.drawImage(logoImg, 0, 0, 512, 512); g.restore();
+      logo.needsUpdate = true;
+    };
+    logoImg.src = new URL('../binottoland-avatar.svg', import.meta.url).href;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(0.25, 48), new THREE.MeshBasicMaterial({ map: logo, toneMapped: false }));
+    disc.position.set(bbX - 1.08, 2.93, -5.965); scene.add(disc);
+    const rimLogo = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.275, 48), std('#ba935e', 0.36, 0.6));
+    rimLogo.position.set(bbX - 1.08, 2.93, -5.966); scene.add(rimLogo);
+    plane(2.05, 0.5, new THREE.MeshBasicMaterial({ map: canvasTex(1024, 250, (g, w) => {
+      g.textAlign = 'left'; g.textBaseline = 'middle';
+      g.fillStyle = '#2b2140'; g.font = 'bold 132px "Arial Black", Arial, sans-serif'; g.fillText('BINOTTOLAND', 8, 90, w - 16);
+      g.fillStyle = '#c07a2c'; g.font = 'bold 66px Arial, sans-serif'; g.fillText('P L A Y G R O U N D', 12, 200, w - 24);
+    }), transparent: true }), bbX + 0.27, 2.93, -5.975);
+  }
   box(2.7, 1.75, 0.08, std('#5a3a22', 0.55), bbX, 1.55, -5.95);
   plane(2.5, 1.56, new THREE.MeshStandardMaterial({ map: blackboard(), roughness: 0.95 }), bbX, 1.55, -5.9);
   box(2.6, 0.05, 0.12, std('#5a3a22', 0.55), bbX, 0.68, -5.86);
@@ -258,10 +274,14 @@ export function createLobby3D(app) {
     for(const y of [-.206,.206])box(2.62,.012,.014,glow(color,1.45),0,y,.03,group);
     return group;
   }
-  doorSign('Sala biliardo','#82ddbd',6.87,-Math.PI/2);
-  doorSign('Sala giochi','#61d7ff',-6.87,Math.PI/2);
-  doorSign('← Atrio', '#ffd23f', 7.12, Math.PI / 2);
-  doorSign('Atrio →', '#ffd23f', -7.12, -Math.PI / 2);
+  // ogni porta ha il cartello da tutte e due le parti: dall'atrio il nome della sala, dalla sala "Atrio"
+  // (staccati di qualche centimetro dalla parete, sopra l'architrave a 2,5 m)
+  doorSign('Sala biliardo','#82ddbd',6.8,-Math.PI/2);
+  doorSign('Sala giochi','#61d7ff',-6.8,Math.PI/2);
+  doorSign('Atrio', '#ffd23f', 7.2, Math.PI / 2);
+  doorSign('Atrio', '#ffd23f', -7.2, -Math.PI / 2);
+  doorSign('Atrio', '#ffd23f', 0, Math.PI).position.set(0, 2.92, -6.34);
+  doorSign('Atrio', '#ffd23f', 0, 0).position.set(0, 2.92, 6.34);
 
   // ========== SALA BILIARDO (x 7…19): i tavoli veri del gioco ==========
   const pools = [];
@@ -403,7 +423,7 @@ export function createLobby3D(app) {
     plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),1.92,z+.033*Math.cos(angle),angle);
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
-  doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.91,-5.94);
+  doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.92,-5.96);
   let boardRoom=null,boardEpoch=-1,boardSeq=0,nextBoard=0;
   const artwork=canvasTex(576,432,g=>{g.fillStyle='#233f37';g.fillRect(0,0,576,432)});
   const paint=artwork.image.getContext('2d');
@@ -442,7 +462,7 @@ export function createLobby3D(app) {
   plane(14,12.4,std('#101118',1),0,H,12.26,0,Math.PI/2);
   wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
   wallX(-7.3,7.3,18.55,cinemaWall);
-  doorSign('Sala cinema','#ffd496',0,Math.PI).position.set(0,2.93,5.95);
+  doorSign('Sala cinema','#ffd496',0,Math.PI).position.set(0,2.92,5.96);
   // A pleated velvet panel, gathered halfway up and fuller at the hem.
   const curtains=[];
   const curtainMat=new THREE.MeshStandardMaterial({color:'#791e38',roughness:.94,side:THREE.DoubleSide});
@@ -703,8 +723,8 @@ export function createLobby3D(app) {
     }
   }
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
-  solid(-13.69,-12.31,-.40,.40);
-  spots.push({x:-13,z:0,hx:.69,hz:.4,pad:.94,label:'Calcio balilla',balilla:true});
+  solid(-13.73,-12.27,-.42,.42);
+  spots.push({x:-13,z:0,hx:.73,hz:.42,pad:.94,label:'Calcio balilla',balilla:true});
   const speakers=[];
   const grille=std('#15171a',.88),cone=std('#333941',.55);
   for(const [cx,cz,halfX,halfZ] of [[0,0,6.4,5.5],[-13,0,5.4,5.5],[13,0,5.4,5.5],[0,-12,6.4,5.4]]){

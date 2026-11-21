@@ -80,7 +80,7 @@ const run = (f, s, random) => {
   B.throwIn(f);
   const shoot = () => {
     f.phase = 'play';
-    Object.assign(f.ball, { x: 0.43, z: 0.06, vx: 1.5, vz: 0 });
+    Object.assign(f.ball, { x: 0.45, z: 0.06, vx: 1.5, vz: 0 });
     for (let k = 0; k < 120 && f.phase === 'play'; k++) B.simulate(f, 1 / 120);
   };
   shoot();
@@ -109,7 +109,7 @@ const run = (f, s, random) => {
 {
   const f = B.newField({}, () => 0.9);
   B.throwIn(f);
-  Object.assign(f.ball, { x: -0.43, z: 0.33, vx: 0, vz: 0 });
+  Object.assign(f.ball, { x: -0.45, z: 0.335, vx: 0, vz: 0 }); // tra portiere e difesa, vicino alla sponda
   run(f, 2);
   assert.equal(f.phase, 'throw');
   assert.equal(f.thrower, 1, 'rimette chi aveva rimesso');

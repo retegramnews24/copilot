@@ -3,8 +3,9 @@
 // secca o al meglio di 3; contro il computer (si adatta), stesso telefono, 1 contro 1 e 2 contro 2 online.
 // Comandi: dito o mouse su e giù sposta le aste, di lato le ruota (uno scatto verso la porta avversaria tira).
 import * as THREE from 'three';
-import { rows, newField, simulate, throwIn, control, nearPair, figureZ, W, MAX_ANGLE, TARGETS } from './balilla-rules.js?v=cff4794d59';
-import { createAI, loadSkill, saveSkill, adapt, skillName } from './balilla-ai.js?v=aa3bb7922f';
+import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { rows, newField, simulate, throwIn, control, nearPair, figureZ, L, W, GOAL, ROD_H, ROD_R, MAX_ANGLE, TARGETS } from './balilla-rules.js?v=94bb99f54f';
+import { createAI, loadSkill, saveSkill, adapt, skillName } from './balilla-ai.js?v=5d0eba09ec';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -38,72 +39,110 @@ export function buildBalilla(scene, el, send, playSound) {
     c.rotation.x = Math.PI / 2;
     return c;
   }
-  for (const x of [-0.56, 0.56])
+  // misure: campo 120 × 70 cm (L, W), porta 20 cm, aste da 16 mm ogni 15 cm, asse a 8,5 cm dal campo
+  const AXIS = TOP + ROD_H,
+    RAIL = W + 0.015, // sponda laterale
+    END = L + 0.06; // fondo con la porta
+  for (const x of [-(L - 0.03), L - 0.03])
     for (const z of [-0.29, 0.29]) {
       box(0.08, 0.59, 0.08, chrome, x, 0.31, z);
       box(0.095, 0.03, 0.095, rubber, x, 0.016, z);
     }
-  box(1.38, 0.17, 0.76, frame, 0, 0.645, 0);
+  box(2 * END + 0.04, 0.17, 2 * RAIL + 0.06, frame, 0, 0.645, 0);
   for (const sign of [-1, 1]) {
-    box(1.34, 0.016, 0.013, brass, 0, 0.585, 0.382 * sign);
-    for (const x of [-0.59, 0.59]) box(0.1, 0.2, 0.013, chrome, x, 0.675, 0.383 * sign);
+    box(2 * END, 0.016, 0.013, brass, 0, 0.585, (RAIL + 0.032) * sign);
+    for (const x of [-(L - 0.01), L - 0.01]) box(0.1, 0.2, 0.013, chrome, x, 0.675, (RAIL + 0.033) * sign);
   }
-  box(1.13, 0.014, 0.7, pitch, 0, TOP, 0);
-  for (const z of [-0.365, 0.365]) {
-    box(1.38, 0.16, 0.03, frame, 0, 0.82, z);
-    box(1.38, 0.011, 0.034, chrome, 0, 0.895, z);
+  box(2 * L, 0.014, 2 * W, pitch, 0, TOP, 0);
+  for (const s of [-1, 1]) {
+    const z = s * RAIL;
+    box(2 * END + 0.04, 0.16, 0.03, frame, 0, 0.82, z);
+    box(2 * END + 0.04, 0.011, 0.034, chrome, 0, 0.895, z);
     // foro laterale di centrocampo da cui entra la palla
-    const h = mesh(new THREE.CircleGeometry(0.024, 20), hole, 0, 0.758, z - Math.sign(z) * 0.0155);
-    h.rotation.y = z > 0 ? Math.PI : 0;
-    const ring = mesh(new THREE.TorusGeometry(0.025, 0.004, 8, 24), chrome, 0, 0.758, z - Math.sign(z) * 0.016);
-    ring.rotation.y = 0;
+    const h = mesh(new THREE.CircleGeometry(0.022, 20), hole, 0, TOP + 0.026, z - s * 0.0155);
+    h.rotation.y = s > 0 ? Math.PI : 0;
+    mesh(new THREE.TorusGeometry(0.023, 0.003, 8, 24), chrome, 0, TOP + 0.026, z - s * 0.016);
   }
   for (const sign of [-1, 1]) {
-    for (const z of [-0.223, 0.223]) box(0.125, 0.16, 0.254, frame, sign * 0.627, 0.82, z);
-    box(0.018, 0.16, 0.2, rubber, sign * 0.682, 0.82, 0);
-    box(0.12, 0.02, 0.2, chrome, sign * 0.627, 0.89, 0);
-    box(1.08, 0.001, 0.003, white, 0, 0.741, sign * 0.3);
-    box(0.003, 0.001, 0.6, white, 0.54 * sign, 0.741, 0);
-    for (const z of [-0.16, 0.16]) box(0.13, 0.001, 0.003, white, sign * 0.476, 0.742, z);
-    box(0.003, 0.001, 0.32, white, sign * 0.41, 0.742, 0);
+    // fondo: due spalle ai lati della porta, porta larga 20 cm con la rete in gomma dietro
+    for (const z of [-1, 1]) box(END - L, 0.16, W + 0.03 - GOAL, frame, sign * (L + (END - L) / 2), 0.82, z * (GOAL + (W + 0.03 - GOAL) / 2));
+    box(0.018, 0.16, 2 * GOAL, rubber, sign * (END - 0.009), 0.82, 0);
+    box(END - L, 0.02, 2 * GOAL, chrome, sign * (L + (END - L) / 2), 0.89, 0);
+    box(END - L, 0.004, 2 * GOAL, hole, sign * (L + (END - L) / 2), TOP - 0.002, 0);
+    // righe: fondo, area di porta e area grande
+    box(2 * L - 0.04, 0.001, 0.003, white, 0, TOP + 0.008, sign * (W - 0.05));
+    box(0.003, 0.001, 2 * W - 0.1, white, sign * (L - 0.02), TOP + 0.008, 0);
+    for (const z of [-1, 1]) box(0.08, 0.001, 0.003, white, sign * (L - 0.06), TOP + 0.009, z * (GOAL + 0.04));
+    box(0.003, 0.001, 2 * (GOAL + 0.04), white, sign * (L - 0.1), TOP + 0.009, 0);
+    for (const z of [-1, 1]) box(0.16, 0.001, 0.003, white, sign * (L - 0.1), TOP + 0.009, z * (GOAL + 0.11));
+    box(0.003, 0.001, 2 * (GOAL + 0.11), white, sign * (L - 0.18), TOP + 0.009, 0);
     // rialzi negli angoli: la palla non resta ferma nell'angolo
     for (const z of [-1, 1]) {
-      const ramp = mesh(new THREE.CylinderGeometry(0.001, 0.05, 0.012, 3, 1), pitch, sign * 0.545, 0.745, z * 0.33);
+      const ramp = mesh(new THREE.CylinderGeometry(0.001, 0.05, 0.012, 3, 1), pitch, sign * (L - 0.02), TOP + 0.012, z * (W - 0.02));
       ramp.rotation.y = Math.atan2(-z, -sign) + Math.PI / 6;
     }
   }
-  box(0.003, 0.001, 0.6, white, 0, 0.742, 0);
-  mesh(new THREE.RingGeometry(0.076, 0.079, 48), white, 0, 0.742, 0).rotation.x = -Math.PI / 2;
-  // pallottoliere del punteggio: 10 palline per parte
+  box(0.003, 0.001, 2 * W - 0.1, white, 0, TOP + 0.009, 0);
+  mesh(new THREE.RingGeometry(0.076, 0.079, 48), white, 0, TOP + 0.009, 0).rotation.x = -Math.PI / 2;
+  // pallottoliere del punteggio sulla sponda dal lato dei rossi: 10 palline per squadra
   const beads = [0, 1].map(team => {
     const sign = team ? 1 : -1,
       list = [];
-    for (let n = 0; n < 10; n++) list.push(box(0.01, 0.017, 0.02, kits[team], sign * (0.555 + n * 0.0115), 0.911, 0.25));
-    box(0.13, 0.003, 0.003, chrome, sign * 0.6, 0.911, 0.25);
+    for (let n = 0; n < 10; n++) list.push(box(0.01, 0.014, 0.014, kits[team], sign * (L - 0.16 + n * 0.0115), 0.912, RAIL));
+    box(0.17, 0.003, 0.003, chrome, sign * (L - 0.1), 0.912, RAIL);
     return list;
   });
+  // omino fatto in Blender (blender/omino.blend → models/omino.glb); finché non arriva, figure semplici
+  const figures = [];
+  function placeholder(team) {
+    const g = new THREE.Group();
+    mesh(new THREE.SphereGeometry(0.015, 12, 10), skin, 0, 0.03, 0, g);
+    box(0.024, 0.036, 0.036, kits[team], 0, -0.004, 0, g);
+    box(0.023, 0.016, 0.034, white, 0, -0.028, 0, g);
+    box(0.015, 0.037, 0.026, kits[team], 0, -0.054, 0, g);
+    box(0.025, 0.011, 0.028, sole, 0.003, -0.0725, 0, g);
+    return g;
+  }
   const sticks = rows.map(row => {
     const dir = row.team ? -1 : 1,
       group = new THREE.Group();
     table.add(group);
-    group.position.set(row.x, 0.818, 0);
+    group.position.set(row.x, AXIS, 0);
     for (const side of [-1, 1]) {
-      cylinder(0.022, 0.025, brass, row.x, 0.818, side * 0.382);
-      cylinder(0.014, 0.032, rubber, row.x, 0.818, side * 0.362);
+      cylinder(0.02, 0.025, brass, row.x, AXIS, side * (RAIL + 0.017));
+      cylinder(0.013, 0.012, rubber, row.x, AXIS, side * (RAIL - 0.021));
     }
-    // aste telescopiche: non escono dall'altra parte del tavolo
-    cylinder(0.009, 0.84, chrome, 0, 0, dir * 0.05, group);
+    // asta da 16 mm, telescopica: dentro il campo da sponda a sponda, non esce dall'altra parte
+    cylinder(ROD_R, 2 * RAIL + 0.13, chrome, 0, 0, dir * 0.065, group);
     cylinder(0.019, 0.105, rubber, 0, 0, dir * 0.49, group);
     for (let n = 0; n < 6; n++) cylinder(0.02, 0.004, sole, 0, 0, dir * (0.45 + n * 0.015), group);
     for (let n = 0; n < row.count; n++) {
       const z = figureZ(row, n, 0);
-      mesh(new THREE.SphereGeometry(0.017, 12, 10), skin, 0, 0.025, z, group);
-      box(0.032, 0.046, 0.034, kits[row.team], 0, -0.009, z, group);
-      box(0.035, 0.012, 0.035, white, 0, -0.031, z, group);
-      box(0.024, 0.04, 0.024, kits[row.team], 0, -0.048, z, group);
-      box(0.022, 0.016, 0.028, sole, 0, -0.07, z, group);
+      const holder = new THREE.Group();
+      holder.position.z = z;
+      holder.rotation.y = row.team ? Math.PI : 0; // guardano la porta avversaria
+      holder.add(placeholder(row.team));
+      group.add(holder);
+      figures.push({ holder, team: row.team });
     }
     return group;
+  });
+  new GLTFLoader().load(new URL('models/omino.glb', import.meta.url).href, gltf => {
+    const base = gltf.scene;
+    const paint = team => {
+      const copy = base.clone(true);
+      copy.traverse(o => {
+        if (!o.isMesh) return;
+        const name = o.material.name || '';
+        const m = o.material.clone();
+        if (name === 'bal_kit' || name === 'bal_sock') m.color.set(team ? '#2f7fe0' : '#e23b2e');
+        if (name === 'bal_shorts') m.color.set(team ? '#14233f' : '#f4f1e8');
+        o.material = m;
+      });
+      return copy;
+    };
+    const models = [paint(0), paint(1)];
+    for (const f of figures) f.holder.clear().add(models[f.team].clone(true));
   });
   const ball = mesh(new THREE.SphereGeometry(0.017, 16, 12), white, 0, 0.758, 0);
 
@@ -498,7 +537,7 @@ export function buildBalilla(scene, el, send, playSound) {
     beads.forEach((list, team) =>
       list.forEach((b, n) => {
         const sign = team ? 1 : -1;
-        b.position.x = sign * (0.555 + n * 0.0115) + (n < f.score[team] ? -sign * 0.03 : 0);
+        b.position.x = sign * (L - 0.16 + n * 0.0115) + (n < f.score[team] ? -sign * 0.03 : 0);
       })
     );
   }
@@ -509,7 +548,7 @@ export function buildBalilla(scene, el, send, playSound) {
     const vf = THREE.MathUtils.degToRad(camera.fov),
       hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
     if (topView()) {
-      const d = Math.max(0.74 / Math.tan(hf / 2), 0.46 / Math.tan(vf / 2)) + 0.1;
+      const d = Math.max((L + 0.18) / Math.tan(hf / 2), 0.46 / Math.tan(vf / 2)) + 0.1;
       camera.up.set(0, 0, -1);
       camera.position.set(TX, TOP + d, 0.0001);
       camera.lookAt(TX, TOP, 0);
@@ -518,7 +557,7 @@ export function buildBalilla(scene, el, send, playSound) {
     camera.up.set(0, 1, 0);
     const dir = myTeam() === 0 ? 1 : -1,
       p = 0.95;
-    const d = Math.max(1.15, 0.72 / Math.tan(hf / 2));
+    const d = Math.max(1.2, (L + 0.16) / Math.tan(hf / 2));
     camera.position.set(TX, TOP + d * Math.sin(p), dir * d * Math.cos(p));
     camera.lookAt(TX, TOP, dir * 0.05);
   }
