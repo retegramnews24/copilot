@@ -14,9 +14,9 @@ export const ROD_H = 0.085; // altezza dell'asse delle aste sul campo
 export const FOOT = 0.078; // dall'asse alla punta del piede
 export const MAX_ANGLE = 1.55; // l'asta non fa il giro completo: la rullata è impossibile
 const LOW = Math.acos((ROD_H - 2 * R + 0.004) / FOOT); // oltre questo angolo il piede passa sopra la pallina
-const SPIN = 120; // rad/s, rotazione più veloce di un polso (piede a circa 9 m/s)
-const SLIDE = 2.4; // m/s, spostamento più veloce di un'asta
-const MAX_SPEED = 11; // m/s
+const SPIN = 55; // rad/s, rotazione più veloce di un polso (piede a circa 4,3 m/s)
+const SLIDE = 1.4; // m/s, spostamento più veloce di un'asta
+const MAX_SPEED = 6.5; // m/s: un tiro forte di un buon giocatore da bar
 const STEP = 1 / 600;
 
 export const rows = [
@@ -57,6 +57,7 @@ export function newField(opts = {}, random = Math.random) {
     dead: 0,
     hit: 0,
     sound: '',
+    power: 0,
     swap: 0, // cresce quando si cambia campo (2 contro 2, tra una partita e l'altra)
     finished: false,
     ball: { x: 0, z: 0, vx: 0, vz: 0 },
@@ -74,12 +75,13 @@ function holdInHole(f) {
 export function throwIn(f, random = Math.random) {
   if (f.phase !== 'throw') return false;
   const side = f.thrower === 0 ? 1 : -1;
-  Object.assign(f.ball, { x: 0, z: side * (W - R - 0.002), vx: (random() - 0.5) * 0.14, vz: -side * (0.55 + random() * 0.3) });
+  Object.assign(f.ball, { x: 0, z: side * (W - R - 0.002), vx: (random() - 0.5) * 0.14, vz: -side * (0.32 + random() * 0.18) });
   f.lastThrower = f.thrower;
   f.phase = 'play';
   f.dead = 0;
   f.hit++;
   f.sound = 'throw';
+  f.power = 0.5;
   return true;
 }
 // Comandi di una squadra: slide da -1 a 1 (tutta la corsa dell'asta), angle in radianti (positivo = piede verso +x).
@@ -169,6 +171,7 @@ function kickFigures(f, dt) {
         if (!rod.pin) {
           f.hit++;
           f.sound = 'stop';
+          f.power = Math.min(1, Math.hypot(b.vx, b.vz) / 2);
         }
         rod.pin = true;
         b.vx = 0;
@@ -187,7 +190,7 @@ function kickFigures(f, dt) {
         nz = dz / d;
       const vn = (b.vx - vfx) * nx + (b.vz - vfz) * nz;
       if (vn < 0) {
-        const e = 0.55;
+        const e = 0.42; // figure in plastica dura: rimbalzo smorzato
         b.vx -= (1 + e) * vn * nx;
         b.vz -= (1 + e) * vn * nz;
         // un filo di attrito laterale col piede
@@ -195,6 +198,7 @@ function kickFigures(f, dt) {
         if (-vn > 0.15) {
           f.hit++;
           f.sound = 'kick';
+          f.power = Math.min(1, -vn / 4);
         }
       }
       const pd = d === 1 ? 0 : d;
@@ -209,17 +213,20 @@ function kickFigures(f, dt) {
 
 function moveBall(f, dt) {
   const b = f.ball;
-  // rialzi negli angoli: la palla scivola verso il centro
-  if (Math.abs(b.x) > L - 0.045 && Math.abs(b.z) > W - 0.045) {
-    b.vx -= Math.sign(b.x) * 0.85 * dt;
-    b.vz -= Math.sign(b.z) * 0.85 * dt;
+  // rialzi del fondo: ai lati della porta il campo sale leggermente e la palla scivola verso il portiere
+  // (negli angoli anche verso il centro del campo), così non resta ferma dove nessuno arriva
+  if (Math.abs(b.x) > L - 0.09 && Math.abs(b.z) > GOAL + 0.02) {
+    const k = Math.min(1, (Math.abs(b.x) - (L - 0.09)) / 0.05);
+    b.vz -= Math.sign(b.z) * 0.7 * k * dt;
+    if (Math.abs(b.z) > W - 0.05) b.vx -= Math.sign(b.x) * 0.7 * dt;
   }
   b.x += b.vx * dt;
   b.z += b.vz * dt;
   // rotolamento sul campo
   const v = Math.hypot(b.vx, b.vz);
   if (v > 0) {
-    const k = Math.max(0, v - 0.16 * dt) / v * Math.exp(-0.08 * dt);
+    // panno del campo: la palla rallenta (circa 0,3 m/s al secondo più un po' d'aria)
+    const k = (Math.max(0, v - 0.3 * dt) / v) * Math.exp(-0.22 * dt);
     b.vx *= k;
     b.vz *= k;
   }
@@ -232,11 +239,12 @@ function moveBall(f, dt) {
     const s = Math.sign(b.z);
     b.z = s * (W - R);
     if (b.vz * s > 0) {
-      if (Math.abs(b.vz) > 0.25) {
+      if (Math.abs(b.vz) > 0.2) {
         f.hit++;
         f.sound = 'rail';
+        f.power = Math.min(1, Math.abs(b.vz) / 3);
       }
-      b.vz = -b.vz * 0.7;
+      b.vz = -b.vz * 0.55;
     }
   }
   // fondo campo e porte
@@ -256,8 +264,11 @@ function moveBall(f, dt) {
             nz = dz / d,
             vn = b.vx * nx + b.vz * nz;
           if (vn < 0) {
-            b.vx -= 1.7 * vn * nx;
-            b.vz -= 1.7 * vn * nz;
+            b.vx -= 1.55 * vn * nx;
+            b.vz -= 1.55 * vn * nz;
+            f.hit++;
+            f.sound = 'post';
+            f.power = Math.min(1, -vn / 3);
           }
           b.x = s * L + nx * R;
           b.z = post + nz * R;
@@ -265,11 +276,12 @@ function moveBall(f, dt) {
       } else {
         b.x = s * (L - R);
         if (b.vx * s > 0) {
-          if (Math.abs(b.vx) > 0.25) {
+          if (Math.abs(b.vx) > 0.2) {
             f.hit++;
             f.sound = 'rail';
+            f.power = Math.min(1, Math.abs(b.vx) / 3);
           }
-          b.vx = -b.vx * 0.7;
+          b.vx = -b.vx * 0.55;
         }
       }
     } else if (Math.abs(b.z) >= GOAL - R * 0.4) {
@@ -285,6 +297,7 @@ function goal(f, team) {
   f.score[team]++;
   f.hit++;
   f.sound = 'goal';
+  f.power = Math.min(1, Math.hypot(f.ball.vx, f.ball.vz) / 5);
   f.thrower = 1 - team; // rimette chi ha subito
   f.timer = 1.4;
   f.phase = 'goal';

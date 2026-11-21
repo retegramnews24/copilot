@@ -678,11 +678,15 @@ export class Room extends DurableObject {
         !a.closed && pose && typeof pose.station === 'string' && /^[a-z0-9-]{1,48}$/.test(pose.station)
           ? {
               station: pose.station,
-              slot: Number.isInteger(pose.slot) && pose.slot >= 0 && pose.slot < 4 ? pose.slot : 0,
+              slot: Number.isInteger(pose.slot) && pose.slot >= 0 && pose.slot < 5 ? pose.slot : 0,
               mode: pose.mode === 4 ? 4 : 2,
               pair: pose.pair === 0 ? 0 : 1,
               shirt: /^#[0-9a-f]{6}$/i.test(pose.shirt) ? pose.shirt : '#35618a',
-              shorts: /^#[0-9a-f]{6}$/i.test(pose.shorts) ? pose.shorts : '#303745'
+              shorts: /^#[0-9a-f]{6}$/i.test(pose.shorts) ? pose.shorts : '#303745',
+              // personaggio a blocchi della Lobby 3D: dettagli, capelli, pelle
+              accent: /^#[0-9a-f]{6}$/i.test(pose.accent) ? pose.accent : '#d62828',
+              hair: /^#[0-9a-f]{6}$/i.test(pose.hair) ? pose.hair : '#4a2a17',
+              skin: /^#[0-9a-f]{6}$/i.test(pose.skin) ? pose.skin : '#d79a6b'
             }
           : null;
       ws.serializeAttachment(a);

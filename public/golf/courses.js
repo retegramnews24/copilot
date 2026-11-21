@@ -1,7 +1,7 @@
 import {CAMPAIGNS,LEGACY_CAMPAIGN} from './campaigns.js?v=2685d41f38';
 export {CAMPAIGNS};
-import {validBallColors} from '../appearance.js?v=3bf8d2e2ca';
-export {BALL_KEY,validBallColors} from '../appearance.js?v=3bf8d2e2ca';
+import {validBallColors} from '../appearance.js?v=a866c9e8ce';
+export {BALL_KEY,validBallColors} from '../appearance.js?v=a866c9e8ce';
 
 const wall = (x, z, toX, toZ) => ({x, z, toX, toZ});
 const water = (x, z, w, h) => ({x, z, w, h});

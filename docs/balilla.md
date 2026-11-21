@@ -24,6 +24,11 @@ Si gioca **solo nella Lobby 3D**, al tavolo della sala giochi. Stato: realizzato
   (portiere a 7,5 cm dal fondo), asse delle aste a 8,5 cm dal campo, piede a 7,8 cm dall'asse.
   Figure: difesa a 23,5 cm, attacco a 20,5 cm, centrocampo a 12 cm. Corsa delle aste fino ai paracolpi (la spalla
   dell'omino si ferma a mezzo centimetro dalla sponda): difesa 20 cm, attacco 11,3 cm, centrocampo 7,8 cm, portiere 12,5 cm.
+- **Aste**: passano sempre dentro le due boccole in ottone; dal lato opposto alla manopola rientrano in un manicotto
+  telescopico fisso lungo quanto la corsa; i paracolpi in gomma sull'asta toccano la sponda a fine corsa.
+- **Velocità** da tavolo vero: polso al massimo 55 rad/s (piede a circa 4 m/s), aste a 1,4 m/s, tiro forte 6,5 m/s,
+  la palla rallenta sul panno; rialzi ai lati delle porte che la riportano verso il portiere.
+- **Suoni** con l'intensità del colpo: piede in plastica, sponde in legno, palo in metallo, gol con la palla che scende nel canale.
 - **Omino** modellato in Blender (`blender/omino.blend` → `public/lobby3d/models/omino.glb`), alto 12,4 cm; maglia e calzettoni
   si colorano per squadra (rossi con pantaloncini bianchi, blu con pantaloncini blu scuro).
 - **Fisica realistica**: pallina che rotola e rallenta, rimbalzi su sponde e omini, tiri fino a circa 10 m/s, palla che si può fermare sotto il piede e passare tra le aste, angoli in rilievo che la riportano in gioco.

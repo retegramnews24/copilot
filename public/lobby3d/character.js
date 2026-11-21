@@ -1,69 +1,145 @@
-// Lobby 3D: il personaggio (lo stesso del Labyrinth: maglia e pantaloncini scelti in Settings) e la sua camminata.
+// Lobby 3D: il personaggio a blocchi fatto in Blender (blender/personaggio.blend → models/personaggio.glb):
+// felpa con cappuccio, lacci e logo del lupo, pantaloni con riga e tasca, sneakers. Colori scelti in Settings:
+// felpa = maglietta, pantaloni = pantaloncini, dettagli (lacci, righe, scarpe), capelli e pelle.
+// Ogni parte (testa, busto, braccia, gambe) ha il suo perno, così cammina, saluta e tiene le manopole.
 import * as THREE from 'three';
+import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 
 export const SPEED = 3.1;
+export const ARM_LEN = 0.6; // dalla spalla alla punta della mano
+export const EYE_Y = 1.56;
+const DEFAULT = { shirt: '#1d1f23', shorts: '#1d1f23', accent: '#d62828', hair: '#4a2a17', skin: '#d79a6b' };
+// nomi dei pezzi nel modello e perni (in metri, personaggio con i piedi a terra, guarda verso -Z)
+const PARTS = {
+  gamba_R: ['legs', 0, -0.11, 0.66],
+  gamba_L: ['legs', 1, 0.11, 0.66],
+  braccio_R: ['arms', 0, -0.33, 1.27],
+  braccio_L: ['arms', 1, 0.33, 1.27],
+  busto: ['torso', 0, 0, 0.66],
+  testa: ['head', 0, 0, 1.32]
+};
+// materiali del modello che prendono i colori scelti
+const COLOR_OF = { pg_hoodie: 'shirt', pg_pants: 'shorts', pg_accent: 'accent', pg_hair: 'hair', pg_skin: 'skin' };
+
+let model = null;
+const waiting = [];
+new GLTFLoader().load(new URL('models/personaggio.glb', import.meta.url).href, gltf => {
+  model = gltf.scene;
+  for (const c of waiting.splice(0)) fill(c);
+});
+
+// logo del lupo sul petto (disegnato qui: un profilo di lupo stilizzato, bianco con il colore dei dettagli)
+let emblemTex = null;
+function emblem() {
+  if (emblemTex) return emblemTex;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const g = cv.getContext('2d');
+  g.translate(64, 66);
+  const wolf = [[-34, 30], [-26, -6], [-34, -40], [-12, -22], [6, -44], [12, -18], [40, -4], [22, 4], [30, 14], [8, 12], [2, 34], [-10, 18]];
+  g.beginPath();
+  wolf.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+  g.closePath();
+  g.fillStyle = '#f2f0ea';
+  g.fill();
+  g.lineWidth = 5;
+  g.strokeStyle = '#2a2a2e';
+  g.stroke();
+  g.fillStyle = '#d62828';
+  g.beginPath();
+  g.moveTo(10, -12);
+  g.lineTo(20, -8);
+  g.lineTo(10, -6);
+  g.fill();
+  emblemTex = new THREE.CanvasTexture(cv);
+  emblemTex.colorSpace = THREE.SRGBColorSpace;
+  return emblemTex;
+}
+
+function fill(c) {
+  model.traverse(node => {
+    const spec = PARTS[node.name];
+    if (!spec) return;
+    const [kind, index] = spec;
+    const pivot = kind === 'legs' || kind === 'arms' ? c[kind][index] : c[kind];
+    const copy = node.clone(true);
+    copy.position.set(0, 0, 0);
+    copy.traverse(o => {
+      if (!o.isMesh) return;
+      const name = o.material.name;
+      if (name === 'pg_emblem') {
+        // il piano del logo: coordinate di texture dalla sua forma, materiale con il disegno
+        const pos = o.geometry.attributes.position;
+        o.geometry = o.geometry.clone();
+        const box = new THREE.Box3().setFromBufferAttribute(pos);
+        const uv = new Float32Array(pos.count * 2);
+        for (let i = 0; i < pos.count; i++) {
+          uv[i * 2] = 1 - (pos.getX(i) - box.min.x) / Math.max(1e-6, box.max.x - box.min.x);
+          uv[i * 2 + 1] = (pos.getY(i) - box.min.y) / Math.max(1e-6, box.max.y - box.min.y);
+        }
+        o.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        o.material = new THREE.MeshStandardMaterial({ map: emblem(), transparent: true, roughness: 0.6 });
+        c.emblem = o;
+        return;
+      }
+      const part = COLOR_OF[name];
+      if (part) {
+        if (!c.mats[name]) {
+          c.mats[name] = o.material.clone();
+          c.mats[name].userData.part = part;
+        }
+        o.material = c.mats[name];
+      }
+      o.castShadow = true;
+    });
+    pivot.add(copy);
+  });
+  setLook(c, c.look);
+}
+
+export function setLook(c, look = {}) {
+  c.look = { ...DEFAULT, ...look };
+  for (const m of Object.values(c.mats)) m.color.set(c.look[m.userData.part]);
+  if (c.emblem) c.emblem.material.color.set('#ffffff');
+}
 
 export function makeCharacter(look) {
   const root = new THREE.Group();
-  const ball = new THREE.SphereGeometry(1, 20, 14);
-  const mat = (c, r = 0.7) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
-  const skin = mat('#dc9f88', 0.65), shirt = mat(look.shirt, 0.8), shorts = mat(look.shorts, 0.8);
-  // maglia e pantaloncini si ricolorano se li cambi in Settings
-  shirt.userData.part = 'shirt'; shorts.userData.part = 'shorts';
-  const hairM = mat('#3a2a1e', 0.9), shoeM = mat('#232b28', 0.6), soleM = mat('#a5a189', 0.8), white = mat('#f5f1e4', 0.4), dark = mat('#1b1512', 0.3);
-  const blob = (parent, m, x, y, z, rx, ry, rz) => { const o = new THREE.Mesh(ball, m); o.position.set(x, y, z); o.scale.set(rx, ry, rz); parent.add(o); return o; };
-  const legs = [], arms = [];
-  for (const s of [-1, 1]) {
-    const hip = new THREE.Group(); hip.position.set(s * 0.119, 0.66, 0); root.add(hip);
-    blob(hip, shorts, 0, -0.15, 0.008, 0.115, 0.19, 0.135);
-    blob(hip, skin, 0, -0.42, 0, 0.068, 0.25, 0.075);
-    blob(hip, shoeM, 0, -0.62, -0.06, 0.085, 0.062, 0.16);
-    blob(hip, soleM, 0, -0.655, -0.06, 0.088, 0.02, 0.165);
-    blob(hip, white, 0, -0.52, -0.01, 0.072, 0.03, 0.08); // calzino
-    legs.push(hip);
-    const sh = new THREE.Group(); sh.position.set(s * 0.27, 1.22, 0); root.add(sh);
-    blob(sh, shirt, 0, -0.09, 0, 0.088, 0.14, 0.088);
-    blob(sh, skin, 0, -0.33, 0, 0.056, 0.2, 0.058);
-    blob(sh, skin, 0, -0.55, -0.01, 0.055, 0.07, 0.048);
-    arms.push(sh);
+  const group = (x, y) => {
+    const g = new THREE.Group();
+    g.position.set(x, y, 0);
+    root.add(g);
+    return g;
+  };
+  const c = { root, legs: [], arms: [], torso: null, head: null, mats: {}, look: { ...DEFAULT, ...look }, phase: 0, expressionEnd: 0 };
+  for (const [kind, index, x, y] of Object.values(PARTS)) {
+    const g = group(x, y);
+    if (kind === 'legs' || kind === 'arms') c[kind][index] = g;
+    else c[kind] = g;
   }
-  blob(root, shorts, 0, 0.66, 0.01, 0.22, 0.11, 0.135);
-  blob(root, shirt, 0, 0.9, 0.008, 0.24, 0.3, 0.15);
-  blob(root, shirt, 0, 1.12, 0, 0.235, 0.15, 0.143);
-  blob(root, skin, 0, 1.27, 0, 0.07, 0.08, 0.07);
-  const brows = [], eyes = [];
-  const head = new THREE.Group(); head.position.y = 1.47; root.add(head);
-  blob(head, skin, 0, 0, 0, 0.165, 0.195, 0.155);
-  for (const s of [-1, 1]) {
-    blob(head, skin, s * 0.16, -0.01, 0.01, 0.028, 0.055, 0.026); // orecchie
-    eyes.push(blob(head, white, s * 0.059, 0.02, -0.14, 0.032, 0.025, 0.014));
-    eyes.push(blob(head, dark, s * 0.059, 0.02, -0.152, 0.015, 0.016, 0.006));
-    brows.push(blob(head, hairM, s * 0.062, 0.08, -0.142, 0.032, 0.008, 0.008)); // sopracciglia
-  }
-  blob(head, skin, 0, -0.04, -0.155, 0.024, 0.034, 0.03); // naso
-  const mouth = blob(head, mat('#7b3939', 0.5), 0, -0.1, -0.135, 0.045, 0.01, 0.012); // bocca
-  blob(head, hairM, 0, 0.065, 0.02, 0.178, 0.16, 0.168);
-  blob(head, hairM, -0.04, 0.17, -0.1, 0.07, 0.035, 0.04); // ciuffo
-  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { root, legs, arms, head, eyes, brows, mouth, expressionEnd: 0, phase: 0 };
+  if (model) fill(c);
+  else waiting.push(c);
+  return c;
 }
+
 export function animateCharacter(c, speed, dt, t) {
   const amt = Math.min(1, speed / SPEED);
-  c.phase += dt * (4 + 6 * speed / SPEED);
-  const sw = Math.sin(c.phase) * 0.65 * amt;
-  c.legs[0].rotation.x = sw; c.legs[1].rotation.x = -sw;
-  c.arms[0].rotation.x = -sw * 0.8; c.arms[1].rotation.x = sw * 0.8;
-  c.arms[0].rotation.z = -0.06; c.arms[1].rotation.z = 0.06;
-  // fermo: respira e si guarda un po' intorno
-  c.root.position.y = Math.abs(Math.cos(c.phase)) * 0.035 * amt + (1 - amt) * Math.sin(t * 2) * 0.004;
+  c.phase += dt * (4 + (6 * speed) / SPEED);
+  const sw = Math.sin(c.phase) * 0.7 * amt;
+  c.legs[0].rotation.x = sw;
+  c.legs[1].rotation.x = -sw;
+  c.arms[0].rotation.x = -sw * 0.8;
+  c.arms[1].rotation.x = sw * 0.8;
+  c.arms[0].rotation.z = -0.04;
+  c.arms[1].rotation.z = 0.04;
+  // a blocchi: si muove a scatti morbidi, fermo respira e si guarda intorno
+  c.root.position.y = Math.abs(Math.cos(c.phase)) * 0.03 * amt + (1 - amt) * Math.sin(t * 2) * 0.004;
+  c.torso.rotation.y = Math.sin(c.phase) * 0.05 * amt;
   const remaining = Math.max(0, c.expressionEnd - t);
   const envelope = Math.min(1, remaining * 4, Math.max(0, (1.2 - remaining) * 7));
   const laugh = c.expression === 'laugh';
-  const pulse = laugh ? .68 + .32 * Math.cos(remaining * 24) : 1;
-  c.mouth.scale.set(.045 + envelope * (laugh ? .028 : -.019), .01 + envelope * pulse * .034, .012 + envelope * .012);
-  for (const brow of c.brows) brow.position.y = .08 + envelope * (laugh ? .008 : .034);
-  for (const eye of c.eyes) eye.scale.y = (eye.material === c.eyes[0].material ? .025 : .016) * (1 + envelope * (laugh ? -.7 : .4));
-  c.head.rotation.x = envelope * (laugh ? -.09 * pulse : -.12);
+  // espressioni: la testa ride (su e giù) o si stupisce (indietro)
+  c.head.rotation.x = envelope * (laugh ? -0.12 * (0.6 + 0.4 * Math.cos(remaining * 24)) : -0.16);
   c.head.rotation.y = (1 - amt) * Math.sin(t * 0.6) * 0.25;
+  c.head.position.y = 1.32 + envelope * (laugh ? 0.01 * Math.abs(Math.sin(remaining * 20)) : 0.012);
 }
-

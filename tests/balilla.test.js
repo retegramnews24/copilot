@@ -1,4 +1,4 @@
-// Calcio balilla della Lobby 3D (docs/balilla.md): rimessa dal foro, tiro fino a 11 m/s, palla fermata sotto il piede
+// Calcio balilla della Lobby 3D (docs/balilla.md): rimessa dal foro, tiro fino a 6,5 m/s, palla fermata sotto il piede
 // e trascinata, rullata impossibile, gol e formati (5/8/10, al meglio di 3), palla morta, computer che si adatta,
 // server: posti, partenza, rimessa, cambio campo nel 2 contro 2, messaggi compatti, posti dopo l'ibernazione.
 import assert from 'node:assert/strict';
@@ -50,7 +50,7 @@ const run = (f, s, random) => {
     B.simulate(f, 1 / 120);
     top = Math.max(top, Math.hypot(f.ball.vx, f.ball.vz));
   }
-  assert.ok(top > 9 && top <= 11.01, 'tiro forte, al massimo 11 m/s: ' + top);
+  assert.ok(top > 4 && top <= 6.51, 'tiro forte ma realistico, al massimo 6,5 m/s: ' + top);
 }
 
 // --- rullata impossibile: l'asta non supera mai il limite, qualunque comando arrivi

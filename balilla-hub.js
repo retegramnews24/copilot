@@ -13,13 +13,14 @@ import {
 } from './public/lobby3d/balilla-rules.js';
 
 const TICK = 33; // ms tra un aggiornamento e l'altro (30 al secondo)
-const SOUNDS = ['kick', 'rail', 'goal', 'stop', 'throw'];
+const SOUNDS = ['kick', 'rail', 'goal', 'stop', 'throw', 'post'];
 const round = v => Math.round(v * 1000) / 1000;
 // Solo quello che serve per disegnare il tavolo, con i numeri arrotondati (messaggi più leggeri).
 export function publicField(f) {
   return {
     hit: f.hit,
     sound: f.sound,
+    power: round(f.power || 0),
     phase: f.phase,
     thrower: f.thrower,
     wait: round(Math.max(0, f.wait)),
@@ -100,7 +101,11 @@ export class BalillaHub {
       const now = Date.now();
       if (this.timer || now - (member.lastSound ?? 0) < 90 || !SOUNDS.includes(b.sound)) return;
       member.lastSound = now;
-      const text = JSON.stringify({ type: 'balilla', sound: b.sound });
+      const text = JSON.stringify({
+        type: 'balilla',
+        sound: b.sound,
+        power: Math.max(0, Math.min(1, Number(b.power) || 0.5))
+      });
       for (const [peer] of this.viewers)
         if (peer !== ws)
           try {

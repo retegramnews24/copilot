@@ -2,9 +2,9 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {campaignInfo} from './golf/courses.js?v=4b40a70e69';
-import {readAppearance} from './appearance.js?v=3bf8d2e2ca';
-import './labyrinth/avatar.js?v=5318415024';
+import {campaignInfo} from './golf/courses.js?v=caf3baf8cd';
+import {readAppearance} from './appearance.js?v=a866c9e8ce';
+import './labyrinth/avatar.js?v=8c61edfe0e';
 import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=bff5f99338';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
@@ -26,7 +26,7 @@ import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
-import {createGolfLink} from './golf-link.js?v=97d037f39a';
+import {createGolfLink} from './golf-link.js?v=cbf0a82bb6';
 import {createArcadeLink} from './arcade-link.js?v=34fb67f403';
 import {createF1Link} from './f1-link.js?v=28d33c1b41';
 import {createBiliardoLink} from './biliardo-link.js?v=bb0b63f788';
@@ -74,7 +74,7 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=0122e0d367');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=904a3d7bbb');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}}})}

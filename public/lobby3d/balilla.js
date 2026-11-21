@@ -4,8 +4,9 @@
 // Comandi: dito o mouse su e giù sposta le aste, di lato le ruota (uno scatto verso la porta avversaria tira).
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
-import { rows, newField, simulate, throwIn, control, nearPair, figureZ, L, W, GOAL, ROD_H, ROD_R, MAX_ANGLE, TARGETS } from './balilla-rules.js?v=94bb99f54f';
-import { createAI, loadSkill, saveSkill, adapt, skillName } from './balilla-ai.js?v=5d0eba09ec';
+import { roundBoxGeometry } from './shapes.js?v=acaec08552';
+import { rows, newField, simulate, throwIn, control, nearPair, figureZ, L, W, GOAL, ROD_H, ROD_R, MAX_ANGLE, TARGETS } from './balilla-rules.js?v=2f23025ee7';
+import { createAI, loadSkill, saveSkill, adapt, skillName } from './balilla-ai.js?v=295687f966';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -34,6 +35,8 @@ export function buildBalilla(scene, el, send, playSound) {
     return m;
   }
   const box = (w, h, d, m, x, y, z, parent) => mesh(new THREE.BoxGeometry(w, h, d), m, x, y, z, parent);
+  // spigoli arrotondati per il mobile del tavolo
+  const rbox = (w, h, d, r, m, x, y, z, parent) => mesh(roundBoxGeometry(w, h, d, r), m, x, y, z, parent);
   function cylinder(radius, length, m, x, y, z, parent) {
     const c = mesh(new THREE.CylinderGeometry(radius, radius, length, 16), m, x, y, z, parent);
     c.rotation.x = Math.PI / 2;
@@ -45,10 +48,10 @@ export function buildBalilla(scene, el, send, playSound) {
     END = L + 0.06; // fondo con la porta
   for (const x of [-(L - 0.03), L - 0.03])
     for (const z of [-0.29, 0.29]) {
-      box(0.08, 0.59, 0.08, chrome, x, 0.31, z);
+      rbox(0.08, 0.59, 0.08, 0.012, chrome, x, 0.31, z);
       box(0.095, 0.03, 0.095, rubber, x, 0.016, z);
     }
-  box(2 * END + 0.04, 0.17, 2 * RAIL + 0.06, frame, 0, 0.645, 0);
+  rbox(2 * END + 0.04, 0.17, 2 * RAIL + 0.06, 0.02, frame, 0, 0.645, 0);
   for (const sign of [-1, 1]) {
     box(2 * END, 0.016, 0.013, brass, 0, 0.585, (RAIL + 0.032) * sign);
     for (const x of [-(L - 0.01), L - 0.01]) box(0.1, 0.2, 0.013, chrome, x, 0.675, (RAIL + 0.033) * sign);
@@ -56,8 +59,8 @@ export function buildBalilla(scene, el, send, playSound) {
   box(2 * L, 0.014, 2 * W, pitch, 0, TOP, 0);
   for (const s of [-1, 1]) {
     const z = s * RAIL;
-    box(2 * END + 0.04, 0.16, 0.03, frame, 0, 0.82, z);
-    box(2 * END + 0.04, 0.011, 0.034, chrome, 0, 0.895, z);
+    rbox(2 * END + 0.04, 0.16, 0.03, 0.008, frame, 0, 0.82, z);
+    rbox(2 * END + 0.04, 0.012, 0.036, 0.005, chrome, 0, 0.895, z);
     // foro laterale di centrocampo da cui entra la palla
     const h = mesh(new THREE.CircleGeometry(0.022, 20), hole, 0, TOP + 0.026, z - s * 0.0155);
     h.rotation.y = s > 0 ? Math.PI : 0;
@@ -65,7 +68,7 @@ export function buildBalilla(scene, el, send, playSound) {
   }
   for (const sign of [-1, 1]) {
     // fondo: due spalle ai lati della porta, porta larga 20 cm con la rete in gomma dietro
-    for (const z of [-1, 1]) box(END - L, 0.16, W + 0.03 - GOAL, frame, sign * (L + (END - L) / 2), 0.82, z * (GOAL + (W + 0.03 - GOAL) / 2));
+    for (const z of [-1, 1]) rbox(END - L, 0.16, W + 0.03 - GOAL, 0.008, frame, sign * (L + (END - L) / 2), 0.82, z * (GOAL + (W + 0.03 - GOAL) / 2));
     box(0.018, 0.16, 2 * GOAL, rubber, sign * (END - 0.009), 0.82, 0);
     box(END - L, 0.02, 2 * GOAL, chrome, sign * (L + (END - L) / 2), 0.89, 0);
     box(END - L, 0.004, 2 * GOAL, hole, sign * (L + (END - L) / 2), TOP - 0.002, 0);
@@ -108,14 +111,26 @@ export function buildBalilla(scene, el, send, playSound) {
       group = new THREE.Group();
     table.add(group);
     group.position.set(row.x, AXIS, 0);
+    const t = row.travel;
+    // boccole in ottone nelle due sponde: l'asta ci scorre dentro e non ne esce mai
     for (const side of [-1, 1]) {
-      cylinder(0.02, 0.025, brass, row.x, AXIS, side * (RAIL + 0.017));
-      cylinder(0.013, 0.012, rubber, row.x, AXIS, side * (RAIL - 0.021));
+      cylinder(0.02, 0.03, brass, row.x, AXIS, side * (RAIL + 0.015));
+      cylinder(0.023, 0.006, brass, row.x, AXIS, side * (RAIL + 0.033));
     }
-    // asta da 16 mm, telescopica: dentro il campo da sponda a sponda, non esce dall'altra parte
-    cylinder(ROD_R, 2 * RAIL + 0.13, chrome, 0, 0, dir * 0.065, group);
-    cylinder(0.019, 0.105, rubber, 0, 0, dir * 0.49, group);
-    for (let n = 0; n < 6; n++) cylinder(0.02, 0.004, sole, 0, 0, dir * (0.45 + n * 0.015), group);
+    // dal lato opposto alla manopola: manicotto telescopico fisso, lungo quanto tutta la corsa (l'asta ci rientra)
+    const sleeve = 2 * t + 0.05;
+    cylinder(0.012, sleeve, chrome, row.x, AXIS, -dir * (RAIL + 0.036 + sleeve / 2));
+    cylinder(0.014, 0.012, rubber, row.x, AXIS, -dir * (RAIL + 0.036 + sleeve));
+    // asta da 16 mm, sempre dentro tutte e due le boccole: dal fondo del manicotto alla manopola
+    const far = -dir * (RAIL + 0.045 + t),
+      grip = dir * (RAIL + 0.1 + t);
+    cylinder(ROD_R, Math.abs(grip - far), chrome, 0, 0, (grip + far) / 2, group);
+    // manopola in gomma con le scanalature
+    cylinder(0.019, 0.11, rubber, 0, 0, grip + dir * 0.055, group);
+    for (let n = 0; n < 6; n++) cylinder(0.0205, 0.004, sole, 0, 0, grip + dir * (0.012 + n * 0.017), group);
+    cylinder(0.015, 0.01, chrome, 0, 0, grip + dir * 0.004, group);
+    // paracolpi in gomma sull'asta: a fine corsa toccano la sponda (la spalla dell'omino resta a mezzo centimetro)
+    for (const side of [-1, 1]) cylinder(0.016, 0.01, rubber, 0, 0, side * (W - 0.005 - t), group);
     for (let n = 0; n < row.count; n++) {
       const z = figureZ(row, n, 0);
       const holder = new THREE.Group();
@@ -387,16 +402,16 @@ export function buildBalilla(scene, el, send, playSound) {
     const p = pointers.get(e.pointerId);
     if (p && !p.mouse) {
       const c = ctl[p.team];
-      c.slide = Math.max(-1, Math.min(1, p.s0 + ((e.clientY - p.y) * slideSign(p.team) * 2.4) / (h * 0.6)));
-      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, p.a0 + (e.clientX - p.x) * angleSign(p.team) * 0.028));
+      c.slide = Math.max(-1, Math.min(1, p.s0 + ((e.clientY - p.y) * slideSign(p.team) * 1.25) / (h * 0.6)));
+      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, p.a0 + (e.clientX - p.x) * angleSign(p.team) * 0.012));
       return;
     }
     // mouse (anche senza tasti): spostamenti relativi
     if (e.pointerType === 'mouse') {
       const team = topView() ? teamAt(e.clientX) : myTeam(),
         c = ctl[team];
-      c.slide = Math.max(-1, Math.min(1, c.slide + ((e.movementY || 0) * slideSign(team) * 2.4) / (h * 0.6)));
-      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, c.angle + (e.movementX || 0) * angleSign(team) * 0.022));
+      c.slide = Math.max(-1, Math.min(1, c.slide + ((e.movementY || 0) * slideSign(team) * 1.2) / (h * 0.6)));
+      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, c.angle + (e.movementX || 0) * angleSign(team) * 0.009));
       c.up = 0.12; // la rotazione resta finché muovi il mouse, poi torna giù
     }
   }
@@ -437,7 +452,7 @@ export function buildBalilla(scene, el, send, playSound) {
       const has = k => (Array.isArray(k) ? k.some(x => keys.has(x)) : keys.has(k));
       const c = ctl[team];
       const v = (has(down) ? 1 : 0) - (has(up) ? 1 : 0);
-      if (v) c.slide = Math.max(-1, Math.min(1, c.slide + v * slideSign(team) * dt * 3));
+      if (v) c.slide = Math.max(-1, Math.min(1, c.slide + v * slideSign(team) * dt * 1.6));
       if (has(kick) && !c.kickHeld) c.keyKick = 0.09;
       c.kickHeld = has(kick);
       c.keyRaise = has(raise);
@@ -454,7 +469,7 @@ export function buildBalilla(scene, el, send, playSound) {
     if (c.raise || c.keyRaise) return -fwd * 1.45;
     if (c.held === 0) {
       if (c.up > 0) c.up -= dt;
-      else c.angle *= Math.exp(-9 * dt); // senza mano le figure tornano giù
+      else c.angle *= Math.exp(-6 * dt); // senza mano le figure tornano giù
     }
     return c.angle;
   }
@@ -483,8 +498,8 @@ export function buildBalilla(scene, el, send, playSound) {
     }
     if (f.hit !== lastHit) {
       lastHit = f.hit;
-      playSound?.(f.sound);
-      post('practice-sound', { sound: f.sound });
+      playSound?.(f.sound, f.power);
+      post('practice-sound', { sound: f.sound, power: Math.round((f.power || 0) * 100) / 100 });
     }
   }
   function sendNet(dt) {
@@ -567,11 +582,14 @@ export function buildBalilla(scene, el, send, playSound) {
       pair = rows
         .map((r, i) => (r.team === team && r.attack === (poseMode === 4 ? slot % 2 : (pairIndex ?? 1)) ? i : -1))
         .filter(i => i >= 0);
-    const handles = pair.map(i => new THREE.Vector3(TX + rows[i].x, 0.818, (team ? -1 : 1) * 0.49 + sticks[i].position.z));
+    // mani sulle manopole (che sono più o meno fuori secondo la corsa dell'asta)
+    const handles = pair.map(
+      i => new THREE.Vector3(TX + rows[i].x, TOP + ROD_H, (team ? -1 : 1) * (W + 0.015 + 0.155 + rows[i].travel) + sticks[i].position.z)
+    );
     const x = (handles[0].x + handles[1].x) / 2;
     return {
       x,
-      z: (team ? -1 : 1) * 0.77,
+      z: (team ? -1 : 1) * 0.98,
       yaw: team ? Math.PI : 0,
       handles: team ? handles.sort((a, b) => b.x - a.x) : handles.sort((a, b) => a.x - b.x)
     };
@@ -606,11 +624,11 @@ export function buildBalilla(scene, el, send, playSound) {
     receive(data) {
       if (!active && !watching) return;
       if (data.sound) {
-        if (mode !== 'ai' && mode !== 'same') playSound?.(data.sound);
+        if (mode !== 'ai' && mode !== 'same') playSound?.(data.sound, data.power);
         return;
       }
       const old = net?.field;
-      if (data.field?.hit > 0 && old && data.field.hit > old.hit && (mode === 'net' || !mode)) playSound?.(data.field.sound);
+      if (data.field?.hit > 0 && old && data.field.hit > old.hit && (mode === 'net' || !mode)) playSound?.(data.field.sound, data.field.power);
       net = data;
       netBall = { ...data.field.ball, t: performance.now() };
       // seduto online da un altro telefono o al cambio campo: la vista segue il posto

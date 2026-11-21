@@ -1,7 +1,7 @@
 // Calcio balilla: il computer (sempre i blu se giochi tu con i rossi). Muove tutte e quattro le sue aste:
 // mette la figura giusta sulla traiettoria della palla, alza le aste davanti ai tiri dei compagni,
 // ferma la palla e tira. Il livello si adatta: sale quando vinci un punto, scende quando lo perdi.
-import { rows, figureZ, W } from './balilla-rules.js?v=94bb99f54f';
+import { rows, figureZ, W } from './balilla-rules.js?v=2f23025ee7';
 
 const KEY = 'binottoland-balilla-ai';
 export function loadSkill() {
@@ -88,7 +88,7 @@ export function createAI(team, skill) {
           ahead > 0 &&
           ahead < 0.075 &&
           Math.hypot(b.vx, b.vz) < 1.2 &&
-          Math.abs(b.z - nearestFigure(row, rod, b.z)) < 0.022 &&
+          Math.abs(b.z - nearestFigure(row, rod, b.z)) < 0.034 &&
           f.phase === 'play'
         ) {
           // (solo palla lenta o ferma: un tiro che arriva forte si para, non si ribatte al volo)
@@ -100,7 +100,7 @@ export function createAI(team, skill) {
           ahead < 0 &&
           ahead > -0.07 &&
           Math.hypot(b.vx, b.vz) < 0.15 &&
-          Math.abs(b.z - nearestFigure(row, rod, b.z)) < 0.022 &&
+          Math.abs(b.z - nearestFigure(row, rod, b.z)) < 0.034 &&
           f.phase === 'play'
         ) {
           // palla ferma appena dietro le figure: tocco all'indietro, verso l'asta di dietro che poi la gioca
