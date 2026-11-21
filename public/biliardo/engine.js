@@ -160,6 +160,7 @@ function newRound(m, starter) {
   m.cur = starter;
   m.acchito = true;
   m.lastThrow = -1;
+  m.penPallino = null;
   for (const b of m.balls) if (b.id) { b.on = false; b.potted = false; }
   Object.assign(m.balls[0], { x: T.L / 2, z: 0, on: true });
   for (const p of m.pins) p.up = true;
@@ -487,12 +488,20 @@ function restore(m, snap) {
 function judgeBoccette(m, events) {
   const pi = m.cur, op = other(m), thrown = m.pre.cue, T = tableOf(m);
   const snap = m.pre.snap;
-  // primi contatti della bilia lanciata
-  let first = null, pinFirst = false, topRail = false;
-  for (const e of events) {
+  // primi contatti della bilia lanciata: sponda corta in fondo (3) o sponde lunghe (0, 1) prima del contatto
+  let first = null, firstAt = -1, pinFirst = false, topRail = false, longRail = false;
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
     if (e.t === 'pin' && e.a === thrown && first === null) { pinFirst = true; break; }
-    if (e.t === 'rail' && e.a === thrown && first === null && e.k === 3) topRail = true;
-    if (e.t === 'ball' && (e.a === thrown || e.b === thrown)) { first = e.a === thrown ? e.b : e.a; break; }
+    if (e.t === 'rail' && e.a === thrown && first === null) { if (e.k === 3) topRail = true; else if (e.k === 0 || e.k === 1) longRail = true; }
+    if (e.t === 'ball' && (e.a === thrown || e.b === thrown)) { first = e.a === thrown ? e.b : e.a; firstAt = i; break; }
+  }
+  // la bilia colpita per prima va "direttamente" sui birilli? (il suo primo evento dopo il colpo è un birillo)
+  let firstDirect = false;
+  if (first !== null) for (let i = firstAt + 1; i < events.length; i++) {
+    const e = events[i];
+    if (e.t === 'pin' && e.a === first) { firstDirect = true; break; }
+    if ((e.t === 'rail' && e.a === first) || (e.t === 'ball' && (e.a === first || e.b === first))) break;
   }
   const all = m.pins.filter((p) => !p.up);
   const value = pinPoints(m.pins, () => true, 8);
@@ -500,9 +509,18 @@ function judgeBoccette(m, events) {
   let msg = '', foul = null, toMe = 0, toOpp = 0;
   const wasAcchito = m.pre.acchito;
   const firstSnap = first !== null ? snap.balls[first] : null;
-  // tiri irregolari (art. 9.3): birilli abbattuti direttamente dalla lanciata, bilia non bocciabile colpita
+  const pallinoLow = !(snap.balls[0].x - m.balls[0].r > 0); // pallino non oltre la mezzeria (quadrato inferiore)
+  // tiri irregolari (art. 9.3): e) birilli abbattuti direttamente dalla lanciata; q) bilia non bocciabile colpita;
+  // p) pallino nel quadrato inferiore: l'accosto va fatto con la sponda corta in fondo o appoggiandosi a una bilia bocciabile
   const irregular = pinFirst ? 'La tua bilia ha abbattuto direttamente i birilli'
-    : !wasAcchito && firstSnap && !(firstSnap.x - m.balls[first].r > 0) ? 'Hai bocciato una bilia non oltre la linea di mezzeria' : null;
+    // (dopo la sponda corta in fondo non è una bocciata ma un accosto di sponda: si può toccare anche una bilia bassa)
+    : !wasAcchito && firstSnap && !topRail && !(firstSnap.x - m.balls[first].r > 0) ? 'Hai bocciato una bilia non oltre la linea di mezzeria'
+      : !wasAcchito && pallinoLow && !topRail && !firstSnap ? 'Col pallino nella metà bassa l\'accosto va fatto di sponda (in fondo) o appoggiandosi a una bilia'
+        : null;
+  // tiro di traversino (art. 9.2b): sponda lunga, poi una bilia che va dritta sui birilli → punti all'avversario
+  const traversino = !wasAcchito && !irregular && longRail && !topRail && first !== null && firstDirect && value > 0;
+  // tiro indiretto (doppio), tranne sul pallino messo in penitenza dopo un fallo d'acchito (art. 13a)
+  const onPenitenza = m.penPallino && first === 0 && Math.abs(snap.balls[0].x - m.penPallino.x) < 1e-9 && Math.abs(snap.balls[0].z - m.penPallino.z) < 1e-9;
   if (wasAcchito && (first !== 0 || pinFirst)) {
     // art. 16: pallino regolarmente posizionato non colpito → punti all'avversario, boccetta annullata, pallino in penitenza
     foul = 'Pallino non colpito nella bocciata d\'acchito';
@@ -510,6 +528,7 @@ function judgeBoccette(m, events) {
     restore(m, snap);
     const pen = penitenze(T).find((q) => m.balls.every((b) => !b.on || b.id === 0 || (b.x - q.x) ** 2 + (b.z - q.z) ** 2 > 0.004)) || { x: T.L - 0.1, z: 0 };
     Object.assign(m.balls[0], pen);
+    m.penPallino = { x: pen.x, z: pen.z };
     m.balls[thrown].on = false;
   } else if (irregular) {
     // la situazione si rimette com'era, la boccetta è annullata e i punti vanno all'avversario
@@ -517,13 +536,16 @@ function judgeBoccette(m, events) {
     toOpp = value;
     restore(m, snap);
     m.balls[thrown].on = false;
+  } else if (traversino) {
+    toOpp = value;
   } else if (value) {
     // art. 13: birilli dalle bilie avversarie o dal pallino = positivi; dalle proprie = negativi (anche misti)
-    const double = topRail ? 2 : 1;
+    const double = topRail && !onPenitenza ? 2 : 1;
     if (anyOwn) toOpp = value * double; else toMe = value * double;
   }
   m.scores[pi] += toMe; m.scores[op] += toOpp;
   if (foul) msg = `Fallo: ${foul.toLowerCase()}${toOpp ? `. ${toOpp} punti a ${m.players[op].name}` : ''}`;
+  else if (traversino) msg = `Tiro di traversino: ${toOpp} punti a ${m.players[op].name}`;
   else if (toMe) msg = `${m.players[pi].name}: +${toMe} punti${toMe > value ? ' (tiro indiretto, doppio)' : ''}`;
   else if (toOpp) msg = `Birilli abbattuti con le tue bilie: ${toOpp} punti a ${m.players[op].name}`;
   standPins(m);
@@ -624,8 +646,10 @@ export const RULES = {
   boccette: [
     'Boccette secondo il regolamento tecnico FIBiS "5 birilli": si gioca a mano, 4 bilie rosse contro 4 bianche, il pallino blu e i cinque birilli al centro.',
     'Ogni giocata comincia con il pallino messo oltre la linea di mezzeria e la bocciata d\'acchito, che deve colpirlo direttamente. Poi tira l\'avversario e, dopo, chi ha l\'accosto peggiore.',
-    'Birilli: laterali 2 punti, centrale 4, il centrale da solo 8. Abbattuti con le bilie avversarie o col pallino sono punti tuoi, con le tue bilie vanno all\'avversario. Tiro indiretto (sponda corta in fondo prima del contatto): doppi.',
-    'Tiri irregolari (la boccetta è annullata, si rimette tutto com\'era e i punti vanno all\'avversario): abbattere i birilli direttamente con la propria bilia, bocciare una bilia che non ha superato la linea di mezzeria, mancare il pallino nella bocciata d\'acchito.',
+    'Si lancia dalla propria zona, dietro la linea: prima del lancio puoi spostare la bilia a destra o a sinistra.',
+    'Birilli: laterali 2 punti, centrale 4, il centrale da solo 8. Abbattuti con le bilie avversarie o col pallino sono punti tuoi, con le tue bilie vanno all\'avversario. Tiro indiretto (sponda corta in fondo prima del contatto): doppi, tranne sul pallino messo in penitenza dopo un fallo d\'acchito.',
+    'Tiri irregolari (la boccetta è annullata, si rimette tutto com\'era e i punti vanno all\'avversario): abbattere i birilli direttamente con la propria bilia, bocciare una bilia che non ha superato la linea di mezzeria, mancare il pallino nella bocciata d\'acchito; col pallino nella metà bassa, fare l\'accosto senza passare dalla sponda corta in fondo o senza appoggiarsi a una bilia bocciabile.',
+    'Tiro di traversino (sponda lunga, poi una bilia che va dritta sui birilli): il tiro vale ma i punti vanno all\'avversario.',
     'Finite le 8 bilie, punti d\'accosto a chi ha le bilie più vicine al pallino: 1 bilia 2 punti, 2 bilie 3, 3 bilie 5, 4 bilie 8. Chi fa l\'accosto rimette in gioco il pallino. Vince chi arriva al punteggio scelto.',
   ],
 };

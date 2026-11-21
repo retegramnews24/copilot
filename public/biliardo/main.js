@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=7a6dafd8ad';
-import { plan } from './ai.js?v=3a95875adb';
+import * as E from './engine.js?v=032c83e418';
+import { plan } from './ai.js?v=e21b1d633f';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
@@ -162,7 +162,7 @@ function hint() {
   if (phase === 'aim') {
     const what = E.onText(m);
     const pull = 'tira giù il pallino della forza';
-    if (m.inHand) t = (m.variant === 'boccette' ? 'Sposta la bilia dietro la linea' : 'Bilia in mano: trascinala') + ', mira e ' + pull;
+    if (m.inHand) t = (m.variant === 'boccette' ? 'Trascina la tua bilia a destra o a sinistra (dietro la linea)' : 'Bilia in mano: trascinala') + ', mira e ' + pull;
     else t = 'Tocca o trascina per mirare · ' + pull;
     if (what) t = what + ' · ' + t;
   } else if (phase === 'cpu' || phase === 'cpuAim') t = 'Il computer sta pensando…';
@@ -428,7 +428,12 @@ canvas.addEventListener('pointermove', (e) => {
   if (phase !== 'aim') return;
   const p = table.pick(e.clientX, e.clientY);
   if (!p) return;
-  if (drag.place) { tryPlace(p); return; }
+  // boccette: spostando la bilia di lato la mira resta puntata sul pallino
+  if (drag.place) {
+    tryPlace(p);
+    if (m.variant === 'boccette') { const c = cueBall(), q = m.balls[0]; aim.angle = Math.atan2(q.z - c.z, q.x - c.x); }
+    return;
+  }
   if (drag.pallino) { tryPallino(p); return; }
   if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) > 6) drag.moved = true;
   if (!drag.moved) return;

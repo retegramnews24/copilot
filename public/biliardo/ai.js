@@ -2,7 +2,7 @@
 // accosti al pallino…), li simula con la fisica vera e le stesse regole, e sceglie il migliore.
 // Il livello decide quanto sbaglia la mira.
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=7a6dafd8ad';
+import * as E from './engine.js?v=032c83e418';
 
 const LEVELS = {
   facile: { err: 0.022, pick: 5, spin: false, budget: 24 },
@@ -96,6 +96,17 @@ function candidates(m, lv) {
     }
     const opp = m.cur === 0 ? [5, 6, 7, 8] : [1, 2, 3, 4];
     for (const id2 of [0, ...opp]) if (m.balls[id2].on && E.bocciabile(m.balls[id2])) push(hitShots(m, cue, id2, [-0.4, 0, 0.4]), [1.6, 2.6], [[0, 0]]);
+    // pallino nella metà bassa: accosto di sponda (si mira al riflesso del pallino oltre la sponda corta in fondo)
+    // oppure appoggiandosi a una bilia bocciabile (anche propria)
+    if (!E.bocciabile(p)) {
+      const T = E.tableOf(m), mx = 2 * (T.L - cue.r) - p.x;
+      for (const dz of [-0.06, 0, 0.06]) {
+        const ex = mx - cue.x, ez = p.z + dz - cue.z, l = Math.hypot(ex, ez);
+        for (const sp of [2.4, 2.9, 3.4]) tries.push({ dx: ex / l, dz: ez / l, speed: sp, sy: 0, sx: 0 });
+      }
+      const mine = m.cur === 0 ? [1, 2, 3, 4] : [5, 6, 7, 8];
+      for (const id2 of mine) if (m.balls[id2].on && E.bocciabile(m.balls[id2])) push(hitShots(m, cue, id2, [-0.3, 0, 0.3]), [1, 1.5], [[0, 0]]);
+    }
   }
   if (!tries.length) for (let i = 0; i < 12; i++) { const a = Math.random() * Math.PI * 2; tries.push({ dx: Math.cos(a), dz: Math.sin(a), speed: 1.5 + Math.random() * 2, sy: 0, sx: 0 }); }
   return tries.slice(0, lv.budget);

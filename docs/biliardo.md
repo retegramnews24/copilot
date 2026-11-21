@@ -12,13 +12,14 @@ Pubblicato in Binottoland Playground dalla versione 1.0.35: scheda nel catalogo,
 | Palla 8 | [WPA World Standardized Rules](https://wpapool.com/rules-of-play/) | si chiama solo la buca della nera; dopo uno spacco non valido si rifà sempre il triangolo (niente scelta dell'avversario) |
 | Snooker | [WPBSA Official Rules](https://wpbsa.com/rules/) | niente "free ball", "miss" e richiesta di far rigiocare; 6, 10 o 15 rosse |
 | 5 birilli | regole UMB/FIBiS della specialità ([sintesi](https://en.wikipedia.org/wiki/Five-pin_billiards)) | il rosso da solo vale 10 (regola professionistica dal 2013); niente salti e bilie fuori dal tavolo |
-| Boccette | [Regolamento tecnico FIBiS «Boccette 5 birilli» (2017)](https://www.fibisromagna.it/doc/15995Doc_10266.pdf) | niente acchito alla sponda per scegliere chi comincia (sorteggio); "friso" e "traversino" non riconosciuti; partita a 50/80/100 punti |
+| Boccette | [Regolamento tecnico FIBiS «Boccette 5 birilli» (2017)](https://www.fibisromagna.it/doc/15995Doc_10266.pdf) | niente acchito alla sponda per scegliere chi comincia (sorteggio); il "friso" non è riconosciuto (il "traversino" sì); niente bilie fuori dal tavolo; partita a 50/80/100 punti |
 
 Punti chiave applicati: misure dei tavoli (9 piedi, 12 piedi, 2,84 × 1,42 m), delle bilie (57,15 / 52,5 / 61,5 mm, pallino 59 mm) e dei birilli (25 mm, croce da 66 mm);
 spacco valido WPA (una bilia in buca o 4 alla sponda); bianca in mano dietro la linea dopo un fallo sullo spacco;
 penali dello snooker (minimo 4, valore più alto in gioco); 5 birilli: casin 3, carambola 4 (conta solo la prima), birilli 2/4/10, falli con bilia in mano + 2;
 boccette: bocciata d'acchito sul pallino, si boccia solo oltre la mezzeria, accosto 2/3/5/8, birilli 2/4/8 con tiro indiretto doppio,
-birilli abbattuti con le proprie bilie all'avversario, tiri irregolari annullati con la situazione rimessa com'era, chi fa l'accosto rimette il pallino.
+birilli abbattuti con le proprie bilie all'avversario, tiri irregolari annullati con la situazione rimessa com'era (art. 9.3 e, p, q), traversino con i punti all'avversario (art. 9.2 b),
+niente doppio sul pallino in penitenza dopo un fallo d'acchito (art. 13 a), lancio dalla propria zona con la bilia spostabile a destra e sinistra, chi fa l'accosto rimette il pallino.
 
 ## File
 

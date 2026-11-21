@@ -188,6 +188,22 @@ for (const [call, winner] of [
   assert.equal(g.scores[1], 2);
   assert.ok(g.inHand === 'head' || g.inHand === 'foot');
 }
+// boccette, art. 9.3 p): pallino nella metà bassa → l'accosto diretto è irregolare, quello di sponda (in fondo) è valido
+for (const [shot, ok] of [
+  [{ dx: 1, dz: 0, speed: 0.45, sy: 0, sx: 0 }, false],
+  [{ dx: 1, dz: 0, speed: 3.6, sy: 0, sx: 0 }, true]
+]) {
+  const g = E.newGame('boccette', two, {});
+  Object.assign(g, { acchito: false, left: [3, 4] });
+  at(g, 0, -0.35, 0); // pallino sotto la linea di mezzeria
+  at(g, 5, 0.6, 0.45); // una bilia bianca oltre la metà
+  g.cur = 0;
+  g.nextBall = 2;
+  g.inHand = 'throw';
+  const { out } = E.playShot(g, { ...shot, px: -1.2, pz: 0.3 });
+  assert.equal(!!out.foul, !ok, ok ? 'accosto di sponda valido' : 'accosto diretto irregolare');
+  if (!ok) assert.equal(g.balls[2].on, false, 'boccetta annullata');
+}
 // boccette: acchito che manca il pallino = boccetta annullata, pallino in penitenza, tocca all'avversario
 {
   const g = E.newGame('boccette', two, {});
