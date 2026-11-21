@@ -4,7 +4,7 @@ import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=caf3baf8cd';
 import {readAppearance} from './appearance.js?v=a866c9e8ce';
-import './labyrinth/avatar.js?v=8c61edfe0e';
+import './labyrinth/avatar.js?v=32e186daf3';
 import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=bff5f99338';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';

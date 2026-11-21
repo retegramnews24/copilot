@@ -64,7 +64,11 @@ export function mountAppearance(root){
  // readLook: anche i colori del personaggio della Lobby 3D (dettagli, capelli, pelle), salvati insieme
  let outfit=readLook(),golf=readGolfStyle(),backpack=false;
  function chooseOutfit(part,color){
-  outfit={...outfit,[part]:color};save(OUTFIT_KEY,outfit);paint();
+  // si salvano maglietta e pantaloncini più solo i colori della Lobby 3D scelti davvero (niente valori predefiniti)
+  let stored={};try{stored=JSON.parse(localStorage.getItem(OUTFIT_KEY))||{};}catch{}
+  const next={shirt:outfit.shirt,shorts:outfit.shorts};
+  for(const key of ['accent','hair','skin'])if(stored[key])next[key]=stored[key];
+  next[part]=color;save(OUTFIT_KEY,next);outfit=readLook();paint();
   window.dispatchEvent(new CustomEvent('labyrinth:appearance'));
  }
  const shirt=swatches(controls,'Maglietta',color=>chooseOutfit('shirt',color));
