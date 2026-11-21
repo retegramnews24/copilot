@@ -1,0 +1,57 @@
+:root { --st: env(safe-area-inset-top, 0px); --sb: env(safe-area-inset-bottom, 0px); --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; user-select: none; -webkit-user-select: none; }
+body { background: #171a18; color: #f5eedb; font-family: Barlow, "Arial Narrow", Arial, sans-serif; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding: var(--st) var(--sr) var(--sb) var(--sl); }
+header, footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 3vw; background: linear-gradient(180deg, #1f2522, #171b19); border-bottom: 2px solid #8e663d; }
+h1 { font-size: clamp(19px, 3vw, 32px); font-weight: 950; font-style: italic; letter-spacing: -1px; margin: 0; text-shadow: 0 2px 0 #5a3c22; }
+h1 i { color: #ffba4a; }
+small, label { color: #d4b992; letter-spacing: 1.6px; font-size: 10px; font-weight: bold; }
+aside { display: flex; gap: clamp(10px, 3vw, 42px); }
+aside div { display: grid; gap: 2px; }
+strong { font: bold clamp(15px, 2.4vw, 24px) monospace; font-variant-numeric: tabular-nums; }
+main { position: relative; min-height: 0; overflow: hidden; background: #836046; }
+#gl, #gl canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#signal { position: absolute; top: 8%; left: 50%; transform: translateX(-50%); font-size: clamp(28px, 7vh, 64px); font-weight: 950; font-style: italic; color: #fff3cf; text-shadow: 0 4px 0 #6b3d1c, 0 8px 18px #000; pointer-events: none; white-space: nowrap; }
+#mini { position: absolute; top: 10px; right: 10px; width: clamp(120px, 22vw, 200px); height: auto; background: rgba(23, 26, 24, 0.55); border: 1px solid #8e663d; border-radius: 6px; pointer-events: none; }
+#speed { position: absolute; left: 12px; bottom: 12px; display: grid; justify-items: start; gap: 2px; pointer-events: none; text-shadow: 0 2px 4px #000; }
+#speed b { font: italic 900 clamp(26px, 5vh, 44px) monospace; color: #fff3cf; line-height: 1; }
+#speed span { font-size: 11px; color: #d4b992; letter-spacing: 1px; }
+#nitro { width: 110px; height: 7px; background: rgba(0, 0, 0, 0.5); border: 1px solid #8e663d; border-radius: 4px; overflow: hidden; }
+#nitro i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff6a2a, #ffd35a); }
+footer { border-top: 2px solid #8e663d; border-bottom: 0; min-height: 60px; }
+#brief { display: grid; gap: 4px; min-width: 0; }
+#hint { font-size: 13px; color: #d6d6c9; }
+.tools { display: flex; gap: 6px; flex: none; }
+button { border: 1px solid #6a6f61; background: #343a34; color: #f6eedc; padding: 10px 14px; font: 800 14px inherit; font-family: inherit; border-radius: 4px; touch-action: none; user-select: none; cursor: pointer; }
+#action, .go, [data-key="up"] { background: #ffb443; color: #211b12; border-color: #ffb443; }
+button:active, .held { filter: brightness(1.4); }
+button:disabled { opacity: 0.5; }
+#pads { display: none; justify-content: space-between; padding: 6px 2vw calc(6px + var(--sb)); background: #171a18; }
+#pads span { display: flex; gap: 6px; }
+#pads button { min-width: 58px; min-height: 54px; font-size: 18px; }
+body.touch { grid-template-rows: auto minmax(0, 1fr) auto auto; padding-bottom: 0; }
+body.touch #pads { display: flex; }
+#sheet { position: absolute; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse, rgba(0, 0, 0, 0.25), rgba(0, 0, 0, 0.7)); }
+.card { background: #1e2421; border: 2px solid #8e663d; border-radius: 8px; padding: 18px 22px; min-width: min(360px, 90vw); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6); }
+.card h2 { margin: 0 0 6px; font-style: italic; font-weight: 950; color: #ffba4a; }
+.card p { margin: 0 0 10px; color: #d6d6c9; font-size: 14px; }
+.card ol { margin: 0 0 14px; padding-left: 22px; font: bold 15px monospace; }
+.card ol li { margin: 3px 0; }
+.card ol li.me { color: #ffd35a; }
+.card .go { width: 100%; font-size: 17px; }
+@media (max-width: 560px) {
+  header, footer { padding: 6px 10px; }
+  header small { font-size: 8px; }
+  aside { gap: 8px; }
+  label { font-size: 8px; }
+  #hint { font-size: 11px; }
+  footer { min-height: 50px; }
+  .tools button { padding: 8px 9px; font-size: 13px; }
+}
+@media (max-height: 480px) {
+  header { padding-top: 4px; padding-bottom: 4px; }
+  footer { min-height: 44px; padding-top: 4px; padding-bottom: 4px; }
+  #hint { display: none; }
+  #pads button { min-height: 44px; }
+}
