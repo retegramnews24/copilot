@@ -1675,14 +1675,19 @@ body {
   z-index: 30;
   background: #171811;
 }
-#f1-overlay {
+#f1-overlay,
+#biliardo-overlay {
   position: fixed;
   inset: 0;
   z-index: 30;
   background: #0f172a;
   overflow: hidden;
 }
-#f1-frame {
+#biliardo-overlay {
+  background: #07050a;
+}
+#f1-frame,
+#biliardo-frame {
   position: absolute;
   inset: 0;
   width: 100%;

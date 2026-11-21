@@ -1,7 +1,19 @@
-// F1 on paper! online: track check, joining, start order, turns, the autopilot and the end of the race.
+// F1 on paper! online: track check, joining, start order, cars on the line one at a time, then rounds where everybody
+// chooses together and the cars move when the last one has chosen, the autopilot and the end of the race.
 import assert from 'node:assert/strict';
 import * as R from '../public/gara/rules.js';
-import { makeTrack, makeRace, joinRace, leaveRace, startRace, playRace, advanceRace, autoMove } from '../f1-server.js';
+import {
+  makeTrack,
+  makeRace,
+  joinRace,
+  leaveRace,
+  startRace,
+  playRace,
+  advanceRace,
+  autoMove,
+  roundOpts,
+  publicRace
+} from '../f1-server.js';
 import { tableNotice } from '../lobby-hub.js';
 
 const ring = (rx, ry, n = 96) =>
@@ -35,7 +47,10 @@ assert.equal(m.capacity, 3);
 assert.throws(() => makeRace('r', 1, anna, now, { laps: 0 }, track), /giri/);
 
 // notice: how many drivers the race is waiting for
-assert.match(tableNotice(anna, 'f1', 4, 'room-1', { capacity: 3, laps: 1 }).text, /sala 4 · cerca 2 piloti \(3 auto, 1 giro\)/);
+assert.match(
+  tableNotice(anna, 'f1', 4, 'room-1', { capacity: 3, laps: 1 }).text,
+  /sala 4 · cerca 2 piloti \(3 auto, 1 giro\)/
+);
 
 // joining: once each, not beyond the cars of the track; a guest can leave the waiting room
 assert.equal(joinRace(m, bruno), true);
@@ -64,29 +79,57 @@ now += 61000;
 playRace(m, anna.player, R.placeable({ ...m.race, track })[0], now, track);
 assert.equal(m.phase, 'race');
 
-// moves: only the options of the rules
+// racing: everybody chooses at the same time; only the options of the rules
 assert.throws(() => playRace(m, bruno.player, { x: 999, y: 999 }, now, track), /Mossa non valida/);
-const before = m.revision;
-const opt = R.options({ ...m.race, track })[0];
-playRace(m, bruno.player, { x: opt.x, y: opt.y }, now, track);
-assert.equal(m.revision, before + 1);
-assert.equal(m.moves.at(-1).kind, 'move');
+assert.throws(() => playRace(m, dario.player, { x: 0, y: 0 }, now, track), /Non sei in questa gara/);
+const pick = (who, i) => {
+  const o = roundOpts({ ...m.race, track }, i).find(x => !x.crash) || roundOpts({ ...m.race, track }, i)[0];
+  return playRace(m, who, { x: o.x, y: o.y }, now, track);
+};
+const movesBefore = m.moves.length,
+  turnAt = m.turnAt;
+pick(bruno.player, 0);
+// nobody moves until the last one has chosen; the others only see who has chosen, never where
+assert.equal(m.moves.length, movesBefore);
+assert.equal(m.turnAt, turnAt, 'choosing does not restart the minute');
+assert.deepEqual(publicRace(m).chosen, [true, false, false]);
+assert.equal(publicRace(m).pending, undefined);
+assert.throws(() => pick(bruno.player, 0), /Hai già scelto/);
+pick(anna.player, 2);
+assert.equal(m.moves.length, movesBefore, 'Carla still has to choose');
+now += 5000;
+pick(carla.player, 1);
+// the last one has chosen: one round, all the cars together
+assert.equal(m.moves.length, movesBefore + 1);
+assert.equal(m.moves.at(-1).kind, 'round');
+assert.equal(m.moves.at(-1).moves.filter(Boolean).length, 3);
+assert.deepEqual(publicRace(m).chosen, [false, false, false]);
+assert.ok(m.turnAt > turnAt, 'a new round: one more minute');
 
 // a client replaying the move list gets exactly the server race
 const replay = R.newRace(track, m.laps, m.seats.length);
 for (const e of m.moves) {
   if (e.kind === 'place') R.placeCar(replay, { x: e.x, y: e.y });
-  else R.applyMove(replay, { x: e.x, y: e.y, gear: e.gear, crash: e.crash, stop: e.stop });
+  else R.applyRound(replay, e.moves);
 }
 assert.deepEqual(
   replay.cars.map(c => [c.pos, c.gear, c.progress]),
   m.race.cars.map(c => [c.pos, c.gear, c.progress])
 );
-assert.equal(replay.turn, m.race.turn);
 
-// autopilot: a legal move
-const a = autoMove({ ...m.race, track });
-assert.ok(R.options({ ...m.race, track }).some(o => o.x === a.x && o.y === a.y));
+// time runs out with someone still to choose: the autopilot chooses for them and the round is played
+pick(bruno.player, 0);
+const n = m.moves.length;
+assert.equal(advanceRace(m, m.turnAt + 1, track), true);
+assert.equal(m.moves.length, n + 1);
+assert.deepEqual(m.moves.at(-1).auto, [false, true, true]);
+now = m.turnAt - 60000;
+
+// autopilot: a legal move for each car
+for (let i = 0; i < 3; i++) {
+  const a = autoMove({ ...m.race, track }, i);
+  assert.ok(roundOpts({ ...m.race, track }, i).some(o => o.x === a.x && o.y === a.y));
+}
 
 // nobody plays any more: after three rounds of autopilot the race ends without a winner
 let guard = 0;
@@ -103,10 +146,16 @@ const t2 = makeTrack(drawn(2));
 joinRace(m2, bruno);
 startRace(m2, anna.player, 0, t2);
 for (let i = 0; i < 2000 && m2.phase !== 'finished'; i++) {
-  const race = { ...m2.race, track: t2 },
-    who = m2.seats[race.turn];
-  const target = m2.phase === 'place' ? R.placeable(race)[0] : autoMove(race);
-  playRace(m2, who, { x: target.x, y: target.y }, i, t2);
+  const race = { ...m2.race, track: t2 };
+  if (m2.phase === 'place') {
+    const target = R.placeable(race)[0];
+    playRace(m2, m2.seats[race.turn], { x: target.x, y: target.y }, i, t2);
+    continue;
+  }
+  // each driver who still has to choose (not stopped after a crash) chooses
+  const k = race.cars.findIndex((c, j) => !c.crash && !m2.pending[j]);
+  const target = autoMove(race, k);
+  playRace(m2, m2.seats[k], { x: target.x, y: target.y }, i, t2);
 }
 assert.equal(m2.phase, 'finished');
 assert.equal(m2.abandoned, false);

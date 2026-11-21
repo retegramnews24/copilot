@@ -8,6 +8,8 @@ import { json, id, name } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
 import { gameTitle } from './public/game-info.js';
 
+const BILIARDO_NAMES = { otto: 'Palla 8', snooker: 'Snooker', italiana: '5 birilli', boccette: 'Boccette' };
+
 // Game notices stored by the server, so everyone finds them also later: a table opened to people, a win.
 // Kept in their own list (not in the chat); the app shows them in the Lobby bell, each with a button.
 export function tableNotice(user, game, number, room, summary = null) {
@@ -23,6 +25,9 @@ export function tableNotice(user, game, number, room, summary = null) {
       ' auto, ' +
       summary.laps +
       (summary.laps === 1 ? ' giro)' : ' giri)');
+  // Biliardo: the specialty and the opponent wanted
+  if (game === 'biliardo' && summary?.variant)
+    where += ' · ' + (BILIARDO_NAMES[summary.variant] || 'Biliardo') + ' · cerca 1 giocatore';
   return {
     id: id(),
     notice: 'table',
@@ -92,7 +97,9 @@ export class LobbyHub {
                         ? 'Pong '
                         : watching.game === 'f1'
                           ? 'F1 on paper! '
-                          : 'Guarda ') + watching.number
+                          : watching.game === 'biliardo'
+                            ? 'Biliardo '
+                            : 'Guarda ') + watching.number
               : 'In Lobby',
           game: own?.room || null,
           viewingRoom: watching?.room || null
@@ -351,12 +358,13 @@ export class LobbyHub {
           'moto-trial',
           'golf',
           'pong',
-          'f1'
+          'f1',
+          'biliardo'
         ].includes(body.game)
       )
         return json({ error: 'Gioco non disponibile.' }, 400);
       const active = (await this.lobbyList()).filter(activeTable);
-      if (!['moto-trial', 'golf', 'pong', 'f1'].includes(body.game)) {
+      if (!['moto-trial', 'golf', 'pong', 'f1', 'biliardo'].includes(body.game)) {
         const limit = seatLimit(active, user.player, {
           room: null,
           game: body.game || 'chess',
@@ -388,7 +396,9 @@ export class LobbyHub {
                   ? 'pong:'
                   : body.game === 'f1'
                     ? 'f1:'
-                    : 'moto:';
+                    : body.game === 'biliardo'
+                      ? 'biliardo:'
+                      : 'moto:';
         const stub = this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix + room));
         const response = await stub.fetch(
           new Request('https://internal/' + body.game + '/init', {
@@ -403,6 +413,11 @@ export class LobbyHub {
               collisions: body.game === 'golf' ? body.collisions === true : undefined,
               // F1 on paper!: the drawn track, laps, time of day (the number of drivers is in the track)
               ...(body.game === 'f1' ? { track: body.track, laps: body.laps, time: body.time } : {}),
+              // Biliardo: the specialty, the points to win (5 birilli, boccette) or the reds (snooker)
+              // ("points", not "target": "target" is the tournament format of the other games)
+              ...(body.game === 'biliardo'
+                ? { variant: body.variant, target: body.points, reds: body.reds }
+                : {}),
               seed: body.game === 'moto-trial' ? 1 : crypto.getRandomValues(new Uint32Array(1))[0]
             })
           })

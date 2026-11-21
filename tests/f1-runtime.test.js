@@ -70,7 +70,10 @@ try {
   // the bell notice and the Lobby
   const lobby = (await call(8002, '/api/lobby')).data;
   const notice = lobby.notices.find(n => n.room === room);
-  assert.match(notice.text, /Pilota 8001 ha aperto F1 on paper! · sala \d+ · cerca 1 pilota \(2 auto, 1 giro\)/);
+  assert.match(
+    notice.text,
+    /Pilota 8001 ha aperto F1 on paper! · sala \d+ · cerca 1 pilota \(2 auto, 1 giro\)/
+  );
   assert.equal(lobby.games.find(g => g.room === room).capacity, 2);
   // the track for the phones
   const got = await call(8002, '/api/f1/' + room + '/track');
@@ -93,12 +96,34 @@ try {
   // unchanged state: nothing to download
   const same = await call(8001, '/api/f1/' + room + '/state?after=' + placed.data.state.revision);
   assert.equal(same.data.state, undefined);
+  // the second car on the line, then the race: both choose at the same time, the cars move together
+  const slot2 = R.placeable({ ...placed.data.state.race, track: t })[0];
+  const placed2 = await call(8001, '/api/f1/' + room + '/play', { x: slot2.x, y: slot2.y });
+  assert.equal(placed2.data.state.phase, 'race');
+  const choose = async (id, state, i) => {
+    const o = R.roundOptions({ ...state.race, track: t }, i).find(x => !x.crash);
+    return call(id, '/api/f1/' + room + '/play', { x: o.x, y: o.y });
+  };
+  const first = await choose(8001, placed2.data.state, 1);
+  assert.equal(first.status, 200, JSON.stringify(first.data));
+  assert.equal(first.data.state.moves.length, 2, 'nobody moves before the last choice');
+  assert.deepEqual(first.data.state.chosen, [false, true]);
+  assert.equal(first.data.state.pending, undefined, 'the choice of the others stays secret');
+  const second = await choose(8002, first.data.state, 0);
+  assert.equal(second.data.state.moves.at(-1).kind, 'round');
+  assert.deepEqual(second.data.state.chosen, [false, false]);
   // the creator closes the race: gone from the Lobby
-  assert.equal((await call(8002, '/api/f1/' + room + '/close', {})).status, 403, 'only the creator while racing');
+  assert.equal(
+    (await call(8002, '/api/f1/' + room + '/close', {})).status,
+    403,
+    'only the creator while racing'
+  );
   assert.equal((await call(8001, '/api/f1/' + room + '/close', {})).status, 200);
   assert.equal((await call(8001, '/api/f1/' + room + '/state')).status, 404);
   assert.ok(!(await call(8002, '/api/lobby')).data.games.some(g => g.room === room));
-  console.log('PASS F1 runtime: big track create, small limit for others, notice, join, auto start, turns, close.');
+  console.log(
+    'PASS F1 runtime: big track create, small limit for others, notice, join, auto start, moves together, close.'
+  );
 } finally {
   await mf.dispose();
   await rm(directory, { recursive: true, force: true });

@@ -11,6 +11,7 @@ import { stagedGame, limits, activeTable, settleSeries } from './match-series.js
 import { initialConnect4, playConnect4 } from './connect4.js';
 import { GolfRoom } from './golf-server.js';
 import { F1Room } from './f1-server.js';
+import { BiliardoRoom } from './biliardo-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
 import { ExpeditionRoom } from './labyrinth-server.js';
@@ -58,6 +59,7 @@ export class Room extends DurableObject {
     this.pong = new PongRoom(ctx, env);
     this.golf = new GolfRoom(ctx, env);
     this.f1 = new F1Room(ctx, env);
+    this.biliardo = new BiliardoRoom(ctx, env);
     this.cinema = new Cinema(ctx);
   }
   public(s, viewer = null) {
@@ -276,6 +278,7 @@ export class Room extends DurableObject {
     if (path.startsWith('/pong/')) return this.pong.fetch(req);
     if (new URL(req.url).pathname.startsWith('/golf/')) return this.golf.fetch(req);
     if (new URL(req.url).pathname.startsWith('/f1/')) return this.f1.fetch(req);
+    if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
     if (new URL(req.url).pathname.startsWith('/moto-trial/')) return this.moto.fetch(req);
     if (new URL(req.url).pathname.startsWith('/labyrinth/')) return this.lab.fetch(req);
     if (
@@ -701,6 +704,7 @@ export class Room extends DurableObject {
     if (await this.ctx.storage.get('expedition')) return this.lab.alarm();
     if (await this.ctx.storage.get('golf')) return this.golf.alarm();
     if (await this.ctx.storage.get('f1')) return this.f1.alarm();
+    if (await this.ctx.storage.get('biliardo')) return this.biliardo.alarm();
     if (await this.ctx.storage.get('moto-trial')) return this.moto.alarm();
     if (await this.ctx.storage.get('pong')) return this.pong.alarm();
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('checkmate-lobby-v1').toString())

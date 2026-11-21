@@ -10,12 +10,12 @@ import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
 import {events,trace,initDebugLog} from './debug-log.js?v=497d88fa03';
-import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=13160c51fd';
-import {renderMyGames,myTables,timeLeft} from './my-games.js?v=2c5d9ea179';
+import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=c739b1d9b6';
+import {renderMyGames,myTables,timeLeft} from './my-games.js?v=e670cbea24';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=6f9a6958a5';
-import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=f70039368d';
+import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e6e542257d';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
@@ -27,15 +27,16 @@ import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
-import {createArcadeLink} from './arcade-link.js?v=f4b248613e';
+import {createArcadeLink} from './arcade-link.js?v=e389f3f88f';
 import {createF1Link} from './f1-link.js?v=28d33c1b41';
+import {createBiliardoLink} from './biliardo-link.js?v=0a36c94b37';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.34',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.35',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -43,7 +44,7 @@ const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeIns
 const noticeGame=room=>games.find(g=>g.room===room&&ongoing(g));
 const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
 // Lobby bell: personal notices (stored by the server, or made here), outside the chat (see notices.js).
-const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(g.game==='golf')golf.open(target);else if(g.game==='f1')f1.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
+const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(g.game==='golf')golf.open(target);else if(g.game==='f1')f1.open(target);else if(g.game==='biliardo')biliardo.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
 const notices=createNotices({me:()=>identity,isOpen:target=>!!noticeGame(target),open:openGameRoom});
 // Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
 createLobbyChips({notice:item=>notices.add(item)});
@@ -58,6 +59,8 @@ const golf=createGolfLink({...linkBase,games:()=>games,roomClosed:selected=>{gam
 const arcade=createArcadeLink({...linkBase,readAppearance,refreshSession:()=>refreshSession(),renderNow:()=>renderNow(),selectPage:page=>selectPage(page)});
 // F1 on paper! (public/gara/): draw a track and race it in 3D, vs the AI or on the same phone (see f1-link.js).
 const f1=createF1Link({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
+// Biliardo (public/biliardo/): sala giochi 3D, palla 8, snooker, 5 birilli e boccette; online a due (see biliardo-link.js).
+const biliardo=createBiliardoLink({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
 initCatalog();
 let simSummary=null,simSummaryAt=0;
 // Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
@@ -97,12 +100,12 @@ function renderTurnClock(){
 }
 setInterval(()=>{if(!$('table').hidden&&state?.clock)renderTurnClock()},60000);
 // Your open table that is not a long-turn game: only one of those at a time.
-function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='f1'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='f1'&&g.game!=='biliardo'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 // Can you take a seat at this table? Long-turn games: up to LONG_LIMIT at once; any other: only without another open table.
 // One open table per game (long-turn games: up to LONG_LIMIT), as on the server.
 function canSit(g){return isLongTurn(g)?myTables(games,id=>seat(id).player).filter(isLongTurn).length<LONG_LIMIT:!games.some(o=>o.room!==g.room&&o.game===g.game&&!isLongTurn(o)&&ongoing(o)&&o.players.some(p=>p.id===seat(o.room).player))}
 // Bell: your open games (also single-player) stay pinned there, without ×, until they close.
-function pinnedGames(){return games.filter(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player||p.id===identity?.player)).map(g=>{const turn=g.phase==='playing'&&g.players[g.turn]?.id===seat(g.room).player;return {id:'pin-'+g.room,text:(turn?'Tocca a te · ':'')+gameTitle(g)+' · '+(['golf','pong','moto-trial','f1'].includes(g.game)?'sala ':'Tavolo ')+g.number,detail:['ai','tutorial'].includes(g.mode)?'Partita singola aperta':'Partita aperta',label:turn?'Gioca':'Riprendi',urgent:turn,action:()=>openGameRoom(g.room)}})}
+function pinnedGames(){return games.filter(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player||p.id===identity?.player)).map(g=>{const turn=g.phase==='playing'&&g.players[g.turn]?.id===seat(g.room).player;return {id:'pin-'+g.room,text:(turn?'Tocca a te · ':'')+gameTitle(g)+' · '+(['golf','pong','moto-trial','f1','biliardo'].includes(g.game)?'sala ':'Tavolo ')+g.number,detail:['ai','tutorial'].includes(g.mode)?'Partita singola aperta':'Partita aperta',label:turn?'Gioca':'Riprendi',urgent:turn,action:()=>openGameRoom(g.room)}})}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -138,6 +141,16 @@ function renderLobby(){
    enter.disabled=!identity;
    enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';
    enter.onclick=()=>f1.open(game.room);card.append(title,info,enter);$('games').append(card);continue;
+  }
+  if(game.game==='biliardo'){
+   const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
+   card.className='table-card';info.className='turn-note';
+   title.textContent=gameTitle(game)+' · sala '+game.number;
+   info.textContent=game.players.length+'/'+game.capacity+' giocatori'+(game.phase==='waiting'?' · In attesa':' · In gioco');
+   const mine=game.players.some(p=>p.id===identity?.player);
+   enter.disabled=!identity;
+   enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';
+   enter.onclick=()=>biliardo.open(game.room);card.append(title,info,enter);$('games').append(card);continue;
   }
   if(game.game==='golf'){
    const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
@@ -200,7 +213,7 @@ function renderLobby(){
 function renderNow(){
  const items=[],me=id=>seat(id).player;
  for(const game of games.filter(ongoing)){
-  if(['golf','pong','moto-trial','labyrinth','f1'].includes(game.game))continue;
+  if(['golf','pong','moto-trial','labyrinth','f1','biliardo'].includes(game.game))continue;
   const mine=game.players.some(p=>p.id===me(game.room)),full=staged(game)&&game.players.length>=gameLimits(game).max;
   if(mine&&game.phase==='playing'&&game.players[game.turn]?.id===me(game.room))items.push({rank:0,text:'Tocca a te · Tavolo '+game.number+' · '+gameTitle(game),label:'Gioca',action:()=>openRoom(game.room,false)});
   else if(mine&&game.phase==='waiting')items.push({rank:2,text:'Il tuo tavolo '+game.number+' · '+gameTitle(game)+' aspetta giocatori',label:'Apri',action:()=>openRoom(game.room,false)});
@@ -252,6 +265,7 @@ async function openRoom(nextRoom,watchOnly=false){
  if(games.find(g=>g.room===nextRoom)?.game==='pong')return arcade.openPong(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='golf')return golf.open(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='f1')return f1.open(nextRoom);
+ if(games.find(g=>g.room===nextRoom)?.game==='biliardo')return biliardo.open(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='moto-trial')return moto.open(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='labyrinth')return labyrinth.open(nextRoom,watchOnly);
  if(busy)return;
@@ -492,6 +506,7 @@ function fitViewport(){
  arcade.insets(insets);
  golf.insets(insets);
  f1.insets(insets);
+ biliardo.insets(insets);
  cinema.post('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
@@ -664,7 +679,7 @@ async function startSession(){
  }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:arcade.pongRoom()||golf.room()||f1.room()||moto.room()||labyrinth.room()||room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||labyrinth.room()||room,away}));
 }
 
 function renderSpectators(){
@@ -715,6 +730,7 @@ window.binottolandRadioMetadata=stationId=>request('/api/radio/now-playing?stati
 tg?.onEvent('backButtonClicked',()=>{
  if(arcade.visible())arcade.back();
  else if(f1.visible())f1.back();
+ else if(biliardo.visible())biliardo.back();
  else if(cinema.visible())cinema.leave();
  else if(golf.visible())golf.close();
  else if(moto.visible())moto.close();

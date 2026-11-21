@@ -1,7 +1,7 @@
 // Arcade overlay seen from the app: Number Connect, Acquedotto!, Pong (solo or online), Giulio Simulator, Binotto Simulator and
 // the Blackboard rooms share one iframe. Online Pong and the Blackboard keep their authenticated sockets here.
 import { blackboardLink } from './blackboard/link.js?v=ed710cda29';
-import { renderNumberLeaders } from './leaderboard.js?v=f70039368d';
+import { renderNumberLeaders } from './leaderboard.js?v=e6e542257d';
 const $ = id => document.getElementById(id);
 const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
 
