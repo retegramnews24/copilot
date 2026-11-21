@@ -274,7 +274,19 @@ window.addEventListener('message',event=>{
 });
 let lastUI='';
 update();
-if(parent!==window)send('ready');
+if(parent!==window && new URLSearchParams(location.search).get('monitor')==='1'){
+  window.cabinetMonitor={
+    canvas,
+    aim(fraction){target=Math.max(0,Math.min(1,fraction))*height},
+    key(code,down){
+      const key=code==='KeyI'?'KeyW':'KeyS';
+      if(down){target=null;keys.add(key)}else keys.delete(key);
+    },
+    clear(){keys.clear()}
+  };
+  command('start');
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&phase==='paused')command('start')});
+}else if(parent!==window)send('ready');
 
 if(new URLSearchParams(location.search).get('cabinet')==='1'){
   document.body.classList.add('cabinet-play');

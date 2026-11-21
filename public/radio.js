@@ -795,8 +795,9 @@
   volume.oninput = () => {
     const value = Number(volume.value);
     if (!Number.isFinite(value)) return;
-    plain.volume = fx.volume = Math.min(1, Math.max(0, value));
-    if(sharedMode){saveLocal('club3d-radio-volume',plain.volume);window.dispatchEvent(new Event('club-volume-change'))}else saveLocal('binottoland-radio-volume', plain.volume);
+    if(sharedMode) setClubVolume(value);
+    else plain.volume = fx.volume = Math.min(1, Math.max(0, value));
+    if(sharedMode){saveLocal('club3d-radio-volume',clubVolume);window.dispatchEvent(new Event('club-volume-change'))}else saveLocal('binottoland-radio-volume', plain.volume);
   };
   // Events from the player that is not in use are ignored.
   for (const el of [plain, fx]) {
@@ -859,6 +860,11 @@
       navigator.mediaSession.setActionHandler('stop', () => stop());
     } catch {}
   }
+  let clubVolume=.7,clubGain=1;
+  function setClubVolume(value){
+    clubVolume=Math.max(0,Math.min(1,value));volume.value=String(clubVolume);
+    plain.volume=fx.volume=clubVolume*clubGain;
+  }
   let selector=null, sharedMode=false, sharedId, savedPersonal, generation=0;
   const sharedCache=new Map(), panelAnchor=document.createComment('radio'), dialog=document.createElement('dialog');
   screen.before(panelAnchor);document.body.append(dialog);
@@ -869,17 +875,18 @@
   document.addEventListener('pointerdown',unlockShared);document.addEventListener('keydown',unlockShared);
   dialog.oncancel=e=>{e.preventDefault();closeScreen()};
   window.binottolandClubRadio={
-    setClubVolume(value){if(sharedMode){plain.volume=fx.volume=Math.max(0,Math.min(1,value));volume.value=String(plain.volume)}},
+    setClubVolume(value){if(sharedMode)setClubVolume(value)},
+    setClubGain(value){if(value===clubGain)return;clubGain=value;if(sharedMode)plain.volume=fx.volume=clubVolume*clubGain},
     choose(send){
       if(!allowed()||!sharedMode||selector)return;
       selector=send;dialog.append(screen);dialog.showModal();openScreen();
-      screen.querySelector('h2').textContent='Radio del bancone';volume.value=String(plain.volume);
+      screen.querySelector('h2').textContent='Radio del bancone';volume.value=String(clubVolume);
       bigPlay.textContent='■';bigPlay.setAttribute('aria-label','Spegni la radio condivisa');
     },
     async sync(active,id){
       if(active===sharedMode && (!active||id===sharedId))return;
       const serial=++generation;
-      if(active&&!sharedMode){savedPersonal={current,playing:wantsPlay,volume:plain.volume};stop();plain.volume=fx.volume=Math.max(0,Math.min(1,Number(readLocal('club3d-radio-volume',.7))))}
+      if(active&&!sharedMode){savedPersonal={current,playing:wantsPlay,volume:plain.volume};stop();setClubVolume(Number(readLocal('club3d-radio-volume',.7)))}
       sharedMode=active;sharedId=id;
       if(!active){
         if(selector)closeScreen();

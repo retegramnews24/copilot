@@ -247,20 +247,21 @@ function makeCharacter(look) {
   blob(root, shirt, 0, 0.9, 0.008, 0.24, 0.3, 0.15);
   blob(root, shirt, 0, 1.12, 0, 0.235, 0.15, 0.143);
   blob(root, skin, 0, 1.27, 0, 0.07, 0.08, 0.07);
+  const brows = [], eyes = [];
   const head = new THREE.Group(); head.position.y = 1.47; root.add(head);
   blob(head, skin, 0, 0, 0, 0.165, 0.195, 0.155);
   for (const s of [-1, 1]) {
     blob(head, skin, s * 0.16, -0.01, 0.01, 0.028, 0.055, 0.026); // orecchie
-    blob(head, white, s * 0.059, 0.02, -0.14, 0.032, 0.025, 0.014);
-    blob(head, dark, s * 0.059, 0.02, -0.152, 0.015, 0.016, 0.006);
-    blob(head, hairM, s * 0.062, 0.08, -0.142, 0.032, 0.008, 0.008); // sopracciglia
+    eyes.push(blob(head, white, s * 0.059, 0.02, -0.14, 0.032, 0.025, 0.014));
+    eyes.push(blob(head, dark, s * 0.059, 0.02, -0.152, 0.015, 0.016, 0.006));
+    brows.push(blob(head, hairM, s * 0.062, 0.08, -0.142, 0.032, 0.008, 0.008)); // sopracciglia
   }
   blob(head, skin, 0, -0.04, -0.155, 0.024, 0.034, 0.03); // naso
-  blob(head, mat('#b5655c', 0.5), 0, -0.1, -0.135, 0.045, 0.01, 0.012); // bocca
+  const mouth = blob(head, mat('#7b3939', 0.5), 0, -0.1, -0.135, 0.045, 0.01, 0.012); // bocca
   blob(head, hairM, 0, 0.065, 0.02, 0.178, 0.16, 0.168);
   blob(head, hairM, -0.04, 0.17, -0.1, 0.07, 0.035, 0.04); // ciuffo
   root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  return { root, legs, arms, head, phase: 0 };
+  return { root, legs, arms, head, eyes, brows, mouth, expressionEnd: 0, phase: 0 };
 }
 function animateCharacter(c, speed, dt, t) {
   const amt = Math.min(1, speed / SPEED);
@@ -271,6 +272,14 @@ function animateCharacter(c, speed, dt, t) {
   c.arms[0].rotation.z = -0.06; c.arms[1].rotation.z = 0.06;
   // fermo: respira e si guarda un po' intorno
   c.root.position.y = Math.abs(Math.cos(c.phase)) * 0.035 * amt + (1 - amt) * Math.sin(t * 2) * 0.004;
+  const remaining = Math.max(0, c.expressionEnd - t);
+  const envelope = Math.min(1, remaining * 4, Math.max(0, (1.2 - remaining) * 7));
+  const laugh = c.expression === 'laugh';
+  const pulse = laugh ? .68 + .32 * Math.cos(remaining * 24) : 1;
+  c.mouth.scale.set(.045 + envelope * (laugh ? .028 : -.019), .01 + envelope * pulse * .034, .012 + envelope * .012);
+  for (const brow of c.brows) brow.position.y = .08 + envelope * (laugh ? .008 : .034);
+  for (const eye of c.eyes) eye.scale.y = (eye.material === c.eyes[0].material ? .025 : .016) * (1 + envelope * (laugh ? -.7 : .4));
+  c.head.rotation.x = envelope * (laugh ? -.09 * pulse : -.12);
   c.head.rotation.y = (1 - amt) * Math.sin(t * 0.6) * 0.25;
 }
 
@@ -693,7 +702,7 @@ export function createLobby3D(app) {
   projection.style.cssText='position:absolute;left:0;top:0;width:960px;height:540px;background:black;overflow:hidden;transform-origin:0 0;pointer-events:none';
   projection.hidden=true;host.prepend(projection);
   let previewKey='',hls=null,previewVideo=null,yt=null,disposeYT=null;
-  let soundEnabled=true, audioContext=null, mediaNodes=[], cinemaVisited=false, audibleZone=false, mixEligible=false;
+  let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false;
   const audioButton=document.createElement('button');
   audioButton.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 10px);right:8px;font-size:12px;padding:7px';
   audioButton.hidden=true;el.append(audioButton);
@@ -894,7 +903,7 @@ export function createLobby3D(app) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - 0.42, z + 0.42); else solid(x - 0.42, x + 0.42, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', pong:key==='pong',crt:new THREE.Vector3(x+.42*Math.sin(ry),1.36,z+.42*Math.cos(ry)),eye:new THREE.Vector3(x+.74*Math.sin(ry),1.36,z+.74*Math.cos(ry)),act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: 0.2, hz: 0.2, pad: 0.6, label: title, where: 'Sala arcade', pong:key==='pong',screen:scr,sweep,act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
   };
   // in fila lungo le pareti, rivolti verso il centro della sala
   const north = list.slice(0, 4), south = list.slice(4, 8), west = list.slice(8);
@@ -940,6 +949,7 @@ export function createLobby3D(app) {
   const keys = new Set();
   let jumpHeight = 0, verticalSpeed = 0;
   function resetMovement() {
+    monitor?.frame.contentWindow.cabinetMonitor?.clear();
     keys.clear();
     jumpHeight = verticalSpeed = moving = 0;
     me.root.position.y = 0;
@@ -951,6 +961,9 @@ export function createLobby3D(app) {
     if (!active || document.querySelector('dialog[open]')) return;
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
     if(e.target?.matches?.('input,select'))return;
+    if(monitor && ['KeyI','KeyK'].includes(e.code)){
+      e.preventDefault();monitor.frame.contentWindow.cabinetMonitor?.key(e.code,e.type==='keydown');return;
+    }
     if (e.code === 'Space') {
       e.preventDefault();
       if (!seating && e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
@@ -958,7 +971,7 @@ export function createLobby3D(app) {
     }
     const k = e.code === 'ShiftLeft' ? 'sprint' : e.key.toLowerCase();
     if (e.type === 'keydown') {
-      if ((k === 'e' || k === 'enter') && near) { e.preventDefault(); launch(near); return; }
+      if ((k === 'e' || k === 'enter') && near) { e.preventDefault(); if(!e.repeat)launch(near); return; }
       keys.add(k);
     } else keys.delete(k);
   };
@@ -972,7 +985,7 @@ export function createLobby3D(app) {
     if (inStick) {
       joy.id = e.pointerId; joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2;
       moveJoy(e);
-    } else drags.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    } else drags.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX,startY:e.clientY, moved:false, paddle:e.button===0&&aimAtMonitor(e) });
   });
   const moveJoy = (e) => {
     let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy;
@@ -985,6 +998,8 @@ export function createLobby3D(app) {
     if (e.pointerId === joy.id) return moveJoy(e);
     const d = drags.get(e.pointerId);
     if (!d) return;
+    if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>5)d.moved=true;
+    if(d.paddle){aimAtMonitor(e);return}
     if (drags.size === 2) {
       const [a, b] = [...drags.values()];
       d.x = e.clientX; d.y = e.clientY;
@@ -1000,6 +1015,10 @@ export function createLobby3D(app) {
   });
   const up = (e) => {
     if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; }
+    const drag=drags.get(e.pointerId);
+    if(e.type==='pointerup' && e.pointerType==='mouse' && drag && !drag.moved && (e.button===0||e.button===2)){
+      me.expression=e.button===0?'surprise':'laugh';me.expressionEnd=t+1.2;
+    }
     drags.delete(e.pointerId);
     if (drags.size < 2) pinch = 0;
   };
@@ -1033,7 +1052,7 @@ export function createLobby3D(app) {
     if (joy.id !== null) { ix += joy.x; iz += joy.y; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     let speed = 0;
-    if (!seating && !cabinetEntry && mag > 0.12) {
+    if (!seating && mag > 0.12) {
       // avanti = lontano dalla telecamera
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
@@ -1068,7 +1087,8 @@ export function createLobby3D(app) {
     if (best !== near) {
       near = best;
       actB.hidden = !near;
-      if (near) actB.textContent = (near.sit?'':'Apri · ') + near.label + (touch ? '' : '  (E)');
+      if (near?.pong) actB.textContent = monitor ? 'Spegni Pong · '+(touch?'tocca il monitor':'racchetta I/K') : 'Avvia Pong'+(touch?'':' (E)');
+      else if (near) actB.textContent = (near.sit?'':'Apri · ') + near.label + (touch ? '' : '  (E)');
     }
     ring.visible = !!near && !!near.mq;
     for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
@@ -1100,13 +1120,7 @@ export function createLobby3D(app) {
       stick.hidden=true;camera.position.set(pos.x,1.12,pos.z+.06);
       camera.lookAt(pos.x-Math.sin(cam.yaw)*Math.cos(cam.pitch),1.12-Math.sin(cam.pitch),camera.position.z-Math.cos(cam.yaw)*Math.cos(cam.pitch));
     }
-    if(cabinetEntry){
-      const entry=cabinetEntry;entry.time+=dt;
-      const f=reducedMotion?1:Math.min(1,entry.time/.37),ease=f*f*(3-2*f);
-      camera.position.lerpVectors(entry.from,entry.spot.eye,ease);camera.lookAt(entry.spot.crt);
-      camera.quaternion.slerp(entry.orientation,1-ease);
-      if(f===1){hide();app.cabinetPong();app.launched?.(entry.spot)}
-    }
+
   }
 
   function frame(now) {
@@ -1115,14 +1129,17 @@ export function createLobby3D(app) {
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
     step(dt);
+    if(monitor?.texture && now-monitor.last>=32){monitor.texture.needsUpdate=true;monitor.last=now}
     if(!active)return;
     const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
     for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
     const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
-    const distance=Math.hypot(Math.max(0,Math.abs(pos.x)-1.45),Math.max(0,6.15-pos.z));
-    const fraction=THREE.MathUtils.clamp(distance/12,0,1);
-    const target=cinemaLevel*(1-fraction*fraction*(3-2*fraction));
-    heard+=(target-heard)*(1-Math.exp(-dt*9));
+    const depth=pos.z-6.23;
+    const signedDistance=depth>0 && Math.abs(pos.x)<7 ? depth : -Math.hypot(Math.max(0,Math.abs(pos.x)-1.45),Math.min(0,depth));
+    const blend=THREE.MathUtils.clamp((signedDistance+1)/2,0,1);
+    const target=cinemaLevel*Math.sin(blend*Math.PI/2);
+    heard=target;
+    window.binottolandClubRadio?.setClubGain?.(blend===1?0:Math.cos(blend*Math.PI/2));
     if(previewVideo)previewVideo.volume=THREE.MathUtils.clamp(heard,0,1);
     const ytLevel=Math.round(heard*100);
     if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
@@ -1132,13 +1149,12 @@ export function createLobby3D(app) {
     if(avail.has('blackboard-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
       nextBoard=t+2;app.gallery?.({room:boardRoom,epoch:boardEpoch,since:boardSeq},drawGallery);
     }
-    cinemaVisited ||= audible;
     if(audibleZone!==audible){
       audibleZone=audible;
       if(previewVideo)previewVideo.muted=!(audible&&soundEnabled);
       if(yt){if(audible&&soundEnabled)yt.unMute();else yt.mute()}
     }
-    playProjection(cinemaVisited ? app.projection?.():null);
+    playProjection(app.projection?.());
     audioButton.hidden=!inRange||!previewKey;
     alignProjection();renderer.render(scene, camera);
   }
@@ -1153,7 +1169,39 @@ export function createLobby3D(app) {
   addEventListener('resize', resize);
 
   // ---------- apri, mostra, nascondi ----------
-  let seating=null,returnPoint=null,cabinetEntry=null;
+  let seating=null,returnPoint=null,monitor=null;
+  function toggleMonitor(spot) {
+    if(monitor){stopMonitor();return}
+    const frame=document.createElement('iframe');
+    frame.tabIndex=-1;frame.setAttribute('aria-hidden','true');
+    frame.style.cssText='position:absolute;top:0;left:0;width:2px;height:2px;opacity:0;pointer-events:none;border:0';
+    const session={frame,spot,idle:spot.screen.material.map,texture:null,last:-Infinity};
+    monitor=session;
+    frame.onload=()=>{
+      if(monitor!==session)return;
+      const canvas=frame.contentWindow.cabinetMonitor?.canvas;
+      if(!canvas){stopMonitor();return}
+      const texture=new THREE.CanvasTexture(canvas);
+      texture.colorSpace=THREE.SRGBColorSpace;texture.generateMipmaps=false;texture.minFilter=THREE.LinearFilter;
+      session.texture=texture;spot.screen.material.map=texture;spot.sweep.visible=false;
+    };
+    frame.src='/arcade/pong.html?monitor=1';el.append(frame);near=null;
+  }
+  function stopMonitor(){
+    if(!monitor)return;
+    const {frame,spot,idle,texture}=monitor;monitor=null;
+    spot.screen.material.map=idle;spot.sweep.visible=true;texture?.dispose();frame.remove();near=null;
+  }
+  const monitorRay=new THREE.Raycaster(),pointerNDC=new THREE.Vector2();
+  function aimAtMonitor(e){
+    if(!monitor?.texture || Math.hypot(pos.x-monitor.spot.x,pos.z-monitor.spot.z)>2.4)return false;
+    const bounds=host.getBoundingClientRect();
+    pointerNDC.set(2*(e.clientX-bounds.left)/bounds.width-1,1-2*(e.clientY-bounds.top)/bounds.height);
+    monitorRay.setFromCamera(pointerNDC,camera);
+    const hit=monitorRay.intersectObject(monitor.spot.screen,false)[0];
+    if(!hit)return false;
+    monitor.frame.contentWindow.cabinetMonitor.aim(1-hit.uv.y);return true;
+  }
   const seatActions=document.createElement('div');
   seatActions.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap';
   const enterButton=document.createElement('button'),standButton=document.createElement('button');
@@ -1166,8 +1214,8 @@ export function createLobby3D(app) {
   enterButton.onclick=()=>{if(seating){const seat=seating;hide();seat.act();app.launched?.(seat)}};
   standButton.onclick=stand;
   function launch(s) {
-    if(seating||cabinetEntry)return;
-    if(s.pong && app.cabinetPong){resetMovement();cabinetEntry={spot:s,time:0,from:camera.position.clone(),orientation:camera.quaternion.clone()};return}
+    if(seating)return;
+    if(s.pong){toggleMonitor(s);return}
     if(s.sit){
       resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;actB.hidden=true;stick.hidden=true;cam.pitch=.03;
       pos.x=s.x;pos.z=s.z;heading=Math.PI;cam.yaw=Math.PI;
@@ -1192,8 +1240,8 @@ export function createLobby3D(app) {
     raf = requestAnimationFrame(frame);
   }
   function hide() {
-    stand();cabinetEntry=null;heard=0;
-    active = false; cinemaVisited=false;audibleZone=false;app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
+    stand();stopMonitor();heard=0;
+    active = false;audibleZone=false;app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
