@@ -2,12 +2,13 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=b36e517ea0';
+import {buildBalilla} from './balilla.js?v=5c5bbb18cb';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
 import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
+import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
 import * as E from '../biliardo/engine.js?v=2db7d98a7f';
 import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
@@ -710,11 +711,13 @@ export function createLobby3D(app) {
   box(1.25,.09,2.29,brassTrim,counterX,.94,counterZ);
   solid(counterX-.63,counterX+.63,counterZ-1.15,counterZ+1.15);
   const receiver=new THREE.Group();receiver.position.set(counterX,1.00,counterZ);receiver.rotation.y=-Math.PI/2;scene.add(receiver);
-  box(.89,.44,.25,walnut,0,.22,0,receiver);box(.83,.38,.025,darkWood,0,.22,.134,receiver);
-  for(let n=0;n<10;n++)box(.024,.28,.018,brassTrim,-.36+n*.041,.22,.155,receiver);
-  box(.31,.095,.016,amber,.22,.29,.152,receiver);
-  for(const x of [.13,.32]){const knob=new THREE.Mesh(new THREE.CylinderGeometry(.046,.046,.04,16),brassTrim);knob.rotation.x=Math.PI/2;knob.position.set(x,.145,.165);receiver.add(knob)}
-  const aerial=box(.012,.46,.012,brassTrim,.29,.64,0,receiver);aerial.rotation.z=-.28;
+  // radio vintage fatta in Blender (blender/radio.blend → models/radio.glb): cupola in legno, griglia in stoffa,
+  // quadrante illuminato, manopole godronate e antenna; finché non arriva, una sagoma semplice
+  const radioStandIn=box(.89,.44,.25,walnut,0,.22,0,receiver);
+  new GLTFLoader().load(new URL('models/radio.glb',import.meta.url).href,gltf=>{
+    gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='rd_dial'){o.material.emissive=new THREE.Color('#ffa040');o.material.emissiveIntensity=1.4;o.material.toneMapped=false}});
+    receiver.remove(radioStandIn);receiver.add(gltf.scene);
+  });
   spots.push({x:counterX-.64,z:counterZ,hx:.05,hz:.97,pad:.88,label:'Radio del bancone',radio:true,act:()=>app.tune?.()});
   // ========== SALA ARCADE (x -19…-7) ==========
   const list = ARCADE.filter(([k]) => avail.has(k));

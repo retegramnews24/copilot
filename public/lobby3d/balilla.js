@@ -206,7 +206,7 @@ export function buildBalilla(scene, el, send, playSound) {
     netBall = null;
   const opts = { target: 5, bestOf: 1, online: 2 };
   const pairs = [1, 1];
-  const ctl = [0, 1].map(() => ({ slide: 0, angle: 0, held: 0, keyKick: 0, raise: false, up: 0 }));
+  const ctl = [0, 1].map(() => ({ slide: 0, angle: 0, held: 0, keyFwd: false, keyBack: false }));
   const pointers = new Map();
   const post = (action, data = {}) => send?.({ type: 'balilla', action, ...data });
   const mySlot = () => (mode === 'net' ? (net?.slot ?? -1) : 0);
@@ -273,7 +273,9 @@ export function buildBalilla(scene, el, send, playSound) {
     const hint = document.createElement('small');
     hint.textContent = topView()
       ? 'Rossi a sinistra, Blu a destra: su e giù sposta, di lato ruota e tira'
-      : 'Su e giù sposta le aste · scatto verso la porta avversaria tira · indietro alza le figure';
+      : matchMedia('(pointer: fine)').matches
+        ? 'Mouse avanti e indietro sposta le aste · D ruota in avanti e tira · A ruota indietro e alza le figure'
+        : 'Su e giù sposta le aste · scatto verso la porta avversaria tira · indietro alza le figure';
     ui.append(hint);
   }
   function menu() {
@@ -369,7 +371,7 @@ export function buildBalilla(scene, el, send, playSound) {
   }
   function resetControls() {
     pointers.clear();
-    for (const c of ctl) Object.assign(c, { slide: 0, angle: 0, held: 0, keyKick: 0, raise: false, up: 0 });
+    for (const c of ctl) Object.assign(c, { slide: 0, angle: 0, held: 0, keyFwd: false, keyBack: false });
   }
 
   // ---------- comandi ----------
@@ -385,6 +387,8 @@ export function buildBalilla(scene, el, send, playSound) {
         host.requestPointerLock();
       } catch {}
     }
+    // mouse: sposta solo le aste (avanti e indietro); la rotazione è dei tasti A e D
+    if (e.pointerType === 'mouse') return;
     const team = teamAt(e.clientX),
       c = ctl[team];
     try {
@@ -392,9 +396,6 @@ export function buildBalilla(scene, el, send, playSound) {
     } catch {}
     pointers.set(e.pointerId, { team, x: e.clientX, y: e.clientY, s0: c.slide, a0: c.angle, mouse: e.pointerType === 'mouse' });
     c.held++;
-    // clic del mouse: tiro secco
-    if (e.pointerType === 'mouse' && e.button === 0) c.keyKick = 0.09;
-    if (e.pointerType === 'mouse' && e.button === 2) c.raise = true;
   });
   function onMove(e) {
     if (!active || !playing()) return;
@@ -406,13 +407,11 @@ export function buildBalilla(scene, el, send, playSound) {
       c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, p.a0 + (e.clientX - p.x) * angleSign(p.team) * 0.012));
       return;
     }
-    // mouse (anche senza tasti): spostamenti relativi
+    // mouse (anche senza tasti): solo avanti e indietro, cioè lo spostamento delle aste
     if (e.pointerType === 'mouse') {
       const team = topView() ? teamAt(e.clientX) : myTeam(),
         c = ctl[team];
       c.slide = Math.max(-1, Math.min(1, c.slide + ((e.movementY || 0) * slideSign(team) * 1.2) / (h * 0.6)));
-      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, c.angle + (e.movementX || 0) * angleSign(team) * 0.009));
-      c.up = 0.12; // la rotazione resta finché muovi il mouse, poi torna giù
     }
   }
   host.addEventListener('pointermove', onMove);
@@ -422,11 +421,11 @@ export function buildBalilla(scene, el, send, playSound) {
     pointers.delete(e.pointerId);
     const c = ctl[p.team];
     c.held = Math.max(0, c.held - 1);
-    if (e.button === 2) c.raise = false;
   };
   for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) host.addEventListener(t, lift);
   host.addEventListener('contextmenu', e => active && e.preventDefault());
-  // tastiera: W/S o frecce su e giù spostano, D o → tira, A o ← alza (stesso telefono: blu con le frecce)
+  // tastiera: W/S o frecce su e giù spostano; D (o →) ruota in avanti e tira finché è premuto, A (o ←) ruota
+  // indietro e alza le figure; lasciati, le figure tornano giù (stesso telefono: blu con le frecce)
   const keys = new Set();
   function input(e) {
     if (!active) return false;
@@ -453,24 +452,17 @@ export function buildBalilla(scene, el, send, playSound) {
       const c = ctl[team];
       const v = (has(down) ? 1 : 0) - (has(up) ? 1 : 0);
       if (v) c.slide = Math.max(-1, Math.min(1, c.slide + v * slideSign(team) * dt * 1.6));
-      if (has(kick) && !c.kickHeld) c.keyKick = 0.09;
-      c.kickHeld = has(kick);
-      c.keyRaise = has(raise);
+      c.keyFwd = has(kick);
+      c.keyBack = has(raise);
     }
   }
   // angolo voluto di ogni squadra: dito/mouse, tiro da tasto, alzata
   function wantedAngle(team, dt) {
     const c = ctl[team],
       fwd = team === 0 ? 1 : -1;
-    if (c.keyKick > 0) {
-      c.keyKick -= dt;
-      return fwd * 1.45;
-    }
-    if (c.raise || c.keyRaise) return -fwd * 1.45;
-    if (c.held === 0) {
-      if (c.up > 0) c.up -= dt;
-      else c.angle *= Math.exp(-6 * dt); // senza mano le figure tornano giù
-    }
+    if (c.keyFwd && !c.keyBack) return fwd * 1.45;
+    if (c.keyBack && !c.keyFwd) return -fwd * 1.45;
+    if (c.held === 0) c.angle *= Math.exp(-6 * dt); // senza mano le figure tornano giù
     return c.angle;
   }
 
