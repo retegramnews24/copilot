@@ -344,6 +344,40 @@
   }
   window.binottolandRadioLevels = () =>
     audio === fx && analyser ? (analyser.getByteFrequencyData(bins), [...bins]) : null;
+  let directBus,
+    channels = [],
+    fallbackLevel = 1;
+  function routeClub(active) {
+    if (directBus) directBus.gain.value = active ? 0 : 1;
+    if (!active) for (const channel of channels) channel.gain.gain.value = 0;
+  }
+  function locate(points, listener, yaw) {
+    if (!sharedMode) return;
+    let energy = 0;
+    for (let i = 0; i < points.length; i++) {
+      const dx = points[i].x - listener.x,
+        dz = points[i].z - listener.z;
+      const d = Math.hypot(dx, dz, 1.1),
+        level = 0.8 / (1 + (d / 3) ** 2);
+      energy += level * level;
+      if (!ctx || !analyser) continue;
+      if (!channels[i]) {
+        const gain = ctx.createGain(),
+          pan = ctx.createStereoPanner();
+        gain.gain.value = 0;
+        analyser.connect(gain).connect(pan).connect(ctx.destination);
+        channels[i] = { gain, pan };
+      }
+      channels[i].gain.gain.setTargetAtTime(level * 0.47, ctx.currentTime, 0.04);
+      channels[i].pan.pan.setTargetAtTime(
+        Math.max(-1, Math.min(1, (dx * Math.cos(yaw) - dz * Math.sin(yaw)) / d)),
+        ctx.currentTime,
+        0.035
+      );
+    }
+    fallbackLevel = Math.min(1, Math.sqrt(energy));
+    plain.volume = clubVolume * clubGain * fallbackLevel;
+  }
   function ensureGraph() {
     if (ctx) return true;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -355,7 +389,9 @@
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
-      analyser.connect(ctx.destination);
+      directBus = ctx.createGain();
+      analyser.connect(directBus).connect(ctx.destination);
+      routeClub(sharedMode);
       bins = new Uint8Array(analyser.frequencyBinCount);
       const hz = ctx.sampleRate / analyser.fftSize;
       bands = CENTERS.map(c => {
@@ -409,6 +445,15 @@
         if (station.down) row.classList.add('down');
         pick.append(name, info);
         pick.onclick = () => {
+          if (selector) {
+            if (!selector(station.id)) {
+              status.textContent = 'Radio condivisa scollegata.';
+              return;
+            }
+            sharedCache.set(station.id, station);
+            closeScreen();
+            return;
+          }
           current = station;
           saveLocal('binottoland-radio-last', current);
           streamIndex = 0;
@@ -621,6 +666,12 @@
     loadList(tab);
   }
   function closeScreen() {
+    if (selector) {
+      selector = null;
+      dialog.close();
+      panelAnchor.after(screen);
+      screen.querySelector('h2').textContent = 'Radio';
+    }
     screen.hidden = true;
     toggle.setAttribute('aria-expanded', 'false');
     document.documentElement.classList.remove('radio-open');
@@ -766,6 +817,10 @@
     startStream();
   }
   const playPause = () => {
+    if (selector) {
+      if (selector(null)) closeScreen();
+      return;
+    }
     if (!allowed()) return;
     if (wantsPlay) {
       stop();
@@ -785,8 +840,12 @@
   volume.oninput = () => {
     const value = Number(volume.value);
     if (!Number.isFinite(value)) return;
-    plain.volume = fx.volume = Math.min(1, Math.max(0, value));
-    saveLocal('binottoland-radio-volume', plain.volume);
+    if (sharedMode) setClubVolume(value);
+    else plain.volume = fx.volume = Math.min(1, Math.max(0, value));
+    if (sharedMode) {
+      saveLocal('club3d-radio-volume', clubVolume);
+      window.dispatchEvent(new Event('club-volume-change'));
+    } else saveLocal('binottoland-radio-volume', plain.volume);
   };
   // Events from the player that is not in use are ignored.
   for (const el of [plain, fx]) {
@@ -849,6 +908,103 @@
       navigator.mediaSession.setActionHandler('stop', () => stop());
     } catch {}
   }
+  let clubVolume = 0.7,
+    clubGain = 1;
+  function setClubVolume(value) {
+    clubVolume = Math.max(0, Math.min(1, value));
+    volume.value = String(clubVolume);
+    fx.volume = clubVolume * clubGain;
+    plain.volume = fx.volume * fallbackLevel;
+  }
+  let selector = null,
+    sharedMode = false,
+    sharedId,
+    savedPersonal,
+    generation = 0;
+  const sharedCache = new Map(),
+    panelAnchor = document.createComment('radio'),
+    dialog = document.createElement('dialog');
+  screen.before(panelAnchor);
+  document.body.append(dialog);
+  dialog.style.cssText =
+    'border:0;padding:0;background:transparent;color:inherit;max-width:none;max-height:none';
+  const unlockShared = () => {
+    if (sharedMode && current && sharedId === current.id && !wantsPlay && !selector) resume();
+  };
+  document.addEventListener('pointerdown', unlockShared);
+  document.addEventListener('keydown', unlockShared);
+  dialog.oncancel = e => {
+    e.preventDefault();
+    closeScreen();
+  };
+  window.binottolandClubRadio = {
+    setClubVolume(value) {
+      if (sharedMode) setClubVolume(value);
+    },
+    locate,
+    setClubGain(value) {
+      if (value === clubGain) return;
+      clubGain = value;
+      if (sharedMode) {
+        fx.volume = clubVolume * clubGain;
+        plain.volume = fx.volume * fallbackLevel;
+      }
+    },
+    choose(send) {
+      if (!allowed() || !sharedMode || selector) return;
+      selector = send;
+      dialog.append(screen);
+      dialog.showModal();
+      openScreen();
+      screen.querySelector('h2').textContent = 'Radio del bancone';
+      volume.value = String(clubVolume);
+      bigPlay.textContent = '■';
+      bigPlay.setAttribute('aria-label', 'Spegni la radio condivisa');
+    },
+    async sync(active, id) {
+      if (active === sharedMode && (!active || id === sharedId)) return;
+      const serial = ++generation;
+      if (active && !sharedMode) {
+        savedPersonal = { current, playing: wantsPlay, volume: plain.volume };
+        stop();
+        setClubVolume(Number(readLocal('club3d-radio-volume', 0.7)));
+      }
+      sharedMode = active;
+      sharedId = id;
+      routeClub(active);
+      if (!active) {
+        if (selector) closeScreen();
+        stop();
+        plain.volume = fx.volume = savedPersonal?.volume ?? startVolume;
+        volume.value = String(plain.volume);
+        current = savedPersonal?.current ?? null;
+        if (savedPersonal?.playing) resume();
+        savedPersonal = null;
+        update();
+        return;
+      }
+      stop();
+      current = null;
+      update();
+      if (!id) return;
+      try {
+        const station =
+          sharedCache.get(id) ||
+          favorites.find(s => s.id === id) ||
+          (await query('/json/stations/byuuid/' + encodeURIComponent(id)))[0];
+        if (serial !== generation || !station) return;
+        sharedCache.set(id, station);
+        current = station;
+        resume();
+      } catch {
+        if (serial === generation) {
+          sharedId = undefined;
+          status.textContent = 'Stazione condivisa non raggiungibile.';
+        }
+      }
+    },
+    loadHls
+  };
   update();
   renderList();
   // Last station is HLS: fetch hls.js now, so Play starts right away.

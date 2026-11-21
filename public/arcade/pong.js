@@ -20,6 +20,7 @@ function unlockAudio(){
     return audio.resume().catch(()=>{});
   }catch{}
 }
+let monitorBus=null,monitorPan=null,monitorLevel=0,monitorBalance=0;
 function beep(event){
   if(!sound||audio?.state!=='running')return;
   const note=audio.createOscillator(),volume=audio.createGain(),now=audio.currentTime;
@@ -28,7 +29,11 @@ function beep(event){
   if(event==='switch')note.frequency.exponentialRampToValueAtTime(66,now+.055);
   volume.gain.setValueAtTime(event==='switch' ? .16 : .055,now);
   volume.gain.exponentialRampToValueAtTime(.001,now+.085);
-  note.connect(volume);volume.connect(audio.destination);
+  note.connect(volume);
+  if(window.cabinetMonitor){
+    if(!monitorBus){monitorBus=audio.createGain();monitorPan=audio.createStereoPanner();monitorBus.connect(monitorPan).connect(audio.destination)}
+    monitorBus.gain.value=monitorLevel;monitorPan.pan.value=monitorBalance;volume.connect(monitorBus);
+  }else volume.connect(audio.destination);
   note.start(now);note.stop(now+.09);
 }
 function clickSound(){
@@ -274,4 +279,26 @@ window.addEventListener('message',event=>{
 });
 let lastUI='';
 update();
-if(parent!==window)send('ready');
+if(parent!==window && new URLSearchParams(location.search).get('monitor')==='1'){
+  window.cabinetMonitor={
+    mix(level,pan){monitorLevel=level;monitorBalance=pan;if(monitorBus){monitorBus.gain.value=level;monitorPan.pan.value=pan}},
+    canvas,
+    aim(fraction){target=Math.max(0,Math.min(1,fraction))*height},
+    key(code,down){
+      const key=code==='KeyI'?'KeyW':'KeyS';
+      if(down){target=null;keys.add(key)}else keys.delete(key);
+    },
+    clear(){keys.clear()}
+  };
+  command('start');
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&phase==='paused')command('start')});
+}else if(parent!==window)send('ready');
+
+if(new URLSearchParams(location.search).get('cabinet')==='1'){
+  document.body.classList.add('cabinet-play');
+  const bar=document.createElement('nav');bar.className='cabinet-controls';
+  const exit=document.querySelector('[data-arcade-back]');exit.textContent='Esci';
+  for(const control of [exit,primary,modeSelect,$('online')])bar.append(control);
+  document.body.append(bar);
+  if(!online&&phase==='ready')primary.click();
+}

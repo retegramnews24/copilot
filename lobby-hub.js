@@ -99,6 +99,7 @@ export class LobbyHub {
         const watching = tables.find(g => g.room === a.room);
         return {
           ...a.user,
+          clubPose: a.clubPose ?? null,
           status: own
             ? 'In partita ' + own.number
             : watching
@@ -124,6 +125,8 @@ export class LobbyHub {
     const records = [...(await this.ctx.storage.list({ prefix: 'result:' })).values()];
     return {
       games,
+      clubRadio: (await this.ctx.storage.get('clubRadio')) ?? null,
+      tableVolume: (await this.ctx.storage.get('tableVolume')) ?? 80,
       users,
       // Chat: messages only (notices stored there by 1.0.41 are dropped).
       messages: ((await this.ctx.storage.get('chat')) || []).filter(m => !m.notice),

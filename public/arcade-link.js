@@ -1,6 +1,6 @@
 // Arcade overlay seen from the app: Number Connect, Acquedotto!, Pong (solo or online), Giulio Simulator, Binotto Simulator and
 // the Blackboard rooms share one iframe. Online Pong and the Blackboard keep their authenticated sockets here.
-import { blackboardLink } from './blackboard/link.js?v=ed710cda29';
+import { blackboardLink } from './blackboard/link.js?v=bb859dccee';
 import { renderNumberLeaders } from './leaderboard.js?v=56908653f4';
 const $ = id => document.getElementById(id);
 const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
@@ -97,7 +97,7 @@ export function createArcadeLink({
       button.disabled = !me();
     }
   };
-  function openArcade(button, game, title, online = false) {
+  function openArcade(button, game, title, online = false, cabinet = false) {
     if (!arcadeOverlay.hidden) return;
     arcadeLaunch = button;
     simulatorBackReady = false;
@@ -117,7 +117,10 @@ export function createArcadeLink({
     };
     arcadeFrame.src =
       standalonePages[game] ??
-      '/arcade/' + game + '.html' + (game === 'pong' ? (online ? '?v=3&online=1' : '?v=3') : '?v=2');
+      '/arcade/' +
+        game +
+        '.html' +
+        (game === 'pong' ? (cabinet ? '?v=3&cabinet=1' : online ? '?v=3&online=1' : '?v=3') : '?v=2');
     tg?.BackButton?.show();
   }
   function closeArcade() {
@@ -350,6 +353,9 @@ export function createArcadeLink({
         action: button => openBlackboard(button, entry.id)
       }));
   return {
+    gallery: blackboard.gallery,
+    enterGallery: id => (id ? openBlackboard($('open-blackboard'), id) : $('open-blackboard').click()),
+    cabinetPong: () => openArcade($('play-pong'), 'pong', 'Pong', false, true),
     visible: () => !arcadeOverlay.hidden,
     back,
     openPong,

@@ -3414,6 +3414,14 @@ button.uno-card:not(:disabled) {
 .window-mode[hidden] {
   display: none;
 }
+/* Lobby 3D: tasto che apre il guscio 3D (public/lobby3d/). */
+.lobby3d-open {
+  width: auto;
+  padding: 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
 
 /* Avvisi del bot: invito in Lobby ad attivarli. */
 .alerts-card {

@@ -1,9 +1,9 @@
 import {soundAllowed} from '../sound-pref.js';
-import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=4b40a70e69';
-import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=139f3cba98';
-import { drawCourse } from './render.js?v=7300500888';
+import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=caf3baf8cd';
+import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=c89641197d';
+import { drawCourse } from './render.js?v=438901d859';
 import { upright, rollBy } from './roll.js';
-import {golfColors,validBallColors} from '../appearance.js?v=3bf8d2e2ca';
+import {golfColors,validBallColors} from '../appearance.js?v=a866c9e8ce';
 import { applyInsets } from '../safe-area.js';
 
 const $=id=>document.getElementById(id), canvas=$('green'), ctx=canvas.getContext('2d',{alpha:false});

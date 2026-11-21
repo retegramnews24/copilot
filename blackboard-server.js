@@ -337,6 +337,19 @@ export class Blackboard {
     let command;
     try { command = JSON.parse(raw); } catch { return; }
     const peer = socket.deserializeAttachment();
+    if (!peer.legacy && command?.type === 'gallery' && !peer.room) {
+      // Only free-drawing surfaces from open rooms, ordered by latest mark.
+      const picked=this.sql.exec(
+        'SELECT b.number,b.epoch FROM chalk c JOIN boards b ON c.room=CAST(b.number AS TEXT) WHERE b.deleted=0 AND c.color>=0 AND c.seq>b.epoch ORDER BY c.seq DESC LIMIT 1'
+      ).toArray()[0];
+      if(!picked)return send(socket,{type:'gallery',room:null,strokes:[]});
+      const room=String(picked.number);
+      const cursor=command.room===room && command.epoch===picked.epoch && Number.isSafeInteger(command.since)
+        ? Math.max(picked.epoch,command.since):picked.epoch;
+      const rows=this.sql.exec('SELECT seq,color,size,points FROM chalk WHERE room=? AND seq>? AND color>=0 ORDER BY seq LIMIT 64',room,cursor).toArray();
+      return send(socket,{type:'gallery',room,epoch:picked.epoch,more:rows.length===64,
+        strokes:rows.map(row=>({...row,points:JSON.parse(row.points)}))});
+    }
     if (!peer.legacy && command?.type === 'enter') return this.enter(socket, command.room, command.since);
     if (!peer.legacy && command?.type === 'leave') return this.leave(socket);
     const room = this.getRoom(peer.room);

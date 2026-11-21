@@ -10,6 +10,7 @@ export function createCinemaLobby({
   enterFullscreen,
   leaveRoom,
   selectPage,
+  projectionChanged,
   renderNow
 }) {
   let cinemaSocket = null,
@@ -125,6 +126,7 @@ export function createCinemaLobby({
         const packet = JSON.parse(event.data);
         if (packet.type === 'rooms') {
           cinemaRooms = packet;
+          projectionChanged?.();
           if (packet.active && !cinemaOpen()) {
             cinemaSend({ type: 'leave' });
             return;
@@ -148,7 +150,11 @@ export function createCinemaLobby({
       if (cinemaSocket !== socket) return;
       cinemaSocket = null;
       cinemaRooms = { ...cinemaRooms, active: null };
-      const expired = event.code === 4001;
+      const expired = event.code === 4001 || event.code === 4003;
+      if (expired) {
+        cinemaRooms = { rooms: [], active: null };
+        projectionChanged?.();
+      }
       if (expired) cinemaLobbyMessage = 'Riapri Binottoland da Telegram.';
       renderCinemaLobby();
       cinemaPost('connection', { connected: false, message: expired ? cinemaLobbyMessage : undefined });
@@ -346,6 +352,11 @@ export function createCinemaLobby({
     return items;
   }
   return {
+    projection: () =>
+      cinemaRooms.rooms.find(r => r.projection) ||
+      cinemaRooms.rooms.find(r => r.channel) ||
+      cinemaRooms.rooms[0] ||
+      null,
     connect: connectCinema,
     post: cinemaPost,
     open: openCinema,

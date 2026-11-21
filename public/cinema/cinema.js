@@ -1,5 +1,5 @@
 import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=e83d11a028';
-import {avatarSVG} from '../labyrinth/avatar.js?v=5318415024';
+import {avatarSVG} from '../labyrinth/avatar.js?v=8c61edfe0e';
 import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=65b3956eb7';
 import {embedYouTube} from './youtube.js?v=c237aa9fc5';
 import {applyInsets} from '../safe-area.js';
@@ -272,6 +272,7 @@ function drawAudience(people){
   });
 }
 const closeDialog=$('close-dialog');
+$('projection-off').onclick=()=>action('projection-off');
 $('close-room').onclick=()=>{closeDialog.returnValue='';closeDialog.showModal();};
 closeDialog.onclose=()=>{if(closeDialog.returnValue==='close')action('close-room');};
 function drawRooms(rooms,active){
@@ -284,6 +285,7 @@ function drawRooms(rooms,active){
   $('multisala').disabled=!active;
   $('connecting').hidden=!!active;cinema.hidden=!active;$('cinema-actions').hidden=!active;
   $('close-room').hidden=!active?.canClose;
+  $('projection-off').hidden=!active?.canClose||!active.channel;
   $('shared-playback').hidden=!!active?.screen||!active?.playback;
   $('seek-shared').hidden=!!active?.channel?.live||!!(active?.channel?.inbox&&!active.channel.file);
   const waiting=active?.queue??0,playingInbox=!!active?.channel?.inbox;

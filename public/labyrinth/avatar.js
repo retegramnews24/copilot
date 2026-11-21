@@ -1,4 +1,4 @@
-import {CLOTHES, OUTFIT_KEY, BALL_STYLE_KEY, BALL_KEY, readAppearance,normalizeAppearance, readGolfStyle, golfColors} from '../appearance.js?v=3bf8d2e2ca';
+import {CLOTHES, ACCENTS, HAIRS, SKINS, OUTFIT_KEY, BALL_STYLE_KEY, BALL_KEY, readAppearance, readLook, normalizeAppearance, readGolfStyle, golfColors} from '../appearance.js?v=a866c9e8ce';
 export {readAppearance};
 
 const styles=`
@@ -19,7 +19,7 @@ const styles=`
 .lab-golf-colors{padding-top:5px}
 `;
 
-function swatches(container,label,choose){
+function swatches(container,label,choose,palette=CLOTHES){
  const title=document.createElement('small'),row=document.createElement('div');
  title.textContent=label;
  row.className='lab-swatches';row.setAttribute('role','group');row.setAttribute('aria-label',label);
@@ -30,7 +30,7 @@ function swatches(container,label,choose){
   button.onclick=()=>choose(color);row.append(button);
   return button;
  };
- const buttons=CLOTHES.map(([name,color])=>add(name,color));
+ const buttons=palette.map(([name,color])=>add(name,color));
  let previous=null;
  container.append(title,row);
  return selected=>{
@@ -61,13 +61,17 @@ export function mountAppearance(root){
  const previews=document.createElement('div'),avatar=document.createElement('div'),controls=document.createElement('div');
  previews.className='lab-avatar-previews';controls.className='lab-avatar-controls';
  previews.append(figure('Personaggio',avatar));wrap.append(previews,controls);root.append(style,wrap);
- let outfit=readAppearance(),golf=readGolfStyle(),backpack=false;
+ // readLook: anche i colori del personaggio della Lobby 3D (dettagli, capelli, pelle), salvati insieme
+ let outfit=readLook(),golf=readGolfStyle(),backpack=false;
  function chooseOutfit(part,color){
   outfit={...outfit,[part]:color};save(OUTFIT_KEY,outfit);paint();
   window.dispatchEvent(new CustomEvent('labyrinth:appearance'));
  }
  const shirt=swatches(controls,'Maglietta',color=>chooseOutfit('shirt',color));
  const shorts=swatches(controls,'Pantaloncini',color=>chooseOutfit('shorts',color));
+ const accent=swatches(controls,'Dettagli · lacci, righe, scarpe (Lobby 3D)',color=>chooseOutfit('accent',color),ACCENTS);
+ const hair=swatches(controls,'Capelli (Lobby 3D)',color=>chooseOutfit('hair',color),HAIRS);
+ const skin=swatches(controls,'Pelle (Lobby 3D)',color=>chooseOutfit('skin',color),SKINS);
  const ball=document.createElement('span'),toggle=document.createElement('input'),separate=document.createElement('div');
  let ballTop,ballBottom;
  if(withGolf){
@@ -92,7 +96,7 @@ export function mountAppearance(root){
  }
  function paint(){
   avatar.innerHTML=avatarSVG(outfit,backpack);
-  shirt(outfit.shirt);shorts(outfit.shorts);
+  shirt(outfit.shirt);shorts(outfit.shorts);accent(outfit.accent);hair(outfit.hair);skin(outfit.skin);
   if(withGolf){
    const [top,bottom]=golfColors(outfit,golf);
    ball.style.setProperty('--ball-top',top);ball.style.setProperty('--ball-bottom',bottom);
@@ -104,7 +108,7 @@ export function mountAppearance(root){
  window.addEventListener('labyrinth:equipment',e=>{backpack=e.detail?.backpack===true;paint();});
  window.addEventListener('storage',e=>{
   if(e.key===null||[OUTFIT_KEY,BALL_STYLE_KEY,BALL_KEY].includes(e.key)){
-   outfit=readAppearance();golf=readGolfStyle();paint();
+   outfit=readLook();golf=readGolfStyle();paint();
   }
  });
 }
