@@ -261,7 +261,7 @@ function makeCharacter(look) {
 }
 function animateCharacter(c, speed, dt, t) {
   const amt = Math.min(1, speed / SPEED);
-  c.phase += dt * (4 + 6 * amt);
+  c.phase += dt * (4 + 6 * speed / SPEED);
   const sw = Math.sin(c.phase) * 0.65 * amt;
   c.legs[0].rotation.x = sw; c.legs[1].rotation.x = -sw;
   c.arms[0].rotation.x = -sw * 0.8; c.arms[1].rotation.x = sw * 0.8;
@@ -284,7 +284,7 @@ export function createLobby3D(app) {
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild;
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
-  hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce per camminare · trascina per girare la vista · E per aprire';
+  hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
@@ -702,19 +702,30 @@ export function createLobby3D(app) {
 
   // ---------- comandi ----------
   const keys = new Set();
+  let jumpHeight = 0, verticalSpeed = 0;
+  function resetMovement() {
+    keys.clear();
+    jumpHeight = verticalSpeed = moving = 0;
+    me.root.position.y = 0;
+  }
   const joy = { id: null, x: 0, y: 0, cx: 0, cy: 0 };
   const drags = new Map();
   let pinch = 0;
   const onKey = (e) => {
     if (!active) return;
-    const k = e.key.toLowerCase();
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
+      return;
+    }
+    const k = e.code === 'ShiftLeft' ? 'sprint' : e.key.toLowerCase();
     if (e.type === 'keydown') {
       if ((k === 'e' || k === 'enter') && near) { e.preventDefault(); launch(near); return; }
       keys.add(k);
     } else keys.delete(k);
   };
   addEventListener('keydown', onKey); addEventListener('keyup', onKey);
-  addEventListener('blur', () => keys.clear());
+  addEventListener('blur', resetMovement);
   host.addEventListener('pointerdown', (e) => {
     if (!active) return;
     const r = stick.getBoundingClientRect();
@@ -789,8 +800,9 @@ export function createLobby3D(app) {
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
       const dx = ((ix * c + iz * s) / n) * mag, dz = ((-ix * s + iz * c) / n) * mag;
-      speed = SPEED * mag;
-      pos.x += dx * SPEED * dt; pos.z += dz * SPEED * dt;
+      const pace = keys.has('sprint') ? SPEED * 1.75 : SPEED;
+      speed = pace * mag;
+      pos.x += dx * pace * dt; pos.z += dz * pace * dt;
       collide(pos);
       const want = Math.atan2(-dx, -dz);
       let d = want - heading; d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -800,6 +812,13 @@ export function createLobby3D(app) {
     moving += (speed - moving) * Math.min(1, dt * 10);
     me.root.position.x = pos.x; me.root.position.z = pos.z; me.root.rotation.y = heading;
     animateCharacter(me, moving, dt, t);
+    if (verticalSpeed !== 0 || jumpHeight > 0) {
+      const gravity = 13;
+      jumpHeight = Math.max(0, jumpHeight + verticalSpeed * dt - .5 * gravity * dt * dt);
+      verticalSpeed = jumpHeight > 0 ? verticalSpeed - gravity * dt : 0;
+      me.root.position.y += jumpHeight;
+    }
+    blob.scale.setScalar(1 - jumpHeight * .24);
     blob.position.set(pos.x, 0.008, pos.z);
     // cosa c'è vicino
     let best = null, bd = 1e9;
@@ -823,7 +842,7 @@ export function createLobby3D(app) {
     const where = pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala arcade' : 'Atrio';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     // telecamera dietro il personaggio, che non passa i muri
-    tgt.set(pos.x, 1.45, pos.z);
+    tgt.set(pos.x, 1.45 + jumpHeight * .42, pos.z);
     tmp.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
     ray.set(tgt, tmp); ray.far = cam.dist;
     const hit = ray.intersectObjects(wallMeshes, false)[0];
@@ -871,10 +890,10 @@ export function createLobby3D(app) {
   }
   function hide() {
     active = false; cancelAnimationFrame(raf);
-    keys.clear(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
+    resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
-  document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelAnimationFrame(raf); last = 0; } else if (active) raf = requestAnimationFrame(frame); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { resetMovement(); cancelAnimationFrame(raf); last = 0; } else if (active) raf = requestAnimationFrame(frame); });
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
   const api = { show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
