@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#07050a">
+<title>Biliardo</title>
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="stylesheet" href="biliardo.css?v=2f074fbd2c">
+</head>
+<body>
+<div id="app">
+  <div id="gl"></div>
+
+  <!-- HUD di gioco -->
+  <div id="hud" hidden>
+    <div class="top">
+      <div class="pl" id="p0"><div class="nm"></div><div class="grp"></div></div>
+      <div class="pl" id="p1"><div class="nm"></div><div class="grp"></div></div>
+    </div>
+    <div id="timer" class="timer" hidden></div>
+    <div id="toast" class="toast"></div>
+    <div id="hint" class="hint"></div>
+    <!-- forza: si trascina giù il pallino e si lascia per tirare; riportarlo in cima (o uscire di lato) annulla -->
+    <div id="power" class="power" role="slider" aria-label="Forza: trascina giù il pallino e lascia per tirare" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div class="lbl" id="powLbl">Forza</div>
+      <div class="track"><div class="fill"></div><div class="ticks"></div><div class="knob"></div></div>
+      <div class="lbl" id="powPct"></div>
+    </div>
+    <div class="bottom">
+      <button id="spinB" class="spinB" aria-label="Effetto"><span class="cueball"><i></i></span></button>
+      <button id="camB" class="ico" aria-label="Muovi la vista con un dito" title="Muovi la vista">🎥</button>
+      <span class="sp"></span>
+      <button id="viewB" aria-label="Cambia vista">Vista</button>
+      <button id="menuB" class="ico" aria-label="Menu">☰</button>
+    </div>
+    <div id="spinPad" class="spinPad" hidden>
+      <div class="big"><i></i></div>
+      <div class="muted">Tocca la bilia dove vuoi colpirla: in alto va avanti, in basso torna indietro, ai lati dà l'effetto sulle sponde.</div>
+      <div class="row"><button id="spinC">Centro</button><span class="sp"></span><button id="spinOk" class="pri">Fatto</button></div>
+    </div>
+    <div id="banner" class="banner"></div>
+  </div>
+
+  <!-- scelta modalità -->
+  <div id="start" class="sheet" hidden>
+    <div class="card">
+      <div class="brand">Biliardo</div>
+      <div class="muted center">Sala giochi Binottoland</div>
+      <div class="vgrid" id="variants"></div>
+      <div id="vDesc" class="muted"></div>
+      <div class="row seg3"><button class="seg" data-m="1">1 giocatore</button><button class="seg" data-m="2">2 giocatori</button><button class="seg" data-m="net">Online</button></div>
+      <div id="modeInfo" class="muted"></div>
+      <div class="row" id="netRow" hidden><span>Giocatori</span><span class="sp"></span><button class="seg" data-np="2">2</button><button class="seg" data-np="3">3</button><button class="seg" data-np="4">4</button></div>
+      <div class="row" id="lvRow"><span>Computer</span><span class="sp"></span><button class="seg" data-l="facile">Facile</button><button class="seg" data-l="medio">Medio</button><button class="seg" data-l="difficile">Difficile</button></div>
+      <div class="row" id="cushRow" hidden><span>Tipo</span><span class="sp"></span><button class="seg" data-cu="0">Libera</button><button class="seg" data-cu="1">1 sponda</button><button class="seg" data-cu="3">3 sponde</button></div>
+      <div class="row" id="tgRow"><span id="tgLbl">Punti</span><span class="sp"></span><span id="tgBtns" class="row"></span></div>
+      <div class="row" id="nameRow" hidden><input id="n1" maxlength="14" placeholder="Giocatore 1"><input id="n2" maxlength="14" placeholder="Giocatore 2"></div>
+      <div class="row"><span>Panno</span><span class="sp"></span><span id="cloths" class="cloths"></span></div>
+      <div class="row"><span>Luminosità</span><span class="sp"></span><b id="brightV2" class="num"></b></div>
+      <input id="bright2" type="range" min="30" max="150" step="5" aria-label="Luminosità della scena">
+      <button id="play" class="pri">Gioca</button>
+      <button id="rulesB" class="link">Regole e comandi</button>
+      <button id="startExit" hidden>Esci</button>
+    </div>
+  </div>
+
+  <!-- online: sala d'attesa -->
+  <div id="wait" class="sheet" hidden>
+    <div class="card">
+      <b class="big" id="waitT">Partita online</b>
+      <div id="waitS" class="muted"></div>
+      <ul id="waitList"></ul>
+      <div class="row"><button id="waitLeave">Esci</button><span class="sp"></span><button id="waitStart" class="pri" hidden>Parti</button></div>
+    </div>
+  </div>
+
+  <div id="menu" class="sheet" hidden>
+    <div class="card">
+      <b class="big">Pausa</b>
+      <button id="resume" class="pri">Riprendi</button>
+      <button id="restart">Ricomincia la partita</button>
+      <button id="toStart">Cambia modalità</button>
+      <button id="closeAll" class="danger" hidden>Chiudi la partita per tutti</button>
+      <button id="exitB">Esci</button>
+      <button id="rulesB2">Regole e comandi</button>
+      <b>Impostazioni</b>
+      <div class="row"><span>Sensibilità mira</span><span class="sp"></span><b id="sensV" class="num"></b></div>
+      <input id="sens" type="range" min="10" max="200" step="5" aria-label="Sensibilità della mira (mouse o dito)">
+      <div class="row"><span>Luminosità</span><span class="sp"></span><b id="brightV" class="num"></b></div>
+      <input id="bright" type="range" min="30" max="150" step="5" aria-label="Luminosità della scena">
+      <div class="row"><span>Grafica</span><span class="sp"></span><button class="seg" data-q="bassa">Bassa</button><button class="seg" data-q="media">Media</button><button class="seg" data-q="alta">Alta</button></div>
+      <div class="row"><span>Linea di mira lunga</span><span class="sp"></span><button id="guideB" class="seg on">Sì</button></div>
+      <div class="row"><span>Suono</span><span class="sp"></span><button id="sndB" class="seg on">Sì</button></div>
+    </div>
+  </div>
+
+  <div id="rules" class="sheet" hidden>
+    <div class="card">
+      <b class="big" id="rulesT">Regole</b>
+      <ul id="rulesList"></ul>
+      <b>Comandi</b>
+      <ul>
+        <li><b>Mirare</b>: tocca un punto del tavolo per puntare lì; trascina il dito per ruotare la mira (più lontano dalla bilia = più preciso; la sensibilità si regola nel menu).</li>
+        <li><b>Tirare</b>: metti il dito sulla barra della forza a destra e trascina giù il pallino; lascia quando la forza è giusta. Per annullare riportalo in cima o sposta il dito fuori dalla barra. Da tastiera: frecce per mirare (Maiusc = fine), spazio tenuto premuto.</li>
+        <li><b>Palla 8</b>: quando tocca alla nera, tocca la buca dove la vuoi mandare (cerchio dorato).</li>
+        <li><b>Boccette</b>: nella bocciata d'acchito trascina il pallino blu oltre la metà del tavolo, poi lancia.</li>
+        <li><b>Vista</b>: rotella o due dita per lo zoom; tasto destro (o 🎥 + un dito) per girare attorno al tavolo; due dita o tasto centrale per spostarla. "Vista" torna alle inquadrature pronte.</li>
+        <li><b>Bilia in mano</b>: trascina la bilia dove vuoi, poi tira.</li>
+      </ul>
+      <button id="rulesOk" class="pri">Ho capito</button>
+    </div>
+  </div>
+
+  <div id="over" class="sheet" hidden>
+    <div class="card">
+      <div id="overT" class="big center"></div>
+      <div id="overS" class="muted center"></div>
+      <button id="overAgain" class="pri">Rivincita</button>
+      <div class="row"><button id="overExit">Esci</button><span class="sp"></span><button id="overMode">Cambia modalità</button></div>
+    </div>
+  </div>
+</div>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+<script type="module" src="main.js?v=011c15b639"></script>
+</body>
+</html>

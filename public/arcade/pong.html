@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pong</title>
+<link rel="stylesheet" href="arcade.css?v=2cce640b74">
+<link rel="stylesheet" href="pong.css?v=75ce6f976c">
+<script type="module" src="bridge.js?v=5ed8f73cf5"></script>
+<script type="module" src="pong.js?v=0a3aec0b0e"></script>
+</head>
+<body>
+<main>
+  <section id="cabinet" aria-label="Monitor Pong">
+    <div id="tube">
+      <canvas id="field" width="640" height="480" aria-label="Campo di Pong"></canvas>
+      <div id="overlay" role="status"><strong id="message"></strong></div>
+    </div>
+    <div class="monitor-label" aria-hidden="true"><span>BINOTTO / VIDEO</span><span>VHF ▪ 1976</span></div>
+  </section>
+  <section class="console" aria-label="Console di gioco">
+    <div class="fascia">
+      <div class="nameplate"><span class="signal-mark" aria-hidden="true"><i></i><i></i><i></i></span><h1>PONG<span>BINOTTO • TELE GAMES</span></h1></div>
+      <div class="speaker" aria-hidden="true"></div>
+      <a class="back" data-arcade-back href="/">← Giochi</a>
+    </div>
+    <div class="deck">
+      <label class="dial" id="dial-0"><span class="player" id="player-0">Giocatore 1</span><span class="knob" aria-hidden="true"></span><input aria-label="Manopola giocatore 1" data-dial="0" type="range" min="0" max="480" value="240"><span class="dial-scale" aria-hidden="true">− &nbsp; +</span></label>
+      <div class="switchboard">
+        <div class="switches" role="group" aria-label="Interruttori della console">
+          <button id="power" class="switch" type="button" aria-pressed="true"><span class="lever" aria-hidden="true"></span>ON / OFF</button>
+          <button id="audio" class="switch" type="button" aria-pressed="true"><span class="lever" aria-hidden="true"></span>AUDIO</button>
+          <button id="online" class="switch" type="button" aria-pressed="false"><span class="lever" aria-hidden="true"></span>2 ONLINE</button>
+        </div>
+        <div class="game-switch"><label for="mode">SELEZIONE GIOCO</label><select id="mode">
+          <option value="classic">1 · Classico</option>
+          <option value="super">2 · Super Pong</option>
+          <option value="catch">3 · Catch</option>
+          <option value="solitaire">4 · Solitaire</option>
+          <option value="football">5 · Football</option>
+        </select></div>
+        <div class="transport">
+          <button id="primary" type="button">Avvia</button><button id="restart" type="button">Reset</button>
+        </div>
+      </div>
+      <label class="dial" id="dial-1"><span class="player" id="player-1">IA</span><span class="knob" aria-hidden="true"></span><input aria-label="Manopola giocatore 2" data-dial="1" type="range" min="0" max="480" value="240"><span class="dial-scale" aria-hidden="true">− &nbsp; +</span></label>
+    </div>
+    <div class="readout"><p id="connection" role="status"></p><output id="score" aria-label="Punteggio" aria-live="polite"></output></div>
+  </section>
+  <p class="hint" id="hint"></p>
+</main>
+</body>
+</html>

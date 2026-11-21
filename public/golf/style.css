@@ -1,0 +1,78 @@
+:root{color-scheme:dark;font:15px/1.35 system-ui,sans-serif;--ink:#fff5e1;--muted:#bcd3da;--line:#b7e0e546;--panel:#122734;--top:calc(max(env(safe-area-inset-top,0px),var(--system-safe-top,0px)) + var(--content-safe-top,0px));--bottom:calc(max(env(safe-area-inset-bottom,0px),var(--system-safe-bottom,0px)) + var(--content-safe-bottom,0px));--left:max(env(safe-area-inset-left,0px),var(--system-safe-left,0px));--right:max(env(safe-area-inset-right,0px),var(--system-safe-right,0px))}
+*{box-sizing:border-box}[hidden]{display:none!important}html,body{height:100%;margin:0;overflow:hidden}
+body{display:flex;flex-direction:column;padding:calc(var(--top) + 8px) calc(var(--right) + 12px) calc(var(--bottom) + 9px) calc(var(--left) + 12px);background:#172938;color:var(--ink)}
+header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;text-align:center;padding-bottom:8px}
+h1,h2,p{margin:0}h1{font-size:clamp(15px,4.4vw,25px);line-height:1.05;letter-spacing:-.025em}h2{font-size:clamp(16px,4vw,23px)}
+.brand,small{color:#a3e7dc;letter-spacing:.1em;font-weight:800;font-size:10px}
+button{min-height:39px;padding:5px 10px;font:inherit;font-weight:750;color:var(--ink);border:1px solid var(--line);background:#253e50;border-radius:11px;touch-action:manipulation;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #ffe58d;outline-offset:2px}
+main{width:min(100%,1300px);margin:0 auto;display:flex;flex:1;min-height:0;flex-direction:column;gap:6px}
+.course-info{display:flex;align-items:center;justify-content:space-between;padding:1px 4px}.course-info h2{line-height:1.15}#clock{font-variant-numeric:tabular-nums;color:#ffe2a0;font-weight:750}
+.course-view{flex:1;min-height:100px;position:relative;overflow:hidden;border:1px solid var(--line);border-radius:17px;background:#213746}
+canvas{width:100%;height:100%;display:block;touch-action:none}
+.glass{position:absolute;inset:auto 50% 50% auto;transform:translate(50%,50%);width:min(92%,570px);max-height:94%;overflow:auto;padding:16px;border:1px solid var(--line);border-radius:16px;background:#142938fa;box-shadow:0 12px 36px #060d1890}
+.glass p{margin:.55em 0;color:var(--muted)}.glass button,#shoot{color:#1d2937;background:#ffdb92;border-color:transparent}
+#status{min-height:1.35em;color:#ffe4b1;font-size:13px;padding:0 4px}
+.controls{display:grid;grid-template-columns:1fr 1fr auto;gap:9px;align-items:center}.controls label{min-width:0;display:grid;gap:2px;color:var(--muted);font-size:12px}.controls input{width:100%;min-width:0;accent-color:#89e1cd}.tip{font-size:12px;color:var(--muted)}
+.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}caption{text-align:left;color:var(--muted);padding:5px 0}td,th{padding:5px 4px;border-bottom:1px solid var(--line);text-align:right}td:first-child,th:first-child{text-align:left}.ball-color{display:inline-block;width:.65em;height:.65em;margin-right:5px;border-radius:50%}
+@media(max-height:440px){header{padding-bottom:2px}.brand{display:none}main{gap:2px}.tip{display:none}.course-info h2{font-size:16px}.controls input{margin:0}}
+
+.course-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+#close-game{font-size:12px;min-height:32px;padding:4px 8px}
+#watch-tools{display:flex;align-items:center;gap:8px;padding:0 4px;color:var(--muted);font-size:13px}
+#watch-player{min-width:0;max-width:60%;min-height:34px;padding:4px 7px;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:7px}
+#cancel-close{background:#253e50;color:var(--ink);border-color:var(--line)}
+
+.zoom-tools{position:absolute;top:8px;right:8px;display:flex;gap:5px}
+.zoom-tools button{min-width:38px;min-height:38px;padding:0;background:#192e3ce8;font-size:20px;line-height:1}
+
+.power-control>span{display:flex;justify-content:space-between;gap:4px}
+#power-value{color:#ffe4a5;font-weight:800;font-variant-numeric:tabular-nums}
+#power{--power-fill:43%;--power-track:linear-gradient(to right,#8fe7be,#ffdf83,#ff9a6d);appearance:none;margin:0;height:23px;background:transparent;cursor:pointer}
+#power::-webkit-slider-runnable-track{height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),#172938b8 calc(25% - 1px) 25%),linear-gradient(90deg,transparent var(--power-fill),#324957 var(--power-fill)),var(--power-track)}
+#power::-moz-range-track{height:10px;border-radius:5px;background:repeating-linear-gradient(90deg,transparent 0 calc(25% - 1px),#172938b8 calc(25% - 1px) 25%),linear-gradient(90deg,transparent var(--power-fill),#324957 var(--power-fill)),var(--power-track)}
+#power::-webkit-slider-thumb{appearance:none;width:15px;height:16px;margin-top:-3px;border-radius:5px;border:2px solid #172938;background:#fff3d1}
+#power::-moz-range-thumb{width:11px;height:12px;border-radius:5px;border:2px solid #172938;background:#fff3d1}
+
+#route-title{color:var(--muted);font-size:11px}
+#route-title:empty{display:none}
+#route-picker{padding:8px 0 4px}
+#route-picker label{display:grid;gap:4px;color:var(--muted);font-size:13px}
+#route-choice{max-width:100%;min-height:40px;padding:6px 8px;font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px}
+#route-note{font-size:12px}
+
+/* The playfield fills the viewport. Only the interactive HUD intercepts input. */
+.golf-playing{position:relative;padding:0;isolation:isolate;--hud:#152b38e8}
+.golf-playing .course-view{position:absolute;inset:0;min-height:0;border:0;border-radius:0}
+.golf-playing header,.golf-playing .course-info{
+  position:absolute;z-index:2;left:calc(var(--left) + 8px);right:calc(var(--right) + 8px);pointer-events:none
+}
+.golf-playing header{top:calc(var(--top) + 7px);display:flex;justify-content:space-between;padding:0}
+.golf-playing header>div{display:none}
+.golf-playing header button,.golf-playing #close-game{pointer-events:auto;background:var(--hud)}
+.golf-playing .course-info{top:calc(var(--top) + 51px);padding:0;gap:5px;align-items:flex-start}
+.golf-playing .course-info>div,.golf-playing #status{
+  border:1px solid var(--line);border-radius:10px;background:var(--hud);padding:4px 8px
+}
+.golf-playing .course-info h2{font-size:clamp(14px,3.5vw,20px)}
+.golf-playing .course-actions{gap:6px}
+.golf-playing #close-game{min-height:29px}
+.golf-playing .zoom-tools{z-index:2;top:calc(var(--top) + 111px);right:calc(var(--right) + 8px)}
+.golf-playing .glass{z-index:4;max-height:calc(100% - var(--top) - var(--bottom) - 14px)}
+.golf-playing .controls,.golf-playing #watch-tools{
+  position:absolute;z-index:2;bottom:calc(var(--bottom) + 8px);
+  left:calc(var(--left) + 8px);right:calc(var(--right) + 8px);width:auto;
+  max-width:760px;margin:auto;padding:5px 8px;border:1px solid var(--line);
+  border-radius:12px;background:var(--hud)
+}
+.golf-playing #status{
+  position:absolute;z-index:2;bottom:calc(var(--bottom) + 62px);
+  left:50%;transform:translateX(-50%);max-width:calc(100% - 24px);
+  width:max-content;text-align:center;pointer-events:none
+}
+.golf-playing #status:empty,.golf-playing #tip{display:none}
+@media(max-height:380px){
+  .golf-playing .course-info{top:calc(var(--top) + 45px)}
+  .golf-playing header button{min-height:34px}
+  .golf-playing .zoom-tools{top:calc(var(--top) + 93px)}
+}

@@ -130,10 +130,10 @@ function setupInfo() {
   $('modeInfo').textContent = ai
     ? 'Una tua auto contro una dell’IA. Muovete nello stesso momento: tu scegli, l’IA sceglie, e le auto partono insieme.'
     : draft.mode === 'net'
-      ? `Gara online: disegni la pista, poi la gara compare negli avvisi di Binottoland e aspetta ${n === 2 ? 'un altro pilota' : `altri ${n - 1} piloti`}. Ognuno muove dal suo telefono, a turno: 1 minuto a mossa, poi guida il pilota automatico.`
+      ? `Gara online: disegni la pista, poi la gara compare negli avvisi di Binottoland e aspetta ${n === 2 ? 'un altro pilota' : `altri ${n - 1} piloti`}. Ognuno sceglie la sua mossa dal suo telefono, tutti nello stesso momento: quando ha scelto anche l’ultimo, le auto si muovono insieme. 1 minuto per scegliere, poi guida il pilota automatico.`
       : draft.mode === 'sprint'
         ? `Sprint: corsa vera, in tempo reale, contro ${n === 2 ? 'un’auto' : n - 1 + ' auto'} dell’IA. Le auto accelerano da sole, tutte uguali: tu sterzi tenendo premuto a sinistra o a destra.`
-        : 'Giocate tutti sullo stesso telefono, a turno.';
+      : 'Giocate tutti sullo stesso telefono, a turno.';
   $('carN').textContent = n;
   $('carDots').innerHTML = R.carColors(n).map((c) => `<span style="--c:${c.hex}">${c.num}</span>`).join('');
   $('setupInfo').textContent = `Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
@@ -296,8 +296,10 @@ async function startRace(track, laps, n, mode = 'local') {
 // barra in alto: l'auto di turno per esteso, le altre compatte (numero, marcia, fermo)
 function chips() {
   $('chips').innerHTML = race.cars.map((c, i) => {
-    const col = COL[i], lap = Math.min(race.laps, R.currentLap(c)), turn = i === race.turn && race.phase !== 'over';
-    const st = (c.crash ? ` · fermo ${c.crash}` : '') + (net && net.auto[i] ? ' · auto' : '');
+    // online in gara si sceglie tutti insieme: evidenziate le auto che devono ancora scegliere
+    const together = netRacing(), chosen = together && netChosen(i);
+    const col = COL[i], lap = Math.min(race.laps, R.currentLap(c)), turn = together ? !c.crash && !chosen : i === race.turn && race.phase !== 'over';
+    const st = (c.crash ? ` · fermo ${c.crash}` : '') + (chosen ? ' · ✓ scelto' : '') + (net && net.auto[i] ? ' · auto' : '');
     // con una mossa scelta al primo tocco, la marcia mostrata è già quella nuova
     const gv = c.gear;
     if (!turn && !isAi() && !net) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${gv ? gv : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
@@ -310,9 +312,11 @@ function chips() {
 
 function refresh() {
   chips();
-  const car = race.cars[race.turn], col = COL[race.turn];
-  // online: quando non tocca a te guardi gli altri; quando tocca a te è come sullo stesso telefono
-  if (net && race.phase !== 'over' && race.turn !== net.mine) {
+  // online in gara: l'auto da guidare è sempre la tua (si sceglie tutti insieme)
+  const ci = netRacing() && net.mine >= 0 ? net.mine : race.turn;
+  const car = race.cars[ci], col = COL[ci];
+  // online: sulla linea si mette l'auto a turno; in gara scegli quando non hai ancora scelto, altrimenti guardi
+  if (net && race.phase !== 'over' && (race.phase === 'place' ? race.turn !== net.mine : !netCanChoose())) {
     scene.clearMarks();
     netHelp();
     if (race.phase === 'place' && !refresh.placed) { const f = race.track.finish; scene.focus({ x: (f.a.x + f.b.x) / 2, y: (f.a.y + f.b.y) / 2 }, true); refresh.placed = true; }
@@ -341,7 +345,7 @@ function refresh() {
     return;
   }
   helpTurn();
-  let opts = isAi() ? R.roundOptions(race, 0) : R.options(race);
+  let opts = isAi() ? R.roundOptions(race, 0) : net ? R.roundOptions(race, ci) : R.options(race);
   if (!opts.length) opts = [{ x: car.pos.x + car.dir.x, y: car.pos.y + car.dir.y, gear: 1, crash: true, stop: { ...car.pos } }];
   race.opts = opts;
   scene.showMarks(opts.map((o) => ({
@@ -385,14 +389,14 @@ async function play(list, ev) {
     if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
     // suoni: motore, gomme se si scala, botto all'arrivo se si sbatte, bip se si passa la linea (solo per la tua auto contro l'IA)
     const ms = 260 + Math.max(1, Math.hypot(car.pos.x - from.x, car.pos.y - from.y)) * 70;
-    if (!isAi() || i === 0) {
+    if (myCar(i)) {
       sfx.engine(opt.crash ? Math.max(1, prevGear) : opt.gear, ms);
       if (opt.crash || opt.gear < prevGear) sfx.skid(ms);
     }
     if (opt.crash) setTimeout(() => sfx.crash(), ms);
     if (ev.some((e) => e.type === 'line' && e.car === i)) setTimeout(() => sfx.line(), ms * 0.6);
-    // contro l'IA la telecamera segue sempre e solo la tua auto
-    return scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash, !isAi() || i === 0).then(() => {
+    // contro l'IA e online (auto che si muovono insieme) la telecamera segue sempre e solo la tua auto
+    return scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash, myCar(i)).then(() => {
       scene.addTrail(i, from, car.pos, car.path[car.path.length - 1].lap);
       scene.setGear(i, car.gear);
       scene.trailFade(i, R.currentLap(car));
@@ -400,7 +404,7 @@ async function play(list, ev) {
   }));
   chips();
   for (const e of ev) {
-    const c = COL[e.car], me = isAi() && e.car === 0;
+    const c = COL[e.car], me = (isAi() && e.car === 0) || (!!net && e.car === net.mine);
     if (e.type === 'crash') { await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${me ? 'Sei fermo' : c.name + ' fermo'} per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700); if (!isAi() || me) tut.show('crash'); }
     else if (e.type === 'line' && race.cars[e.car].progress > 1) { await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100); if (!isAi() || me) tut.show('lap'); }
     else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
@@ -443,15 +447,17 @@ async function pick(mark) {
   if (!mark) return;
   // online: la mossa va al server; si vede quando torna confermata (la stessa per tutti i telefoni)
   if (net) {
-    if (race.turn !== net.mine || (race.phase !== 'place' && race.phase !== 'race')) return;
     if (race.phase === 'race') {
+      // in gara: scegli la tua mossa; le auto partono quando hanno scelto tutti
+      if (!netCanChoose()) return;
       const opt = race.opts && race.opts.find((o) => o.x === mark.x && o.y === mark.y);
       if (!opt) return;
-      scene.setGear(race.turn, opt.crash ? 0 : opt.gear);
-    } else if (!R.placeable(race).some((s) => s.x === mark.x && s.y === mark.y)) return;
+      scene.setGear(net.mine, opt.crash ? 0 : opt.gear);
+    } else if (race.phase !== 'place' || race.turn !== net.mine || !R.placeable(race).some((s) => s.x === mark.x && s.y === mark.y)) return;
     busy = true;
     scene.clearMarks();
-    $('rcHelp').textContent = 'Mossa inviata…';
+    sfx.tick(true);
+    $('rcHelp').textContent = race.phase === 'race' ? 'Mossa scelta: aspettiamo gli altri…' : 'Mossa inviata…';
     toApp('action', { kind: 'play', payload: { x: mark.x, y: mark.y } });
     return;
   }
@@ -703,9 +709,25 @@ function netLeft() {
 function netHelp() {
   if (!net || !race || race.phase === 'over' || busy) return;
   const left = netLeft(), t = left === null ? '' : ` · ${left} s`, i = race.turn;
-  if (i === net.mine) $('rcHelp').textContent = (race.phase === 'place' ? 'Tocca a te: metti la tua auto sulla linea' : 'Tocca a te: scegli dove andare') + t;
-  else $('rcHelp').textContent = `${race.phase === 'place' ? 'Mette l’auto' : 'Tocca a'} ${COL[i].raw}${t}` + (net.mine < 0 ? ' · stai guardando' : '');
+  if (race.phase === 'race') {
+    // si sceglie tutti insieme: chi manca ancora
+    const missing = race.cars.map((c, k) => k).filter((k) => !race.cars[k].crash && !netChosen(k)).map((k) => (k === net.mine ? 'tu' : COL[k].raw));
+    const who = missing.join(', ');
+    if (netCanChoose()) $('rcHelp').textContent = 'Scegli dove andare: le auto si muovono tutte insieme' + t;
+    else if (net.mine >= 0 && race.cars[net.mine].crash) $('rcHelp').textContent = 'Sei fermo per l’urto: questo giro lo salti' + (who ? ` · scelgono ${who}` : '') + t;
+    else if (net.mine >= 0) $('rcHelp').textContent = `Hai scelto: aspettiamo ${who || 'gli altri'}` + t;
+    else $('rcHelp').textContent = `Scelgono: ${who}${t} · stai guardando`;
+    return;
+  }
+  if (i === net.mine) $('rcHelp').textContent = 'Tocca a te: metti la tua auto sulla linea' + t;
+  else $('rcHelp').textContent = `Mette l’auto ${COL[i].raw}${t}` + (net.mine < 0 ? ' · stai guardando' : '');
 }
+// online in gara: le auto scelgono tutte insieme (il server dice solo chi ha già scelto, non cosa)
+const netRacing = () => !!(net && race && race.phase === 'race');
+const netChosen = (i) => !!(net && net.state.chosen && net.state.chosen[i]);
+const netCanChoose = () => netRacing() && net.mine >= 0 && !race.cars[net.mine].crash && !netChosen(net.mine);
+// la "tua" auto: contro l'IA la prima, online la tua (se guardi, la prima); sullo stesso telefono tutte
+const myCar = (i) => (isAi() ? i === 0 : net ? i === (net.mine >= 0 ? net.mine : 0) : true);
 setInterval(() => { if (net && race && !busy) netHelp(); }, 1000);
 function netOverButtons() {
   $('again2').hidden = !!net;
@@ -767,7 +789,7 @@ async function netSync() {
   const fresh = s.moves.length - net.seq, instant = fresh > 4; // entrando tardi le mosse vecchie si mettono subito
   while (net.seq < s.moves.length) {
     const e = s.moves[net.seq++], i = e.car;
-    net.auto[i] = !!e.auto;
+    if (e.kind !== 'round') net.auto[i] = !!e.auto;
     if (e.kind === 'place') {
       R.placeCar(race, { x: e.x, y: e.y });
       scene.placeCar(i, race.cars[i].pos, track.normal);
@@ -784,6 +806,26 @@ async function netSync() {
       }
       continue;
     }
+    if (e.kind === 'round') {
+      // un giro di mosse insieme: tutte le auto partono nello stesso momento
+      const from = race.cars.map((c) => ({ ...c.pos })), gears = race.cars.map((c) => c.gear), still = race.cars.map((c) => c.crash);
+      e.moves.forEach((o, k) => { if (o) net.auto[k] = !!(e.auto && e.auto[k]); });
+      const ev = R.applyRound(race, e.moves);
+      if (instant) continue;
+      busy = true;
+      scene.clearMarks();
+      const list = [];
+      e.moves.forEach((opt, k) => {
+        if (!opt || still[k]) return;
+        list.push({ i: k, from: from[k], opt, prevGear: gears[k] });
+        scene.setGear(k, opt.crash ? 0 : opt.gear);
+      });
+      const autos = e.moves.map((o, k) => (o && e.auto && e.auto[k] ? COL[k].name : null)).filter(Boolean);
+      if (autos.length) banner(`Guida il pilota automatico: ${autos.join(', ')}`, 900);
+      if (await play(list, ev)) { busy = false; return; }
+      continue;
+    }
+    // vecchio formato (una mossa alla volta), per le gare cominciate prima
     const car = race.cars[i], from = { ...car.pos }, prevGear = car.gear;
     const opt = { x: e.x, y: e.y, gear: e.gear, crash: e.crash, stop: e.stop };
     const ev = R.applyMove(race, opt);

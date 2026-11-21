@@ -4,10 +4,10 @@ import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComp
 import { RenderPass } from '../vendor/three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
-import { N, HALF, frame, at, buildWorld, drawTrack, rnd } from './world.js?v=1';
-import { Car, drive, aiInput, bump, Shots } from './cars.js?v=1';
-import { FX } from './fx.js?v=1';
-import { Sfx } from './sound.js?v=1';
+import { N, HALF, frame, at, buildWorld, drawTrack, rnd } from './world.js?v=63baabd3ac';
+import { Car, drive, aiInput, bump, Shots } from './cars.js?v=d925ed95d3';
+import { FX } from './fx.js?v=71299909a6';
+import { Sfx } from './sound.js?v=b410393548';
 
 const $ = (id) => document.getElementById(id);
 const LAPS = 3;

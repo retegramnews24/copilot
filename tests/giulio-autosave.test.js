@@ -1,0 +1,6 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+const html=readFileSync('public/arcade/giulio-simulator.html','utf8'),code=readFileSync('public/giulio/line.js','utf8')+'\nlet lookYaw=0,lookPitch=0;function setLook(y,p){lookYaw=y;lookPitch=p}function resize(){}\n'+readFileSync('public/giulio/cab.js','utf8')+'\nwindow.qa={get:()=>({train,mode,lookYaw,lookPitch}),change:()=>{train.s=420;train.elapsed=30;selectedWeather="wet";train.weather="wet";setLook(.4,.1);setOverlay("run")}}';
+function boot(saved){const dom=new JSDOM(html,{url:'https://test/',runScripts:'outside-only'});const w=dom.window;w.requestAnimationFrame=()=>0;w.setInterval=()=>0;if(saved)w.localStorage.setItem('binottoland-giulio-run-v1',saved);w.eval(code);return dom}
+let d=boot();d.window.qa.change();d.window.dispatchEvent(new d.window.Event('pagehide'));const saved=d.window.localStorage.getItem('binottoland-giulio-run-v1');assert(saved);d.window.close();d=boot(saved);const restored=d.window.qa.get();assert.equal(restored.mode,'paused');assert.equal(restored.train.s,420);assert.equal(restored.train.elapsed,30);assert.equal(restored.train.weather,'wet');assert.equal(restored.lookYaw,.4);d.window.close();console.log('PASS Giulio: run, weather and view restored in paused mode after exit.');

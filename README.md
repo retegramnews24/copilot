@@ -10,9 +10,10 @@ Gira su Cloudflare Workers (Worker `binottoland-motore`, Durable Objects con SQL
 | --- | --- |
 | Accesso, sessioni, pubblicazione e conservazione dello stato | [docs/accesso.md](docs/accesso.md) |
 | Giochi da tavolo: scacchi, Dama italiana, Forza 4, UNO, Scarabeo, Battaglia navale, Briscola, Scopa; avversari AI, tornei e classifica | [docs/giochi-da-tavolo.md](docs/giochi-da-tavolo.md) |
-| Labyrinth · spedizioni multiplayer in prima persona | [docs/labyrinth.md](docs/labyrinth.md) |
+| Labyrinth · spedizioni multiplayer in prima persona (ritirato: non compare più nella pagina Giochi) | [docs/labyrinth.md](docs/labyrinth.md) |
 | Golf with your gay friends | [docs/golf.md](docs/golf.md) |
 | Moto Trial · platform 2D | [docs/moto-trial.md](docs/moto-trial.md) |
+| Acquedotto! · puzzle 3D con l'acqua | [docs/acquedotto.md](docs/acquedotto.md) |
 | Binotto Simulator · manager di scuderia | [docs/binotto-simulator.md](docs/binotto-simulator.md), [docs/circuit-pits.md](docs/circuit-pits.md) |
 | Cinema Streamer | [docs/cinema.md](docs/cinema.md) |
 | Radio | [docs/radio.md](docs/radio.md) |
@@ -23,7 +24,7 @@ Gira su Cloudflare Workers (Worker `binottoland-motore`, Durable Objects con SQL
 - Lobby: in cima "Adesso" (tocca a te, chi ti aspetta, sale Cinema/Blackboard attive), poi tavoli, chat comune (ultimi 100 messaggi) e persone online in una riga di avatar. Le sezioni Cinema e Blackboard compaiono solo con sale aperte.
 - Giochi: "I tuoi giochi" (preferiti ☆ e recenti, salvati sul dispositivo), classifica storica, poi Giochi da tavolo, Arcade e sport, Simulatori e sfide, Guarda e crea insieme. Ogni gioco ha un colore proprio (`public/games-catalog.js`).
 - Settings: Aspetto con anteprima dal vivo di interfaccia, scacchiera e pezzi; Profilo (personaggio e pallina); Preferenze (suoni nei giochi, vibrazione quando tocca a te, dimensione del testo); Le mie partite archiviate; Informazioni (privacy e regolamenti); Segnala un problema (condivide in Telegram il registro degli ultimi eventi, senza token).
-- Modalità sviluppatore: cinque tocchi sulla versione in Informazioni. Mostra la pagina Debug (stato, storico, terminale eventi) e il Dev Mode di Labyrinth.
+- Modalità sviluppatore: cinque tocchi sulla versione in Informazioni. Mostra la pagina Debug (stato, storico, terminale eventi).
 - Radio: controllo compatto con stazioni, preferiti e volume personali. L'audio resta nello stesso documento durante la navigazione; gli stream sono caricati direttamente dal dispositivo. La selezione radio viene caricata su richiesta da Radio Browser, con host alternativi, riprendendo il funzionamento del progetto DABradio.
 
 ## Sviluppo

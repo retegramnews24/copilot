@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#263543">
+<title>Moto Trial · Binottoland</title>
+<link rel="stylesheet" href="./style.css?v=b12dcff9b3">
+</head>
+<body>
+<canvas id="trail" aria-label="Percorso Moto Trial" tabindex="0"></canvas>
+<header class="hud">
+  <button id="exit" type="button" aria-label="Torna a Binottoland">← <span>Giochi</span></button>
+  <div class="metrics">
+    <strong id="section">1 / 5</strong>
+    <span aria-hidden="true">·</span>
+    <span id="time">0:00</span>
+  </div>
+  <div class="hud-buttons"><button id="sound" type="button" aria-label="Audio del gioco" aria-pressed="true">♫</button><button id="pause" type="button" aria-label="Metti in pausa">Ⅱ</button></div>
+</header>
+<p id="race-status" hidden></p>
+<p id="cue" hidden></p>
+<div id="controls" aria-label="Comandi della moto" hidden>
+  <div class="control-pair">
+    <button type="button" data-hold="left" aria-label="Inclina a sinistra"><b>↶</b><small>Inclina</small></button>
+    <button type="button" data-hold="right" aria-label="Inclina a destra"><b>↷</b><small>Inclina</small></button>
+  </div>
+  <button type="button" id="turn" aria-label="Inverti la direzione della moto"><b>↔</b><small>Gira</small></button>
+  <div class="control-pair">
+    <button type="button" data-hold="brake"><b>▰</b><small>Frena</small></button>
+    <button type="button" data-hold="throttle"><b>▲</b><small>Gas</small></button>
+  </div>
+</div>
+<p id="key-hints" hidden><kbd>↑</kbd> Gas <kbd>↓</kbd> Freno <kbd>←</kbd> <kbd>→</kbd> Bilancia <kbd>Spazio</kbd> Gira</p>
+<div id="menu" class="overlay">
+  <section class="panel" aria-labelledby="title">
+    <p class="eyebrow">BINOTTOLAND <span>·</span> PLATFORM 2D</p>
+    <h1 id="title">Moto Trial</h1>
+    <small id="course-summary"></small>
+    <p id="description">Attraversa il canyon, scendi dalle rampe e inverti la marcia quando atterri sul tornante. Bilancia la moto sulle rampe per evitare di ribaltarti.</p>
+    <p id="intro-controls"><span class="desktop-help">Tieni premuto <strong>↑ o W</strong> per accelerare. <strong>Spazio</strong> gira la moto.</span><span class="touch-help">Dopo <strong>Parti</strong>, tieni premuto <strong>Gas</strong>. Tocca <strong>Gira</strong> per cambiare direzione.</span></p>
+    <button id="primary" type="button">Parti</button>
+  </section>
+</div>
+<script type="module" src="./game.js?v=27ab102783"></script>
+</body>
+</html>

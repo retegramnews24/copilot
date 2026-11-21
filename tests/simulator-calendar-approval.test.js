@@ -1,0 +1,27 @@
+import assert from 'node:assert/strict';
+import {initial,act,advance,view,nextAlarm} from '../simulator/engine.js';
+const now=Date.parse('2026-11-12T12:00Z');let s=initial(now);
+for(const id of ['1','2','3']){act(s,{id,name:id},{action:'create'},now);s.teams[id].enrolled=true;}
+const action=(id,b,at=now)=>act(s,{id},b,at), state=id=>view(s,{id},now).approval;
+const p={action:'proposal',days:[0,1,2,3,4,5,6],times:['21:00'],start:'2026-11-13'};
+action('1',p);const first=s.proposals[0].id;
+assert.throws(()=>action('2',{action:'calendar-ready',ready:true}),/Accetta/);
+assert.throws(()=>action('2',{action:'calendar-start'}),/Tutti/);
+action('1',{action:'vote',proposal:first});action('1',{action:'calendar-ready',ready:true});assert(state('1').ready);
+action('1',{action:'calendar-ready',ready:false});assert(!state('1').ready);
+action('2',{...p,times:['22:00']});const other=s.proposals[1].id;
+action('1',{action:'calendar-ready',ready:true});action('1',{action:'vote',proposal:other});assert(!state('1').ready);
+action('1',{action:'vote',proposal:first});action('1',{action:'calendar-ready',ready:true});action('1',p);assert(!state('1').ready);assert(!s.votes['1']);
+const id=s.proposals.find(p=>p.author==='1').id;
+for(const user of ['1','2','3'])action(user,{action:'vote',proposal:id});assert.equal(s.schedule,null);assert.equal(nextAlarm(s,now),null);
+for(const user of ['1','2'])action(user,{action:'calendar-ready',ready:true});assert(!state('1').allReady);
+action('3',{action:'calendar-ready',ready:true});assert(state('1').allReady);assert.equal(s.schedule,null);
+assert.throws(()=>action('1',{action:'calendar-ready',ready:false}),/Tutti pronti/);
+assert.throws(()=>action('1',{action:'vote',proposal:other}),/Tutti pronti/);
+assert.throws(()=>action('1',p),/Tutti pronti/);
+action('1',{action:'calendar-start'});action('1',{action:'calendar-start'});assert.equal(state('1').startCount,1);
+s=JSON.parse(JSON.stringify(s));assert(state('1').started);assert(!state('2').started);
+const expired=structuredClone(s);advance(expired,expired.proposals.find(p=>p.id===id).dates[0]-29*60000);assert(!view(expired,{id:'1'},now).approval.allReady);assert.equal(expired.schedule,null);
+action('2',{action:'calendar-start'});assert.equal(s.schedule,null);action('3',{action:'calendar-start'});assert.equal(s.schedule.dates.length,13);assert.equal(s.schedule.participants.length,3);assert(nextAlarm(s,now)>now);
+assert.throws(()=>action('3',{action:'calendar-start'}),/non disponibile/);
+console.log('PASS calendar: separate acceptance/readiness/start, withdrawal, revote, reformulation, frozen final consent, restart, expired recovery and exactly-once activation.');

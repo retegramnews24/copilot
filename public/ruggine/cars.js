@@ -1,6 +1,6 @@
 // Le auto di Ruggine 89: modelli 3D (telaio, roll-bar, ruote che girano e sterzano), guida arcade, avversari, colpi.
 import * as THREE from 'three';
-import { N, HALF, WALL, at, frame, nearest } from './world.js?v=1';
+import { N, HALF, WALL, at, frame, nearest } from './world.js?v=63baabd3ac';
 
 const box = new THREE.BoxGeometry(1, 1, 1);
 const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.36, 18); wheelGeo.rotateX(Math.PI / 2);

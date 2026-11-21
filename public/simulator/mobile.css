@@ -1,0 +1,342 @@
+/* Binotto Simulator on phones (html.compact, set by app.js).
+   One column, natural sizes, the page scrolls; nothing is scaled down or dragged.
+   Space: Telegram's fixed buttons and Android's bars come from --inset-* (applySimulatorInsets). */
+
+html.compact,
+html.compact body {
+  height: 100%;
+  overflow: hidden;
+}
+html.compact #app {
+  display: flex;
+  flex-direction: column;
+  height: var(--simulator-height, 100dvh);
+  max-height: none;
+  padding: var(--inset-top) var(--inset-right) 0 var(--inset-left);
+  font-size: 15px;
+}
+html.compact #app > header {
+  flex: none;
+  min-height: 50px;
+  padding: 6px 10px;
+  gap: 8px;
+}
+html.compact #app > header .brand small,
+html.compact #app > header .brand-icon {
+  display: none;
+}
+html.compact #app > header .brand b {
+  font-size: 14px;
+}
+html.compact #app > header .header-team {
+  font-size: 12px;
+  line-height: 1.2;
+}
+html.compact #app > header .header-team strong {
+  font-size: 15px;
+}
+html.compact #app > nav {
+  flex: none;
+  height: auto;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px 8px 6px;
+}
+html.compact #app > nav button {
+  min-height: 38px;
+  padding: 4px 2px;
+  font-size: 13px;
+}
+/* The only scrolling area: the page content, with room for Android's gesture bar. */
+html.compact #app > #main {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  display: block;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 8px 10px calc(16px + var(--inset-bottom));
+}
+
+/* Every layout becomes a single column with natural heights. */
+html.compact
+  #main
+  :is(
+    .paddock,
+    .team-layout,
+    .box-workspace,
+    .championship-layout,
+    .session-layout,
+    .session-stage,
+    .race-top,
+    .driver-controls,
+    .two,
+    .grid,
+    .market-grid,
+    .session-drivers,
+    .stats,
+    .form-grid
+  ) {
+  display: block;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  grid-template-columns: none;
+  grid-template-rows: none;
+}
+html.compact
+  #main
+  :is(
+    .paddock,
+    .team-layout,
+    .box-workspace,
+    .championship-layout,
+    .session-layout,
+    .race-top,
+    .driver-controls,
+    .session-drivers,
+    .two,
+    .grid,
+    .market-grid
+  )
+  > * {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0 0 10px;
+  overflow: visible;
+}
+html.compact #main :is(.scroll-card, .scroll-body, .fit-panel, .live-card, .session-car, .community-panel) {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+html.compact #main .split {
+  display: none !important;
+}
+html.compact #main .sub-hidden {
+  display: none !important;
+}
+/* Small grids that read well side by side even on a phone. */
+html.compact #main :is(.stats, .telemetry) {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+html.compact #main .form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+html.compact #main .stint-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+/* Sub-menu inside a section. */
+html.compact .subnav {
+  position: sticky;
+  top: -8px;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  margin: -8px -10px 10px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+html.compact .subnav button {
+  flex: 1;
+  min-height: 36px;
+  padding: 4px 6px;
+  font-size: 13.5px;
+  border-radius: 18px;
+}
+html.compact .subnav button[aria-selected='true'] {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: var(--bg);
+  font-weight: 800;
+}
+
+/* Track: a fixed, comfortable height on the Pista tab. */
+html.compact #main .track-wrap {
+  position: relative;
+  height: min(62vh, 520px);
+  min-height: 260px;
+  margin-bottom: 10px;
+}
+html.compact #main .track-wrap canvas {
+  width: 100%;
+  height: 100%;
+}
+html.compact #main .track-help {
+  display: none;
+}
+
+/* Readable text: no size below 12px, inputs at 16px (no zoom on focus). */
+html.compact #app :is(p, li, .feed-item, .chat-message p, .notice, .hint, .muted) {
+  font-size: 14px;
+  line-height: 1.4;
+}
+html.compact #app :is(small, .tag, .eyebrow, .role, output, .pill) {
+  font-size: 12px;
+  line-height: 1.35;
+}
+html.compact #app label {
+  font-size: 13px;
+}
+html.compact #app :is(input, select, textarea) {
+  font-size: 16px;
+  min-height: 40px;
+}
+html.compact #app button {
+  font-size: 14px;
+  min-height: 40px;
+}
+html.compact #app :is(h2) {
+  font-size: 21px;
+}
+html.compact #app :is(h3) {
+  font-size: 16.5px;
+}
+html.compact #app .stats b,
+html.compact #app .telemetry b,
+html.compact #app .metric {
+  font-size: 16px;
+}
+html.compact
+  #app
+  .live-card
+  :is(small, .stint-plans, .stint-plans > small, [data-save-status], .live-actions small) {
+  font-size: 12px;
+}
+html.compact #app .hero-card h2 {
+  font-size: 30px;
+}
+html.compact #app .hero-card {
+  min-height: 260px;
+}
+html.compact #app dialog {
+  width: min(640px, calc(100vw - 20px));
+  max-height: calc(var(--simulator-height, 100dvh) - var(--inset-top) - var(--inset-bottom) - 20px);
+  padding: 18px;
+}
+
+/* Header on one row: back, title, balance, rules, fullscreen. */
+html.compact #app > header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  grid-template-columns: none;
+}
+html.compact #app > header .brand {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html.compact #app > header :is(.connected, #sync, #team-name) {
+  display: none;
+}
+html.compact #app > header .header-team {
+  flex: none;
+  margin: 0;
+  text-align: right;
+}
+html.compact #app > header .icon {
+  flex: none;
+  width: 38px;
+  min-height: 38px;
+  padding: 0;
+}
+/* Live classification: readable names on phones. */
+html.compact #app .leader {
+  min-height: 46px;
+  padding: 6px 8px;
+}
+html.compact #app .leader b {
+  font-size: 14px;
+}
+html.compact #app .leader small {
+  font-size: 12px;
+}
+html.compact #app .leader > span:last-child {
+  font-size: 12.5px;
+}
+
+/* Evento: one column, natural heights; wide tables scroll sideways inside their card. */
+html.compact #main :is(.event-workspace, #event-live, .event-extra) {
+  display: block;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  grid-template-columns: none;
+  grid-template-rows: none;
+}
+html.compact #main :is(#event-live, .event-extra) > * {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0 0 10px;
+  overflow: visible;
+}
+html.compact #main table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+html.compact #main :is(th, td) {
+  padding: 6px 8px;
+}
+html.compact #main .event-panels {
+  display: block;
+  height: auto;
+}
+html.compact #main .event-panels > * {
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  margin: 0 0 10px;
+  overflow: visible;
+}
+html.compact #main table :is(td, th, small, b, span) {
+  font-size: 13px;
+}
+
+/* "?" stays a small circle: the generic phone button size must not stretch it. */
+html.compact #app .help-btn {
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 50%;
+  flex: none;
+}
+html.compact #app .help-caption {
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+/* Track fills the remaining height (set from app.js); touch pans and pinches the map. */
+html.compact #main .track-wrap canvas {
+  touch-action: none;
+}
+
+html.compact #app .subnav button[aria-selected='true'],
+html.compact #app .subnav button[aria-selected='true']:is(:hover, :focus, :focus-visible, :active) {
+  background: var(--teal) !important;
+  border-color: var(--teal) !important;
+  color: var(--bg) !important;
+  font-weight: 800;
+}

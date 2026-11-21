@@ -1,4 +1,4 @@
-import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,pose,act,snapshot,expeditionSummary,participants,ensureKeycards,zoneDeadline,STALE,GRACE} from './expedition-model.js';
+import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,pose,act,snapshot,expeditionSummary,participants,ensureKeycards,STALE,GRACE} from './expedition-model.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export class ExpeditionRoom{
  constructor(ctx,env,tag){this.ctx=ctx;this.env=env;this.tag=tag;this.state=null;this.lastSave=0;this.lastBroadcast=0;this.arenaRecorded=false}
@@ -15,7 +15,7 @@ export class ExpeditionRoom{
  const path=s.deleted?'/lobby/remove':'/lobby/update';
  await lobby.fetch(new Request('https://internal'+path,{method:'POST',body:JSON.stringify(expeditionSummary(s))}));
  }
- async schedule(){const s=this.state;const deadlines=!s||s.archived||s.deleted?[]:participants(s).map(p=>Math.min(p.standsUntil??Infinity,p.online?p.lastSeen+STALE:(p.offlineAt??Date.now())+GRACE));if(s?.arenaMatch?.result?.winner&&!this.arenaRecorded)deadlines.push(Date.now()+2500);const zone=s&&!s.deleted?zoneDeadline(s,Date.now()):null;if(zone)deadlines.push(zone);if(deadlines.length){const next=Math.max(Date.now()+50,Math.min(...deadlines));if(await this.ctx.storage.getAlarm()!==next)await this.ctx.storage.setAlarm(next)}else await this.ctx.storage.deleteAlarm()}
+ async schedule(){const s=this.state;const deadlines=!s||s.archived||s.deleted?[]:participants(s).map(p=>Math.min(p.standsUntil??Infinity,p.online?p.lastSeen+STALE:(p.offlineAt??Date.now())+GRACE));if(s?.arenaMatch?.result?.winner&&!this.arenaRecorded)deadlines.push(Date.now()+2500);if(deadlines.length){const next=Math.max(Date.now()+50,Math.min(...deadlines));if(await this.ctx.storage.getAlarm()!==next)await this.ctx.storage.setAlarm(next)}else await this.ctx.storage.deleteAlarm()}
  async broadcast(force=true){const now=Date.now();if(!force&&now-this.lastBroadcast<110)return;this.lastBroadcast=now;const tag=await this.tag(),message=JSON.stringify({type:'state',state:snapshot(this.state),serverTime:now});for(const ws of this.ctx.getWebSockets()){try{if(ws.deserializeAttachment()?.accessTag!==tag){ws.close(4001,'Riapri la Mini App');continue}ws.send(message)}catch{}}}
  async fetch(req){return this.ctx.blockConcurrencyWhile(async()=>{try{
  const path=new URL(req.url).pathname,user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');let s=await this.load(),now=Date.now();
@@ -43,7 +43,7 @@ export class ExpeditionRoom{
   if(result==='level')await this.index();
   await this.broadcast(important);return
  }
- if(b.type==='action'&&Number.isSafeInteger(b.request)){const prior=s.arenaMatch?.result;act(s,p,b,now,{travel:this.env.LAB_TRAVEL==='true'});await this.save();if(prior!==s.arenaMatch?.result||b.kind!=='strike'&&b.kind!=='appearance')await this.index();await this.schedule();await this.broadcast();ws.send(JSON.stringify({type:'ack',request:b.request,ok:true}));}
+ if(b.type==='action'&&Number.isSafeInteger(b.request)){const prior=s.arenaMatch?.result;act(s,p,b,now);await this.save();if(prior!==s.arenaMatch?.result||b.kind!=='strike'&&b.kind!=='appearance')await this.index();await this.schedule();await this.broadcast();ws.send(JSON.stringify({type:'ack',request:b.request,ok:true}));}
  }catch(e){try{const b=JSON.parse(message);ws.send(JSON.stringify({type:'ack',request:b.request,ok:false,error:e.message}));ws.send(JSON.stringify({type:'state',state:snapshot(s)}))}catch{}}})}
  async close(ws){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load(),a=ws.deserializeAttachment();if(!s||a.watch)return;disconnectPlayer(s,a.id,a.connection,Date.now());await this.save();await this.index();await this.schedule();await this.broadcast()})}
  async alarm(){return this.ctx.blockConcurrencyWhile(async()=>{const s=await this.load();if(!s)return;if(sweep(s,Date.now())){await this.save();await this.index();await this.broadcast()}else if(s.arenaMatch?.result?.winner&&!this.arenaRecorded)await this.index();await this.schedule()})}

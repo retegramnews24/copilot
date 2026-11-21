@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+const dom=new JSDOM('<main><section class="session-car" style="padding:6px"><form><input name="fuel" value="42"></form><p>Telemetry</p></section></main>',{url:'https://test',runScripts:'outside-only'}),w=dom.window;
+const frames=[];w.requestAnimationFrame=cb=>frames.push(cb);w.eval(readFileSync('public/simulator/cockpit.js','utf8').replace(/export /g,'')+';window.qa={fitPanel,installCockpit}');
+const el=w.document.querySelector('.session-car'),input=el.querySelector('input');Object.defineProperties(el,{clientWidth:{value:192},clientHeight:{value:250}});
+const stop=w.qa.installCockpit(w.document.querySelector('main'));frames.shift()();await Promise.resolve();assert.equal(el.querySelector('input'),input,'fit preserves actual form nodes and values');assert.equal(input.value,'42');assert.equal(el.querySelectorAll('.cockpit-content').length,1);
+const content=el.querySelector('.cockpit-content');Object.defineProperties(content,{scrollHeight:{get(){return 650*Math.sqrt(180/parseFloat(content.style.width));}},scrollWidth:{get(){return parseFloat(content.style.width);}}});
+w.qa.fitPanel(content,180,238);let scale=Number(content.dataset.scale);assert(scale>0&&scale<1);assert(content.scrollHeight*scale<=239);assert(content.scrollWidth*scale<=181);
+w.qa.fitPanel(content,1000,900);assert.equal(Number(content.dataset.scale),1,'ample desktop space must not shrink content');
+input.value='55';input.dispatchEvent(new w.Event('input',{bubbles:true}));content.querySelector('p').textContent='Fresh telemetry';await Promise.resolve();while(frames.length)frames.shift()();assert.equal(el.querySelector('input'),input);assert.equal(input.value,'55');assert.equal(el.querySelectorAll('.cockpit-content').length,1);
+stop();dom.window.close();console.log('PASS cockpit fit: bounds, restored full scale, node identity and edits preserved during live updates.');

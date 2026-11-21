@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Acquedotto!</title>
+<style>
+  :root{--top:max(env(safe-area-inset-top),calc(var(--system-safe-top,0px) + var(--content-safe-top,0px)));--bottom:max(env(safe-area-inset-bottom),calc(var(--system-safe-bottom,0px) + var(--content-safe-bottom,0px)))}
+  html,body{margin:0;height:100%;overflow:hidden;background:#6e5038;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-user-select:none;user-select:none;touch-action:none}
+  canvas{display:block;width:100vw;height:100vh}
+  #hud{position:fixed;top:calc(10px + var(--top));left:10px;right:10px;display:flex;justify-content:center;align-items:center;gap:6px;pointer-events:none;flex-wrap:wrap}
+  .pill{background:rgba(25,20,15,.62);color:#fff;padding:6px 12px;border-radius:999px;font-weight:600;font-size:14px;backdrop-filter:blur(6px);white-space:nowrap}
+  .back{pointer-events:auto;text-decoration:none;margin-right:auto}
+  #hint{position:fixed;top:calc(54px + var(--top));left:16px;right:16px;text-align:center;color:#fff6e8;font-size:14px;font-weight:500;text-shadow:0 1px 3px rgba(0,0,0,.5);transition:opacity .6s;pointer-events:none}
+  #bar{position:fixed;bottom:calc(14px + var(--bottom));left:0;right:0;display:flex;justify-content:center;gap:10px}
+  button{border:0;border-radius:14px;padding:12px 18px;font-size:16px;font-weight:600;background:#fff;color:#3a2a1c;box-shadow:0 3px 10px rgba(0,0,0,.25);cursor:pointer}
+  button:active{transform:translateY(1px)}
+  #win{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,15,10,.35)}
+  #win[hidden]{display:none}
+  .card{background:#fff;border-radius:20px;padding:22px 26px;text-align:center;max-width:300px;margin:16px;box-shadow:0 10px 40px rgba(0,0,0,.3);animation:pop .4s cubic-bezier(.2,1.6,.4,1)}
+  .card h2{margin:0 0 4px;color:#1769b8}
+  .card .stars{font-size:34px;letter-spacing:4px;margin:4px 0 8px}
+  .card p{margin:0 0 16px;color:#345}
+  .card button{background:#1d8ae8;color:#fff}
+  .icon #hud,.icon #hint,.icon #bar,.icon #win{display:none}
+  @keyframes pop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+</style>
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+<script type="module" src="bridge.js?v=5ed8f73cf5"></script>
+<script type="module" src="acquedotto.js?v=5958ff386d"></script>
+</head>
+<body>
+<canvas id="c" aria-label="Tabellone di Acquedotto!"></canvas>
+<div id="hud"><a class="pill back" data-arcade-back href="/">← Giochi</a><div class="pill" id="lvl">Livello 1</div><div class="pill" id="moves">Mosse 0</div><div class="pill" id="starsHud">💧 0/0</div></div>
+<div id="hint">Gira le tessere e porta l'acqua al vaso. Passa dalle gocce d'oro!</div>
+<div id="bar"><button id="tap" type="button">🚰 Apri</button><button id="reset" type="button">↺ Ricomincia</button><button id="mute" type="button" aria-label="Audio">🔊</button></div>
+<div id="win" hidden><div class="card"><h2>Ce l'hai fatta!</h2><div class="stars" id="winStars"></div><p id="winTxt"></p><button id="next" type="button">Livello successivo →</button></div></div>
+</body>
+</html>

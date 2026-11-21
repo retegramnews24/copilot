@@ -1,4 +1,4 @@
-import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,SWORD_ARMOURED_DAMAGE,FRAME_DAMAGE,arenaZone,outsideZone,ZONE_DAMAGE,crackAt,CRACK_DAMAGE,ZONE_TICK,ZONE_START,ZONE_SHRINK,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
+import {worldFor,floorState,itemsAt,pickup,drop,openDoor,putInHand,takeGear,hasPass,CLOTHES,SHOWCASE_GEAR,clearSlot,migrateInventory,equipment,takeDamage,strikeDamage,FRAME_DAMAGE,STANDS_WAIT,CROUCH_OFFSET,standsView} from './public/labyrinth/adventure.js';
 import {SPRING_HEIGHT,springAt} from './public/labyrinth/spring.js';
 import {crossedDoor,free,move,RADIUS} from './public/labyrinth/core.js';
 import {struckFrame,settledFrames,triggerFrames} from './public/labyrinth/traps.js';
@@ -42,37 +42,12 @@ export function joinExpedition(s,user,now){
  if(!p){if(s.entryLocked||s.showcaseOpen)fail('Ingressi chiusi: puoi assistere.');const list=Object.values(s.players);if(list.length>=MAX_PLAYERS)fail('Spedizione piena: puoi assistere.');const w=worldFor(s.seed,1);p=s.players[user.id]={id:user.id,name:user.name.slice(0,60),level:1,player:{...w.spawn,pitch:0,height:0},inventory:[],inventoryLayout:2,health:100,guard:false,backpack:false,swordTaken:false,appearance:clothes(),caseIndex:list.length,joined:now,online:false,counted:true,lastSeen:now,offlineAt:now,lastMove:now,seq:0};}
  p.counted=true;barrier(s);s.revision++;return p;
 }
-export const medalShield=p=>Math.min(.3,.1*(p.medals||0));
-function startArena(s,now=Date.now()){
+function startArena(s){
  if(s.arenaMatch||!s.showcaseOpen||s.archived)return;
  const members=participants(s);
  if(members.length>=2&&members.every(p=>p.online&&p.level===6&&!p.standsUntil)){
-  s.arenaMatch={roster:members.map(p=>p.id),result:null,startedAt:now};
+  s.arenaMatch={roster:members.map(p=>p.id),result:null};
  }
-}
-// Players of a live duel standing outside the shrinking zone lose ZONE_DAMAGE every ZONE_TICK (first second free).
-function zoneDamage(s,now){
- const match=s.arenaMatch;if(!match||match.result||s.archived)return false;
- const scale=arenaZone(match.startedAt,now),w=expeditionWorld(s,6);let changed=false;
- for(const id of match.roster){
-  const p=s.players[id];if(!p||p.eliminated||p.standsUntil||!p.online||p.level!==6)continue;
-  if(!outsideZone(w,p.player,scale)){if(p.zoneTick){delete p.zoneTick;changed=true}continue}
-  if(!p.zoneTick){p.zoneTick=now;changed=true;continue}
-  if(now-p.zoneTick<ZONE_TICK)continue;
-  p.zoneTick=now;changed=true;
-  const impact=takeDamage(p,'zone',ZONE_DAMAGE,now);
-  if(impact?.fatal){eliminate(p,w,now);settleArena(s)}
- }
- return changed;
-}
-// Next moment the server must check the zone without client messages (alarm), or null.
-export function zoneDeadline(s,now){
- const match=s.arenaMatch;if(!match||match.result||s.archived||!Number.isFinite(match.startedAt))return null;
- const begin=match.startedAt+ZONE_START,end=begin+ZONE_SHRINK;
- if(now<begin)return begin;
- const w=expeditionWorld(s,6),scale=arenaZone(match.startedAt,now);
- const outside=match.roster.some(id=>{const p=s.players[id];return p&&!p.eliminated&&p.online&&p.level===6&&outsideZone(w,p.player,scale)});
- return outside||now<end?now+ZONE_TICK:null;
 }
 function eliminate(p,w,now){
  p.eliminated=true;p.health=0;
@@ -100,7 +75,7 @@ export function sweep(s,now){if(s.archived||s.deleted)return false;let changed=f
  }
  if(p.online&&now-p.lastSeen>=STALE){p.online=false;p.guard=false;p.offlineAt=p.lastSeen+STALE;changed=true}
  if(!p.online&&p.counted&&now-(p.offlineAt??now)>=GRACE){const w=expeditionWorld(s,p.level),r=runFor(s,p);for(let i=p.inventory.length-1;i>=0;i--)if(p.inventory[i]!=='sword')drop(r,w,i,free(w,p.player.x,p.player.z)?p.player:w.spawn);p.counted=false;if(!p.eliminated&&s.arenaMatch?.roster.includes(p.id)&&!s.arenaMatch.result)eliminate(p,expeditionWorld(s,6),now);changed=true}
- }if(zoneDamage(s,now))changed=true;if(changed){barrier(s);if(s.arenaMatch?.result&&!participants(s).length)s.deleted=true;s.revision++}return changed}
+ }if(changed){barrier(s);if(s.arenaMatch?.result&&!participants(s).length)s.deleted=true;s.revision++}return changed}
 function relocate(p,position,now){
  p.player={height:0,pitch:0,...position};
  p.guard=false;
@@ -138,22 +113,14 @@ export function pose(s,p,b,now){
   impact=takeDamage(p,'frame',FRAME_DAMAGE,now);
   if(impact?.fatal){relocate(p,w.spawn,now);s.revision++;return 'warp'}
  }
- const crack=impact?null:crackAt(w,candidate,height);
- if(crack!==null&&!(p.crackHits??=[]).includes(crack)){
-  p.crackHits.push(crack);impact=takeDamage(p,'crack',CRACK_DAMAGE,now);
-  if(impact?.fatal){relocate(p,w.spawn,now);s.revision++;return 'warp'}
- }
- const cracked=crack!==null&&!!impact;
  if(floor.open&&crossedDoor(w,previous,candidate)){
-  // Race: the first to leave each floor (with at least two participants) earns a medal.
-  if(p.level<=5&&participants(s).length>=2&&!(s.floorWinners??={})[p.level]){s.floorWinners[p.level]={id:p.id,name:p.name};p.medals=(p.medals||0)+1}
   p.level++;relocate(p,expeditionWorld(s,p.level).spawn,now);barrier(s);s.revision++;
   return 'level';
  }
  p.player={...candidate,yaw,pitch};
  p.guard=b.guard===true;
  p.lastMove=now;
- if(triggered||frame||cracked){s.revision++;return 'trap'}
+ if(triggered||frame){s.revision++;return 'trap'}
  return Math.hypot(candidate.x-b.x,candidate.z-b.z)>.025?'clipped':true;
 }
 const near=(p,t,d)=>Math.hypot(p.player.x-t.x,p.player.z-t.z)<d;
@@ -177,11 +144,10 @@ function strike(s,p,w,floor,now){
   }
   if(!clear)continue;
   const guarded=other.guard&&now-other.lastMove<750&&facing(other,from);
-  // Each race medal lowers the damage taken by 10%, up to 30%.
-  const gear=equipment(other),raw=strikeDamage(kind,guarded,gear),damage=Math.round(raw*(1-medalShield(other)));
+  const gear=equipment(other),damage=strikeDamage(kind,guarded,gear);
   const impact=takeDamage(other,kind,damage,now,p.id);
   if(impact){
-   impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||raw===SWORD_ARMOURED_DAMAGE&&kind==='sword');
+   impact.guarded=!!guarded;impact.shielded=gear.shield&&(!!guarded||damage===2&&kind==='sword');
    if(impact.fatal){
     if(w.arena){
      if(s.arenaMatch?.roster.includes(other.id)){eliminate(other,w,now);settleArena(s)}
@@ -194,7 +160,7 @@ function strike(s,p,w,floor,now){
  return true;
 }
 function aimCard(p,t){return near(p,t,.38)||(p.player.pitch<-.35&&facing(p,t))}
-export function act(s,p,b,now,options={}){
+export function act(s,p,b,now){
  if(!p||!p.online||s.archived||s.deleted)fail('Non puoi agire in questa spedizione.');
  if(p.eliminated&&b.kind!=='appearance')fail('Sei stato eliminato. Puoi seguire dagli spalti.');
  if(p.standsUntil&&b.kind!=='appearance')fail('Sei sugli spalti. Attendi il rientro.');
@@ -218,18 +184,9 @@ export function act(s,p,b,now,options={}){
   Object.assign(p,{backpack:r.backpack,swordTaken:r.swordTaken,shieldTaken:r.shieldTaken,helmet:r.helmet,armor:r.armor});
  }
  }
- // Test environment only (LAB_TRAVEL=true): jump straight to a floor or the arena.
- else if(b.kind==='travel'){
-  if(!options.travel)fail('Selezione dei piani non disponibile.');
-  if(!Number.isInteger(b.level)||b.level<1||b.level>6)fail('Piano non valido.');
-  if(s.arenaMatch&&!s.arenaMatch.result)fail('La sfida è in corso.');
-  const slot=p.inventory.indexOf('key:'+p.level);if(slot>=0)drop(r,w,slot,p.player);
-  p.level=b.level;const next=expeditionWorld(s,p.level);
-  relocate(p,next.arena?{x:next.showcase.x,z:next.showcase.z+2.2,yaw:0}:next.spawn,now);barrier(s,now);
- }
  else if(b.kind==='appearance')p.appearance=clothes(b.appearance);
- else if(b.kind==='strike'){if(w.arena){startArena(s,now);if(s.arenaMatch?.result)fail('Il combattimento è concluso.');if(s.arenaMatch&&!s.arenaMatch.roster.includes(p.id))fail('La sfida è già iniziata.');}if(!strike(s,p,w,floorState(r,w),now))return false;}
+ else if(b.kind==='strike'){if(w.arena){startArena(s);if(s.arenaMatch?.result)fail('Il combattimento è concluso.');if(s.arenaMatch&&!s.arenaMatch.roster.includes(p.id))fail('La sfida è già iniziata.');}if(!strike(s,p,w,floorState(r,w),now))return false;}
  else fail('Azione non valida.');p.weapon=equipment(p).weapon;s.revision++;return true;
 }
-export function snapshot(s){return {room:s.room,number:s.number,seed:s.seed,revision:s.revision,created:s.created,archived:s.archived,deleted:s.deleted,entryLocked:s.entryLocked,showcaseOpen:s.showcaseOpen,arenaResult:s.arenaMatch?.result??null,arenaLive:!!s.arenaMatch&&!s.arenaMatch.result,arenaStartedAt:s.arenaMatch?.startedAt??null,floorWinners:s.floorWinners||{},floors:s.floors,cases:cases(s),players:Object.values(s.players).map(({connection,lastMove,...p})=>({...p,...equipment(p)})),grace:GRACE}}
+export function snapshot(s){return {room:s.room,number:s.number,seed:s.seed,revision:s.revision,created:s.created,archived:s.archived,deleted:s.deleted,entryLocked:s.entryLocked,showcaseOpen:s.showcaseOpen,arenaResult:s.arenaMatch?.result??null,arenaLive:!!s.arenaMatch&&!s.arenaMatch.result,floors:s.floors,cases:cases(s),players:Object.values(s.players).map(({connection,lastMove,...p})=>({...p,...equipment(p)})),grace:GRACE}}
 export function expeditionSummary(s){return {room:s.room,number:s.number,game:'labyrinth',archived:s.archived,arenaResult:s.arenaMatch?.result??null,phase:s.archived||s.arenaMatch?.result?'finished':s.entryLocked?'playing':'waiting',players:Object.values(s.players).filter(p=>!s.arenaMatch||s.arenaMatch.roster.includes(p.id)).map(p=>({id:'tg:'+p.id,name:p.name})),turn:0,revision:s.revision,created:s.created,expires:null,online:participants(s).filter(p=>p.online).length,arrived:participants(s).filter(p=>p.level===6).length,entryLocked:s.entryLocked}}
