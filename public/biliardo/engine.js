@@ -90,6 +90,18 @@ export function newGame(variant, players, opts = {}) {
   return m;
 }
 
+// Online a squadre (da 2 a 4 giocatori): i posti pari sono la squadra 0, i dispari la squadra 1.
+// Tocca a turno ai compagni: ogni volta che la squadra riprende il tavolo tira il compagno successivo
+// (come nel doppio di palla 8 e snooker); ptr = quale compagno per ciascuna squadra.
+export const teamSeats = (seats, side) => seats.filter((_, i) => i % 2 === side);
+export function shooterId(seats, ptr, side) {
+  const list = teamSeats(seats, side);
+  return list.length ? list[(ptr[side] || 0) % list.length] : null;
+}
+export function teamName(names) {
+  return names.length > 1 ? names.slice(0, -1).join(', ') + ' e ' + names[names.length - 1] : names[0] || 'Giocatore';
+}
+
 // Chi comincia (a caso in 2 giocatori e online)
 export function setStarter(m, pi) {
   m.cur = m.first = pi;

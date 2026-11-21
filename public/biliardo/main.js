@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=851b24b204';
-import { plan } from './ai.js?v=72423e284c';
+import * as E from './engine.js?v=f23fc1fa03';
+import { plan } from './ai.js?v=5b59c07863';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
@@ -59,6 +59,7 @@ const cfg = {
   guide: store.get('guide', '1') === '1',
   view: store.get('view', 'over'),
   sens: +store.get('sens', '100') / 100,
+  netPlayers: [2, 3, 4].includes(+store.get('np', '2')) ? +store.get('np', '2') : 2,
   bright: +store.get('bright', '75') / 100,
   charge: store.get('charge', 'normale'),
   quality: store.get('quality', /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? 'media' : 'alta'),
@@ -101,7 +102,11 @@ function players() {
   if (cfg.mode === '1') return [{ name: 'Tu' }, { name: 'Computer', cpu: true }];
   return [{ name: cfg.n1.trim() || 'Giocatore 1' }, { name: cfg.n2.trim() || 'Giocatore 2' }];
 }
-function targetOf(v) { return cfg.target[v] || (v === 'italiana' ? 50 : v === 'boccette' ? 30 : v === 'snooker' ? 6 : 0); }
+// valore scelto, se è uno di quelli ammessi; altrimenti quello predefinito (60 per i 5 birilli, 80 per le boccette)
+function targetOf(v) {
+  const ok = v === 'snooker' ? E.REDS : E.TARGETS[v] || [];
+  return ok.includes(cfg.target[v]) ? cfg.target[v] : v === 'snooker' ? 6 : E.DEFAULT_TARGET[v] || 0;
+}
 function gameOpts(v) { const t = targetOf(v); return v === 'snooker' ? { reds: t } : { target: t }; }
 
 function newGame() {
@@ -116,7 +121,12 @@ function newGame() {
 
 // ---------- turni ----------
 const cur = () => m.players[m.cur];
-const myTurn = () => (net ? net.seats.indexOf(me && me.player) === m.cur && net.phase === 'playing' : !cur().cpu);
+// online (anche a squadre): tocca a chi deve tirare per la squadra di turno; chi non è seduto guarda
+const shooterId = () => (net && net.seats ? E.shooterId(net.seats, net.ptr || [0, 0], m.cur) : null);
+const nameOfId = (id) => { const p = net && net.players.find((q) => q.id === id); return p ? p.name : ''; };
+const myTurn = () => (net ? !!me && shooterId() === me.player && net.phase === 'playing' : !cur().cpu);
+const mySide = () => (net && me ? net.seats.indexOf(me.player) % 2 : -1); // -1: spettatore (indexOf -1 → -1 % 2 = -1)
+const shooterName = () => (net ? nameOfId(shooterId()) || cur().name : cur().name);
 const cueBall = () => m.balls[E.cueId(m)];
 
 function aimAtNearest() {
@@ -131,7 +141,7 @@ function turn(changed) {
   hud();
   aimAtNearest();
   if (changed) {
-    const who = net ? (myTurn() ? 'Tocca a te' : `Tocca a ${cur().name}`) : cfg.mode === '1' ? (cur().cpu ? 'Tocca al computer' : 'Tocca a te') : `Tocca a ${cur().name}`;
+    const who = net ? (myTurn() ? 'Tocca a te' : `Tocca a ${shooterName()}`) : cfg.mode === '1' ? (cur().cpu ? 'Tocca al computer' : 'Tocca a te') : `Tocca a ${cur().name}`;
     banner(who);
     if (myTurn()) haptic('impact', 'medium');
   }
@@ -151,7 +161,7 @@ function hint() {
     else t = 'Tocca o trascina per mirare · ' + pull;
     if (what) t = what + ' · ' + t;
   } else if (phase === 'cpu' || phase === 'cpuAim') t = 'Il computer sta pensando…';
-  else if (phase === 'watch') t = `Tocca a ${cur().name}…`;
+  else if (phase === 'watch') t = `Tocca a ${shooterName()}…` + (net && mySide() < 0 ? ' · stai guardando' : '');
   $('hint').textContent = t;
   const can = phase === 'aim';
   $('power').classList.toggle('off', !can);
@@ -162,10 +172,10 @@ function hud() {
   m.players.forEach((p, i) => {
     const el = $('p' + i);
     el.classList.toggle('on', i === m.cur && !m.over);
-    const mine = net && net.seats[i] === (me && me.player);
+    const mine = net && mySide() === i;
     el.querySelector('.nm').innerHTML = '';
     el.querySelector('.nm').append(p.name);
-    if (mine) { const s = document.createElement('span'); s.className = 'me'; s.textContent = '(tu)'; el.querySelector('.nm').append(s); }
+    if (mine) { const s = document.createElement('span'); s.className = 'me'; s.textContent = net.seats.length > 2 ? '(la tua squadra)' : '(tu)'; el.querySelector('.nm').append(s); }
     const g = el.querySelector('.grp');
     g.innerHTML = '';
     if (m.variant === 'otto' && p.group) {
@@ -268,10 +278,10 @@ function gameOver() {
   hint();
   toApp('racing', { on: false });
   const w = m.players[m.winner];
-  const myWin = net ? net.seats[m.winner] === (me && me.player) : cfg.mode === '2' || !w.cpu;
+  const myWin = net ? mySide() === m.winner : cfg.mode === '2' || !w.cpu;
   if (myWin) { sfx.win(); haptic('notification', 'success'); } else sfx.foul();
   setTimeout(() => {
-    $('overT').textContent = net ? (myWin ? 'Hai vinto!' : `Vince ${w.name}`) : cfg.mode === '1' ? (w.cpu ? 'Ha vinto il computer' : 'Hai vinto!') : `Vince ${w.name}!`;
+    $('overT').textContent = net ? (myWin ? (net.seats.length > 2 ? 'Avete vinto!' : 'Hai vinto!') : `Vince ${w.name}`) : cfg.mode === '1' ? (w.cpu ? 'Ha vinto il computer' : 'Hai vinto!') : `Vince ${w.name}!`;
     const sc = m.variant === 'otto' ? '' : ` · ${m.scores[0]} a ${m.scores[1]}`;
     $('overS').textContent = (m.msg || '') + sc + ` · ${m.shots} colpi`;
     $('overAgain').hidden = !!net;
@@ -571,16 +581,22 @@ function showStart() {
   segOn('[data-l]', 'l', cfg.level);
   $('lvRow').hidden = cfg.mode !== '1';
   $('nameRow').hidden = cfg.mode !== '2';
+  $('netRow').hidden = cfg.mode !== 'net';
+  segOn('[data-np]', 'np', String(cfg.netPlayers));
+  const np = cfg.netPlayers;
   $('modeInfo').textContent = cfg.mode === '1' ? 'Giochi contro il computer.'
     : cfg.mode === '2' ? 'Due giocatori a turno sullo stesso telefono o PC.'
-      : embedded ? 'Partita online con un altro giocatore di Binottoland: compare negli avvisi e nella Lobby. 1 minuto a colpo, poi tira il pilota automatico.'
+      : embedded ? (np === 2 ? 'Partita online contro un altro giocatore di Binottoland'
+        : np === 3 ? 'Partita online a squadre, 2 contro 1: nella squadra da due i compagni tirano a turno'
+          : 'Partita online a squadre, 2 contro 2: i compagni tirano a turno, come nel doppio') +
+        ': compare negli avvisi e nella Lobby, chi arriva dopo guarda. 1 minuto a colpo, poi tira il pilota automatico.'
         : 'Online solo aprendo il gioco da Binottoland.';
-  // punteggio da raggiungere / rosse
+  // punteggio da raggiungere / rosse (gli stessi valori che accetta il motore)
   const v = cfg.variant, row = $('tgRow'), btns = $('tgBtns');
   row.hidden = v === 'otto';
   btns.innerHTML = '';
   $('tgLbl').textContent = v === 'snooker' ? 'Rosse' : 'Punti per vincere';
-  const opts = v === 'snooker' ? [6, 10, 15] : v === 'boccette' ? [20, 30, 50] : [30, 50, 80];
+  const opts = v === 'snooker' ? E.REDS : E.TARGETS[v] || [];
   for (const o of opts) {
     const b = document.createElement('button'); b.className = 'seg' + (o === targetOf(v) ? ' on' : ''); b.textContent = o;
     b.onclick = () => { cfg.target[v] = o; store.set('target', JSON.stringify(cfg.target)); showStart(); };
@@ -600,13 +616,14 @@ function showStart() {
 }
 document.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { cfg.mode = b.dataset.m; store.set('mode', cfg.mode); showStart(); }));
 document.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => { cfg.level = b.dataset.l; store.set('level', cfg.level); showStart(); }));
+document.querySelectorAll('[data-np]').forEach((b) => (b.onclick = () => { cfg.netPlayers = +b.dataset.np; store.set('np', b.dataset.np); showStart(); }));
 $('n1').oninput = () => { cfg.n1 = $('n1').value; store.set('n1', cfg.n1); };
 $('n2').oninput = () => { cfg.n2 = $('n2').value; store.set('n2', cfg.n2); };
 $('play').onclick = () => {
   if (cfg.mode !== 'net') return newGame();
   if (!me) return toast('Apri il gioco da Binottoland per giocare online.', true);
   toast('Apro la partita online…');
-  toApp('create', { variant: cfg.variant, ...gameOpts(cfg.variant) });
+  toApp('create', { variant: cfg.variant, players: cfg.netPlayers, ...gameOpts(cfg.variant) });
 };
 
 // impostazioni
@@ -687,11 +704,17 @@ function showWait(st) {
   phase = 'wait';
   $('start').hidden = true; $('hud').hidden = true; $('wait').hidden = false;
   const v = E.VARIANTS[st.variant];
-  $('waitT').textContent = `${v.name} online · sala ${st.number}`;
-  $('waitS').textContent = st.players.length < 2 ? 'Aspetto un avversario: la partita è negli avvisi e nella Lobby di Binottoland.' : 'Pronti!';
-  $('waitList').innerHTML = st.players.map((p) => `<li>${p.name.replace(/[<&>]/g, '')}${p.id === (me && me.player) ? ' (tu)' : ''}</li>`).join('');
+  const cap = st.capacity || 2, missing = cap - st.players.length;
+  $('waitT').textContent = `${v.name} online · sala ${st.number}` + (cap > 2 ? ` · ${cap === 3 ? '2 contro 1' : '2 contro 2'}` : '');
+  $('waitS').textContent = missing > 0
+    ? `Aspetto ${missing === 1 ? 'un giocatore' : missing + ' giocatori'}: la partita è negli avvisi e nella Lobby di Binottoland.` + (st.players.length >= 2 ? ' Chi l’ha creata può anche partire ora.' : '')
+    : 'Pronti!';
+  // squadre: posti in ordine di arrivo, 1° e 3° contro 2° e 4°
+  const esc = (s) => String(s).replace(/[<&>"]/g, '');
+  $('waitList').innerHTML = st.players.map((p, i) => `<li>${esc(p.name)}${p.id === (me && me.player) ? ' (tu)' : ''}${cap > 2 ? ` · squadra ${i % 2 ? 'B' : 'A'}` : ''}</li>`).join('');
   const owner = st.owner === (me && me.player);
   $('waitStart').hidden = !owner || st.players.length < 2;
+  $('waitStart').textContent = missing > 0 ? `Parti ora (${st.players.length})` : 'Parti';
   $('waitLeave').textContent = owner ? 'Chiudi la partita' : 'Esci';
   if (!m || m.variant !== st.variant) { m = E.newGame(st.variant, [{ name: 'A' }, { name: 'B' }], {}); stage(m); }
 }

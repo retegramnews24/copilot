@@ -25,9 +25,17 @@ export function tableNotice(user, game, number, room, summary = null) {
       ' auto, ' +
       summary.laps +
       (summary.laps === 1 ? ' giro)' : ' giri)');
-  // Biliardo: the specialty and the opponent wanted
-  if (game === 'biliardo' && summary?.variant)
-    where += ' · ' + (BILIARDO_NAMES[summary.variant] || 'Biliardo') + ' · cerca 1 giocatore';
+  // Biliardo: the specialty, the teams (3 = two against one, 4 = two against two) and the players wanted
+  if (game === 'biliardo' && summary?.variant) {
+    const cap = summary.capacity || 2;
+    where +=
+      ' · ' +
+      (BILIARDO_NAMES[summary.variant] || 'Biliardo') +
+      (cap === 3 ? ' · 2 contro 1' : cap === 4 ? ' · 2 contro 2' : '') +
+      ' · cerca ' +
+      (cap - 1) +
+      (cap === 2 ? ' giocatore' : ' giocatori');
+  }
   return {
     id: id(),
     notice: 'table',
@@ -413,10 +421,10 @@ export class LobbyHub {
               collisions: body.game === 'golf' ? body.collisions === true : undefined,
               // F1 on paper!: the drawn track, laps, time of day (the number of drivers is in the track)
               ...(body.game === 'f1' ? { track: body.track, laps: body.laps, time: body.time } : {}),
-              // Biliardo: the specialty, the points to win (5 birilli, boccette) or the reds (snooker)
-              // ("points", not "target": "target" is the tournament format of the other games)
+              // Biliardo: the specialty, the points to win (5 birilli, boccette) or the reds (snooker), and the
+              // players (2, or 3 / 4 in two teams). "points", not "target": that is the tournament format of other games
               ...(body.game === 'biliardo'
-                ? { variant: body.variant, target: body.points, reds: body.reds }
+                ? { variant: body.variant, target: body.points, reds: body.reds, players: body.players }
                 : {}),
               seed: body.game === 'moto-trial' ? 1 : crypto.getRandomValues(new Uint32Array(1))[0]
             })

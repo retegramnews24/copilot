@@ -1,5 +1,6 @@
 // Biliardo online: una partita per Durable Object ("biliardo:<room>"), stesso schema di F1 on paper! (f1-server.js).
-// Chi crea sceglie la specialità (palla 8, snooker, 5 birilli, boccette); l'altro entra dalla Lobby o dall'avviso.
+// Chi crea sceglie la specialità (palla 8, snooker, 5 birilli, boccette) e quanti giocatori (2, oppure 3 o 4 in due
+// squadre che si alternano al tavolo); gli altri entrano dalla Lobby o dall'avviso, chi arriva dopo guarda.
 // Il server tiene il tavolo e rifà ogni colpo con la stessa fisica e le stesse regole del gioco
 // (public/biliardo/engine.js): la fisica usa solo + − × ÷ e radice quadrata, quindi dà lo stesso risultato
 // al bit su ogni telefono. Ogni stato porta il tavolo prima del colpo, il colpo e il tavolo dopo:
@@ -34,7 +35,9 @@ export function makeMatch(room, number, user, now, body) {
     phase: 'waiting',
     created: now,
     revision: 1,
-    capacity: 2,
+    // 2 = uno contro uno; 3 = due contro uno; 4 = due contro due
+    capacity: [2, 3, 4].includes(body.players) ? body.players : 2,
+    ptr: [0, 0],
     owner: user.player,
     players: [{ id: user.player, name: String(user.name || 'Giocatore').slice(0, 40) }],
     seats: [],
@@ -70,8 +73,11 @@ export function startMatch(m, player, now) {
   if (m.phase !== 'waiting') throw Error('La partita è già cominciata.');
   if (player !== m.owner) throw Error('Solo chi ha creato la partita la fa partire.');
   if (m.players.length < 2) throw Error('Serve un avversario.');
-  m.seats = m.players.slice(0, 2).map((p) => p.id);
-  const names = m.seats.map((id) => ({ name: m.players.find((p) => p.id === id).name }));
+  // posti nell'ordine di arrivo: squadre alternate (1° e 3° contro 2° e 4°)
+  m.seats = m.players.slice(0, m.capacity).map((p) => p.id);
+  m.ptr = [0, 0];
+  const nameOf = (id) => m.players.find((p) => p.id === id).name;
+  const names = [0, 1].map((side) => ({ name: E.teamName(E.teamSeats(m.seats, side).map(nameOf)) }));
   m.match = E.newGame(m.variant, names, { ...m.opts, seed: m.seed });
   E.setStarter(m.match, m.seed % 2);
   m.phase = 'playing';
@@ -105,11 +111,14 @@ export function cleanShot(body) {
   return s;
 }
 
-const seatOf = (m, player) => m.seats.indexOf(player);
+// chi deve tirare adesso (id del giocatore)
+export const shooter = (m) => (m.match ? E.shooterId(m.seats, m.ptr || [0, 0], m.match.cur) : null);
 export function playMatch(m, player, body, now, auto = false) {
   if (m.phase !== 'playing') throw Error('La partita non è in corso.');
   const g = m.match;
-  if (!auto && seatOf(m, player) !== g.cur) throw Error('Non tocca a te.');
+  m.ptr = m.ptr || [0, 0];
+  if (!auto && !m.seats.includes(player)) throw Error('Stai guardando: non sei in questa partita.');
+  if (!auto && shooter(m) !== player) throw Error('Non tocca a te.');
   let input;
   if (auto) input = E.autoShot(g);
   else {
@@ -122,11 +131,14 @@ export function playMatch(m, player, body, now, auto = false) {
     if (input.qx !== undefined && !(g.acchito && E.canPlacePallino(g, input.qx, input.qz))) throw Error('Il pallino va messo oltre la linea di mezzeria.');
     if (input.call !== undefined && !E.onEight(g)) delete input.call;
   }
-  const seat = g.cur;
+  const seat = g.cur,
+    by = shooter(m);
   m.prev = clone(g);
   E.playShot(g, input);
-  m.last = { seat, input, ...(auto ? { auto: true } : {}) };
+  m.last = { seat, by, input, ...(auto ? { auto: true } : {}) };
   m.n++;
+  // la squadra lascia il tavolo: la prossima volta tira il compagno successivo
+  if (g.cur !== seat) m.ptr[seat] = (m.ptr[seat] || 0) + 1;
   // colpi del pilota automatico di fila: se nessuno gioca più (tre giri a testa) la partita finisce
   m.idle = auto ? m.idle + 1 : 0;
   const abandoned = m.idle >= 6;
@@ -135,8 +147,9 @@ export function playMatch(m, player, body, now, auto = false) {
     m.finished = now;
     m.turnAt = null;
     m.abandoned = !g.over;
-    const id = g.over && g.winner >= 0 ? m.seats[g.winner] : null;
-    m.winners = id ? m.players.filter((p) => p.id === id) : [];
+    // vince tutta la squadra
+    const ids = g.over && g.winner >= 0 ? E.teamSeats(m.seats, g.winner) : [];
+    m.winners = m.players.filter((p) => ids.includes(p.id));
   } else m.turnAt = now + TURN;
   m.revision++;
   return m.last;
@@ -166,7 +179,8 @@ export class BiliardoRoom {
       created,
       revision,
       capacity,
-      turn: m.match ? m.match.cur : 0,
+      // posto di chi tira (per il "Tocca a te" della campanella)
+      turn: m.match ? Math.max(0, m.seats.indexOf(shooter(m))) : 0,
       players: (m.seats.length ? m.seats.map((id) => m.players.find((p) => p.id === id)) : m.players).map(({ id, name }) => ({ id, name })),
       expires: null
     };

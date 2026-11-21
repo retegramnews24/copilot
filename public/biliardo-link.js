@@ -143,6 +143,7 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
         const result = await request('/api/create', {
           game: 'biliardo',
           variant: data.variant,
+          players: data.players, // 2, oppure 3 o 4 a squadre
           points: data.target, // la Lobby usa "target" per i tornei degli altri giochi
           reds: data.reds
         });
