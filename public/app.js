@@ -74,7 +74,7 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=811a7a7e6c');lobby3d=m.createLobby3D({me:()=>identity,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=69f203edfb');lobby3d=m.createLobby3D({me:()=>identity,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}}})}

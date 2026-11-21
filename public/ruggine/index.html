@@ -33,6 +33,7 @@
 <footer>
   <div id="brief"><b id="title">GP della Raffineria</b><span id="hint">Auto gialla · WASD o frecce per guidare · Spazio per sparare · Shift = nitro</span></div>
   <div class="tools">
+    <button id="exitB" type="button">Esci</button>
     <button id="viewB" title="Cambia vista">Vista</button>
     <button id="sndB" title="Audio">🔊</button>
     <button id="action" disabled>Caricamento</button>
@@ -42,6 +43,12 @@
   <span><button aria-label="Sinistra" data-key="left">◀</button><button aria-label="Destra" data-key="right">▶</button></span>
   <span><button data-key="fire">Colpo</button><button data-key="down">Freno</button><button data-key="up">Gas</button></span>
 </div>
+<script>
+document.getElementById('exitB').onclick=()=>{
+  if(parent!==window)parent.postMessage({type:'ruggine:exit'},location.origin);
+  else location.assign('../');
+};
+</script>
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
 <script type="module" src="main.js?v=205e82182c"></script>
 </body>

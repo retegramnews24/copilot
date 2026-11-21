@@ -3,6 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import * as THREE from 'three';
+import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
 import * as E from '../biliardo/engine.js?v=2db7d98a7f';
@@ -598,35 +599,65 @@ export function createLobby3D(app) {
   poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
   // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
-  const velvet=std('#862c43',.94), piping=std('#ab5860',.85), cinemaWall=std('#34232d',.96);
+  const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#16131c',.98);
   plane(14,12.4,std('#4c2935',.98),0,0,12.26,0,-Math.PI/2);
-  plane(14,12.4,std('#29252e',.96),0,H,12.26,0,Math.PI/2);
+  plane(14,12.4,std('#101118',1),0,H,12.26,0,Math.PI/2);
   wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
   wallX(-7.3,7.3,18.55,cinemaWall);
   doorSign('CINEMA','#ffd496',0,Math.PI).position.set(0,2.93,5.95);
+  // A pleated velvet panel, gathered halfway up and fuller at the hem.
+  const curtains=[];
+  const curtainMat=new THREE.MeshStandardMaterial({color:'#791e38',roughness:.94,side:THREE.DoubleSide});
+  for(const side of [-1,1]){
+    const fabric=new THREE.PlaneGeometry(1,1,44,12),vertices=fabric.attributes.position;
+    for(let n=0;n<vertices.count;n++){
+      const u=vertices.getX(n)+.5,v=vertices.getY(n)+.5;
+      const gather=Math.exp(-((v-.42)**2)/.04);
+      vertices.setXYZ(n,-side*u*(1.15-.5*gather),.06+v*(DOOR_H-.07)+.035*Math.cos(u*36)*(1-v),.13*Math.cos(u*Math.PI*12)*(.9-.25*gather));
+    }
+    fabric.computeVertexNormals();const panel=new THREE.Mesh(fabric,curtainMat);
+    panel.position.set(side*1.62,0,6.23);scene.add(panel);curtains.push(panel);
+  }
+  box(3.55,.17,.24,velvet,0,DOOR_H+.05,6.23);
+  // Dark acoustic lining on the entrance wall, either side of the passage.
+  for(const side of [-1,1]){
+    box(5.35,H,.07,cinemaWall,side*4.325,H/2,6.34);
+    for(let row=0;row<5;row++)box(.09,1.72,1.35,std('#241e29',1),side*6.94,1.85,8.3+row*1.92);
+  }
+  box(3.30,H-DOOR_H,.07,cinemaWall,0,(H+DOOR_H)/2,6.34);
+  const rugMap=canvasTex(256,512,(g,w,h)=>{
+    g.fillStyle='#502030';g.fillRect(0,0,w,h);
+    for(const x of [9,17,w-18,w-10]){g.fillStyle='#b08b59';g.fillRect(x,0,2,h)}
+    g.strokeStyle='#754050';g.lineWidth=2;
+    for(let j=-1;j<9;j++)for(let i=0;i<4;i++){const x=35+i*61,y=j*64+(i%2)*32;g.beginPath();g.moveTo(x,y-17);g.lineTo(x+12,y);g.lineTo(x,y+17);g.lineTo(x-12,y);g.closePath();g.stroke()}
+  });
+  rugMap.wrapT=THREE.RepeatWrapping;rugMap.repeat.y=5;
+  const aisleMat=new THREE.MeshStandardMaterial({map:rugMap,roughness:1});
+  for(const x of [0,-5.12,5.12])plane(x===0?2.13:1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
   const amber=glow('#ffbb6b',1.5);
   for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
   for(let row=0;row<5;row++){
     const z=8.1+row*1.63;
     for(const side of [-1,1]){
       const x=side*2.66;
-      groundTint(x,z,3.3,1.46,contact);
-      box(2.72,.22,.95,darkWood,x,.17,z);
-      box(2.61,.66,.20,velvet,x,.56,z-.44);
-      for(const off of [-.59,.59]){
-        box(1.14,.18,.77,velvet,x+off,.37,z+.02);
-        const back=box(1.13,.46,.16,piping,x+off,.65,z-.31);back.rotation.x=-.10;
+      groundTint(x,z,1.9,1.5,contact);
+      box(1.18,.21,.85,darkWood,x,.16,z);
+      box(1.22,.24,.90,velvet,x,.39,z);
+      const back=box(1.16,.69,.20,velvet,x,.66,z-.42);back.rotation.x=-.10;
+      const cushion=box(.91,.41,.13,piping,x,.71,z-.30);cushion.rotation.x=-.10;
+      for(const off of [-.64,.64]){
+        box(.18,.42,.91,velvet,x+off,.48,z);
+        box(.17,.055,.63,walnut,x+off,.7,z+.04);
       }
-      for(const off of [-1.27,1.27])box(.19,.42,.91,velvet,x+off,.45,z);
-      solid(x-1.37,x+1.37,z-.55,z+.50);
-      spots.push({x,z,hx:1.37,hz:.5,pad:.68,label:'Siediti · Cinema',sit:true,act:()=>app.sit?app.sit(app.projection()?.id):app.open('cinema-streamer')});
+      solid(x-.74,x+.74,z-.56,z+.51);
+      spots.push({x,z,hx:.74,hz:.5,pad:.68,label:'Siediti · Cinema',sit:true,act:()=>app.sit?app.sit(app.projection()?.id):app.open('cinema-streamer')});
     }
     for(const side of [-1,1]){
       box(.11,.54,.20,brassTrim,side*6.94,1.9,z);
       box(.13,.37,.15,amber,side*6.86,1.91,z);
     }
   }
-  point('#ffc086',10,0,2.8,10,13);point('#adc8f3',10,0,2.9,16,11);
+  point('#ffb782',3.2,0,2.55,10,11);point('#bac9f0',4.1,0,2.7,16,9);
   for(const side of [-1,1])for(let i=0;i<8;i++)box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12);
   box(5.16,2.97,.12,darkWood,0,1.77,18.08);
   const standby=new THREE.MeshBasicMaterial({map:neonText('BINOTTOLAND CINEMA','#f3c485',1024,576,'bold 69px Georgia'),color:0xccb99b});
@@ -635,8 +666,47 @@ export function createLobby3D(app) {
   const projection=document.createElement('div');
   projection.style.cssText='position:absolute;left:0;top:0;width:960px;height:540px;background:black;overflow:hidden;transform-origin:0 0;pointer-events:none';
   projection.hidden=true;host.prepend(projection);
-  let previewKey='',hls=null,previewVideo=null;
+  let previewKey='',hls=null,previewVideo=null,yt=null,disposeYT=null;
+  let soundEnabled=true, audioContext=null, mediaNodes=[], cinemaVisited=false, audibleZone=false, mixEligible=false;
+  const audioButton=document.createElement('button');
+  audioButton.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 10px);right:8px;font-size:12px;padding:7px';
+  audioButton.hidden=true;el.append(audioButton);
+  function updateSoundButton(){
+    audioButton.textContent=soundEnabled?'Audio cinema · On':'Attiva audio cinema';
+    audioButton.setAttribute('aria-pressed',String(soundEnabled));
+  }
+  function unlockCinemaSound(){
+    if(!active||!soundEnabled)return;
+    try{audioContext??=new AudioContext();if(audioContext.state==='suspended')audioContext.resume().then(()=>{if(mixEligible&&previewVideo)cinemaMix(previewVideo)}).catch(()=>{});else if(mixEligible&&previewVideo)cinemaMix(previewVideo)}catch{}
+  }
+  host.addEventListener('pointerdown',unlockCinemaSound);
+  window.addEventListener('keydown',unlockCinemaSound);
+  audioButton.onclick=()=>{
+    soundEnabled=!soundEnabled;updateSoundButton();
+    if(soundEnabled)unlockCinemaSound();
+    if(previewVideo){previewVideo.muted=!soundEnabled;if(soundEnabled)previewVideo.play().catch(()=>{})}
+    if(yt){if(soundEnabled){yt.unMute();yt.playVideo()}else yt.mute()}
+  };
+  updateSoundButton();
+  // Keep direct sound in stereo; short, asymmetric reflections widen the room.
+  function cinemaMix(video){
+    if(!audioContext||mediaNodes.length)return;
+    const ctx=audioContext;
+    const source=ctx.createMediaElementSource(video),bass=ctx.createBiquadFilter(),limiter=ctx.createDynamicsCompressor();
+    bass.type='lowshelf';bass.frequency.value=145;bass.gain.value=3;
+    limiter.threshold.value=-9;limiter.ratio.value=5;
+    source.connect(bass);bass.connect(limiter);limiter.connect(ctx.destination);
+    mediaNodes.push(source,bass,limiter);
+    for(const [seconds,pan,level] of [[.023,-.83,.18],[.037,.84,.15],[.067,-.4,.07]]){
+      const delay=ctx.createDelay(.1),gain=ctx.createGain(),speaker=ctx.createStereoPanner();
+      delay.delayTime.value=seconds;gain.gain.value=level;speaker.pan.value=pan;
+      bass.connect(delay);delay.connect(gain);gain.connect(speaker);speaker.connect(limiter);
+      mediaNodes.push(delay,gain,speaker);
+    }
+  }
   function stopProjection(){
+    mixEligible=false;disposeYT?.();disposeYT=null;yt=null;audioButton.hidden=true;
+    mediaNodes.forEach(node=>node.disconnect());mediaNodes=[];projection.style.zIndex='';
     previewKey='';screenMesh.material=standby;projection.hidden=true;
     hls?.destroy();hls=null;
     if(previewVideo){previewVideo.pause();previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
@@ -648,22 +718,32 @@ export function createLobby3D(app) {
     const key=p?JSON.stringify([data.id,p.url,play?.playing,play?.seek,play?.playRevision]):'';
     if(key===previewKey)return;
     stopProjection();if(!key)return;
-    previewKey=key;
+    previewKey=key;audioButton.hidden=false;
     const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5}};
     if(p.youtube&&/^[\w-]{11}$/.test(p.youtube)){
-      const frame=document.createElement('iframe');
-      const position=(play?.position||0)+(play?.playing?Math.max(0,(Date.now()-play.updated)/1000):0);
-      frame.allow='autoplay';frame.title='Proiezione cinema';frame.style.cssText='width:100%;height:100%;border:0';
-      frame.src='https://www.youtube.com/embed/'+p.youtube+'?playsinline=1&mute=1&controls=0&autoplay='+(play?.playing===false?0:1)+'&start='+Math.max(0,Math.floor(position)||0);
-      frame.onload=ready;projection.append(frame);return;
+      disposeYT=embedYouTube(projection,p.youtube,{
+        ready(player){
+          yt=player;const frame=projection.querySelector('iframe');if(frame)frame.style.cssText='width:100%;height:100%;border:0';
+          ready();if(soundEnabled&&audibleZone)player.unMute();else player.mute();
+          if(!p.live&&play)player.seekTo((play.position||0)+(play.playing?Math.max(0,(Date.now()-play.updated)/1000):0),true);
+          if(play?.playing!==false)player.playVideo();
+        },
+        state(){},blocked(){if(!soundEnabled)return;soundEnabled=false;updateSoundButton();yt?.mute();if(play?.playing!==false)yt?.playVideo()},error(){screenMesh.material=standby}
+      });return;
     }
-    const v=document.createElement('video');previewVideo=v;v.muted=true;v.playsInline=true;v.autoplay=true;
+    const v=document.createElement('video');previewVideo=v;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=true;
     v.style.cssText='width:100%;height:100%;object-fit:contain';projection.append(v);
-    v.onloadeddata=ready;
+    v.onloadeddata=()=>{
+      ready();v.play().catch(error=>{
+        if(error.name==='NotAllowedError'&&v===previewVideo){soundEnabled=false;updateSoundButton();v.muted=true;v.play().catch(()=>{})}
+      });
+    };
+    const canMix=()=>{mixEligible=true;try{if(audioContext?.state==='running')cinemaMix(v)}catch{}};
+    if(new URL(p.url,location.href).origin===location.origin)canMix();
     if(/\.m3u8?(?:[?#]|$)/i.test(p.url)&&!v.canPlayType('application/vnd.apple.mpegurl')){
       window.binottolandClubRadio?.loadHls().then(Hls=>{
         if(previewVideo!==v||!Hls.isSupported())return;
-        hls=new Hls({backBufferLength:10});hls.loadSource(p.url);hls.attachMedia(v);
+        canMix();hls=new Hls({backBufferLength:10});hls.loadSource(p.url);hls.attachMedia(v);
       }).catch(()=>{});
     }else v.src=p.url;
   }
@@ -671,6 +751,14 @@ export function createLobby3D(app) {
   function alignProjection(){
     if(projection.hidden)return;
     const w=host.clientWidth/2,h=host.clientHeight/2;
+    screenMesh.getWorldPosition(tmp);tmp.project(camera);
+    const inset=pos.z>6.15 && (tmp.z>1||tmp.z< -1||Math.abs(tmp.x)>.94||Math.abs(tmp.y)>.94);
+    projection.style.zIndex=inset?'1':'';
+    if(inset){
+      const width=Math.min(220,w*.72),scale=width/960;
+      projection.style.transform='translate('+Math.max(0,2*w-width-10)+'px,64px) scale('+scale+')';
+      return;
+    }
     pixelPlane.set(5.04/960,0,0,-2.52,0,-2.835/540,0,1.4175,0,0,1,0,0,0,0,1);
     viewport.set(w,0,0,w,0,-h,0,h,0,0,1,0,0,0,0,1);
     camera.updateMatrixWorld();screenMesh.updateMatrixWorld();
@@ -712,8 +800,11 @@ export function createLobby3D(app) {
   function openRuggine(){
     const panel=document.createElement('div');panel.className='l3d';panel.style.zIndex='100';
     const frame=document.createElement('iframe');frame.title='Ruggine 89';frame.src='/ruggine/';frame.style.cssText='width:100%;height:100%;border:0';
-    const back=document.createElement('button');back.textContent='← Sala arcade';back.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 66px);left:8px';
-    panel.append(frame,back);document.body.append(panel);back.onclick=()=>{panel.remove();show()};
+    function exitGame(event){
+      if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.type!=='ruggine:exit')return;
+      window.removeEventListener('message',exitGame);panel.remove();show();
+    }
+    window.addEventListener('message',exitGame);panel.append(frame);document.body.append(panel);
   }
   const cabinet = (key, title, color, x, z, ry) => {
     const g = new THREE.Group();
@@ -967,7 +1058,17 @@ export function createLobby3D(app) {
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
     step(dt);
-    playProjection((pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65)) && camera.getWorldDirection(tmp).z>.1 ? app.projection?.():null);
+    const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
+    for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
+    const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
+    cinemaVisited ||= inRange;
+    if(audibleZone!==inRange){
+      audibleZone=inRange;
+      if(previewVideo)previewVideo.muted=!(inRange&&soundEnabled);
+      if(yt){if(inRange&&soundEnabled)yt.unMute();else yt.mute()}
+    }
+    playProjection(cinemaVisited ? app.projection?.():null);
+    audioButton.hidden=!inRange||!previewKey;
     alignProjection();renderer.render(scene, camera);
   }
   function resize() {
@@ -1009,7 +1110,7 @@ export function createLobby3D(app) {
   }
   function hide() {
     if(seating){clearTimeout(seatTimer);seating=false;pos.z+=.95;collide(pos)}
-    active = false; app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
+    active = false; cinemaVisited=false;audibleZone=false;app.clubVisibility?.();stopProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
