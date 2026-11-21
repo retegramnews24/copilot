@@ -6,16 +6,22 @@
 // Regolamenti di riferimento (vedi RULES e docs/biliardo.md):
 //   Palla 8: World Standardized Rules WPA (8-Ball). Snooker: Official Rules of Snooker WPBSA.
 //   5 birilli: regole UMB/FIBiS della specialità. Boccette: Regolamento tecnico FIBiS "Boccette 5 birilli" (2017).
+//   Palla 9: World Standardized Rules WPA (9-Ball). Carambola (libera, una sponda, tre sponde): regolamento UMB.
 import * as P from './physics.js?v=ba3146227c';
 
 export const VARIANTS = {
   otto: { name: 'Palla 8', table: 'pool', desc: 'Piene contro rigate, poi la nera in una buca chiamata.' },
+  nove: { name: 'Palla 9', table: 'pool', desc: 'Si colpisce sempre per prima la bilia col numero più basso: chi imbuca la 9 vince.' },
   snooker: { name: 'Snooker', table: 'snooker', desc: 'Rossa, colore, rossa… vince chi fa più punti.' },
   italiana: { name: 'Biliardo all\'italiana', table: 'carom', desc: '5 birilli: con la tua bilia colpisci quella dell\'avversario e mandala sui birilli o sul pallino.' },
+  carambola: { name: 'Carambola', table: 'carom', desc: 'Senza buche né birilli: la tua bilia deve toccare le altre due (libera, a una sponda o a tre sponde).' },
   boccette: { name: 'Boccette', table: 'carom', desc: 'Si gioca a mano: accosto al pallino e birilli abbattuti con le bilie dell\'avversario.' },
 };
-export const TARGETS = { italiana: [25, 50, 60], boccette: [50, 80, 100] };
-export const DEFAULT_TARGET = { italiana: 60, boccette: 80 };
+export const TARGETS = { italiana: [25, 50, 60], boccette: [50, 80, 100], carambola: [10, 15, 25, 40] };
+export const DEFAULT_TARGET = { italiana: 60, boccette: 80, carambola: 15 };
+// carambola: sponde da toccare prima della seconda bilia (0 = libera, 1 = una sponda, 3 = tre sponde)
+export const CUSHIONS = [0, 1, 3];
+export const CUSH_NAMES = { 0: 'libera', 1: 'a una sponda', 3: 'a tre sponde' };
 export const REDS = [6, 10, 15];
 // colori del panno (online li sceglie chi crea la partita e li vedono uguali tutti)
 export const CLOTH_KEYS = ['verde', 'blu', 'rosso', 'grigio', 'viola'];
@@ -33,7 +39,7 @@ export const POCKET_NAMES = ['in alto a sinistra', 'centrale in alto', 'in alto 
 // aspetto delle bilie per la grafica
 export function ballLook(m, b) {
   const v = m.variant;
-  if (v === 'otto') {
+  if (v === 'otto' || v === 'nove') {
     const C = ['#f4f1e6', '#f2c414', '#1f4fc4', '#d42a26', '#5b2a8f', '#f0711c', '#16804a', '#7a1f1f', '#111111'];
     return { color: b.id === 0 ? C[0] : b.id === 8 ? C[8] : C[((b.id - 1) % 8) + 1], stripe: b.id >= 9, num: b.id || null, dot: b.id === 0 };
   }
@@ -41,7 +47,7 @@ export function ballLook(m, b) {
     const C = { 16: '#f2d214', 17: '#10804a', 18: '#6b3a1e', 19: '#1d4fd0', 20: '#ff7aa8', 21: '#0d0d0d' };
     return { color: b.id === 0 ? '#f4f1e6' : C[b.id] || '#c8141e', dot: b.id === 0 };
   }
-  if (v === 'italiana') return { color: ['#f4f1e6', '#f2c414', '#c8141e'][b.id], dot: b.id === 0 };
+  if (v === 'italiana' || v === 'carambola') return { color: ['#f4f1e6', '#f2c414', '#c8141e'][b.id], dot: b.id === 0 };
   // boccette: 0 pallino, 1-4 rosse, 5-8 bianche
   if (b.id === 0) return { color: '#2a6fe0' };
   return b.id <= 4 ? { color: '#c8141e', ring: '#f4f1e6' } : { color: '#f4f1e6', ring: '#c8141e' };
@@ -60,6 +66,17 @@ export function newGame(variant, players, opts = {}) {
   if (variant === 'otto') {
     m.open = true; m.breakShot = true; m.inHand = 'kitchen'; m.racks = 0;
     m.balls = rackOtto(T, m.seed);
+  } else if (variant === 'nove') {
+    // WPA: rombo con la 1 sulla punta (punto di fondo) e la 9 al centro; si spacca dalla cucina
+    m.breakShot = true; m.inHand = 'kitchen'; m.fouls = [0, 0];
+    m.balls = rackNove(T, m.seed);
+  } else if (variant === 'carambola') {
+    // UMB: rosso sul punto di fondo, bilia avversaria sul punto di testa, quella di chi apre sulla linea di testa
+    // a 18,2 cm dal punto di testa. Il primo colpo deve prendere prima il rosso.
+    m.cush = CUSHIONS.includes(opts.cush) ? opts.cush : 3;
+    m.target = TARGETS.carambola.includes(opts.target) ? opts.target : DEFAULT_TARGET.carambola;
+    m.breakShot = true;
+    m.balls = [ball(0, -L / 2, 0.182), ball(1, -L / 2, 0), ball(2, L / 2, 0)];
   } else if (variant === 'snooker') {
     const reds = REDS.includes(opts.reds) ? opts.reds : 6;
     m.reds = reds; m.on = 'red'; m.inHand = 'D';
@@ -107,7 +124,7 @@ export function teamName(names) {
 // Chi comincia (a caso in 2 giocatori e online)
 export function setStarter(m, pi) {
   m.cur = m.first = pi;
-  if (m.variant === 'italiana' && pi === 1) {
+  if ((m.variant === 'italiana' || m.variant === 'carambola') && pi === 1) {
     const [a, b] = m.balls;
     [a.x, b.x] = [b.x, a.x]; [a.z, b.z] = [b.z, a.z];
   }
@@ -122,6 +139,28 @@ export function snkSpot(T, id) {
 }
 // penitenze (boccette): sull'asse lungo, al centro delle due metà e a 10 cm dalle sponde corte
 export const penitenze = (T) => [T.L - 0.1, T.L / 2, -T.L / 2, -T.L + 0.1].map((x) => ({ x, z: 0 }));
+
+// palla 9: rombo da 9 (righe 1-2-3-2-1), la 1 in punta sul punto di fondo, la 9 al centro, le altre a caso
+function rackNove(T, seed) {
+  let s = (seed >>> 0) || 1;
+  const rnd = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
+  const R = T.R, gap = 1.0008, balls = [];
+  for (let id = 0; id <= 9; id++) balls.push(P.makeBall(id, 0, 0, R));
+  balls[0].x = -T.L / 2;
+  const rest = [2, 3, 4, 5, 6, 7, 8];
+  for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+  const rows = [1, 2, 3, 2, 1];
+  let k = 0;
+  rows.forEach((n, row) => {
+    for (let j = 0; j < n; j++) {
+      const id = row === 0 ? 1 : row === 2 && j === 1 ? 9 : rest[k++];
+      const b = balls[id];
+      b.x = T.L / 2 + row * Math.sqrt(3) * R * gap;
+      b.z = (j - (n - 1) / 2) * 2 * R * gap;
+    }
+  });
+  return balls;
+}
 
 function rackOtto(T, seed) {
   let s = (seed >>> 0) || 1;
@@ -177,7 +216,7 @@ function nextThrow(m) {
 
 // ---------- chi tira, cosa si deve colpire ----------
 export function cueId(m) {
-  if (m.variant === 'italiana') return m.cur === 0 ? 0 : 1;
+  if (m.variant === 'italiana' || m.variant === 'carambola') return m.cur === 0 ? 0 : 1;
   if (m.variant === 'boccette') return m.nextBall;
   return 0;
 }
@@ -195,7 +234,14 @@ export function legalFirst(m) {
     const left = m.balls.filter((b) => b.on && groupOf(b.id) === g).map((b) => b.id);
     return left.length ? left : [8];
   }
+  if (m.variant === 'nove') {
+    const low = m.balls.find((b) => b.on && b.id);
+    return low ? [low.id] : [];
+  }
+  if (m.variant === 'carambola') return m.breakShot ? [2] : null;
   if (m.variant === 'snooker') {
+    // free ball: dopo un fallo, se chi entra è "snookerato", può colpire per prima qualunque bilia
+    if (m.freeBall) return m.balls.filter((b) => b.on && b.id).map((b) => b.id);
     if (m.on === 'red') return m.balls.filter((b) => b.on && b.id >= 1 && b.id <= 15).map((b) => b.id);
     if (m.on === 'color') return [16, 17, 18, 19, 20, 21].filter((id) => onTable(m, id));
     const t = snkTarget(m);
@@ -250,7 +296,7 @@ export function beginShot(m, s) {
   if (m.inHand && num(s.px) && num(s.pz) && canPlace(m, s.px, s.pz)) { b.x = s.px; b.z = s.pz; }
   b.on = true; b.potted = false;
   m.pre = {
-    legal: legalFirst(m), cue: id, on: m.on, acchito: !!m.acchito,
+    legal: legalFirst(m), cue: id, on: m.on, acchito: !!m.acchito, free: !!m.freeBall,
     target: m.variant === 'snooker' ? snkTarget(m) : 0,
     call: Number.isInteger(s.call) && s.call >= 0 && s.call < 6 ? s.call : -1,
     snap: m.variant === 'boccette' ? { balls: m.balls.map((o) => ({ on: o.on, x: o.x, z: o.z })), pins: m.pins.map((p) => ({ ...p })) } : null,
@@ -274,7 +320,7 @@ const redsLeft = (m) => m.balls.filter((b) => b.on && b.id >= 1 && b.id <= 15).l
 export function finishShot(m, events) {
   for (const b of m.balls) { b.vx = b.vz = b.ux = b.uz = b.side = 0; }
   m.shots++;
-  const fn = { otto: judgeOtto, snooker: judgeSnooker, italiana: judgeItaliana, boccette: judgeBoccette }[m.variant];
+  const fn = { otto: judgeOtto, nove: judgeNove, snooker: judgeSnooker, italiana: judgeItaliana, carambola: judgeCarambola, boccette: judgeBoccette }[m.variant];
   const out = fn(m, events);
   m.msg = out.msg || '';
   m.lastOut = { foul: out.foul || null, msg: m.msg, keep: !!out.keep };
@@ -356,6 +402,77 @@ function judgeOtto(m, events) {
 }
 
 // --- snooker (WPBSA, senza "free ball", "miss" e richiesta di far rigiocare)
+// --- palla 9 (WPA World Standardized Rules, 9-Ball; senza "push out")
+function judgeNove(m, events) {
+  const pi = m.cur, op = other(m), me = m.players[pi], T = tableOf(m);
+  const lowest = m.pre.legal[0], wasBreak = m.breakShot;
+  let first = null, railAfter = false;
+  for (const e of events) {
+    if (e.t === 'ball' && first === null && (e.a === 0 || e.b === 0)) first = e.a === 0 ? e.b : e.a;
+    else if (e.t === 'rail' && first !== null) railAfter = true;
+  }
+  const potted = pottedIds(events), cuePot = potted.includes(0), nine = potted.includes(9);
+  const objPot = potted.filter((id) => id !== 0);
+  let foul = null;
+  if (cuePot) foul = 'Bianca in buca';
+  else if (first === null) foul = 'Nessuna bilia toccata';
+  else if (first !== lowest) foul = `Dovevi colpire per prima la ${lowest}`;
+  else if (wasBreak) {
+    // spacco valido: prima la 1, poi almeno una bilia in buca o quattro bilie alla sponda
+    const railed = new Set(events.filter((e) => e.t === 'rail' && e.a !== 0).map((e) => e.a));
+    if (!objPot.length && railed.size < 4) foul = 'Spacco non valido (meno di 4 bilie alla sponda)';
+  } else if (!railAfter && !objPot.length) foul = 'Nessuna bilia ha toccato la sponda dopo il contatto';
+  m.breakShot = false;
+  if (cuePot) { const s = freeSpot(m, -T.L / 2, 0, -1, 0); Object.assign(m.balls[0], { x: s.x, z: s.z, on: true, potted: false }); }
+  if (nine && !foul) return endGame(m, pi, `${me.name} imbuca la 9 e vince!`);
+  let msg = '';
+  if (nine) { const s = freeSpot(m, T.L / 2, 0, 1, 9); Object.assign(m.balls[9], { x: s.x, z: s.z, on: true, potted: false }); msg = 'La 9 torna sul punto. '; }
+  if (foul) {
+    // tre falli di fila: partita persa
+    m.fouls[pi]++;
+    if (m.fouls[pi] >= 3) return endGame(m, op, `Tre falli di fila: vince ${m.players[op].name}`);
+    m.cur = op; m.inHand = 'any';
+    return { foul, keep: false, msg: msg + `Fallo: ${foul.toLowerCase()}. Bianca in mano a ${m.players[op].name}` + (m.fouls[pi] === 2 ? ` · ${me.name} è a due falli` : '') };
+  }
+  m.fouls[pi] = 0;
+  m.inHand = null;
+  const keep = objPot.length > 0;
+  if (!keep) m.cur = op;
+  return { foul: null, keep, msg: msg + (keep ? `Tocca ancora a ${me.name}` : '') };
+}
+
+// --- carambola (UMB): libera, a una sponda, a tre sponde
+function judgeCarambola(m, events) {
+  const pi = m.cur, op = other(m), me = m.players[pi];
+  const mine = pi === 0 ? 0 : 1;
+  // sequenza della propria bilia: le bilie toccate e quante sponde prima della seconda
+  const hit = [];
+  let rails = 0, railsBefore2nd = -1;
+  for (const e of events) {
+    if (e.t === 'rail' && e.a === mine) rails++;
+    else if (e.t === 'ball' && (e.a === mine || e.b === mine)) {
+      const o = e.a === mine ? e.b : e.a;
+      if (!hit.includes(o)) { hit.push(o); if (hit.length === 2) { railsBefore2nd = rails; break; } }
+    }
+  }
+  const wasBreak = m.breakShot;
+  m.breakShot = false;
+  let foul = null;
+  if (wasBreak && hit[0] !== 2) foul = 'In apertura devi colpire per primo il pallino rosso';
+  const point = !foul && hit.length === 2 && railsBefore2nd >= m.cush;
+  let msg = '';
+  if (point) {
+    m.scores[pi]++;
+    if (m.scores[pi] >= m.target) return endGame(m, pi, `${me.name} arriva a ${m.scores[pi]} e vince!`);
+    msg = `Punto! ${me.name} ${m.scores[pi]}/${m.target}, tira ancora`;
+  } else {
+    m.cur = op;
+    if (foul) msg = `Fallo: ${foul.toLowerCase()}. Tocca a ${m.players[op].name}`;
+    else if (hit.length === 2) msg = `Carambola senza le ${m.cush} sponde prima della seconda bilia: niente punto`;
+  }
+  return { foul, keep: point, msg };
+}
+
 function respot(m, id) {
   const T = tableOf(m), b = m.balls[id];
   const free = (x, z) => m.balls.every((o) => !o.on || o.id === id || (o.x - x) ** 2 + (o.z - z) ** 2 > (2 * T.R + 0.001) ** 2);
@@ -377,24 +494,34 @@ function judgeSnooker(m, events) {
   let foul = null, valueOn = 1;
   if (pre.on === 'color') valueOn = first >= 16 ? snkValue(first) : 0;
   if (pre.on === 'clear') valueOn = snkValue(pre.target);
+  // free ball (regola 10 WPBSA): la bilia colpita per prima, se non è quella "on", vale come la bilia on
+  const freeId = pre.free && first !== null && (pre.on === 'red' ? first >= 16 : pre.on === 'clear' ? first !== pre.target : false) ? first : 0;
   if (cuePot) foul = 'Bianca in buca';
   else if (first === null) foul = 'Nessuna bilia toccata';
+  else if (freeId) { /* free ball: qualunque prima bilia va bene */ }
   else if (pre.on === 'red' && !(first >= 1 && first <= 15)) foul = 'Dovevi colpire una rossa';
   else if (pre.on === 'color' && first < 16) foul = 'Dovevi colpire un colore';
   else if (pre.on === 'clear' && first !== pre.target) foul = `Dovevi colpire la ${SNK_NAMES[snkValue(pre.target)]}`;
   if (!foul) {
-    if (pre.on === 'red' && colors.length) foul = 'Colore imbucato al posto della rossa';
-    if (pre.on === 'color' && (reds.length || colors.some((c) => c !== first))) foul = 'Imbucata la bilia sbagliata';
-    if (pre.on === 'clear' && potted.some((id) => id !== pre.target)) foul = 'Imbucata la bilia sbagliata';
+    if (freeId && pre.on === 'red' && colors.some((c) => c !== freeId)) foul = 'Imbucato un colore diverso dalla free ball';
+    else if (freeId && pre.on === 'clear' && potted.some((id) => id !== freeId && id !== pre.target)) foul = 'Imbucata la bilia sbagliata';
+    else if (!freeId && pre.on === 'red' && colors.length) foul = 'Colore imbucato al posto della rossa';
+    else if (pre.on === 'color' && (reds.length || colors.some((c) => c !== first))) foul = 'Imbucata la bilia sbagliata';
+    else if (!freeId && pre.on === 'clear' && potted.some((id) => id !== pre.target)) foul = 'Imbucata la bilia sbagliata';
   }
   const blackDown = potted.includes(21) && pre.on === 'clear' && pre.target === 21;
   let keep = false, msg = '';
   if (foul) {
     // penale: almeno 4, oppure il valore più alto fra bilia "on", bilia colpita e bilie imbucate
-    const pen = Math.max(4, valueOn, snkValue(first || 0), ...potted.map(snkValue));
+    const pen = Math.max(4, valueOn, freeId ? 0 : snkValue(first || 0), ...potted.filter((id) => id !== freeId).map(snkValue));
     m.scores[op] += pen;
     msg = `Fallo: ${foul.toLowerCase()}. ${pen} punti a ${m.players[op].name}`;
     if (!blackDown) for (const c of colors) respot(m, c);
+  } else if (freeId) {
+    // la free ball imbucata vale come la bilia on (una rossa = 1, oppure il colore di turno) e torna sul suo punto
+    const pts = pre.on === 'red' ? reds.length + (potted.includes(freeId) ? 1 : 0) : potted.length ? valueOn : 0;
+    if (potted.includes(freeId)) respot(m, freeId);
+    if (pts) { m.scores[pi] += pts; keep = true; msg = `Free ball: +${pts}`; }
   } else if (pre.on === 'red') { if (reds.length) { m.scores[pi] += reds.length; keep = true; msg = `+${reds.length}`; } }
   else if (pre.on === 'color') {
     if (colors.length) { m.scores[pi] += snkValue(first); keep = true; msg = `+${snkValue(first)} (${SNK_NAMES[snkValue(first)]})`; respot(m, first); }
@@ -416,7 +543,31 @@ function judgeSnooker(m, events) {
   if (keep && pre.on === 'red') m.on = 'color';
   else m.on = left ? 'red' : 'clear';
   if (foul && cuePot) msg += ' · bianca in mano nella D';
+  // dopo un fallo: se chi entra non vede entrambi i bordi di nessuna bilia on, ha la free ball
+  m.freeBall = false;
+  if (foul && !cuePot && !m.over && snookered(m)) { m.freeBall = true; msg += ` · free ball per ${m.players[m.cur].name}`; }
   return { foul, keep, msg };
+}
+// "snookerato": per nessuna bilia on la bianca può arrivare in linea retta a sfiorarne entrambi i bordi
+export function snookered(m) {
+  const c = m.balls[0], R = tableOf(m).R;
+  const free = m.freeBall; m.freeBall = false;
+  const ons = legalFirst(m); m.freeBall = free;
+  const clear = (tx, tz, skip) => {
+    const dx = tx - c.x, dz = tz - c.z, l2 = dx * dx + dz * dz || 1e-9;
+    return m.balls.every((b) => {
+      if (!b.on || b.id === 0 || b.id === skip) return true;
+      let t = ((b.x - c.x) * dx + (b.z - c.z) * dz) / l2;
+      t = Math.max(0, Math.min(1, t));
+      return (c.x + dx * t - b.x) ** 2 + (c.z + dz * t - b.z) ** 2 >= (2 * R * 0.99) ** 2;
+    });
+  };
+  for (const id of ons) {
+    const o = m.balls[id], dx = o.x - c.x, dz = o.z - c.z, l = Math.sqrt(dx * dx + dz * dz) || 1;
+    const px = -dz / l, pz = dx / l;
+    if ([-1, 1].every((s) => clear(o.x + px * s * 2 * R * 0.97, o.z + pz * s * 2 * R * 0.97, id))) return false;
+  }
+  return ons.length > 0;
 }
 
 // --- birilli
@@ -588,6 +739,7 @@ export function autoShot(m) {
   let tx, tz;
   const s = {};
   if (m.variant === 'boccette') { tx = m.balls[0].x; tz = m.balls[0].z; }
+  else if (m.variant === 'carambola') { tx = m.balls[2].x; tz = m.balls[2].z; }
   else {
     const ids = legalFirst(m) || [];
     let best = null, bd = Infinity;
@@ -602,13 +754,20 @@ export function autoShot(m) {
 export function status(m, pi) {
   if (m.variant === 'otto') { const g = m.players[pi].group; return g ? g : m.open ? 'tavolo aperto' : ''; }
   if (m.variant === 'snooker') return `${m.scores[pi]} punti`;
+  if (m.variant === 'nove') return m.fouls && m.fouls[pi] ? `${m.fouls[pi]} ${m.fouls[pi] === 1 ? 'fallo' : 'falli'} di fila` : '';
   if (m.variant === 'boccette') return `${m.scores[pi]}/${m.target} · ${m.left[pi]} da tirare`;
   return `${m.scores[pi]}/${m.target} punti`;
 }
 
 // Cosa deve fare chi tira (riga di aiuto)
 export function onText(m) {
+  if (m.variant === 'nove') return (m.breakShot ? 'Spacco · ' : '') + `Colpisci per prima la ${legalFirst(m)[0] || 9}`;
+  if (m.variant === 'carambola') {
+    if (m.breakShot) return 'Apertura: colpisci per primo il pallino rosso';
+    return m.cush ? `Tocca le altre due bilie, con almeno ${m.cush} ${m.cush === 1 ? 'sponda' : 'sponde'} prima della seconda` : 'Tocca le altre due bilie';
+  }
   if (m.variant === 'snooker') {
+    if (m.freeBall) return 'Free ball: puoi colpire per prima qualunque bilia (vale come la bilia on)';
     if (m.on === 'red') return 'Colpisci una rossa';
     if (m.on === 'color') return 'Colpisci un colore';
     return `Colpisci la ${SNK_NAMES[snkValue(snkTarget(m))]}`;
@@ -634,7 +793,23 @@ export const RULES = {
     'Si alterna una rossa e un colore: il primo colore che colpisci è quello "chiamato". Finché ci sono rosse i colori imbucati tornano sul loro punto; poi si imbucano in ordine, dalla gialla alla nera.',
     'Fallo (bilia sbagliata colpita o imbucata, bianca in buca, nessun contatto): all\'avversario il valore più alto fra 4, la bilia da giocare e quelle coinvolte. Bianca in buca: si riparte dalla D.',
     'Quando cade l\'ultima nera vince chi ha più punti; a parità la nera torna sul punto e si gioca dalla D.',
-    'Semplificazioni: niente "free ball", niente regola del "miss" e niente richiesta di far rigiocare l\'avversario.',
+    'Free ball: se dopo un fallo dell\'avversario non puoi colpire in linea retta entrambi i bordi di nessuna bilia on, puoi colpire per prima qualunque bilia; imbucata vale come la bilia on (una rossa = 1) e torna sul suo punto.',
+    'Semplificazioni: niente regola del "miss" e niente richiesta di far rigiocare l\'avversario.',
+  ],
+  nove: [
+    'Palla 9 secondo le regole mondiali WPA: bilie dalla 1 alla 9 a rombo, la 1 in punta e la 9 al centro, tavolo da 9 piedi.',
+    'Si deve colpire per prima la bilia col numero più basso sul tavolo. Ogni bilia imbucata regolarmente fa continuare il turno.',
+    'Chi imbuca la 9 con un tiro regolare vince, anche di combinazione o allo spacco. Se la 9 cade con un fallo torna sul punto di fondo.',
+    'Spacco valido: prima la 1, poi almeno una bilia in buca o quattro bilie alla sponda. Fallo (bianca in buca, bilia sbagliata colpita per prima, nessun contatto, nessuna sponda dopo il contatto): bianca in mano ovunque all\'avversario.',
+    'Tre falli di fila: partita persa.',
+    'Semplificazione: niente "push out" dopo lo spacco.',
+  ],
+  carambola: [
+    'Carambola secondo il regolamento UMB, tavolo da 2,84 × 1,42 m senza buche: bilia bianca, bilia gialla e pallino rosso.',
+    'Apertura: rosso sul punto di fondo, bilia avversaria sul punto di testa, la tua sulla linea di testa a 18 cm di lato; devi colpire per primo il rosso.',
+    'Fai un punto quando la tua bilia tocca le altre due. Nella partita "a una sponda" deve toccare almeno una sponda prima della seconda bilia, in quella "a tre sponde" almeno tre (anche la stessa più volte).',
+    'Chi fa punto continua a tirare; se sbaglia tocca all\'avversario. Vince chi arriva per primo al punteggio scelto.',
+    'Semplificazioni: niente ripresa di pareggio per il secondo giocatore e niente riquadri della partita libera.',
   ],
   italiana: [
     'Biliardo all\'italiana (5 birilli, regole UMB/FIBiS), tavolo da 2,84 × 1,42 m senza buche: bilia bianca, bilia gialla e pallino rosso; cinque birilli a croce al centro.',

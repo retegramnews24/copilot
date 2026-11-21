@@ -1,5 +1,12 @@
 // Facts about a lobby game record: its name, whether seats are chosen before starting, player limits, still open.
-const BILIARDO = { otto: 'Palla 8', snooker: 'Snooker', italiana: '5 birilli', boccette: 'Boccette' };
+const BILIARDO = {
+  otto: 'Palla 8',
+  nove: 'Palla 9',
+  snooker: 'Snooker',
+  italiana: '5 birilli',
+  carambola: 'Carambola',
+  boccette: 'Boccette'
+};
 export const gameTitle = g =>
   g?.game === 'biliardo'
     ? 'Biliardo' + (BILIARDO[g.variant] ? ' · ' + BILIARDO[g.variant] : '')

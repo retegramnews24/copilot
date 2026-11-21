@@ -1,6 +1,6 @@
 # Biliardo
 
-Sala giochi 3D con quattro specialità: **Palla 8**, **Snooker**, **Biliardo all'italiana (5 birilli)** e **Boccette**.
+Sala giochi 3D con sei specialità: **Palla 8**, **Palla 9**, **Snooker**, **Biliardo all'italiana (5 birilli)**, **Carambola** (libera, a una sponda, a tre sponde) e **Boccette**.
 Si gioca contro il computer (Facile/Medio/Difficile), in due sullo stesso telefono, oppure **online** con un altro giocatore di Binottoland.
 
 Pubblicato in Binottoland Playground dalla versione 1.0.35: scheda nel catalogo, Lobby, avvisi, classifiche (pagina `/biliardo/`).
@@ -10,13 +10,17 @@ Pubblicato in Binottoland Playground dalla versione 1.0.35: scheda nel catalogo,
 | Specialità | Regolamento | Cosa è semplificato |
 |---|---|---|
 | Palla 8 | [WPA World Standardized Rules](https://wpapool.com/rules-of-play/) | si chiama solo la buca della nera; dopo uno spacco non valido si rifà sempre il triangolo (niente scelta dell'avversario) |
-| Snooker | [WPBSA Official Rules](https://wpbsa.com/rules/) | niente "free ball", "miss" e richiesta di far rigiocare; 6, 10 o 15 rosse |
+| Palla 9 | [WPA World Standardized Rules](https://wpapool.com/rules-of-play/) | niente "push out" dopo lo spacco |
+| Snooker | [WPBSA Official Rules](https://wpbsa.com/rules/) | con la "free ball" (snookerato dopo un fallo); niente "miss" e richiesta di far rigiocare; 6, 10 o 15 rosse |
+| Carambola | [regolamento UMB](https://www.umb-carom.org/) (libera, una sponda, tre sponde) | niente ripresa di pareggio per il secondo giocatore e niente riquadri della libera; partita a 10/15/25/40 punti |
 | 5 birilli | regole UMB/FIBiS della specialità ([sintesi](https://en.wikipedia.org/wiki/Five-pin_billiards)) | il rosso da solo vale 10 (regola professionistica dal 2013); niente salti e bilie fuori dal tavolo |
 | Boccette | [Regolamento tecnico FIBiS «Boccette 5 birilli» (2017)](https://www.fibisromagna.it/doc/15995Doc_10266.pdf) | niente acchito alla sponda per scegliere chi comincia (sorteggio); il "friso" non è riconosciuto (il "traversino" sì); niente bilie fuori dal tavolo; partita a 50/80/100 punti |
 
 Punti chiave applicati: misure dei tavoli (9 piedi, 12 piedi, 2,84 × 1,42 m), delle bilie (57,15 / 52,5 / 61,5 mm, pallino 59 mm) e dei birilli (25 mm, croce da 66 mm);
 spacco valido WPA (una bilia in buca o 4 alla sponda); bianca in mano dietro la linea dopo un fallo sullo spacco;
-penali dello snooker (minimo 4, valore più alto in gioco); 5 birilli: casin 3, carambola 4 (conta solo la prima), birilli 2/4/10, falli con bilia in mano + 2;
+penali dello snooker (minimo 4, valore più alto in gioco) e free ball quando chi entra non vede entrambi i bordi di nessuna bilia on;
+palla 9: prima la più bassa, la 9 regolare vince (anche di combinazione o allo spacco), la 9 su fallo torna sul punto, tre falli di fila perdono;
+carambola: apertura UMB (rosso sul punto di fondo, avversaria sul punto di testa, la propria a 18,2 cm sulla linea di testa, prima il rosso), punto se la propria bilia tocca le altre due con 0/1/3 sponde prima della seconda, chi segna continua; 5 birilli: casin 3, carambola 4 (conta solo la prima), birilli 2/4/10, falli con bilia in mano + 2;
 boccette: bocciata d'acchito sul pallino, si boccia solo oltre la mezzeria, accosto 2/3/5/8, birilli 2/4/8 con tiro indiretto doppio,
 birilli abbattuti con le proprie bilie all'avversario, tiri irregolari annullati con la situazione rimessa com'era (art. 9.3 e, p, q), traversino con i punti all'avversario (art. 9.2 b),
 niente doppio sul pallino in penitenza dopo un fallo d'acchito (art. 13 a), lancio dalla propria zona con la bilia spostabile a destra e sinistra, chi fa l'accosto rimette il pallino.

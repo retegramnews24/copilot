@@ -8,7 +8,14 @@ import { json, id, name } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
 import { gameTitle } from './public/game-info.js';
 
-const BILIARDO_NAMES = { otto: 'Palla 8', snooker: 'Snooker', italiana: '5 birilli', boccette: 'Boccette' };
+const BILIARDO_NAMES = {
+  otto: 'Palla 8',
+  nove: 'Palla 9',
+  snooker: 'Snooker',
+  italiana: '5 birilli',
+  carambola: 'Carambola',
+  boccette: 'Boccette'
+};
 
 // Game notices stored by the server, so everyone finds them also later: a table opened to people, a win.
 // Kept in their own list (not in the chat); the app shows them in the Lobby bell, each with a button.
@@ -429,7 +436,8 @@ export class LobbyHub {
                     target: body.points,
                     reds: body.reds,
                     players: body.players,
-                    cloth: body.cloth
+                    cloth: body.cloth,
+                    cush: body.cush
                   }
                 : {}),
               seed: body.game === 'moto-trial' ? 1 : crypto.getRandomValues(new Uint32Array(1))[0]

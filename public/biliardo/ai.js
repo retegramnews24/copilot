@@ -2,7 +2,7 @@
 // accosti al pallino…), li simula con la fisica vera e le stesse regole, e sceglie il migliore.
 // Il livello decide quanto sbaglia la mira.
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=032c83e418';
+import * as E from './engine.js?v=2db7d98a7f';
 
 const LEVELS = {
   facile: { err: 0.022, pick: 5, spin: false, budget: 24 },
@@ -74,10 +74,17 @@ function candidates(m, lv) {
   const eight = E.onEight(m), b8 = m.balls[8];
   const near8 = eight ? E.tableOf(m).pockets.reduce((best, p, k, a) => (Math.hypot(p.x - b8.x, p.z - b8.z) < Math.hypot(a[best].x - b8.x, a[best].z - b8.z) ? k : best), 0) : -1;
   const push = (list, ks, sp = spins) => { for (const c of list) for (const k of ks) for (const [sy, sx] of sp) tries.push({ dx: c.dx, dz: c.dz, speed: Math.min(E.maxSpeed(m), c.base * k), sy, sx, ...(eight ? { call: c.call ?? near8 } : {}) }); };
-  if (m.variant === 'otto' || m.variant === 'snooker') {
+  if (m.variant === 'otto' || m.variant === 'snooker' || m.variant === 'nove') {
     const legal = E.legalFirst(m);
     push(pocketShots(m, cue, legal).slice(0, Math.ceil(lv.budget / 9)), [0.75, 1.1, 1.6]);
+    // palla 9: anche la combinazione sulla 9 (prima la più bassa, che la manda in buca)
+    if (m.variant === 'nove' && m.balls[9].on && legal[0] !== 9) push(pocketShots(m, cue, [9]).slice(0, 2), [1.1, 1.6]);
     if (tries.length < 6) for (const t of legal.slice(0, 4)) push(hitShots(m, cue, t, [-0.4, 0, 0.4]), [1.3, 2]);
+  } else if (m.variant === 'carambola') {
+    // tocca una delle due bilie con vari tagli, forze ed effetti: la simulazione dice quali fanno punto
+    const objs = m.breakShot ? [2] : [m.cur === 0 ? 1 : 0, 2];
+    const ks = m.cush === 3 ? [2.2, 3.2, 4.4] : m.cush === 1 ? [1.6, 2.6] : [1, 1.8];
+    for (const o of objs) push(hitShots(m, cue, o, [-0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75]), ks, lv.spin ? [[0, 0], [0.4, 0.5], [0.4, -0.5]] : [[0, 0]]);
   } else if (m.variant === 'italiana') {
     const opp = m.cur === 0 ? 1 : 0;
     push(hitShots(m, cue, opp, [-0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7]), [1.4, 2.2, 3.2], lv.spin ? [[0, 0], [0.4, 0]] : [[0, 0]]);
@@ -131,7 +138,7 @@ function score(m, before, out, pi) {
 // Dove mettere la bilia in mano: varie posizioni valide, il computer prova i colpi da ognuna
 function placements(m) {
   const T = E.tableOf(m), id = E.cueId(m), out = [];
-  if (m.inHand === 'any' && m.variant === 'otto') {
+  if (m.inHand === 'any' && (m.variant === 'otto' || m.variant === 'nove')) {
     for (const t of E.legalFirst(m)) {
       const o = m.balls[t];
       for (const p of T.pockets) {
@@ -157,7 +164,7 @@ function placements(m) {
 export async function plan(m, level = 'medio') {
   const lv = LEVELS[level] || LEVELS.medio;
   const pi = m.cur;
-  if (m.variant === 'otto' && m.breakShot) {
+  if ((m.variant === 'otto' || m.variant === 'nove') && m.breakShot) {
     const c = m.balls[0], apex = m.balls.filter((b) => b.on && b.id).reduce((a, b) => (b.x < a.x ? b : a));
     const z = (Math.random() - 0.5) * 0.2, px = c.x, a = Math.atan2(apex.z - z, apex.x - px) + gauss() * 0.004;
     return { dx: Math.cos(a), dz: Math.sin(a), speed: 6.6, sy: 0.1, sx: 0, px, pz: z };

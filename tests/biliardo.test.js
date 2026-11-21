@@ -234,10 +234,84 @@ for (const [shot, ok] of [
   assert.equal(g.cur, 0, "chi fa l'accosto rimette il pallino");
 }
 
-// le quattro specialità giocate fino in fondo dal computer, e online con il pilota automatico
+// palla 9 (WPA): rombo con la 1 in punta e la 9 al centro; prima la più bassa; la 9 regolare vince; tre falli perdono
+{
+  const g = E.newGame('nove', two, { seed: 4 });
+  const xs = g.balls.filter(b => b.id).map(b => b.x);
+  assert.equal(g.balls[1].x, Math.min(...xs), 'la 1 in punta');
+  assert.ok(Math.abs(g.balls[9].z) < 1e-9 && g.balls[9].x > g.balls[1].x, 'la 9 al centro');
+  assert.deepEqual(E.legalFirst(g), [1]);
+  // tiro sulla 9 quando la più bassa è un'altra: fallo, la 9 torna sul punto
+  Object.assign(g, { breakShot: false, inHand: null });
+  park(g, [2, 3, 4, 5, 6, 7, 8]);
+  at(g, 1, -0.3, 0.5);
+  at(g, 9, 1.1, -0.48);
+  at(g, 0, 0.8, -0.24);
+  const d = Math.hypot(0.3, 0.24);
+  let r = E.playShot(g, { dx: 0.3 / d, dz: -0.24 / d, speed: 2.2, sy: -0.9, sx: 0 });
+  assert.match(r.out.foul, /colpire per prima la 1/);
+  assert.equal(g.balls[9].on, true, 'la 9 torna sul punto');
+  assert.equal(g.inHand, 'any');
+  // tre falli di fila: partita persa (il giocatore B manca due volte, poi ancora)
+  const h = E.newGame('nove', two, { seed: 4 });
+  Object.assign(h, { breakShot: false, inHand: null, cur: 1, fouls: [0, 2] });
+  at(h, 0, -1.0, 0.5);
+  r = E.playShot(h, { dx: 0, dz: -1, speed: 0.3, sy: 0, sx: 0 });
+  assert.equal(r.out.win, 0, 'tre falli di fila');
+  // la 9 imbucata regolarmente (prima la più bassa, qui sola rimasta) vince
+  const w = E.newGame('nove', two, { seed: 4 });
+  Object.assign(w, { breakShot: false, inHand: null });
+  for (const b of w.balls) if (b.id && b.id !== 9) b.on = false;
+  at(w, 9, 1.1, -0.48);
+  at(w, 0, 0.8, -0.24);
+  r = E.playShot(w, { dx: 0.3 / d, dz: -0.24 / d, speed: 2.2, sy: -0.9, sx: 0 });
+  assert.equal(r.out.win, 0);
+}
+// carambola (UMB): in apertura prima il rosso; un punto quando si toccano le altre due, con le sponde richieste
+{
+  const g = E.newGame('carambola', two, { cush: 0, target: 10 });
+  assert.deepEqual(E.legalFirst(g), [2]);
+  Object.assign(g, { breakShot: false });
+  at(g, 0, -0.8, 0);
+  at(g, 2, -0.5, 0.059);
+  at(g, 1, -0.2, 0);
+  let r = E.playShot(g, { dx: 1, dz: 0, speed: 2, sy: 0, sx: 0 });
+  assert.equal(g.scores[0], 1, 'carambola libera: punto');
+  assert.equal(r.out.keep, true, 'chi fa punto continua');
+  // la stessa carambola, ma nella partita a tre sponde: niente punto, tocca all'altro
+  const h = E.newGame('carambola', two, { cush: 3, target: 10 });
+  Object.assign(h, { breakShot: false });
+  at(h, 0, -0.8, 0);
+  at(h, 2, -0.5, 0.059);
+  at(h, 1, -0.2, 0);
+  r = E.playShot(h, { dx: 1, dz: 0, speed: 2, sy: 0, sx: 0 });
+  assert.equal(h.scores[0], 0, 'tre sponde: senza sponde niente punto');
+  assert.equal(h.cur, 1);
+}
+// snooker: dopo un fallo, se chi entra non vede le rosse (coperte da un colore) ha la free ball
+{
+  const g = E.newGame('snooker', two, { reds: 6 });
+  for (let id = 2; id <= 15; id++) g.balls[id].on = false;
+  at(g, 1, 1.2, 0);
+  at(g, 0, 0.5, 0);
+  at(g, 21, 0.85, 0); // la nera copre l'unica rossa
+  for (const id of [16, 17, 18, 19, 20]) at(g, id, -1.5 + (id - 16) * 0.2, 0.7);
+  Object.assign(g, { on: 'red', inHand: null, cur: 1 });
+  assert.equal(E.snookered(g), true, 'snookerato');
+  // l'avversario fa fallo (manca tutto lontano): tocca al giocatore 0, snookerato → free ball
+  at(g, 0, 0.5, 0);
+  g.cur = 1;
+  E.playShot(g, { dx: 0, dz: 1, speed: 0.15, sy: 0, sx: 0 });
+  assert.equal(g.cur, 0);
+  assert.equal(g.freeBall, true, 'free ball assegnata');
+  assert.ok(E.legalFirst(g).includes(21), 'con la free ball si può colpire anche un colore');
+}
+
+// tutte le specialità giocate fino in fondo dal computer, e online con il pilota automatico
 for (const variant of Object.keys(E.VARIANTS)) {
   const g = E.newGame(variant, [{ name: 'A' }, { name: 'B' }], {
-    target: variant === 'italiana' ? 25 : 50,
+    target: variant === 'italiana' ? 25 : variant === 'carambola' ? 10 : 50,
+    cush: 0,
     reds: 6,
     seed: 5
   });

@@ -10,12 +10,12 @@ import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
 import {events,trace,initDebugLog} from './debug-log.js?v=497d88fa03';
-import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=c739b1d9b6';
-import {renderMyGames,myTables,timeLeft} from './my-games.js?v=e670cbea24';
+import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=dab50e1d8e';
+import {renderMyGames,myTables,timeLeft} from './my-games.js?v=8240b254bd';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=6f9a6958a5';
-import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e6e542257d';
+import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=56908653f4';
 import {createCinemaLobby} from './cinema-lobby.js?v=e593ea3a15';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
@@ -27,16 +27,16 @@ import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=97d037f39a';
-import {createArcadeLink} from './arcade-link.js?v=e389f3f88f';
+import {createArcadeLink} from './arcade-link.js?v=567f7a97f8';
 import {createF1Link} from './f1-link.js?v=28d33c1b41';
-import {createBiliardoLink} from './biliardo-link.js?v=720571c69a';
+import {createBiliardoLink} from './biliardo-link.js?v=bb0b63f788';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.39',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.40',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});

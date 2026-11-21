@@ -152,7 +152,8 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
           players: data.players, // 2, oppure 3 o 4 a squadre
           points: data.target, // la Lobby usa "target" per i tornei degli altri giochi
           reds: data.reds,
-          cloth: data.cloth // il colore del panno, uguale per tutti
+          cloth: data.cloth, // il colore del panno, uguale per tutti
+          cush: data.cush // carambola: libera, a una o a tre sponde
         });
         clock(result);
         room = result.state.room;

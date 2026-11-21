@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=032c83e418';
-import { plan } from './ai.js?v=e21b1d633f';
+import * as E from './engine.js?v=2db7d98a7f';
+import { plan } from './ai.js?v=daf9ff5d64';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
@@ -60,6 +60,7 @@ const cfg = {
   view: store.get('view', 'over'),
   sens: +store.get('sens', '100') / 100,
   netPlayers: [2, 3, 4].includes(+store.get('np', '2')) ? +store.get('np', '2') : 2,
+  cush: +store.get('cush', '3'),
   bright: +store.get('bright', '75') / 100,
   charge: store.get('charge', 'normale'),
   quality: store.get('quality', /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? 'media' : 'alta'),
@@ -112,7 +113,12 @@ function targetOf(v) {
   const ok = v === 'snooker' ? E.REDS : E.TARGETS[v] || [];
   return ok.includes(cfg.target[v]) ? cfg.target[v] : v === 'snooker' ? 6 : E.DEFAULT_TARGET[v] || 0;
 }
-function gameOpts(v) { const t = targetOf(v); return v === 'snooker' ? { reds: t } : { target: t }; }
+// carambola: libera, a una o a tre sponde
+const cushOf = () => (E.CUSHIONS.includes(cfg.cush) ? cfg.cush : 3);
+function gameOpts(v) {
+  const t = targetOf(v);
+  return v === 'snooker' ? { reds: t } : v === 'carambola' ? { target: t, cush: cushOf() } : { target: t };
+}
 
 function newGame() {
   m = E.newGame(cfg.variant, players(), gameOpts(cfg.variant));
@@ -196,9 +202,9 @@ function hud() {
       if (!left) { const d = document.createElement('span'); d.className = 'mb'; d.style.background = '#111'; d.style.outline = '2px solid #e8c26a'; g.appendChild(d); }
       return;
     }
-    if (m.variant === 'italiana' || m.variant === 'boccette') {
+    if (m.variant === 'italiana' || m.variant === 'carambola' || m.variant === 'boccette') {
       const d = document.createElement('span'); d.className = 'mb';
-      d.style.background = m.variant === 'italiana' ? (i === 0 ? '#f4f1e6' : '#f2c414') : (i === 0 ? '#c8141e' : '#f4f1e6');
+      d.style.background = m.variant !== 'boccette' ? (i === 0 ? '#f4f1e6' : '#f2c414') : (i === 0 ? '#c8141e' : '#f4f1e6');
       g.appendChild(d);
     }
     g.append(' ' + E.status(m, i));
@@ -287,7 +293,7 @@ function gameOver() {
   if (myWin) { sfx.win(); haptic('notification', 'success'); } else sfx.foul();
   setTimeout(() => {
     $('overT').textContent = net ? (myWin ? (net.seats.length > 2 ? 'Avete vinto!' : 'Hai vinto!') : `Vince ${w.name}`) : cfg.mode === '1' ? (w.cpu ? 'Ha vinto il computer' : 'Hai vinto!') : `Vince ${w.name}!`;
-    const sc = m.variant === 'otto' ? '' : ` · ${m.scores[0]} a ${m.scores[1]}`;
+    const sc = m.variant === 'otto' || m.variant === 'nove' ? '' : ` · ${m.scores[0]} a ${m.scores[1]}`;
     $('overS').textContent = (m.msg || '') + sc + ` · ${m.shots} colpi`;
     // rivincita: in locale si riparte subito; online si apre una partita nuova con le stesse scelte
     // (gli altri la trovano negli avvisi); chi guardava soltanto non la offre
@@ -590,7 +596,7 @@ $('overAgain').onclick = () => {
   const o = net.opts || {};
   $('over').hidden = true;
   toast('Apro la rivincita online…');
-  toApp('create', { variant: net.variant, players: net.capacity || 2, cloth: o.cloth || cfg.cloth, ...(net.variant === 'snooker' ? { reds: o.reds } : { target: o.target }) });
+  toApp('create', { variant: net.variant, players: net.capacity || 2, cloth: o.cloth || cfg.cloth, ...(net.variant === 'snooker' ? { reds: o.reds } : { target: o.target, cush: o.cush }) });
 };
 $('exitB').onclick = leaveGame;
 $('overExit').onclick = leaveGame;
@@ -620,7 +626,7 @@ function showStart() {
   vg.innerHTML = '';
   for (const [k, v] of Object.entries(E.VARIANTS)) {
     const b = document.createElement('button');
-    b.innerHTML = `<b>${v.name}</b><small>${{ otto: 'palla 8, buche', snooker: 'tavolo da 12 piedi', italiana: '5 birilli, carambola', boccette: 'a mano, senza stecca' }[k]}</small>`;
+    b.innerHTML = `<b>${v.name}</b><small>${{ otto: 'piene e rigate, WPA', nove: 'dalla 1 alla 9, WPA', snooker: 'tavolo da 12 piedi', italiana: '5 birilli, FIBiS', carambola: 'libera, 1 o 3 sponde', boccette: 'a mano, senza stecca' }[k]}</small>`;
     b.classList.toggle('on', k === cfg.variant);
     b.onclick = () => { cfg.variant = k; store.set('variant', k); preview(); showStart(); };
     vg.appendChild(b);
@@ -643,7 +649,9 @@ function showStart() {
         : 'Online solo aprendo il gioco da Binottoland.';
   // punteggio da raggiungere / rosse (gli stessi valori che accetta il motore)
   const v = cfg.variant, row = $('tgRow'), btns = $('tgBtns');
-  row.hidden = v === 'otto';
+  row.hidden = v === 'otto' || v === 'nove';
+  $('cushRow').hidden = v !== 'carambola';
+  segOn('[data-cu]', 'cu', String(cushOf()));
   btns.innerHTML = '';
   $('tgLbl').textContent = v === 'snooker' ? 'Rosse' : 'Punti per vincere';
   const opts = v === 'snooker' ? E.REDS : E.TARGETS[v] || [];
@@ -666,6 +674,7 @@ function showStart() {
 }
 document.querySelectorAll('[data-m]').forEach((b) => (b.onclick = () => { cfg.mode = b.dataset.m; store.set('mode', cfg.mode); showStart(); }));
 document.querySelectorAll('[data-l]').forEach((b) => (b.onclick = () => { cfg.level = b.dataset.l; store.set('level', cfg.level); showStart(); }));
+document.querySelectorAll('[data-cu]').forEach((b) => (b.onclick = () => { cfg.cush = +b.dataset.cu; store.set('cush', b.dataset.cu); showStart(); }));
 document.querySelectorAll('[data-np]').forEach((b) => (b.onclick = () => { cfg.netPlayers = +b.dataset.np; store.set('np', b.dataset.np); showStart(); }));
 $('n1').oninput = () => { cfg.n1 = $('n1').value; store.set('n1', cfg.n1); };
 $('n2').oninput = () => { cfg.n2 = $('n2').value; store.set('n2', cfg.n2); };
