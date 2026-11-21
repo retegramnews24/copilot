@@ -9,7 +9,8 @@ export function renderNaval(g,ctx){const root=$('naval-area');if(!root.dataset.r
  if(root.dataset.phase!==g.phase){root.dataset.phase=g.phase;root.dataset.tab=g.phase==='placement'?'own':'target'}
  $('naval-info').textContent=g.lastEvent+' · '+g.ready.filter(Boolean).length+'/2 flotte pronte'+(g.phase==='battle'?' · navi affondate '+g.sunk.join(' / '):'');$('naval-builder').hidden=!canSetup;$('naval-tabs').hidden=g.phase==='placement';
  const mine=ctx.seat<0?0:ctx.seat,opponent=1-mine,fleet=g.fleet||(canSetup?draft.fleet:null);
- $('naval-own-title').textContent=ctx.seat<0?'Tiri contro '+ctx.players[0].name:'La tua flotta';$('naval-target-title').textContent=ctx.seat<0?'Tiri contro '+ctx.players[1].name:'Attacco · '+ctx.players[opponent].name;
+ const who=i=>ctx.players[i]?.name||'Posto libero';
+ $('naval-own-title').textContent=ctx.seat<0?'Tiri contro '+who(0):'La tua flotta';$('naval-target-title').textContent=ctx.seat<0?'Tiri contro '+who(1):'Attacco · '+who(opponent);
  grid($('naval-own-grid'),ctx.seat<0?null:fleet,g.shots[opponent],canSetup,cell=>{const index=Number($('naval-ship').value),cells=shipCells(cell,SHIPS[index].length,$('naval-direction').value==='vertical');if(!cells||draft.fleet.some((s,i)=>i!==index&&s?.some(c=>cells.includes(c)))){$('naval-info').textContent='Posizione fuori griglia o sovrapposta a un’altra nave.';return}draft.fleet[index]=cells;const next=draft.fleet.findIndex(s=>!s);if(next>=0)$('naval-ship').value=next;renderNaval(g,ctx)});
  grid($('naval-target-grid'),null,g.shots[mine],ctx.active&&g.phase==='battle'&&!g.result,cell=>ctx.move({kind:'fire',cell}));
  $('naval-random').onclick=()=>{draft.fleet=randomFleet();renderNaval(g,ctx)};$('naval-clear').onclick=()=>{draft.fleet=Array(5).fill(null);renderNaval(g,ctx)};$('naval-deploy').disabled=draft.fleet.length!==5||draft.fleet.some(s=>!s);$('naval-deploy').onclick=()=>ctx.move({kind:'deploy',fleet:draft.fleet});
