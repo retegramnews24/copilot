@@ -1,46 +1,352 @@
-// Metres; rows ordered from the red goal to the blue goal.
-export const rows=[
-  [0,0,1],[0,0,2],[1,1,3],[0,1,5],[1,1,5],[0,1,3],[1,0,2],[1,0,1]
-].map(([team,attack,count],i)=>({team,attack,count,x:(i-3.5)*.143,spacing:count===2?.24:count===3?.204:.118,
-  travel:count===1?.135:count===2?.208:count===3?.127:.096}));
-export function newField(){
-  return {hit:0,sound:'',ball:{x:0,z:0,vx:0,vz:0},score:[0,0],restart:"announce",defence:false,hold:.7,serve:1,finished:false,
-    rods:rows.map(()=>({shift:0,angle:0,slide:0,turn:0}))};
+// Calcio balilla (tavolo italiano a portiere singolo, regole ITSF con le scelte di docs/balilla.md).
+// Metri e secondi. Le aste sono in ordine dalla porta rossa (x negativa) alla porta blu (x positiva):
+// per squadra portiere 1, difesa 2, centrocampo 5, attacco 3. I rossi (squadra 0) attaccano verso +x.
+// Stesso codice sul server (partite online) e sul telefono (contro il computer, stesso telefono).
+export const L = 0.565; // mezza lunghezza del campo (113 cm)
+export const W = 0.35; // mezza larghezza (70 cm)
+export const GOAL = 0.1; // mezza larghezza della porta (20 cm)
+export const R = 0.017; // pallina da 34 mm
+export const ROD_H = 0.085; // altezza dell'asse delle aste sul campo
+export const FOOT = 0.078; // dall'asse alla punta del piede
+export const MAX_ANGLE = 1.55; // l'asta non fa il giro completo: la rullata è impossibile
+const LOW = Math.acos((ROD_H - 2 * R + 0.004) / FOOT); // oltre questo angolo il piede passa sopra la pallina
+const SPIN = 120; // rad/s, rotazione più veloce di un polso (piede a circa 9 m/s)
+const SLIDE = 2.4; // m/s, spostamento più veloce di un'asta
+const MAX_SPEED = 11; // m/s
+const STEP = 1 / 600;
+
+export const rows = [
+  [0, 0, 1],
+  [0, 0, 2],
+  [1, 1, 3],
+  [0, 1, 5],
+  [1, 1, 5],
+  [0, 1, 3],
+  [1, 0, 2],
+  [1, 0, 1]
+].map(([team, attack, count], i) => ({
+  team,
+  attack,
+  count,
+  x: (i - 3.5) * 0.143,
+  spacing: count === 2 ? 0.24 : count === 3 ? 0.204 : 0.118,
+  travel: count === 1 ? 0.135 : count === 2 ? 0.208 : count === 3 ? 0.127 : 0.096
+}));
+export const figureZ = (row, n, shift) => (n - (row.count - 1) / 2) * row.spacing + shift;
+export const TARGETS = [5, 8, 10];
+
+// Nuova partita. target: gol per vincere (5, 8, 10); bestOf: 1 (secca) o 3 (al meglio di 3).
+export function newField(opts = {}, random = Math.random) {
+  const f = {
+    target: TARGETS.includes(opts.target) ? opts.target : 5,
+    bestOf: opts.bestOf === 3 ? 3 : 1,
+    games: [0, 0],
+    gameNo: 1,
+    score: [0, 0],
+    phase: 'throw', // throw (palla nel foro) · play · goal · over (fine di una partita) · match (fine)
+    thrower: random() < 0.5 ? 0 : 1, // prima rimessa a sorteggio
+    lastThrower: 0,
+    wait: 4, // secondi prima che la palla entri da sola
+    timer: 0,
+    dead: 0,
+    hit: 0,
+    sound: '',
+    swap: 0, // cresce quando si cambia campo (2 contro 2, tra una partita e l'altra)
+    finished: false,
+    ball: { x: 0, z: 0, vx: 0, vz: 0 },
+    rods: rows.map(() => ({ shift: 0, angle: 0, vs: 0, va: 0, tShift: 0, tAngle: 0, pin: false, cool: 0 }))
+  };
+  holdInHole(f);
+  return f;
 }
-export function simulate(field,dt){
-  if(field.finished)return;
-  const ball=field.ball,radius=.017;
-  if(!field.restart&&field.hold>0){
-    field.hold-=dt;
-    if(field.hold<=0){ball.vx=(field.defence?-.42:.035)*field.serve;ball.vz=-.68*field.serve;if(!field.defence){ball.z=.30*field.serve;field.toRail=true}}
+// La palla aspetta nel foro laterale di centrocampo, dal lato di chi rimette (rossi dal lato +z).
+function holdInHole(f) {
+  const side = f.thrower === 0 ? 1 : -1;
+  Object.assign(f.ball, { x: 0, z: side * (W + 0.03), vx: 0, vz: 0 });
+}
+// Rimessa all'italiana: la palla entra dal foro e rotola verso il centro, tra le due aste di centrocampo.
+export function throwIn(f, random = Math.random) {
+  if (f.phase !== 'throw') return false;
+  const side = f.thrower === 0 ? 1 : -1;
+  Object.assign(f.ball, { x: 0, z: side * (W - R - 0.002), vx: (random() - 0.5) * 0.14, vz: -side * (0.55 + random() * 0.3) });
+  f.lastThrower = f.thrower;
+  f.phase = 'play';
+  f.dead = 0;
+  f.hit++;
+  f.sound = 'throw';
+  return true;
+}
+// Comandi di una squadra: slide da -1 a 1 (tutta la corsa dell'asta), angle in radianti (positivo = piede verso +x).
+// attack: 0 portiere+difesa, 1 centrocampo+attacco, null tutte e quattro.
+export function control(f, team, attack, slide, angle) {
+  const s = Math.max(-1, Math.min(1, Number(slide) || 0)),
+    a = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, Number(angle) || 0));
+  rows.forEach((row, i) => {
+    if (row.team !== team || (attack !== null && row.attack !== attack)) return;
+    f.rods[i].tShift = s;
+    f.rods[i].tAngle = a;
+  });
+}
+// La coppia di aste più vicina alla palla (1 contro 1: cambia da sola), con un po' di isteresi.
+export function nearPair(f, team, current = 1) {
+  let best = null,
+    bd = 1e9;
+  rows.forEach(row => {
+    if (row.team !== team) return;
+    const d = Math.abs(row.x - f.ball.x) - (row.attack === current ? 0.03 : 0);
+    if (d < bd) {
+      bd = d;
+      best = row.attack;
+    }
+  });
+  return best ?? current;
+}
+// Una figura può arrivare alla palla?
+function reachable(f) {
+  const b = f.ball;
+  return rows.some(row => {
+    if (Math.abs(b.x - row.x) > FOOT * Math.sin(LOW) + R) return false;
+    for (let n = 0; n < row.count; n++) {
+      const z0 = figureZ(row, n, 0);
+      if (b.z > z0 - row.travel - 0.03 && b.z < z0 + row.travel + 0.03) return true;
+    }
+    return false;
+  });
+}
+
+function moveRods(f, dt) {
+  rows.forEach((row, i) => {
+    const r = f.rods[i];
+    const ts = r.tShift * row.travel,
+      s0 = r.shift,
+      a0 = r.angle;
+    r.shift += Math.max(-SLIDE * dt, Math.min(SLIDE * dt, ts - r.shift));
+    r.angle += Math.max(-SPIN * dt, Math.min(SPIN * dt, r.tAngle - r.angle));
+    r.vs = (r.shift - s0) / dt;
+    r.va = (r.angle - a0) / dt;
+  });
+}
+
+function kickFigures(f, dt) {
+  const b = f.ball;
+  for (const [i, row] of rows.entries()) {
+    const rod = f.rods[i];
+    // appena lasciata da sotto il piede la palla non si urta subito (il piede ci passa sopra)
+    if (rod.cool > 0) {
+      rod.cool -= dt;
+      continue;
+    }
+    if (Math.abs(rod.angle) > LOW) {
+      if (rod.pin) rod.cool = 0.08;
+      rod.pin = false;
+      continue; // piede alzato: la palla passa sotto
+    }
+    const fx = row.x + FOOT * Math.sin(rod.angle);
+    if (Math.abs(b.x - fx) > R + 0.02) {
+      rod.pin = false;
+      continue;
+    }
+    const vfx = FOOT * Math.cos(rod.angle) * rod.va,
+      vfz = rod.vs;
+    for (let n = 0; n < row.count; n++) {
+      const fz = figureZ(row, n, rod.shift);
+      // piede: rettangolo 2,2 × 2,8 cm visto dall'alto
+      const cx = Math.max(fx - 0.011, Math.min(fx + 0.011, b.x)),
+        cz = Math.max(fz - 0.014, Math.min(fz + 0.014, b.z));
+      let dx = b.x - cx,
+        dz = b.z - cz,
+        d = Math.hypot(dx, dz);
+      // palla fermata sotto il piede: piede inclinato sopra la palla e palla lenta rispetto al piede
+      const lean = Math.abs(rod.angle) > 0.3 && Math.sign(rod.angle) === Math.sign(b.x - row.x);
+      if (lean && (b.x - fx) * Math.sign(rod.angle) > -0.004 && Math.abs(b.x - fx) < R + 0.013 && Math.abs(b.z - fz) < 0.02 && (rod.pin || Math.hypot(b.vx - vfx, b.vz - vfz) < 1.6)) {
+        if (!rod.pin) {
+          f.hit++;
+          f.sound = 'stop';
+        }
+        rod.pin = true;
+        b.vx = 0;
+        b.vz = vfz;
+        b.x = fx + Math.sign(rod.angle) * 0.004;
+        b.z += (fz - b.z) * 0.2;
+        return;
+      }
+      if (d >= R) continue;
+      if (d < 1e-6) {
+        dx = Math.sign(b.x - row.x) || 1;
+        dz = 0;
+        d = 1;
+      }
+      const nx = dx / d,
+        nz = dz / d;
+      const vn = (b.vx - vfx) * nx + (b.vz - vfz) * nz;
+      if (vn < 0) {
+        const e = 0.55;
+        b.vx -= (1 + e) * vn * nx;
+        b.vz -= (1 + e) * vn * nz;
+        // un filo di attrito laterale col piede
+        b.vz += (vfz - b.vz) * 0.15;
+        if (-vn > 0.15) {
+          f.hit++;
+          f.sound = 'kick';
+        }
+      }
+      const pd = d === 1 ? 0 : d;
+      b.x = cx + nx * R + (pd === 0 ? nx * 0.001 : 0);
+      b.z = cz + nz * R;
+    }
+    if (!rod.pin) continue;
+    rod.pin = false;
+    rod.cool = 0.08;
   }
-  for(const [index,row] of rows.entries()){
-    const rod=field.rods[index],old=rod.angle,previous=rod.shift;
-    rod.shift+=Math.max(-dt*1.35,Math.min(dt*1.35,rod.slide*row.travel-rod.shift));
-    rod.angle+=Math.max(-dt*13,Math.min(dt*13,rod.turn*1.12-rod.angle));
-    const foot=row.x-.066*Math.sin(rod.angle);
-    if(field.restart||field.hold>0||field.toRail||Math.abs(ball.x-foot)>.04)continue;
-    for(let n=0;n<row.count;n++){
-      const z=(n-(row.count-1)/2)*row.spacing+rod.shift;
-      const dx=ball.x-foot,dz=ball.z-z,d=Math.hypot(dx,dz);
-      if(d>=.032)continue;
-      const nx=d>.0001?dx/d:field.serve,nz=d>.0001?dz/d:0;
-      const vx=-.075*(rod.angle-old)/dt,vz=(rod.shift-previous)/dt;
-      const approach=(ball.vx-vx)*nx+(ball.vz-vz)*nz;
-      if(approach<0){if(approach<-.10){field.hit++;field.sound='kick'}ball.vx-=1.82*approach*nx;ball.vz-=1.82*approach*nz}
-      ball.x=foot+nx*.032;ball.z=z+nz*.032;
+}
+
+function moveBall(f, dt) {
+  const b = f.ball;
+  // rialzi negli angoli: la palla scivola verso il centro
+  if (Math.abs(b.x) > L - 0.045 && Math.abs(b.z) > W - 0.045) {
+    b.vx -= Math.sign(b.x) * 0.85 * dt;
+    b.vz -= Math.sign(b.z) * 0.85 * dt;
+  }
+  b.x += b.vx * dt;
+  b.z += b.vz * dt;
+  // rotolamento sul campo
+  const v = Math.hypot(b.vx, b.vz);
+  if (v > 0) {
+    const k = Math.max(0, v - 0.16 * dt) / v * Math.exp(-0.08 * dt);
+    b.vx *= k;
+    b.vz *= k;
+  }
+  if (v > MAX_SPEED) {
+    b.vx *= MAX_SPEED / v;
+    b.vz *= MAX_SPEED / v;
+  }
+  // sponde laterali
+  if (Math.abs(b.z) > W - R) {
+    const s = Math.sign(b.z);
+    b.z = s * (W - R);
+    if (b.vz * s > 0) {
+      if (Math.abs(b.vz) > 0.25) {
+        f.hit++;
+        f.sound = 'rail';
+      }
+      b.vz = -b.vz * 0.7;
     }
   }
-  if(field.restart||field.hold>0)return;
-  ball.x+=ball.vx*dt;ball.z+=ball.vz*dt;
-  const drag=Math.exp(-.38*dt);ball.vx*=drag;ball.vz*=drag;
-  if(Math.abs(ball.z)>.35-radius){ball.z=Math.sign(ball.z)*(.35-radius);field.hit++;field.sound='rail';ball.vz=-Math.sign(ball.z)*Math.abs(ball.vz)*.86;field.toRail=false}
-  if(Math.abs(ball.x)>.565-radius){
-    if(Math.abs(ball.z)<.094-radius){
-      if(Math.abs(ball.x)<.583)return;
-      const team=ball.x>0?0:1;field.hit++;field.sound='goal';field.score[team]++;field.finished=field.score[team]>=8;
-      field.serve=team===0?-1:1;field.hold=.25;field.defence=false;field.restart='announce';Object.assign(ball,{x:0,z:0,vx:0,vz:0});
-    }else{ball.x=Math.sign(ball.x)*(.565-radius);field.hit++;field.sound='rail';ball.vx=-Math.sign(ball.x)*Math.abs(ball.vx)*.87}
+  // fondo campo e porte
+  if (Math.abs(b.x) > L - R) {
+    const s = Math.sign(b.x);
+    if (Math.abs(b.z) < GOAL - R * 0.4) {
+      if (Math.abs(b.x) > L + R) return s > 0 ? 0 : 1; // gol: squadra che segna
+    } else if (Math.abs(b.x) < L + R * 0.5) {
+      // pali: la palla rimbalza sullo spigolo della porta
+      const post = Math.sign(b.z) * GOAL;
+      if (Math.abs(b.z) < GOAL + R) {
+        const dx = b.x - s * L,
+          dz = b.z - post,
+          d = Math.hypot(dx, dz) || 1;
+        if (d < R) {
+          const nx = dx / d,
+            nz = dz / d,
+            vn = b.vx * nx + b.vz * nz;
+          if (vn < 0) {
+            b.vx -= 1.7 * vn * nx;
+            b.vz -= 1.7 * vn * nz;
+          }
+          b.x = s * L + nx * R;
+          b.z = post + nz * R;
+        }
+      } else {
+        b.x = s * (L - R);
+        if (b.vx * s > 0) {
+          if (Math.abs(b.vx) > 0.25) {
+            f.hit++;
+            f.sound = 'rail';
+          }
+          b.vx = -b.vx * 0.7;
+        }
+      }
+    } else if (Math.abs(b.z) >= GOAL - R * 0.4) {
+      // già dentro la bocca della porta: rimbalza sui lati interni
+      b.z = Math.sign(b.z) * (GOAL - R * 0.4);
+      b.vz = -b.vz * 0.6;
+    }
   }
-  if(!field.finished&&field.hold<=0&&Math.hypot(ball.vx,ball.vz)<.035){field.serve=Math.abs(ball.x)>.071?(ball.x<0?1:-1):field.serve;field.defence=true;field.restart='announce';field.hold=.25;Object.assign(ball,{x:-.46*field.serve,z:0,vx:0,vz:0})}
+  return -1;
+}
+
+function goal(f, team) {
+  f.score[team]++;
+  f.hit++;
+  f.sound = 'goal';
+  f.thrower = 1 - team; // rimette chi ha subito
+  f.timer = 1.4;
+  f.phase = 'goal';
+  for (const r of f.rods) r.pin = false;
+  if (f.score[team] >= f.target) {
+    f.games[team]++;
+    if (f.games[team] > f.bestOf / 2) {
+      f.phase = 'match';
+      f.finished = true;
+    } else {
+      f.phase = 'over';
+      f.timer = 3;
+      f.thrower = 1 - team; // la partita dopo comincia chi ha perso
+    }
+  }
+}
+
+// Partita successiva del "al meglio di 3".
+function nextGame(f) {
+  f.score = [0, 0];
+  f.gameNo++;
+  f.swap++;
+  startThrow(f, f.thrower);
+}
+function startThrow(f, team) {
+  f.thrower = team;
+  f.phase = 'throw';
+  f.wait = 4;
+  f.dead = 0;
+  holdInHole(f);
+}
+// Cambio campo (2 contro 2): le squadre si scambiano i lati, punteggi e turno seguono le persone.
+export function swapSides(f) {
+  f.games.reverse();
+  f.score.reverse();
+  f.thrower = 1 - f.thrower;
+  f.lastThrower = 1 - f.lastThrower;
+  holdInHole(f);
+}
+
+export function simulate(f, dt, random = Math.random) {
+  if (f.finished) return;
+  const n = Math.max(1, Math.ceil(dt / STEP)),
+    h = dt / n;
+  for (let k = 0; k < n; k++) {
+    moveRods(f, h);
+    if (f.phase === 'throw') {
+      f.wait -= h;
+      if (f.wait <= 0) throwIn(f, random);
+      continue;
+    }
+    if (f.phase === 'goal' || f.phase === 'over') {
+      f.timer -= h;
+      if (f.timer > 0) continue;
+      if (f.phase === 'over') nextGame(f);
+      else startThrow(f, f.thrower);
+      continue;
+    }
+    if (f.phase !== 'play') return;
+    kickFigures(f, h);
+    const scored = moveBall(f, h);
+    if (scored >= 0) {
+      goal(f, scored);
+      if (f.finished) return;
+      continue;
+    }
+    // palla ferma dove nessuno arriva: si rimette dal foro (la rimette chi l'aveva rimessa)
+    const still = Math.hypot(f.ball.vx, f.ball.vz) < 0.03 && !f.rods.some(r => r.pin);
+    f.dead = still ? f.dead + h : 0;
+    if (f.dead > 1.5 && !reachable(f)) startThrow(f, f.lastThrower);
+  }
 }

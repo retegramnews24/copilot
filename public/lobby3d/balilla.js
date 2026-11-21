@@ -1,167 +1,614 @@
+// Calcio balilla della Lobby 3D: il tavolo (italiano a portiere singolo), i comandi e le partite.
+// Decisioni in docs/balilla.md: regole ITSF, rullata impossibile, rimessa dal foro laterale, 5/8/10 gol,
+// secca o al meglio di 3; contro il computer (si adatta), stesso telefono, 1 contro 1 e 2 contro 2 online.
+// Comandi: dito o mouse su e giù sposta le aste, di lato le ruota (uno scatto verso la porta avversaria tira).
 import * as THREE from 'three';
-import {rows,newField,simulate} from './balilla-rules.js?v=a7fa00b1a8';
+import { rows, newField, simulate, throwIn, control, nearPair, figureZ, W, MAX_ANGLE, TARGETS } from './balilla-rules.js?v=cff4794d59';
+import { createAI, loadSkill, saveSkill, adapt, skillName } from './balilla-ai.js?v=aa3bb7922f';
 
-export function buildBalilla(scene,el,send,playSound){
-  const table=new THREE.Group();table.position.set(-13,0,0);scene.add(table);
-  const material=(color,metalness=0)=>new THREE.MeshStandardMaterial({color,metalness,roughness:metalness?.3:.56});
-  const frame=material('#23384a'),chrome=material('#bccbd4',.82),rubber=material('#202228'),white=material('#fff1cc'),pitch=material('#207b63');
-  const brass=material('#c7a16c',.7),sole=material('#17202c'),skin=material('#e0b390');
-  const kits=[material('#ef4438'),material('#388cec')];
-  function mesh(geo,mat,x,y,z,parent=table){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);parent.add(m);return m}
-  function box(w,h,d,m,x,y,z,parent){return mesh(new THREE.BoxGeometry(w,h,d),m,x,y,z,parent)}
-  function cylinder(radius,length,m,x,y,z,parent){
-    const c=mesh(new THREE.CylinderGeometry(radius,radius,length,16),m,x,y,z,parent);c.rotation.x=Math.PI/2;return c;
+const TX = -13; // posizione del tavolo nella sala giochi
+const TOP = 0.733; // piano del campo
+const TEAM = ['Rossi', 'Blu'];
+
+export function buildBalilla(scene, el, send, playSound) {
+  // ---------- il tavolo ----------
+  const table = new THREE.Group();
+  table.position.set(TX, 0, 0);
+  scene.add(table);
+  const material = (color, metalness = 0) => new THREE.MeshStandardMaterial({ color, metalness, roughness: metalness ? 0.3 : 0.56 });
+  const frame = material('#23384a'),
+    chrome = material('#bccbd4', 0.82),
+    rubber = material('#202228'),
+    white = material('#fff1cc'),
+    pitch = material('#207b63');
+  const brass = material('#c7a16c', 0.7),
+    sole = material('#17202c'),
+    skin = material('#e0b390'),
+    hole = material('#07090c');
+  const kits = [material('#ef4438'), material('#388cec')];
+  function mesh(geo, mat, x, y, z, parent = table) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    parent.add(m);
+    return m;
   }
-  for(const x of [-.56,.56])for(const z of [-.29,.29]){
-    box(.08,.59,.08,chrome,x,.31,z);box(.095,.03,.095,rubber,x,.016,z);
+  const box = (w, h, d, m, x, y, z, parent) => mesh(new THREE.BoxGeometry(w, h, d), m, x, y, z, parent);
+  function cylinder(radius, length, m, x, y, z, parent) {
+    const c = mesh(new THREE.CylinderGeometry(radius, radius, length, 16), m, x, y, z, parent);
+    c.rotation.x = Math.PI / 2;
+    return c;
   }
-  box(1.38,.17,.76,frame,0,.645,0);
-  for(const sign of [-1,1]){
-    box(1.34,.016,.013,brass,0,.585,.382*sign);
-    box(.23,.072,.014,rubber,.35,.65,.382*sign);
-    for(const x of [-.59,.59])box(.10,.20,.013,chrome,x,.675,.383*sign);
-  }
-  box(1.13,.014,.70,pitch,0,.733,0);
-  for(const z of [-.365,.365]){box(1.38,.16,.03,frame,0,.82,z);box(1.38,.011,.034,chrome,0,.895,z)}
-  for(const sign of [-1,1]){
-    for(const z of [-.223,.223])box(.125,.16,.254,frame,sign*.627,.82,z);
-    box(.018,.16,.19,rubber,sign*.682,.82,0);box(.12,.02,.19,chrome,sign*.627,.89,0);
-    for(let n=0;n<8;n++)box(.012,.017,.02,kits[sign===1?1:0],sign*(.58+n*.011),.911,.25);
-    box(1.08,.001,.003,white,0,.741,sign*.30);
-    box(.003,.001,.60,white,.54*sign,.741,0);
-    for(const z of [-.16,.16])box(.13,.001,.003,white,sign*.476,.742,z);
-    box(.003,.001,.32,white,sign*.41,.742,0);
-  }
-  box(.003,.001,.60,white,0,.742,0);
-  const circle=mesh(new THREE.RingGeometry(.076,.079,48),white,0,.742,0);circle.rotation.x=-Math.PI/2;
-  const sticks=rows.map(row=>{
-    const dir=row.team?-1:1, group=new THREE.Group();table.add(group);group.position.set(row.x,.818,0);
-    for(const side of [-1,1]){
-      cylinder(.022,.025,brass,row.x,.818,side*.382);
-      cylinder(.014,.032,rubber,row.x,.818,side*.362);
+  for (const x of [-0.56, 0.56])
+    for (const z of [-0.29, 0.29]) {
+      box(0.08, 0.59, 0.08, chrome, x, 0.31, z);
+      box(0.095, 0.03, 0.095, rubber, x, 0.016, z);
     }
-    cylinder(.009,.81,chrome,row.x,.818,0);
-    cylinder(.009,.50,chrome,0,0,dir*.23,group);
-    cylinder(.019,.105,rubber,0,0,dir*.49,group);
-    for(let n=0;n<6;n++)cylinder(.020,.004,sole,0,0,dir*(.45+n*.015),group);
-    for(let n=0;n<row.count;n++){
-      const z=(n-(row.count-1)/2)*row.spacing;
-      mesh(new THREE.SphereGeometry(.017,12,10),skin,0,.025,z,group);
-      box(.032,.046,.034,kits[row.team],0,-.009,z,group);
-      box(.035,.012,.035,white,0,-.031,z,group);
-      box(.024,.04,.024,kits[row.team],0,-.048,z,group);
-      box(.03,.016,.029,sole,0,-.066,z,group);
-    }return group;
+  box(1.38, 0.17, 0.76, frame, 0, 0.645, 0);
+  for (const sign of [-1, 1]) {
+    box(1.34, 0.016, 0.013, brass, 0, 0.585, 0.382 * sign);
+    for (const x of [-0.59, 0.59]) box(0.1, 0.2, 0.013, chrome, x, 0.675, 0.383 * sign);
+  }
+  box(1.13, 0.014, 0.7, pitch, 0, TOP, 0);
+  for (const z of [-0.365, 0.365]) {
+    box(1.38, 0.16, 0.03, frame, 0, 0.82, z);
+    box(1.38, 0.011, 0.034, chrome, 0, 0.895, z);
+    // foro laterale di centrocampo da cui entra la palla
+    const h = mesh(new THREE.CircleGeometry(0.024, 20), hole, 0, 0.758, z - Math.sign(z) * 0.0155);
+    h.rotation.y = z > 0 ? Math.PI : 0;
+    const ring = mesh(new THREE.TorusGeometry(0.025, 0.004, 8, 24), chrome, 0, 0.758, z - Math.sign(z) * 0.016);
+    ring.rotation.y = 0;
+  }
+  for (const sign of [-1, 1]) {
+    for (const z of [-0.223, 0.223]) box(0.125, 0.16, 0.254, frame, sign * 0.627, 0.82, z);
+    box(0.018, 0.16, 0.2, rubber, sign * 0.682, 0.82, 0);
+    box(0.12, 0.02, 0.2, chrome, sign * 0.627, 0.89, 0);
+    box(1.08, 0.001, 0.003, white, 0, 0.741, sign * 0.3);
+    box(0.003, 0.001, 0.6, white, 0.54 * sign, 0.741, 0);
+    for (const z of [-0.16, 0.16]) box(0.13, 0.001, 0.003, white, sign * 0.476, 0.742, z);
+    box(0.003, 0.001, 0.32, white, sign * 0.41, 0.742, 0);
+    // rialzi negli angoli: la palla non resta ferma nell'angolo
+    for (const z of [-1, 1]) {
+      const ramp = mesh(new THREE.CylinderGeometry(0.001, 0.05, 0.012, 3, 1), pitch, sign * 0.545, 0.745, z * 0.33);
+      ramp.rotation.y = Math.atan2(-z, -sign) + Math.PI / 6;
+    }
+  }
+  box(0.003, 0.001, 0.6, white, 0, 0.742, 0);
+  mesh(new THREE.RingGeometry(0.076, 0.079, 48), white, 0, 0.742, 0).rotation.x = -Math.PI / 2;
+  // pallottoliere del punteggio: 10 palline per parte
+  const beads = [0, 1].map(team => {
+    const sign = team ? 1 : -1,
+      list = [];
+    for (let n = 0; n < 10; n++) list.push(box(0.01, 0.017, 0.02, kits[team], sign * (0.555 + n * 0.0115), 0.911, 0.25));
+    box(0.13, 0.003, 0.003, chrome, sign * 0.6, 0.911, 0.25);
+    return list;
   });
-  const training=newField();
-  let lastPracticeHit=0,lastRemoteHit=null,lastBeat=0;
-  let soloPair=1,trainingTeam=0,trainingAttack=1,shotUntil=0;
-  function resetTraining(){
-    lastPracticeHit=0;Object.assign(training,newField());training.restart='';training.hold=0;
-    const side=trainingTeam?-1:1;
-    Object.assign(training.ball,{x:(trainingAttack?.28:-.33)*side,z:.08,vx:.20*side,vz:.19});
-  }
-  const ball=mesh(new THREE.SphereGeometry(.017,16,12),white,0,.758,0);
-  const ui=document.createElement('section');ui.hidden=true;
-  ui.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 12px);left:50%;transform:translateX(-50%);width:max-content;max-width:94%;padding:10px;border-radius:10px;background:#101924ee;color:white;text-align:center;touch-action:none';
-  const status=document.createElement('div'),choices=document.createElement('div'),hint=document.createElement('small');
-  const button=(parent,title,fn)=>{const b=document.createElement('button');b.textContent=title;b.onclick=fn;parent.append(b);return b};
-  ui.append(status,choices,hint);el.append(ui);
-  let watching=false,active=false,state=null,mode=2,slide=0,turn=0,lastInput='',lastUI='',lastSend=0,lastWatch=0;
-  const post=(action,data={})=>send?.({type:'balilla',action,...data});
-  function render(){
-    if(!active)return;
-    const occupied=state?.occupied??[],slot=state?.slot??-1;
-    if(occupied.length)mode=state.mode;
-    const key=JSON.stringify([mode,slot,occupied,state?.field.score,state?.field.finished,state?.field.restart,state?.field.serve,!!state,soloPair]);
-    if(key===lastUI)return;lastUI=key;
-    status.textContent=!state?'Allenamento libero':(!state.playing&&!state.field.finished?'Allenamento · Rossi – Blu':state.field.finished?'Finale':'Rossi – Blu')+'  '+state.field.score.join(' : ')+' · '+occupied.length+'/'+mode;
-    choices.replaceChildren();
-    if(state && slot<0){
-      if(!occupied.length)button(choices,mode===2?'1 contro 1 ▾':'2 contro 2 ▾',()=>{mode=mode===2?4:2;render()});
-      for(let n=0;n<4;n++){
-        if(mode===2&&n%2)continue;
-        button(choices,(n<2?'Rossi':'Blu')+(mode===4?(n%2?' attacco':' difesa'):''),()=>post('join',{slot:n,mode})).disabled=occupied.includes(n);
+  const sticks = rows.map(row => {
+    const dir = row.team ? -1 : 1,
+      group = new THREE.Group();
+    table.add(group);
+    group.position.set(row.x, 0.818, 0);
+    for (const side of [-1, 1]) {
+      cylinder(0.022, 0.025, brass, row.x, 0.818, side * 0.382);
+      cylinder(0.014, 0.032, rubber, row.x, 0.818, side * 0.362);
+    }
+    // aste telescopiche: non escono dall'altra parte del tavolo
+    cylinder(0.009, 0.84, chrome, 0, 0, dir * 0.05, group);
+    cylinder(0.019, 0.105, rubber, 0, 0, dir * 0.49, group);
+    for (let n = 0; n < 6; n++) cylinder(0.02, 0.004, sole, 0, 0, dir * (0.45 + n * 0.015), group);
+    for (let n = 0; n < row.count; n++) {
+      const z = figureZ(row, n, 0);
+      mesh(new THREE.SphereGeometry(0.017, 12, 10), skin, 0, 0.025, z, group);
+      box(0.032, 0.046, 0.034, kits[row.team], 0, -0.009, z, group);
+      box(0.035, 0.012, 0.035, white, 0, -0.031, z, group);
+      box(0.024, 0.04, 0.024, kits[row.team], 0, -0.048, z, group);
+      box(0.022, 0.016, 0.028, sole, 0, -0.07, z, group);
+    }
+    return group;
+  });
+  const ball = mesh(new THREE.SphereGeometry(0.017, 16, 12), white, 0, 0.758, 0);
+
+  // ---------- pannello ----------
+  const ui = document.createElement('section');
+  ui.hidden = true;
+  ui.className = 'bal-ui';
+  const css = document.createElement('style');
+  css.textContent = `.bal-ui{position:absolute;top:calc(var(--ui-safe-top,0px) + 56px);left:50%;transform:translateX(-50%);width:max-content;max-width:94%;padding:8px 10px;border-radius:12px;background:#101924e6;color:#fff;text-align:center;font-size:14px;touch-action:none;z-index:3}
+.bal-ui .row{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:6px}
+.bal-ui .lbl{opacity:.75;font-size:12px;align-self:center}
+.bal-ui button{padding:7px 11px!important;font-size:14px!important;width:auto!important;margin:0}
+.bal-ui button.on{background:#f0b429!important;color:#231400!important;border-color:#f0b429!important}
+.bal-ui .big{font-weight:700;font-size:16px}
+.bal-ui small{display:block;opacity:.7;margin-top:6px;font-size:12px}`;
+  document.head.append(css);
+  el.append(ui);
+  const div = (cls, text = '') => {
+    const d = document.createElement('div');
+    if (cls) d.className = cls;
+    d.textContent = text;
+    return d;
+  };
+  const button = (parent, title, fn, on = false) => {
+    const b = document.createElement('button');
+    b.textContent = title;
+    b.onclick = fn;
+    if (on) b.classList.add('on');
+    parent.append(b);
+    return b;
+  };
+
+  // ---------- stato ----------
+  let active = false, // sei al tavolo con il pannello aperto
+    watching = false, // sei vicino al tavolo (ricevi la partita online)
+    net = null, // ultimo stato del server
+    mode = null, // null (menu) · 'ai' · 'same' · 'net'
+    local = null, // campo della partita sul telefono
+    ai = null,
+    skill = loadSkill(),
+    lastUI = '',
+    lastSend = 0,
+    lastInput = '',
+    lastWatch = 0,
+    lastHit = 0,
+    netBall = null;
+  const opts = { target: 5, bestOf: 1, online: 2 };
+  const pairs = [1, 1];
+  const ctl = [0, 1].map(() => ({ slide: 0, angle: 0, held: 0, keyKick: 0, raise: false, up: 0 }));
+  const pointers = new Map();
+  const post = (action, data = {}) => send?.({ type: 'balilla', action, ...data });
+  const mySlot = () => (mode === 'net' ? (net?.slot ?? -1) : 0);
+  const myTeam = () => Math.floor(Math.max(0, mySlot()) / 2);
+  const field = () => (mode === 'net' ? net?.field : local);
+  const playing = () => (mode === 'ai' || mode === 'same' ? !!local : mode === 'net' && mySlot() >= 0);
+  const topView = () => mode === 'same';
+
+  // ---------- pannello: menu, partita, fine ----------
+  function render() {
+    if (!active) return;
+    const f = field();
+    const key = JSON.stringify([
+      mode,
+      opts,
+      net && [net.slot, net.occupied, net.mode, net.busy, net.playing],
+      f && [f.score, f.games, f.phase === 'throw' ? f.thrower : -1, f.phase, f.finished],
+      mode === 'ai' && skillName(skill)
+    ]);
+    if (key === lastUI) return;
+    lastUI = key;
+    ui.replaceChildren();
+    if (!mode) return menu();
+    const status = div('big');
+    const sc = f ? f.score : [0, 0];
+    status.textContent = `${TEAM[0]} ${sc[0]} – ${sc[1]} ${TEAM[1]}`;
+    ui.append(status);
+    const info = div('');
+    const fmt = f ? `a ${f.target} gol` + (f.bestOf === 3 ? ` · partita ${f.gameNo} di 3 (vinte ${f.games[0]}–${f.games[1]})` : '') : '';
+    info.textContent = (mode === 'ai' ? `Contro il computer (${skillName(skill)}) · ` : mode === 'same' ? 'Stesso telefono · ' : '') + fmt;
+    ui.append(info);
+    const row = div('row');
+    ui.append(row);
+    if (mode === 'net' && mySlot() < 0) {
+      // online: posti liberi
+      const occ = net?.occupied ?? [],
+        m = net?.mode ?? 2;
+      const msg = div('', net?.busy ? 'Il tavolo è occupato da una partita sul telefono.' : `Online ${m === 4 ? '2 contro 2' : '1 contro 1'}: scegli un posto`);
+      ui.insertBefore(msg, row);
+      for (let n = 0; n < 4; n++) {
+        if (m === 2 && n % 2) continue;
+        const b = button(row, TEAM[n >> 1] + (m === 4 ? (n % 2 ? ' attacco' : ' difesa') : ''), () =>
+          post('join', { slot: n, mode: m, target: opts.target, bestOf: opts.bestOf })
+        );
+        b.disabled = occ.includes(n) || net?.busy;
       }
+    } else if (f) {
+      const t = myTeam();
+      const phase = div('');
+      if (f.finished) {
+        const w = f.bestOf === 3 ? (f.games[0] > f.games[1] ? 0 : 1) : f.score[0] > f.score[1] ? 0 : 1;
+        phase.textContent = mode === 'same' ? `Vincono i ${TEAM[w]}!` : w === t ? 'Hai vinto!' : 'Hai perso';
+        button(row, 'Rivincita', again);
+      } else if (f.phase === 'throw') {
+        const mine = mode === 'same' || f.thrower === t;
+        phase.textContent = mine ? `Rimettono i ${TEAM[f.thrower]}: tocca Rimetti (o aspetta)` : `Rimettono i ${TEAM[f.thrower]}…`;
+        if (mine && !(mode === 'ai' && f.thrower === 1)) button(row, 'Rimetti', doThrow);
+      } else if (f.phase === 'goal') phase.textContent = 'Gol!';
+      else if (f.phase === 'over') phase.textContent = `Partita ai ${TEAM[f.games[0] > f.games[1] ? 0 : 1]}… si cambia campo`;
+      else if (mode === 'net' && !net?.playing) phase.textContent = 'In attesa degli altri giocatori…';
+      ui.insertBefore(phase, row);
     }
-    if(slot<0||mode===2)button(choices,soloPair?'Attacco ⇄':'Difesa ⇄',()=>{soloPair=1-soloPair;render()});
-    if(slot>=0&&state.playing&&state.field.restart){
-      const serving=(state.field.serve===1?0:1)===Math.floor(slot/2);
-      const announce=serving&&state.field.restart==='announce'&&(mode===2||slot%2===(state.field.defence?0:1));
-      const confirm=!serving&&state.field.restart==='confirm';
-      if(announce||confirm)button(choices,announce?'Vado':'Vai',()=>post('ready'));
-      else status.textContent+=' · Attesa battuta';
-    }
-    if(slot>=0 && matchMedia('(pointer: coarse)').matches){
-      for(const [label,value] of [['Indietro',-1],['Avanti',1]]){
-        const b=button(choices,label,()=>{});
-        b.onpointerdown=e=>{e.preventDefault();b.setPointerCapture(e.pointerId);turn=value};
-        b.onpointerup=b.onpointercancel=b.onlostpointercapture=()=>{turn=0};
-      }
-    }
-    if(slot>=0&&state.field.finished)button(choices,'Rivincita',()=>post('again'));
-    button(choices,'Lascia il tavolo',close);
-    hint.textContent='Mouse ↕ sposta le aste · A carica · D tira · Esc esci';
+    button(row, 'Esci', close);
+    const hint = document.createElement('small');
+    hint.textContent = topView()
+      ? 'Rossi a sinistra, Blu a destra: su e giù sposta, di lato ruota e tira'
+      : 'Su e giù sposta le aste · scatto verso la porta avversaria tira · indietro alza le figure';
+    ui.append(hint);
   }
-  function close(){if(!active&&!watching)return;watching=active=false;lastRemoteHit=null;ui.hidden=true;post('leave');state=null;turn=slide=0;lastInput=lastUI=''}
-  function input(e){
-    if(!active)return false;
-    if(e.target.closest?.('button')&&['Space','Enter','Tab'].includes(e.code))return false;
-    if(e.code==='KeyQ'&&e.type==='keydown'&&!e.repeat&&(state?.slot<0||state?.mode!==4)){soloPair=1-soloPair;render()}
-    if(e.code==='Escape'&&e.type==='keydown')close();
-    if(['KeyA','KeyD'].includes(e.code)){const v=e.code==='KeyA'?-1:1;if(e.type==='keydown'){turn=v;if(v===1&&!e.repeat)shotUntil=performance.now()+135}else if(turn===v)turn=0}
+  function menu() {
+    ui.append(div('big', 'Calcio balilla'));
+    const occ = net?.occupied ?? [];
+    if (net?.busy) ui.append(div('', 'Il tavolo è occupato da una partita sul telefono.'));
+    else if (occ.length) {
+      // c'è già una partita online aperta: ci si siede nei posti liberi
+      const m = net.mode;
+      ui.append(div('', `Partita online ${m === 4 ? '2 contro 2' : '1 contro 1'} · a ${net.field.target} gol${net.field.bestOf === 3 ? ' · al meglio di 3' : ''}`));
+      const row = div('row');
+      ui.append(row);
+      for (let n = 0; n < 4; n++) {
+        if (m === 2 && n % 2) continue;
+        const b = button(row, TEAM[n >> 1] + (m === 4 ? (n % 2 ? ' attacco' : ' difesa') : ''), () => {
+          mode = 'net';
+          post('join', { slot: n, mode: m });
+        });
+        b.disabled = occ.includes(n);
+      }
+      const r2 = div('row');
+      ui.append(r2);
+      button(r2, 'Esci', close);
+      return;
+    }
+    const modes = div('row');
+    ui.append(modes);
+    const pick = (label, v) => button(modes, label, () => { opts.mode = v; lastUI = ''; render(); }, opts.mode === v);
+    opts.mode ??= 'ai';
+    pick('Contro il computer', 'ai');
+    pick('Stesso telefono', 'same');
+    pick('Online 1 contro 1', 'net2');
+    pick('Online 2 contro 2', 'net4');
+    const goals = div('row');
+    goals.append(div('lbl', 'Gol'));
+    for (const g of TARGETS) button(goals, String(g), () => { opts.target = g; lastUI = ''; render(); }, opts.target === g);
+    goals.append(div('lbl', 'Partita'));
+    button(goals, 'Secca', () => { opts.bestOf = 1; lastUI = ''; render(); }, opts.bestOf === 1);
+    button(goals, 'Al meglio di 3', () => { opts.bestOf = 3; lastUI = ''; render(); }, opts.bestOf === 3);
+    ui.append(goals);
+    const go = div('row');
+    ui.append(go);
+    button(go, 'Gioca', start, true);
+    button(go, 'Esci', close);
+    if (opts.mode === 'ai') ui.append(Object.assign(document.createElement('small'), { textContent: `Il computer si adatta: ora è ${skillName(skill)}` }));
+  }
+  function start() {
+    resetControls();
+    if (opts.mode === 'ai' || opts.mode === 'same') {
+      mode = opts.mode;
+      local = newField({ target: opts.target, bestOf: opts.bestOf });
+      ai = mode === 'ai' ? createAI(1, skill) : null;
+      lastHit = local.hit;
+      post('local', { on: true });
+    } else {
+      mode = 'net';
+      post('join', { slot: 0, mode: opts.mode === 'net4' ? 4 : 2, target: opts.target, bestOf: opts.bestOf });
+    }
+    lastUI = '';
+    render();
+  }
+  function again() {
+    if (mode === 'net') post('again');
+    else {
+      local = newField({ target: local.target, bestOf: local.bestOf });
+      if (ai) ai.skill = skill;
+      lastHit = local.hit;
+    }
+    lastUI = '';
+    render();
+  }
+  function doThrow() {
+    if (mode === 'net') post('ready');
+    else if (local) throwIn(local);
+    render();
+  }
+  function stopGame() {
+    if (mode === 'net') post('leave');
+    if (mode === 'ai' || mode === 'same') post('local', { on: false });
+    mode = null;
+    local = null;
+    ai = null;
+    resetControls();
+  }
+  function close() {
+    if (!active && !watching) return;
+    stopGame();
+    watching = active = false;
+    ui.hidden = true;
+    net = null;
+    lastUI = '';
+    restoreCamera = true;
+  }
+  function resetControls() {
+    pointers.clear();
+    for (const c of ctl) Object.assign(c, { slide: 0, angle: 0, held: 0, keyKick: 0, raise: false, up: 0 });
+  }
+
+  // ---------- comandi ----------
+  // segni: nella vista dal proprio lato, giù sullo schermo = verso di te; a destra = verso la porta avversaria
+  const slideSign = team => (topView() ? 1 : team === 0 ? 1 : -1);
+  const angleSign = team => (topView() ? 1 : team === 0 ? 1 : -1);
+  const host = el.querySelector('.l3d-gl') || el;
+  const teamAt = x => (topView() ? (x < innerWidth / 2 ? 0 : 1) : myTeam());
+  host.addEventListener('pointerdown', e => {
+    if (!active || !playing()) return;
+    if (e.pointerType === 'mouse' && host.requestPointerLock && document.pointerLockElement !== host && !topView()) {
+      try {
+        host.requestPointerLock();
+      } catch {}
+    }
+    const team = teamAt(e.clientX),
+      c = ctl[team];
+    try {
+      host.setPointerCapture(e.pointerId);
+    } catch {}
+    pointers.set(e.pointerId, { team, x: e.clientX, y: e.clientY, s0: c.slide, a0: c.angle, mouse: e.pointerType === 'mouse' });
+    c.held++;
+    // clic del mouse: tiro secco
+    if (e.pointerType === 'mouse' && e.button === 0) c.keyKick = 0.09;
+    if (e.pointerType === 'mouse' && e.button === 2) c.raise = true;
+  });
+  function onMove(e) {
+    if (!active || !playing()) return;
+    const h = Math.max(320, host.clientHeight || innerHeight);
+    const p = pointers.get(e.pointerId);
+    if (p && !p.mouse) {
+      const c = ctl[p.team];
+      c.slide = Math.max(-1, Math.min(1, p.s0 + ((e.clientY - p.y) * slideSign(p.team) * 2.4) / (h * 0.6)));
+      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, p.a0 + (e.clientX - p.x) * angleSign(p.team) * 0.028));
+      return;
+    }
+    // mouse (anche senza tasti): spostamenti relativi
+    if (e.pointerType === 'mouse') {
+      const team = topView() ? teamAt(e.clientX) : myTeam(),
+        c = ctl[team];
+      c.slide = Math.max(-1, Math.min(1, c.slide + ((e.movementY || 0) * slideSign(team) * 2.4) / (h * 0.6)));
+      c.angle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, c.angle + (e.movementX || 0) * angleSign(team) * 0.022));
+      c.up = 0.12; // la rotazione resta finché muovi il mouse, poi torna giù
+    }
+  }
+  host.addEventListener('pointermove', onMove);
+  const lift = e => {
+    const p = pointers.get(e.pointerId);
+    if (!p) return;
+    pointers.delete(e.pointerId);
+    const c = ctl[p.team];
+    c.held = Math.max(0, c.held - 1);
+    if (e.button === 2) c.raise = false;
+  };
+  for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) host.addEventListener(t, lift);
+  host.addEventListener('contextmenu', e => active && e.preventDefault());
+  // tastiera: W/S o frecce su e giù spostano, D o → tira, A o ← alza (stesso telefono: blu con le frecce)
+  const keys = new Set();
+  function input(e) {
+    if (!active) return false;
+    if (e.target.closest?.('button') && ['Space', 'Enter', 'Tab'].includes(e.code)) return false;
+    if (e.code === 'Escape' && e.type === 'keydown') {
+      if (document.pointerLockElement === host) document.exitPointerLock?.();
+      else close();
+      return true;
+    }
+    if (e.code === 'Space' && e.type === 'keydown' && field()?.phase === 'throw') doThrow();
+    if (e.type === 'keydown') keys.add(e.code);
+    else keys.delete(e.code);
     return true;
   }
-  function move(e,bounds){
-    if(!active)return;
-    const direction=state?.slot>=2?-1:1;
-    if(e.pointerType==='touch')slide=THREE.MathUtils.clamp((e.clientY-bounds.top)/bounds.height*2-1,-1,1)*direction;
-    else slide=THREE.MathUtils.clamp(slide+(e.movementY||0)*direction*4/Math.max(260,bounds.height),-1,1);
+  function keyControl(dt) {
+    const sets = topView()
+      ? [
+          [0, 'KeyW', 'KeyS', 'KeyD', 'KeyA'],
+          [1, 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']
+        ]
+      : [[myTeam(), ['KeyW', 'ArrowUp'], ['KeyS', 'ArrowDown'], ['KeyD', 'ArrowRight'], ['KeyA', 'ArrowLeft']]];
+    for (const [team, up, down, kick, raise] of sets) {
+      const has = k => (Array.isArray(k) ? k.some(x => keys.has(x)) : keys.has(k));
+      const c = ctl[team];
+      const v = (has(down) ? 1 : 0) - (has(up) ? 1 : 0);
+      if (v) c.slide = Math.max(-1, Math.min(1, c.slide + v * slideSign(team) * dt * 3));
+      if (has(kick) && !c.kickHeld) c.keyKick = 0.09;
+      c.kickHeld = has(kick);
+      c.keyRaise = has(raise);
+    }
   }
-  function pose(slot,mode,pairIndex){
-    const team=Math.floor(slot/2),pair=rows.map((r,i)=>r.team===team&&r.attack===(mode===4?slot%2:pairIndex??1)?i:-1).filter(i=>i>=0);
-    const handles=pair.map(i=>new THREE.Vector3(-13+rows[i].x,.818,(team?-1:1)*.49+sticks[i].position.z));
-    const x=(handles[0].x+handles[1].x)/2;
-    return {x,z:(team?-1:1)*.77,yaw:team?Math.PI:0,handles:team?handles.sort((a,b)=>b.x-a.x):handles.sort((a,b)=>a.x-b.x)};
+  // angolo voluto di ogni squadra: dito/mouse, tiro da tasto, alzata
+  function wantedAngle(team, dt) {
+    const c = ctl[team],
+      fwd = team === 0 ? 1 : -1;
+    if (c.keyKick > 0) {
+      c.keyKick -= dt;
+      return fwd * 1.45;
+    }
+    if (c.raise || c.keyRaise) return -fwd * 1.45;
+    if (c.held === 0) {
+      if (c.up > 0) c.up -= dt;
+      else c.angle *= Math.exp(-9 * dt); // senza mano le figure tornano giù
+    }
+    return c.angle;
   }
-  return {pose,get seat(){return active&&state?.slot>=0?{station:'balilla',slot:state.slot,mode:state.mode,pair:soloPair}:null},get active(){return active},open(){active=true;soloPair=1;slide=turn=shotUntil=0;trainingTeam=0;trainingAttack=1;resetTraining();ui.hidden=false;state=null;lastUI='';lastWatch=performance.now();post('watch');render()},close,input,move,
-    receive(data){
-      if(!active&&!watching)return;
-      if(data.sound){playSound?.(data.sound);return}
-      if(data.field?.hit>0&&lastRemoteHit!==null&&data.field.hit>lastRemoteHit)playSound?.(data.field.sound);
-      lastRemoteHit=data.field?.hit??null;state=data;render()
-    },
-    update(camera,dt,nearby){
-      if(!active&&!nearby){if(watching)close();return}
-      if(!active&&!watching){watching=true;post('watch');lastWatch=performance.now()}
-      const now=performance.now();
-      if(now-lastWatch>3000){post('watch');lastWatch=now}
-      const stroke=now<shotUntil?1:turn;
-      if(state?.slot>=0){const data={slide:Math.round(slide*100)/100,turn:stroke,pair:soloPair};const key=JSON.stringify(data);
-        if(key!==lastInput&&now-lastSend>35){post('input',data);lastInput=key;lastSend=now}}
-      const dir=state?.slot>=2?-1:1;
-      if(active){camera.position.set(-13,1.93,dir*.68);camera.lookAt(-13,.75,0)}
-      let f=state?.field;
-      if(active&&!state?.playing&&!f?.finished){
-        const team=state?.slot>=2?1:0,attack=state?.mode===4&&state.slot>=0?state.slot%2:soloPair;
-        if(team!==trainingTeam||attack!==trainingAttack||training.restart||training.finished){
-          trainingTeam=team;trainingAttack=attack;resetTraining();
-        }
-        rows.forEach((row,i)=>{
-          if(row.team===team&&row.attack===attack){training.rods[i].slide=slide;training.rods[i].turn=stroke*(team?1:-1)}
-        });
-        const steps=Math.max(1,Math.ceil(dt*120));
-        for(let n=0;n<steps;n++)simulate(training,dt/steps);
-        if(training.hit!==lastPracticeHit){
-          lastPracticeHit=training.hit;
-          if(now-lastBeat>=110){lastBeat=now;playSound?.(training.sound);post('practice-sound',{sound:training.sound})}
-        }
-        f=training;
+
+  // ---------- partita sul telefono ----------
+  function stepLocal(dt) {
+    const f = local;
+    if (!f) return;
+    keyControl(dt);
+    const humans = mode === 'same' ? [0, 1] : [0];
+    for (const t of humans) {
+      pairs[t] = nearPair(f, t, pairs[t]);
+      control(f, t, pairs[t], ctl[t].slide, wantedAngle(t, dt));
+    }
+    if (ai) {
+      ai.step(f, dt);
+      // il computer rimette in fretta
+      if (f.phase === 'throw' && f.thrower === 1 && f.wait > 1.2) f.wait = 1.2;
+    }
+    const before = f.score.slice();
+    simulate(f, dt);
+    if (ai && (f.score[0] !== before[0] || f.score[1] !== before[1])) {
+      skill = adapt(skill, f.score[0] > before[0]);
+      ai.skill = skill;
+      saveSkill(skill);
+    }
+    if (f.hit !== lastHit) {
+      lastHit = f.hit;
+      playSound?.(f.sound);
+      post('practice-sound', { sound: f.sound });
+    }
+  }
+  function sendNet(dt) {
+    if (mode !== 'net' || mySlot() < 0 || !net?.field) return;
+    keyControl(dt);
+    const t = myTeam(),
+      f = net.field;
+    if (net.mode !== 4) pairs[t] = nearPair(f, t, pairs[t]);
+    const pair = net.mode === 4 ? mySlot() % 2 : pairs[t];
+    const data = { slide: Math.round(ctl[t].slide * 100) / 100, angle: Math.round(wantedAngle(t, dt) * 100) / 100, pair };
+    const key = JSON.stringify(data),
+      now = performance.now();
+    if (key !== lastInput && now - lastSend > 33) {
+      post('input', data);
+      lastInput = key;
+      lastSend = now;
+    }
+  }
+
+  // ---------- disegno ----------
+  let restoreCamera = false;
+  function draw(f, dt) {
+    const smooth = 1 - Math.exp(-dt * 30);
+    if (!f) {
+      sticks.forEach(s => {
+        s.position.z += (0 - s.position.z) * smooth;
+        s.rotation.z += (0 - s.rotation.z) * smooth;
+      });
+      return;
+    }
+    let bx = f.ball.x,
+      bz = f.ball.z;
+    if (mode !== 'ai' && mode !== 'same' && netBall) {
+      // online: tra un aggiornamento e l'altro la palla continua con la sua velocità
+      const e = Math.min(0.08, (performance.now() - netBall.t) / 1000);
+      if (f.phase === 'play') {
+        bx = netBall.x + netBall.vx * e;
+        bz = Math.max(-W + 0.017, Math.min(W - 0.017, netBall.z + netBall.vz * e));
       }
-      if(!f)return;
-      const smooth=1-Math.exp(-dt*34);
-      ball.position.x+=(f.ball.x-ball.position.x)*smooth;ball.position.z+=(f.ball.z-ball.position.z)*smooth;
-      sticks.forEach((s,i)=>{s.position.z+=(f.rods[i].shift-s.position.z)*smooth;s.rotation.z+=(-f.rods[i].angle-s.rotation.z)*smooth});
-    },blur(){turn=0}
+    }
+    const k = mode === 'ai' || mode === 'same' ? 1 : 1 - Math.exp(-dt * 40);
+    ball.position.x += (bx - ball.position.x) * k;
+    ball.position.z += (bz - ball.position.z) * k;
+    ball.position.y = Math.abs(bz) > W ? 0.758 : 0.75;
+    sticks.forEach((s, i) => {
+      const kk = mode === 'ai' || mode === 'same' ? 1 : smooth;
+      s.position.z += (f.rods[i].shift - s.position.z) * kk;
+      s.rotation.z += (f.rods[i].angle - s.rotation.z) * kk;
+    });
+    beads.forEach((list, team) =>
+      list.forEach((b, n) => {
+        const sign = team ? 1 : -1;
+        b.position.x = sign * (0.555 + n * 0.0115) + (n < f.score[team] ? -sign * 0.03 : 0);
+      })
+    );
+  }
+  function placeCamera(camera) {
+    const w = innerWidth,
+      h = innerHeight,
+      aspect = w / h;
+    const vf = THREE.MathUtils.degToRad(camera.fov),
+      hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
+    if (topView()) {
+      const d = Math.max(0.74 / Math.tan(hf / 2), 0.46 / Math.tan(vf / 2)) + 0.1;
+      camera.up.set(0, 0, -1);
+      camera.position.set(TX, TOP + d, 0.0001);
+      camera.lookAt(TX, TOP, 0);
+      return;
+    }
+    camera.up.set(0, 1, 0);
+    const dir = myTeam() === 0 ? 1 : -1,
+      p = 0.95;
+    const d = Math.max(1.15, 0.72 / Math.tan(hf / 2));
+    camera.position.set(TX, TOP + d * Math.sin(p), dir * d * Math.cos(p));
+    camera.lookAt(TX, TOP, dir * 0.05);
+  }
+
+  function pose(slot, poseMode, pairIndex) {
+    const team = Math.floor(slot / 2),
+      pair = rows
+        .map((r, i) => (r.team === team && r.attack === (poseMode === 4 ? slot % 2 : (pairIndex ?? 1)) ? i : -1))
+        .filter(i => i >= 0);
+    const handles = pair.map(i => new THREE.Vector3(TX + rows[i].x, 0.818, (team ? -1 : 1) * 0.49 + sticks[i].position.z));
+    const x = (handles[0].x + handles[1].x) / 2;
+    return {
+      x,
+      z: (team ? -1 : 1) * 0.77,
+      yaw: team ? Math.PI : 0,
+      handles: team ? handles.sort((a, b) => b.x - a.x) : handles.sort((a, b) => a.x - b.x)
+    };
+  }
+
+  return {
+    pose,
+    get seat() {
+      if (!active || !playing()) return null;
+      const slot = mySlot(),
+        m = mode === 'net' ? (net?.mode ?? 2) : 2;
+      return { station: 'balilla', slot, mode: m, pair: m === 4 ? slot % 2 : pairs[myTeam()] };
+    },
+    get active() {
+      return active;
+    },
+    open() {
+      active = true;
+      watching = true;
+      mode = null;
+      local = null;
+      ui.hidden = false;
+      lastUI = '';
+      lastWatch = performance.now();
+      post('watch');
+      resetControls();
+      render();
+    },
+    close,
+    input,
+    move() {}, // i movimenti li legge il tavolo stesso (pointermove su .l3d-gl)
+    receive(data) {
+      if (!active && !watching) return;
+      if (data.sound) {
+        if (mode !== 'ai' && mode !== 'same') playSound?.(data.sound);
+        return;
+      }
+      const old = net?.field;
+      if (data.field?.hit > 0 && old && data.field.hit > old.hit && (mode === 'net' || !mode)) playSound?.(data.field.sound);
+      net = data;
+      netBall = { ...data.field.ball, t: performance.now() };
+      // seduto online da un altro telefono o al cambio campo: la vista segue il posto
+      if (active && !mode && data.slot >= 0) mode = 'net';
+      render();
+    },
+    update(camera, dt, nearby) {
+      if (!active && !nearby) {
+        if (watching) close();
+        return;
+      }
+      if (!active && !watching) {
+        watching = true;
+        post('watch');
+        lastWatch = performance.now();
+      }
+      const now = performance.now();
+      if (now - lastWatch > 3000) {
+        post('watch');
+        lastWatch = now;
+      }
+      if (mode === 'ai' || mode === 'same') stepLocal(dt);
+      else sendNet(dt);
+      if (restoreCamera) {
+        camera.up.set(0, 1, 0);
+        restoreCamera = false;
+      }
+      if (active) {
+        placeCamera(camera);
+        render();
+      }
+      draw(mode === 'ai' || mode === 'same' ? local : net?.playing || net?.occupied?.length ? net.field : null, dt);
+    },
+    blur() {
+      keys.clear();
+      for (const c of ctl) c.held = 0;
+      pointers.clear();
+    }
   };
 }

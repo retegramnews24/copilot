@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=1dae6fde98';
+import {buildBalilla} from './balilla.js?v=2d3cd87246';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -1134,7 +1134,10 @@ export function createLobby3D(app) {
     if(!localPose)for(const arm of me.arms){arm.scale.y=1;arm.rotation.y=0}
     const anchor=modelPose(me,localPose);
     me.head.visible=!firstPerson;
-    if(firstPerson&&!seating&&(!tableFootball.active||anchor)){
+    // al calcio balilla il tuo personaggio non copre il tavolo nella tua vista (gli altri lo vedono alle manopole)
+    if(!seating)me.root.visible=!tableFootball.active;
+    // al calcio balilla la telecamera la decide il tavolo (dal tuo lato, o dall'alto sullo stesso telefono)
+    if(firstPerson&&!seating&&!tableFootball.active){
       const yaw=anchor?.yaw??cam.yaw;
       if(!anchor)me.root.rotation.y=yaw;
       const eyeY=anchor?1.49:me.root.position.y+1.49;
