@@ -70,7 +70,7 @@ export function practiceAI(f, team, dt, mem) {
   });
 }
 
-const PRACTICE_AI = true; // temporaneo: da soli al tavolo i blu (o i rossi) li muove il computer
+const PRACTICE_AI = false; // da soli al tavolo ci si allena: l'altra squadra resta ferma (computer spento)
 const SOUNDS = ['kick', 'rail', 'goal', 'stop', 'throw', 'post'];
 const round = v => Math.round(v * 1000) / 1000;
 // Solo quello che serve per disegnare il tavolo, con i numeri arrotondati (messaggi più leggeri).
