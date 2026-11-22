@@ -185,7 +185,8 @@ export class BalillaHub {
         });
       }
       control(this.field, team, pair, b.slide, b.angle);
-    } else if (b.action === 'again' && member.slot >= 0 && this.field.finished) {
+    } else if (member.slot >= 0 && ((b.action === 'again' && this.field.finished) || b.action === 'reset')) {
+      // nuova partita, oppure contapunti azzerati da chi è al tavolo
       this.field = newField({ bar: this.field.bar, target: this.field.target, bestOf: this.field.bestOf });
       if (this.field.bar) this.updateBar();
       this.swap = this.field.swap;

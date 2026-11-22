@@ -91,12 +91,8 @@ export function throwIn(f, random = Math.random, practicePair = 1) {
     vx: (random() - 0.5) * 0.14,
     vz: -side * (0.28 + random() * 0.06)
   });
-  if (f.practice) {
-    const row = rows.find(r => r.team === f.thrower && r.attack === practicePair && r.count > 1);
-    f.ball.x = row.x + side * 0.032;
-    f.ball.vx = 0;
-    f.ball.vz = -side * 0.57;
-  }
+  // anche da soli la palla esce sempre dal foro laterale di centrocampo (non davanti all'attacco)
+  void practicePair;
   f.lastThrower = f.thrower;
   f.phase = 'play';
   f.dead = 0;
@@ -221,7 +217,7 @@ function moveBall(f, dt) {
   const v = Math.hypot(b.vx, b.vz);
   if (v > 0) {
     // panno del campo: la palla rallenta (circa 0,3 m/s al secondo più un po' d'aria)
-    const k = (Math.max(0, v - 0.36 * dt) / v) * Math.exp(-0.36 * dt);
+    const k = (Math.max(0, v - 0.29 * dt) / v) * Math.exp(-0.29 * dt); // panno un filo più scorrevole
     b.vx *= k;
     b.vz *= k;
   }

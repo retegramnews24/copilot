@@ -23,7 +23,7 @@ export async function changeStool(ctx,ws,{id,action,x,z,height}){
       if(start.some((v,j)=>j!==id&&Math.hypot(x-(layout[j]??v).x,z-(layout[j]??v).z)<.48))return reply(false);
       layout[id]={...at,x,z};
     }else if(action==='stand'&&a.stool.action==='sit'){
-      layout[id]={...at,height:Number.isFinite(height)?Math.max(-.12,Math.min(.30,height)):at.height??0};
+      layout[id]={...at,height:Number.isFinite(height)?Math.max(-.12,Math.min(.26,height)):at.height??0};
     }else if(action!=='cancel')return reply(false);
     if(action!=='cancel')await ctx.storage.put('stools',layout);
     delete a.stool;

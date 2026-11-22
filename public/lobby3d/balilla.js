@@ -17,7 +17,7 @@ import {
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=853d4f7671';
+} from './balilla-rules.js?v=6b6704b060';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -30,11 +30,11 @@ export function buildBalilla(scene, el, send, playSound) {
   scene.add(table);
   const material = (color, metalness = 0) =>
     new THREE.MeshStandardMaterial({ color, metalness, roughness: metalness ? 0.3 : 0.56 });
-  const frame = material('#23384a'),
+  const frame = material('#111214'),
     chrome = material('#bccbd4', 0.82),
     rubber = material('#202228'),
     white = material('#fff1cc'),
-    pitch = material('#207b63');
+    pitch = material('#16181b'); // campo nero come il tavolo vero
   const brass = material('#c7a16c', 0.7),
     sole = material('#17202c'),
     skin = material('#e0b390'),
@@ -57,7 +57,10 @@ export function buildBalilla(scene, el, send, playSound) {
   // misure: campo 120 × 70 cm (L, W), porta 20 cm, aste da 16 mm ogni 15 cm, asse a 8,5 cm dal campo
   const AXIS = TOP + ROD_H,
     RAIL = W + 0.015, // sponda laterale
+    OUT = 0.43, // fianco esterno del mobile
     END = L + 0.06; // fondo con la porta
+  // mobile disegnato qui finché non arriva quello fatto in Blender (blender/tavolo-balilla.blend → models/tavolo-balilla.glb)
+  const cabinetStart = table.children.length;
   for (const x of [-(L - 0.03), L - 0.03])
     for (const z of [-0.29, 0.29]) {
       rbox(0.08, 0.59, 0.08, 0.012, chrome, x, 0.31, z);
@@ -69,16 +72,6 @@ export function buildBalilla(scene, el, send, playSound) {
     for (const x of [-(L - 0.01), L - 0.01]) box(0.1, 0.2, 0.013, chrome, x, 0.675, (RAIL + 0.033) * sign);
   }
   const fallbackLines = [];
-  // Aerial pitch photograph by Willian Justen de Vasconcellos (Unsplash, 21Cg_fsFBGc).
-  new THREE.TextureLoader().load(
-    'https://images.unsplash.com/photo-1510526292299-20af3f62d453?w=960&fm=jpg',
-    texture => {
-      fallbackLines.forEach(line => (line.visible = false));
-      texture.colorSpace = THREE.SRGBColorSpace;
-      const surface = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.92 });
-      mesh(new THREE.PlaneGeometry(2 * L, 2 * W), surface, 0, TOP + 0.0074, 0).rotation.x = -Math.PI / 2;
-    }
-  );
   box(2 * L, 0.014, 2 * W, pitch, 0, TOP, 0);
   for (const s of [-1, 1]) {
     const z = s * RAIL;
@@ -139,6 +132,13 @@ export function buildBalilla(scene, el, send, playSound) {
   box(0.003, 0.001, 2 * W - 0.1, white, 0, TOP + 0.009, 0);
   mesh(new THREE.RingGeometry(0.076, 0.079, 48), white, 0, TOP + 0.009, 0).rotation.x = -Math.PI / 2;
   fallbackLines.push(...table.children.slice(middleStart));
+  const cabinetParts = table.children.slice(cabinetStart);
+  // tavolo da bar fatto in Blender: mobile nero con gambe squadrate e piedini, sponde interne bianche, campo nero
+  // con le righe, rialzi negli angoli, bulloni in ottone, targhette Binottoland e Calcio balilla, uscita della palla
+  new GLTFLoader().load(new URL('models/tavolo-balilla.glb', import.meta.url).href, gltf => {
+    for (const part of cabinetParts) part.removeFromParent();
+    table.add(gltf.scene);
+  });
   // pallottoliere del punteggio sulla sponda dal lato dei rossi: 10 palline per squadra
   const beads = [0, 1].map(team => {
     const sign = team ? 1 : -1,
@@ -167,9 +167,10 @@ export function buildBalilla(scene, el, send, playSound) {
     group.position.set(row.x, AXIS, 0);
     const t = row.travel;
     // boccole in ottone nelle due sponde: l'asta ci scorre dentro e non ne esce mai
+    // boccole nere sul fianco esterno, rondelle bianche sulla sponda interna (come il tavolo vero)
     for (const side of [-1, 1]) {
-      cylinder(0.02, 0.03, brass, row.x, AXIS, side * (RAIL + 0.015));
-      cylinder(0.023, 0.006, brass, row.x, AXIS, side * (RAIL + 0.033));
+      cylinder(0.022, 0.018, rubber, row.x, AXIS, side * (OUT + 0.009));
+      cylinder(0.016, 0.004, white, row.x, AXIS, side * (W - 0.002));
     }
     // dal lato opposto alla manopola: manicotto telescopico fisso, lungo quanto tutta la corsa (l'asta ci rientra)
     const sleeve = 2 * t + 0.05;
@@ -220,8 +221,10 @@ export function buildBalilla(scene, el, send, playSound) {
     'position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:max-content;max-width:94%;background:#142026eb;color:white;padding:6px 10px;border-radius:8px;text-align:center;z-index:4;font-size:13px';
   ui.hidden = true;
   ui.innerHTML =
-    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
+    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <button data-reset>Azzera</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
   el.append(ui);
+  // sul computer niente pannello: si gioca con i tasti (Spazio, Q, E, R, + e -); sul telefono servono i pulsanti
+  const noPanel = !matchMedia('(pointer: coarse)').matches;
   const sensitivity = ui.querySelector('input');
   sensitivity.value = '1';
   try {
@@ -244,7 +247,9 @@ export function buildBalilla(scene, el, send, playSound) {
     lastInput = 0,
     finger = null;
   const mouseLocked = () => document.pointerLockElement === host;
-  let hadLock = false;
+  let hadLock = false,
+    blurredAt = -1e9;
+  addEventListener('blur', () => (blurredAt = performance.now()));
   const lockHint = document.createElement('small');
   lockHint.textContent = 'Clicca sul campo per agganciare il mouse';
   lockHint.hidden = true;
@@ -269,7 +274,12 @@ export function buildBalilla(scene, el, send, playSound) {
     if (mouseLocked()) {
       hadLock = true;
       lockHint.hidden = true;
-    } else if (hadLock) close();
+    } else if (hadLock) {
+      if (document.hidden || !document.hasFocus() || performance.now() - blurredAt < 400) {
+        hadLock = false;
+        ui.hidden = noPanel; // si riaggancia con un clic sul campo
+      } else close();
+    }
   });
   const targets = [
     { slide: 0, angle: 0 },
@@ -308,6 +318,7 @@ export function buildBalilla(scene, el, send, playSound) {
   const serveButton = ui.querySelector('[data-serve]');
   serveButton.onclick = serve;
   ui.querySelector('[data-exit]').onclick = close;
+  ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
     if (!seated() || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
@@ -322,8 +333,8 @@ export function buildBalilla(scene, el, send, playSound) {
     }
     const t = targets[pair],
       gain = Number(sensitivity.value) * (team ? -1 : 1);
-    t.slide = clamp(t.slide + (dy * gain) / 170, 1);
-    t.angle = clamp(t.angle + (dx * gain * Math.PI) / 210, MAX_ANGLE);
+    t.slide = clamp(t.slide + (dy * gain * 0.7) / 170, 1); // 0,7: sensibilità più bassa
+    t.angle = clamp(t.angle + (dx * gain * 0.7 * Math.PI) / 210, MAX_ANGLE);
     dirty = true;
   }
   host.addEventListener('mousemove', e => {
@@ -343,7 +354,9 @@ export function buildBalilla(scene, el, send, playSound) {
   function input(e) {
     if (e.type !== 'keydown' || e.repeat) return false;
     if (e.code === 'KeyE' || e.code === 'Escape') close();
-    else if (e.code === 'KeyQ' && seated() && net.mode === 2) selectPair(1 - pair);
+    else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
+    else if (e.code === 'KeyR' && seated())
+      post('reset'); // contapunti a zero
     else if (e.code === 'Digit1' || e.code === 'Digit2') selectPair(Number(e.code.slice(-1)) - 1);
     else if (e.key === '+' || e.key === '-') {
       if (e.key === '+') sensitivity.stepUp();
@@ -449,7 +462,7 @@ export function buildBalilla(scene, el, send, playSound) {
       team = side;
       if (matchMedia('(any-pointer: fine)').matches || mouseLocked()) lockMouse();
       selectPair(pairIndex);
-      ui.hidden = false;
+      ui.hidden = noPanel;
       ui.querySelector('span').textContent = 'Collegamento al tavolo…';
       serveButton.disabled = true;
       lastWatch = performance.now();
@@ -473,6 +486,7 @@ export function buildBalilla(scene, el, send, playSound) {
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
       if (!wasSeated && seated()) selectPair(pair);
+      ui.hidden = noPanel;
       const status = ui.querySelector('span');
       status.textContent = seated()
         ? TEAM[team] + ' · Su/giù sposta · Destra/sinistra ruota · Q cambia coppia · E lascia'
