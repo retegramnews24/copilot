@@ -4,9 +4,11 @@
 // La fisica è quella di ../flipper/physics.js (sul piano inclinato): qui la pallina d'acciaio viene messa sul piano 3D.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { paintPlayfield, paintBackglass } from './flipper-art.js?v=3aae8c64a6';
 import {
   newGame,
   makeTable,
+  rampPoint,
   simulate,
   setFlipper,
   pull,
@@ -15,7 +17,7 @@ import {
   R,
   LANE_X,
   BALLS
-} from '../flipper/physics.js?v=319279a440';
+} from '../flipper/physics.js?v=2c64ad27f0';
 
 // contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro)
 const now0 = () => performance.now() / 1000;
@@ -23,12 +25,28 @@ export const FLIPPER_AT = { x: -18.05, z: -3.0, ry: Math.PI / 2 };
 const STAND = 1.15; // dove sta il personaggio, davanti alla barra (in metri dal centro del cabinet)
 const LEVER_RUN = 0.06; // quanto torna indietro la leva tirata tutta
 
-export function buildFlipper(scene, el, { audio, allowed }) {
+export function buildFlipper(
+  scene,
+  el,
+  { audio, allowed, top = () => [], sendScore = () => {}, me = () => null }
+) {
   const root = new THREE.Group();
   root.position.set(FLIPPER_AT.x, 0, FLIPPER_AT.z);
   root.rotation.y = FLIPPER_AT.ry;
   scene.add(root);
-  const glow = {};
+  const glow = {},
+    inner = { spring: null, tip: null, last: 0, slam: 0 };
+  // grafica: vetro del tabellone (ridisegnato per la cornice di lampadine) e inserti del piano
+  const art = { lamps: null, bgCanvas: document.createElement('canvas'), lastBg: 0 };
+  art.bgCanvas.width = 768;
+  art.bgCanvas.height = 579;
+  paintBackglass(art.bgCanvas, 0, true);
+  art.bgTexture = new THREE.CanvasTexture(art.bgCanvas);
+  art.bgTexture.colorSpace = THREE.SRGBColorSpace;
+  let record = 0;
+  try {
+    record = Number(localStorage.getItem('binottoland-flipper-record')) || 0;
+  } catch {}
   let piano = null,
     flips = [],
     lever = null,
@@ -55,10 +73,15 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     dmd.fillStyle = '#ff8a1c';
     dmd.textAlign = 'center';
     dmd.textBaseline = 'middle';
-    dmd.font = '700 26px "Courier New", monospace';
-    dmd.fillText(top, 128, 22);
-    dmd.font = '700 13px "Courier New", monospace';
-    dmd.fillText(bottom, 128, 50);
+    // numero grande (si restringe solo se non ci sta), riga di testo sotto
+    let size = 40;
+    dmd.font = `900 ${size}px "Courier New", monospace`;
+    const wide = dmd.measureText(top).width;
+    if (wide > 248) size = Math.floor((size * 248) / wide);
+    dmd.font = `900 ${size}px "Courier New", monospace`;
+    dmd.fillText(top, 128, 24);
+    dmd.font = '700 12px "Courier New", monospace';
+    dmd.fillText(bottom, 128, 55);
     // griglia dei punti luminosi
     dmd.fillStyle = '#120600aa';
     for (let x = 0; x < 256; x += 3) dmd.fillRect(x, 0, 1, 64);
@@ -106,6 +129,15 @@ export function buildFlipper(scene, el, { audio, allowed }) {
       screen.position.set((bb.min.x + bb.max.x) / 2, (bb.min.y + bb.max.y) / 2, bb.max.z + 0.001);
       gltf.scene.add(screen);
       display.material = new THREE.MeshBasicMaterial({ color: '#120600' });
+      // vetro dipinto del tabellone (collage della gara di notte) con la cornice di lampadine
+      const glass = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.7085, 0.534),
+        new THREE.MeshBasicMaterial({ map: art.bgTexture, toneMapped: false })
+      );
+      glass.position.set(screen.position.x, screen.position.y + 0.414, bb.max.z + 0.014); // davanti alle luci del modello
+      gltf.scene.add(glass);
+    }
+    {
     }
     // superfici luminose (luci, neon, inserti) più vive
     gltf.scene.traverse(o => {
@@ -139,6 +171,53 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     glow.pit = halo(0.4, 0.95, 0.03, 0.04, '#3cff7a');
     glow.light = new THREE.PointLight('#ffb070', 0, 0.6, 1.6);
     piano.add(glow.light);
+    // piano dipinto (asfalto, cordoli, frecce dei tiri, logo): appena sopra il piano di Blender
+    const pf = document.createElement('canvas');
+    pf.width = 1024;
+    pf.height = 2088;
+    paintPlayfield(pf);
+    const pfTex = new THREE.CanvasTexture(pf);
+    pfTex.colorSpace = THREE.SRGBColorSpace;
+    pfTex.anisotropy = 8;
+    const field = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.52, 1.06),
+      new THREE.MeshStandardMaterial({ map: pfTex, roughness: 0.55, metalness: 0.05 })
+    );
+    field.rotation.x = -Math.PI / 2;
+    field.position.y = 0.0011;
+    piano.add(field);
+    // inserti luminosi: lampadine sotto il piano che si accendono con il gioco
+    const lamp = (x, y, r, color) => halo(x, y, 0.0014, r, color);
+    art.lamps = {
+      lanes: table.lanes.map(x => lamp(x, 0.905, 0.016, '#ffd23f')),
+      mult: [0, 1, 2, 3].map(i => lamp(0.15 + i * 0.062, 0.36, 0.016, '#ffb020')),
+      lights: [0, 1, 2].map(i => lamp(0.205 + i * 0.035, 0.555, 0.013, '#ff2a2a')),
+      ramp: lamp(0.105, 0.46, 0.028, '#ff8a1c'),
+      orbit: lamp(0.032, 0.63, 0.022, '#3cd8ff'),
+      save: lamp(0.241, 0.05, 0.03, '#3cff7a'),
+      extra: lamp(0.36, 0.92, 0.018, '#ff60ff'),
+      superj: lamp(0.44, 0.92, 0.018, '#ff60ff'),
+      pitArrow: lamp(0.37, 0.85, 0.024, '#3cff7a')
+    };
+    {
+      const coil = [];
+      for (let i = 0; i <= 120; i++) {
+        const a = (i / 120) * 12 * Math.PI;
+        coil.push(new THREE.Vector3(0.0075 * Math.cos(a), 0.0075 * Math.sin(a), i / 120));
+      }
+      const metal = new THREE.MeshStandardMaterial({ color: '#c9d2da', metalness: 0.9, roughness: 0.25 });
+      inner.spring = new THREE.Mesh(
+        new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coil), 240, 0.0013, 6),
+        metal
+      );
+      inner.spring.position.set(0.501 - 0.26, R * 0.7, 0.53);
+      inner.spring.rotation.y = Math.PI; // dal fondo della corsia verso la pallina
+      piano.add(inner.spring);
+      inner.tip = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.006, 16), metal);
+      inner.tip.rotation.x = Math.PI / 2;
+      inner.tip.position.set(0.501 - 0.26, R * 0.7, 0.5);
+      piano.add(inner.tip);
+    }
     for (const b of balls) {
       b.visible = false;
       piano.add(b);
@@ -220,7 +299,81 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     else if (type === 'tilt') tone(110, 0.8, 0.12, 0, 100, 'sawtooth');
     else if (type === 'nudge') hit(150, 1, 0.12, 0.5);
     else if (type === 'hit') hit(1100, 3, 0.04, 0.4 * p);
-    else hit(2200, 5, 0.03, 0.25 * p);
+    else if (type === 'ramp' || type === 'rampUp') {
+      // fruscio della pallina sulla rampa e "vroom" che sale
+      hit(2600, 1, type === 'ramp' ? 0.35 : 0.5, 0.25);
+      tone(180, 0.5, 0.07, 0, type === 'ramp' ? 540 : 360, 'sawtooth');
+    } else if (type === 'rampFail') tone(400, 0.4, 0.06, 0, 160, 'triangle');
+    else if (type === 'combo') [660, 880].forEach((f, i) => tone(f, 0.1, 0.07, i * 0.06));
+    else if (type === 'skill' || type === 'extra' || type === 'jackpot' || type === 'super') {
+      const notes =
+        type === 'super'
+          ? [523, 659, 784, 1047, 1319, 1568]
+          : type === 'jackpot'
+            ? [523, 659, 784, 1047]
+            : [784, 988, 1175];
+      notes.forEach((f, i) => tone(f, 0.16, 0.08, i * 0.08, f, 'square'));
+      hit(5000, 1, 0.5, 0.15, 0.1);
+    } else hit(2200, 5, 0.03, 0.25 * p);
+    // la voce del tavolo (sintesi vocale del browser, in italiano)
+    const words = {
+      skill: 'Tiro di precisione!',
+      jackpot: 'Jackpot!',
+      super: 'Super jackpot!',
+      extra: 'Palla extra!',
+      tilt: 'Tilt!',
+      kickback: 'Kickback!'
+    };
+    if (words[type]) say(words[type]);
+    if (type === 'combo' && power >= 0.75) say('Combo!');
+  }
+  let lastVoice = 0;
+  function say(text) {
+    try {
+      const now = performance.now();
+      if (!allowed() || now - lastVoice < 1200 || !window.speechSynthesis) return;
+      lastVoice = now;
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = 'it-IT';
+      u.rate = 1.15;
+      u.pitch = 0.9;
+      u.volume = 0.8;
+      speechSynthesis.speak(u);
+    } catch {}
+  }
+  let motor = null;
+  function engine(g) {
+    const ac = audio() || ownAudio;
+    if (!g || g.over || !active || !ac || ac.state !== 'running' || !allowed()) {
+      if (motor) {
+        motor.gain.gain.setTargetAtTime(0, ac?.currentTime || 0, 0.2);
+        const m = motor;
+        setTimeout(() => {
+          try {
+            m.osc.stop();
+            m.osc.disconnect();
+            m.gain.disconnect();
+          } catch {}
+        }, 600);
+        motor = null;
+      }
+      return;
+    }
+    if (!motor) {
+      const osc = ac.createOscillator(),
+        lp = ac.createBiquadFilter(),
+        gain = ac.createGain();
+      osc.type = 'sawtooth';
+      lp.type = 'lowpass';
+      lp.frequency.value = 380;
+      gain.gain.value = 0;
+      osc.connect(lp).connect(gain).connect(ac.destination);
+      osc.start();
+      motor = { osc, gain };
+    }
+    const v = Math.max(0, ...g.balls.map(b => (b.ramp ? b.ramp.v : Math.hypot(b.vx, b.vy))));
+    motor.osc.frequency.setTargetAtTime(42 + v * 22, ac.currentTime, 0.15);
+    motor.gain.gain.setTargetAtTime(0.018 + Math.min(0.03, v * 0.008), ac.currentTime, 0.2);
   }
 
   // ---------- partita ----------
@@ -249,6 +402,11 @@ export function buildFlipper(scene, el, { audio, allowed }) {
   tip.textContent =
     'Tocco breve = colpo morbido · Tenuto = colpo pieno · Leva: trascina il pomello (più tiri, più forte) · Spazio scossa';
   el.append(hud, tip);
+  addEventListener('mouseup', e => {
+    if (!active || !game) return;
+    if (!((e.buttons ?? 0) & 1) && pressed[0] && !grab) flip(0, false);
+    if (!((e.buttons ?? 0) & 2) && pressed[1]) flip(1, false);
+  });
   const look = { yaw: 0, pitch: 0 }; // la testa di chi gioca: si gira muovendo il mouse
   const turn = new THREE.Quaternion(),
     UP = new THREE.Vector3(0, 1, 0);
@@ -322,6 +480,20 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     pointer(e) {
       if (!game) return false;
       if (e.type === 'pointerdown') wakeAudio();
+      // Mouse: i flipper seguono i tasti davvero premuti (e.buttons). Con un tasto già giù il browser non manda il
+      // "giù" e il "su" dell'altro tasto: leggendo lo stato dei tasti a ogni evento i flipper non restano mai bloccati.
+      if (e.pointerType === 'mouse' && !game.over) {
+        const down = e.buttons ?? 0;
+        if (e.type === 'pointerdown' && e.button === 0 && onLever(e) && !grab) {
+          grab = { id: e.pointerId, y: e.clientY };
+          drag(game, 0);
+          pulling = true;
+        }
+        const left = !grab && (down & 1) !== 0,
+          right = (down & 2) !== 0;
+        if (left !== pressed[0]) flip(0, left);
+        if (right !== pressed[1]) flip(1, right);
+      }
       if (e.type === 'pointerdown') {
         if (game.over) {
           api.open();
@@ -340,12 +512,6 @@ export function buildFlipper(scene, el, { audio, allowed }) {
           } else flip(e.clientX < r.left + r.width / 2 ? 0 : 1, true);
           return true;
         }
-        if (e.button === 0 && onLever(e)) {
-          grab = { id: e.pointerId, y: e.clientY };
-          drag(game, 0);
-          pulling = true;
-        } else if (e.button === 0) flip(0, true);
-        else if (e.button === 2) flip(1, true);
         return true;
       }
       if (e.type === 'pointermove') {
@@ -358,14 +524,13 @@ export function buildFlipper(scene, el, { audio, allowed }) {
         return true;
       }
       if (e.type === 'pointerup' || e.type === 'pointercancel') {
-        if (grab?.id === e.pointerId) {
+        if (grab?.id === e.pointerId && !((e.buttons ?? 0) & 1)) {
           grab = null;
           setPull(false);
         } else if (e.pointerType !== 'mouse') {
           const r = el.getBoundingClientRect();
           flip(e.clientX < r.left + r.width / 2 ? 0 : 1, false);
-        } else if (e.button === 0) flip(0, false);
-        else if (e.button === 2) flip(1, false);
+        }
         return true;
       }
       return false;
@@ -405,14 +570,28 @@ export function buildFlipper(scene, el, { audio, allowed }) {
       balls.forEach((b, i) => {
         const p = g?.balls[i];
         b.visible = !!p;
-        if (p) b.position.set(p.x - 0.26, R, -(p.y - 0.53));
+        if (p?.ramp) {
+          const q = rampPoint(p.ramp.s);
+          b.position.set(q.x - 0.26, q.z + 0.006 + R, -(q.y - 0.53));
+        } else if (p) b.position.set(p.x - 0.26, R, -(p.y - 0.53));
       });
       // flipper: girano sul perno (stesso angolo della fisica)
       if (g) g.t.flippers.forEach((f, i) => flips[i] && (flips[i].rotation.y = f.a - f.rest));
       // leva e molla: tirata torna indietro verso chi gioca e la molla si accorcia
       const pullNow = g?.plunger ?? 0;
       lever.position.z = leverZ + pullNow * LEVER_RUN;
-      spring.scale.z = 1 - pullNow * 0.55;
+      // molla esterna: viaggia con il pomello senza schiacciarsi; quando la leva torna indietro di colpo ammortizza
+      if (inner.last > 0.08 && pullNow === 0) inner.slam = 0.22;
+      inner.last = pullNow;
+      inner.slam = Math.max(0, inner.slam - dt);
+      spring.position.z = lever.position.z;
+      spring.scale.z = 1 - 0.45 * Math.sin((inner.slam / 0.22) * Math.PI);
+      // molla interna (nella corsia di lancio): più tiri, più si comprime, e il pistone scende con lei
+      if (inner.spring) {
+        const tipY = 0.0225 - pullNow * 0.02;
+        inner.spring.scale.z = Math.max(0.004, tipY);
+        inner.tip.position.z = -(tipY - 0.53);
+      }
       // pulsanti premuti
       buttons.forEach((b, i) => (b.position.x = buttonX[i] + (pressed[i] ? (i ? -0.008 : 0.008) : 0)));
       // luci sui colpi
@@ -435,7 +614,7 @@ export function buildFlipper(scene, el, { audio, allowed }) {
         g.t.targets.forEach((t, i) =>
           set(glow.targets[i], (t.flash || 0) / 0.25 + (t.down ? 0.25 : 0), (t.ax + t.bx) / 2, t.ay)
         );
-        glow.kick.material.opacity = g.kickback ? 0.55 + 0.45 * Math.sin(now0() * 6) ** 2 : 0.08;
+        glow.kick.material.opacity = g.kickback ? 0.55 + 0.45 * Math.sin(now0() * 6) ** 2 : 0;
         set(glow.pit, g.pitFlash, 0.4, 0.95);
         if (g.kickFlash > 0) set(glow.kick, g.kickFlash / 0.4, 0.03, 0.1);
         glow.light.intensity = best * 0.8;
@@ -451,6 +630,107 @@ export function buildFlipper(scene, el, { audio, allowed }) {
         });
         bars[1].fill.style.width = (g.plunger * 100).toFixed(0) + '%';
       }
+      // inserti luminosi: accesi dal gioco, in attesa fanno un giro di luci
+      const tt = now0();
+      if (art.lamps) {
+        const L = art.lamps,
+          blink = Math.sin(tt * 9) > 0,
+          set = (m, v) => (m.material.opacity = v ? 0.95 : 0.06);
+        if (!g) {
+          const all = [
+            ...L.lanes,
+            ...L.mult,
+            ...L.lights,
+            L.ramp,
+            L.orbit,
+            L.save,
+            L.extra,
+            L.superj,
+            L.pitArrow
+          ];
+          all.forEach((m, i) => set(m, (Math.floor(tt * 8) + i) % 5 === 0));
+        } else {
+          L.lanes.forEach((m, i) =>
+            set(
+              m,
+              g.lanes[i] || (g.balls.some(b => b.y < 0.06 && b.x > LANE_X) && i === g.skillLane && blink)
+            )
+          );
+          L.mult.forEach((m, i) => set(m, g.mult >= i + 2));
+          L.lights.forEach((m, i) => set(m, g.lights > i || (g.lights >= 3 && blink)));
+          set(L.ramp, g.multiball ? blink : g.comboTimer > 0 ? blink : true);
+          set(L.orbit, g.comboTimer > 0 ? blink : g.laps > 0);
+          set(L.save, g.save > 0 && (g.save > 2 || blink));
+          set(L.extra, g.extraLit && blink);
+          set(L.superj, g.superLit && blink);
+          set(L.pitArrow, (g.lights >= 3 || g.extraLit || g.superLit) && blink);
+        }
+      }
+      // vetro del tabellone: punteggio grande che sale in diretta, con un lampo quando arrivano punti
+      if (tt - art.lastBg > 1 / 30) {
+        const dt = tt - art.lastBg;
+        art.lastBg = tt;
+        let info;
+        if (g) {
+          if (g !== art.shownGame) ((art.shownGame = g), (art.shown = 0));
+          const gap = g.score - art.shown;
+          if (gap > 0) {
+            art.shown = Math.min(g.score, art.shown + Math.max(gap * Math.min(1, dt * 9), 37));
+            if (gap > 400) art.flash = 1;
+          } else art.shown = g.score;
+          art.flash = Math.max(0, (art.flash || 0) - dt * 3);
+          info = {
+            label: g.over ? 'PUNTEGGIO FINALE' : g.multiball ? 'MULTIBALL!' : 'PUNTEGGIO',
+            score: Math.round(art.shown),
+            ball: Math.min(g.ball, BALLS),
+            balls: BALLS,
+            mult: g.mult || 1,
+            flash: art.flash,
+            message: g.messageTime > 0 ? g.message : g.over ? 'S per ricominciare' : ''
+          };
+        } else {
+          const best = top()[0];
+          info = best
+            ? { label: 'RECORD', score: best.score, message: best.name, flash: 0 }
+            : record
+              ? { label: 'IL TUO RECORD', score: record, message: 'E per giocare', flash: 0 }
+              : null;
+        }
+        paintBackglass(art.bgCanvas, tt, !g, info);
+        art.bgTexture.needsUpdate = true;
+      }
+      // motore in sottofondo: sale di giri con la velocità della pallina
+      engine(g);
+      // fine partita: il punteggio va in classifica (una volta sola) e il display dice in che posizione sei
+      if (g?.over && !g.sent) {
+        g.sent = true;
+        const list = top(),
+          myId = String(me()?.id ?? '');
+        g.rank = list.filter(e => e.score > g.score && e.id !== myId).length + 1;
+        const mine = list.find(e => e.id === myId);
+        if (g.score > 0 && (!mine || g.score > mine.score)) sendScore(g.score);
+        if (g.score > record) {
+          record = g.score;
+          try {
+            localStorage.setItem('binottoland-flipper-record', String(record));
+          } catch {}
+        }
+        if (g.rank === 1 && g.score > 0) say('Nuovo record della classifica!');
+        else if (g.rank <= 10 && g.score > 0) say('Sei in classifica!');
+      }
+      // in attesa: la classifica a rotazione (1. NOME · punti), poi "E PER GIOCARE"
+      if (!g && tt - (art.lastTop || 0) > 2.2) {
+        art.lastTop = tt;
+        const list = top();
+        art.topIndex = ((art.topIndex ?? -1) + 1) % (list.length + 1);
+        const e = list[art.topIndex];
+        if (e)
+          drawDmd(
+            e.score.toLocaleString('it-IT'),
+            art.topIndex + 1 + '. ' + e.name.toUpperCase().slice(0, 20)
+          );
+        else drawDmd(list.length ? 'CLASSIFICA' : 'GRAND PRIX', 'E PER GIOCARE · 5 PALLINE');
+      }
       // display
       const now = performance.now();
       if (g && now - lastDmd > 120) {
@@ -459,7 +739,8 @@ export function buildFlipper(scene, el, { audio, allowed }) {
           g.messageTime > 0
             ? g.message
             : g.over
-              ? 'FINE · S PER RICOMINCIARE'
+              ? (g.rank <= 10 && g.score > 0 ? g.rank + '° IN CLASSIFICA · ' : 'FINE · ') +
+                'S PER RICOMINCIARE'
               : 'PALLINA ' + g.ball + '/' + BALLS;
         drawDmd(g.score.toLocaleString('it-IT'), msg.toUpperCase().slice(0, 30));
       }

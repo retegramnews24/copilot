@@ -194,7 +194,10 @@ function stars(c) {
 const mix = (v, to, k) => v * (1 - k) + to * k;
 export function actCharacter(c, a, dt, t) {
   const fx = c.fx || (c.fx = { crouch: 0, guard: 0, punch: 9, starsUntil: 0 });
-  fx.crouch += ((a.crouch ? 1 : 0) - fx.crouch) * Math.min(1, dt * 12);
+  // atterrando dal salto le ginocchia si piegano un poco (c.landBend: secondi che restano) e poi si raddrizzano
+  c.landBend = Math.max(0, (c.landBend || 0) - dt);
+  const land = c.landBend > 0 ? Math.sin((c.landBend / 0.28) * Math.PI) * 0.35 : 0;
+  fx.crouch += (Math.max(a.crouch ? 1 : 0, land) - fx.crouch) * Math.min(1, dt * (a.crouch ? 12 : 22));
   fx.guard += ((a.guard ? 1 : 0) - fx.guard) * Math.min(1, dt * 14);
   fx.punch += dt;
   // abbassato: cosce avanti, ginocchia piegate in avanti (stinchi indietro), il corpo scende e si sporge un po'

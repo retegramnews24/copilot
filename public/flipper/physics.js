@@ -4,7 +4,8 @@
 // Passo fisso di 1/1200 s: anche a 7 m/s la pallina fa meno di 6 mm per passo (il raggio è 13,5 mm), quindi non
 // attraversa mai flipper e sponde.
 
-export const W = 0.52, H = 1.06; // piano largo 52 cm e lungo 106 cm
+export const W = 0.52,
+  H = 1.06; // piano largo 52 cm e lungo 106 cm
 export const R = 0.0135; // raggio della pallina
 const G = 9.81 * Math.sin((6.5 * Math.PI) / 180);
 const STEP = 1 / 1200;
@@ -15,6 +16,17 @@ export const PLAY_W = LANE_X; // larghezza del campo senza la corsia di lancio
 const mx = x => PLAY_W - x; // simmetria sinistra/destra del campo
 
 // ---------- il tavolo ----------
+// parte bassa (lato sinistro; il destro è simmetrico): guida del corridoio dal muro al perno del flipper e
+// respingente triangolare sopra, col lato basso parallelo alla guida
+export const INLANE = [
+  [0, 0.275],
+  [0.132, 0.165]
+];
+export const SLING = [
+  [0.07, 0.382],
+  [0.07, 0.272],
+  [0.125, 0.227]
+];
 function seg(ax, ay, bx, by, extra = {}) {
   return { ax, ay, bx, by, r: 0.002, e: 0.5, ...extra };
 }
@@ -23,7 +35,15 @@ function arc(cx, cy, rad, a0, a1, n, extra) {
   for (let i = 0; i < n; i++) {
     const t0 = a0 + ((a1 - a0) * i) / n,
       t1 = a0 + ((a1 - a0) * (i + 1)) / n;
-    out.push(seg(cx + rad * Math.cos(t0), cy + rad * Math.sin(t0), cx + rad * Math.cos(t1), cy + rad * Math.sin(t1), extra));
+    out.push(
+      seg(
+        cx + rad * Math.cos(t0),
+        cy + rad * Math.sin(t0),
+        cx + rad * Math.cos(t1),
+        cy + rad * Math.sin(t1),
+        extra
+      )
+    );
   }
   return out;
 }
@@ -36,8 +56,12 @@ export function makeTable() {
     seg(LANE_X, PLUNGER_Y - R, W, PLUNGER_Y - R, { plunger: true, e: 0.1 }), // punta del pistone
     seg(LANE_X, 0.81, W, 0.81, { oneWay: -1, r: 0.001 }), // cancelletto: la palla sale, non riscende nella corsia
     // corridoi di rientro (inlane) verso i flipper e uscite laterali (outlane)
-    seg(0.045, 0.27, 0.135, 0.163, { r: 0.004 }),
-    seg(mx(0.045), 0.27, mx(0.135), 0.163, { r: 0.004 }),
+    // corridoi verso i flipper: la guida parte dal muro (niente uscite laterali, la pallina si perde solo in mezzo)
+    // e finisce appena sopra il perno del flipper; il corridoio sotto il respingente è largo 4,4 cm
+    seg(0, INLANE[0][1], INLANE[1][0], INLANE[1][1], { r: 0.004 }),
+    seg(LANE_X, INLANE[0][1], mx(INLANE[1][0]), INLANE[1][1], { r: 0.004 }),
+    // scivolo dalla parete al flipper piccolo di destra: la pallina non resta ferma sul perno
+    seg(LANE_X, 0.565, 0.462, 0.515, { r: 0.004 }),
     // guida dell'orbita sinistra ("giro veloce")
     seg(0.062, 0.58, 0.062, 0.85, { r: 0.004 }),
     // separatori delle tre corsie in alto (G · P · !)
@@ -46,24 +70,38 @@ export function makeTable() {
   // respingenti triangolari sopra i flipper: il lato interno (cordolo) spinge via la pallina
   for (const side of [0, 1]) {
     const f = x => (side ? mx(x) : x);
-    const p1 = [f(0.065), 0.33], p2 = [f(0.065), 0.215], p3 = [f(0.125), 0.19];
+    const p1 = [f(SLING[0][0]), SLING[0][1]],
+      p2 = [f(SLING[1][0]), SLING[1][1]],
+      p3 = [f(SLING[2][0]), SLING[2][1]];
     walls.push(seg(...p1, ...p2, { r: 0.004 }), seg(...p2, ...p3, { r: 0.004 }));
     walls.push(seg(...p1, ...p3, { r: 0.005, kicker: 1.5, e: 0.6, sling: side }));
   }
-  const posts = [
-    { x: 0.045, y: 0.285, r: 0.006, e: 0.6 }, // varco dell'uscita laterale: 3,7 cm per una pallina da 2,7
-    { x: mx(0.045), y: 0.285, r: 0.006, e: 0.6 }
-  ];
+  const posts = [];
   const bumpers = [
     { x: 0.17, y: 0.74, r: 0.026, kick: 1.3, flash: 0 },
     { x: 0.31, y: 0.74, r: 0.026, kick: 1.3, flash: 0 },
     { x: 0.24, y: 0.83, r: 0.026, kick: 1.3, flash: 0 }
   ];
   // tre bersagli che scendono: i semafori di partenza
-  const targets = [0.195, 0.24, 0.285].map(x => ({ ax: x - 0.016, ay: 0.6, bx: x + 0.016, by: 0.6, down: false }));
+  const targets = [0.195, 0.24, 0.285].map(x => ({
+    ax: x - 0.016,
+    ay: 0.6,
+    bx: x + 0.016,
+    by: 0.6,
+    down: false
+  }));
   const flippers = [
     { x: 0.146, y: 0.14, len: 0.075, r1: 0.012, r2: 0.007, rest: -0.52, up: 0.5, side: 0 },
-    { x: mx(0.146), y: 0.14, len: 0.075, r1: 0.012, r2: 0.007, rest: Math.PI + 0.52, up: Math.PI - 0.5, side: 1 },
+    {
+      x: mx(0.146),
+      y: 0.14,
+      len: 0.075,
+      r1: 0.012,
+      r2: 0.007,
+      rest: Math.PI + 0.52,
+      up: Math.PI - 0.5,
+      side: 1
+    },
     { x: 0.457, y: 0.5, len: 0.055, r1: 0.01, r2: 0.006, rest: Math.PI + 0.55, up: Math.PI - 0.3, side: 1 }
   ].map(f => ({ ...f, a: f.rest, w: 0 }));
   return {
@@ -77,8 +115,45 @@ export function makeTable() {
   };
 }
 
+// ---------- la rampa ----------
+// Entra dal basso a sinistra, sale sopra i bumper e ricade nel corridoio destro. Sulla rampa la pallina rallenta in
+// salita (gravità vera sulla pendenza della rampa più l'inclinazione del tavolo) e accelera in discesa; se non ha
+// abbastanza velocità torna indietro ("rampa mancata").
+export const RAMP = [
+  [0.1, 0.5, 0],
+  [0.1, 0.68, 0.03],
+  [0.12, 0.86, 0.06],
+  [0.2, 0.965, 0.075],
+  [0.31, 0.97, 0.075],
+  [0.41, 0.9, 0.07],
+  [0.448, 0.76, 0.06],
+  [0.45, 0.6, 0.055],
+  [0.447, 0.46, 0.042],
+  [0.432, 0.36, 0.004]
+];
+const rampLen = RAMP.slice(1).map((p, i) =>
+  Math.hypot(p[0] - RAMP[i][0], p[1] - RAMP[i][1], p[2] - RAMP[i][2])
+);
+export const RAMP_LEN = rampLen.reduce((a, b) => a + b, 0);
+// punto della rampa a distanza s dall'ingresso: { x, y, z, dz (pendenza), dy (verso sul tavolo) }
+export function rampPoint(s) {
+  let i = 0;
+  while (i < rampLen.length - 1 && s > rampLen[i]) s -= rampLen[i++];
+  const a = RAMP[i],
+    b = RAMP[i + 1],
+    l = rampLen[i],
+    u = Math.max(0, Math.min(1, s / l));
+  return {
+    x: a[0] + (b[0] - a[0]) * u,
+    y: a[1] + (b[1] - a[1]) * u,
+    z: a[2] + (b[2] - a[2]) * u,
+    dz: (b[2] - a[2]) / l,
+    dy: (b[1] - a[1]) / l
+  };
+}
+
 // ---------- partita ----------
-export const BALLS = 3;
+export const BALLS = 5; // palline a partita
 export function newGame() {
   const g = {
     t: makeTable(),
@@ -100,10 +175,21 @@ export function newGame() {
     tilted: false,
     nudge: 0,
     multiball: false,
-    kickback: true, // il blocco a sinistra è carico all'inizio
+    kickback: false, // le uscite laterali sono chiuse: il kickback non serve più
     kickbackTimer: 0,
     kickFlash: 0,
     pitFlash: 0,
+    ramps: 0, // rampe fatte in questa partita
+    jackpot: 10000, // jackpot del multiball (cresce a ogni rampa presa in multiball)
+    jackpots: 0,
+    superLit: false, // super jackpot acceso ai box
+    extraLit: false, // palla extra accesa ai box
+    extra: 0, // palle extra guadagnate
+    combo: 0,
+    comboTimer: 0,
+    skillLane: 0, // corsia del tiro di precisione (lampeggia mentre la pallina è sul pistone)
+    skillArmed: false,
+    clock: 0,
     over: false,
     message: 'Tira giù la leva e lascia per lanciare',
     messageTime: 4,
@@ -121,6 +207,8 @@ function emit(g, type, power = 0.6) {
   g.events.push({ type, power });
 }
 function newBall(g) {
+  g.superLit = false;
+  g.jackpots = 0;
   g.balls = [{ x: (LANE_X + W) / 2, y: PLUNGER_Y + 0.001, vx: 0, vy: 0, held: 0, lap: 0 }];
   g.laps = 0;
   g.tilt = 0;
@@ -159,6 +247,7 @@ export function pull(g, on) {
       if (b.x > LANE_X && b.y < PLUNGER_Y + 0.02) {
         b.vy = 1.4 + 3.6 * g.plunger;
         if (!g.save && g.ball) g.save = 8; // 8 secondi di salva pallina dal lancio
+        g.skillArmed = true; // la prima corsia in alto: se è quella accesa è il tiro di precisione
       }
     if (g.plunger > 0.05) emit(g, 'launch', g.plunger);
     g.plunger = 0;
@@ -270,34 +359,113 @@ function hitFlipper(g, b, f) {
     sy = f.w * px;
   b.x = cx + nx * min;
   b.y = cy + ny * min;
-  const speed = bounce(b, nx, ny, 0.55, sx, sy, 0.04);
+  // gomma: rimbalza tanto se l'urto è leggero, meno se è forte; flipper fermo e palla lenta = "presa morta"
+  const rel = Math.abs((b.vx - sx) * nx + (b.vy - sy) * ny),
+    still = Math.abs(f.w) < 0.5;
+  const e = still && rel < 1.2 ? 0.22 : Math.max(0.35, Math.min(0.72, 0.78 - 0.07 * rel));
+  // palla d'acciaio: parte della velocità di scorrimento diventa rotazione (2/7 per una sfera piena)
+  const speed = bounce(b, nx, ny, e, sx, sy, 0.12);
   if (speed > 0.6) emit(g, 'hit', Math.min(1, speed / 5));
 }
 
 // ---------- un passo ----------
 // Flipper con la bobina vera: accelerano (non partono già alla velocità piena). Un tocco breve li alza solo in parte
 // e il colpo è morbido; tenuto premuto il colpo è pieno, e conta anche in che punto della corsa arriva la pallina.
-const FLIP_ACC = 2600, FLIP_MAX = 52, FLIP_DOWN = 26; // rad/s², rad/s su, rad/s giù
+const FLIP_ACC = 2600,
+  FLIP_MAX = 52,
+  FLIP_DOWN = 26; // rad/s², rad/s su, rad/s giù
 function moveFlippers(g, h) {
   for (const f of g.t.flippers) {
     const on = f.side ? g.right : g.left;
     const upDir = Math.sign(f.up - f.rest); // verso in cui si alza
-    if (on) f.w = upDir * Math.min(FLIP_MAX, Math.abs(f.w) * (Math.sign(f.w) === upDir ? 1 : 0) + FLIP_ACC * h);
-    else f.w = -upDir * Math.min(FLIP_DOWN, Math.abs(f.w) * (Math.sign(f.w) === -upDir ? 1 : 0) + FLIP_ACC * 0.6 * h);
+    if (on)
+      f.w = upDir * Math.min(FLIP_MAX, Math.abs(f.w) * (Math.sign(f.w) === upDir ? 1 : 0) + FLIP_ACC * h);
+    else
+      f.w =
+        -upDir *
+        Math.min(FLIP_DOWN, Math.abs(f.w) * (Math.sign(f.w) === -upDir ? 1 : 0) + FLIP_ACC * 0.6 * h);
     f.a += f.w * h;
     // fine corsa: in alto si ferma contro il fermo, in basso torna a riposo
-    if ((f.a - f.up) * upDir >= 0) { f.a = f.up; if (on) f.w = 0; }
-    if ((f.a - f.rest) * upDir <= 0) { f.a = f.rest; if (!on) f.w = 0; }
+    if ((f.a - f.up) * upDir >= 0) {
+      f.a = f.up;
+      if (on) f.w = 0;
+    }
+    if ((f.a - f.rest) * upDir <= 0) {
+      f.a = f.rest;
+      if (!on) f.w = 0;
+    }
   }
+}
+function combo(g) {
+  g.combo = g.comboTimer > 0 ? g.combo + 1 : 1;
+  g.comboTimer = 3.5;
+  if (g.combo > 1) {
+    g.score += 1000 * g.combo;
+    say(g, 'COMBO ×' + g.combo + '!', 1.6);
+    emit(g, 'combo', Math.min(1, g.combo / 4));
+  }
+}
+function rampMade(g) {
+  g.ramps++;
+  g.score += 2500;
+  if (g.multiball) {
+    g.score += g.jackpot;
+    say(g, 'JACKPOT ' + g.jackpot.toLocaleString('it-IT') + '!', 2.5);
+    emit(g, 'jackpot', 1);
+    g.jackpot += 5000;
+    if (++g.jackpots >= 3 && !g.superLit) {
+      g.superLit = true;
+      say(g, 'SUPER JACKPOT acceso ai box!', 2.5);
+    }
+  } else {
+    say(g, 'RETTILINEO! ' + g.ramps, 1.6);
+    emit(g, 'ramp', 1);
+    if (g.ramps % 3 === 0 && !g.extraLit) {
+      g.extraLit = true;
+      say(g, 'PALLA EXTRA accesa ai box', 2.5);
+    }
+  }
+  combo(g);
 }
 function stepBall(g, b, h) {
   const t = g.t;
+  if (b.ramp) {
+    // sulla rampa: rallenta in salita, accelera in discesa, un po' di attrito della plastica
+    const r = b.ramp,
+      p = rampPoint(r.s);
+    r.v += (-9.81 * p.dz - G * p.dy - 0.25) * h;
+    r.s += r.v * h;
+    if (r.v <= 0 && r.s < RAMP_LEN * 0.45) {
+      // rampa mancata: torna giù da dove è entrata
+      b.ramp = null;
+      Object.assign(b, { x: RAMP[0][0], y: RAMP[0][1] - 0.01, vx: 0, vy: -0.6 });
+      say(g, 'Rampa mancata', 1);
+      emit(g, 'rampFail', 0.6);
+    } else if (r.s >= RAMP_LEN) {
+      // fine della rampa: ricade nel corridoio destro, nella direzione dell'ultimo tratto
+      const a = RAMP[RAMP.length - 2],
+        e = RAMP[RAMP.length - 1],
+        l = Math.hypot(e[0] - a[0], e[1] - a[1]);
+      b.ramp = null;
+      Object.assign(b, {
+        x: e[0],
+        y: e[1],
+        vx: ((e[0] - a[0]) / l) * Math.max(0.8, r.v),
+        vy: ((e[1] - a[1]) / l) * Math.max(0.8, r.v)
+      });
+      rampMade(g);
+    } else {
+      b.x = p.x;
+      b.y = p.y;
+    }
+    return;
+  }
   if (b.held > 0) {
     // ai box: ferma, poi esce verso il basso a sinistra
     b.held -= h;
     if (b.held <= 0) {
-      b.vx = -1.1;
-      b.vy = -1.3;
+      b.vx = -0.55 - Math.random() * 0.2;
+      b.vy = -1.35;
       b.y -= 0.03;
       emit(g, 'eject', 1);
     }
@@ -315,6 +483,14 @@ function stepBall(g, b, h) {
   const oy = b.y;
   b.x += b.vx * h;
   b.y += b.vy * h;
+  if (b.vy > 0 && oy < RAMP[0][1] && b.y >= RAMP[0][1] && Math.abs(b.x - RAMP[0][0]) < 0.022) {
+    const v = Math.hypot(b.vx, b.vy);
+    if (v > 0.9) {
+      b.ramp = { s: 0, v: v * 0.92 };
+      emit(g, 'rampUp', Math.min(1, v / 4));
+      return;
+    }
+  }
   for (const s of t.walls) hitSegment(g, b, s);
   for (const p of t.posts) hitCircle(g, b, p);
   for (const bm of t.bumpers)
@@ -345,6 +521,15 @@ function stepBall(g, b, h) {
   // corsie in alto: passarci accende la lettera; tutte e tre = moltiplicatore
   if (b.y > 0.95 && oy <= 0.95 && b.vy > 0)
     t.lanes.forEach((x, i) => {
+      if (Math.abs(b.x - x) < 0.022 && g.skillArmed) {
+        g.skillArmed = false;
+        if (i === g.skillLane) {
+          g.score += 5000;
+          g.save = Math.max(g.save, 10);
+          say(g, 'TIRO DI PRECISIONE! 5.000', 2);
+          emit(g, 'skill', 1);
+        }
+      }
       if (Math.abs(b.x - x) < 0.022 && !g.lanes[i]) {
         g.lanes[i] = true;
         g.score += 250;
@@ -363,6 +548,7 @@ function stepBall(g, b, h) {
     g.score += 1500 + 500 * (g.laps - 1);
     say(g, 'GIRO VELOCE ' + g.laps + '!', 1.8);
     emit(g, 'lap', 1);
+    combo(g);
   }
   // i box
   const pd = Math.hypot(b.x - t.pit.x, b.y - t.pit.y);
@@ -374,9 +560,20 @@ function stepBall(g, b, h) {
     g.pitFlash = 1.2;
     g.score += 1000;
     emit(g, 'pit', 1);
-    if (g.multiball) {
-      g.score += 10000;
-      say(g, 'JACKPOT! 10.000');
+    if (g.multiball && g.superLit) {
+      g.score += 50000;
+      g.superLit = false;
+      g.jackpots = 0;
+      say(g, 'SUPER JACKPOT! 50.000', 3);
+      emit(g, 'super', 1);
+    } else if (g.multiball) {
+      g.score += 5000;
+      say(g, 'Pit stop in gara · 5.000');
+    } else if (g.extraLit) {
+      g.extraLit = false;
+      g.extra++;
+      say(g, 'PALLA EXTRA!', 3);
+      emit(g, 'extra', 1);
     } else if (g.lights >= 3) {
       g.lights = 0;
       g.multiball = true;
@@ -433,10 +630,10 @@ function drain(g, b) {
     return;
   }
   if (g.save > 0 && !g.tilted) {
-    say(g, 'Pallina salvata!', 2);
-    g.balls = [{ x: (LANE_X + W) / 2, y: PLUNGER_Y + 0.001, vx: 0, vy: 4.2, held: 0, lap: 0 }];
+    say(g, 'Pallina salvata! Rilancia con la leva', 3);
+    g.balls = [{ x: (LANE_X + W) / 2, y: PLUNGER_Y + 0.001, vx: 0, vy: 0, held: 0, lap: 0 }];
     g.save = 0;
-    emit(g, 'launch', 1);
+    emit(g, 'extra', 0.6);
     return;
   }
   // fine pallina: bonus (giri e semafori) × moltiplicatore
@@ -445,6 +642,12 @@ function drain(g, b) {
   g.targetsHit = 0;
   g.mult = 1;
   emit(g, 'drain', 1);
+  if (g.extra > 0) {
+    g.extra--;
+    say(g, 'Bonus ' + bonus.toLocaleString('it-IT') + ' · TIRA ANCORA!', 3);
+    newBall(g);
+    return;
+  }
   if (g.ball >= BALLS) {
     g.over = true;
     g.ball = 0;
@@ -467,19 +670,23 @@ export function simulate(g, dt) {
       stepBall(g, b, h);
       if (b.y < -0.05) drain(g, b);
     }
-    for (let i = 0; i < g.balls.length; i++) for (let j = i + 1; j < g.balls.length; j++) ballsCollide(g.balls[i], g.balls[j]);
+    for (let i = 0; i < g.balls.length; i++)
+      for (let j = i + 1; j < g.balls.length; j++) ballsCollide(g.balls[i], g.balls[j]);
     for (const bm of g.t.bumpers) bm.flash = Math.max(0, bm.flash - h);
     for (const w of g.t.walls) if (w.flash) w.flash = Math.max(0, w.flash - h);
     for (const tg of g.t.targets) if (tg.flash) tg.flash = Math.max(0, tg.flash - h);
     g.kickFlash = Math.max(0, g.kickFlash - h);
     g.pitFlash = Math.max(0, g.pitFlash - h);
-    if (!g.kickback && (g.kickbackTimer -= h) <= 0) {
-      g.kickback = true;
-      say(g, 'Kickback pronto', 1.2);
-    }
+
     if (g.save > 0 && !g.balls.some(b => b.x > LANE_X && b.y < 0.1)) g.save = Math.max(0, g.save - h);
     if (g.resetTargets > 0 && (g.resetTargets -= h) <= 0) g.t.targets.forEach(x => (x.down = false));
     g.nudge = Math.max(0, g.nudge - h);
+    g.clock += h;
+    g.comboTimer = Math.max(0, g.comboTimer - h);
+    if (g.balls.some(b => b.x > LANE_X && b.y < 0.06)) g.skillLane = Math.floor(g.clock / 0.45) % 3;
+    else if (g.skillArmed && g.clock % 1 < h && !g.balls.some(b => b.y > 0.7)) {
+      /* la pallina è ancora in salita: la corsia resta quella */
+    }
     g.messageTime -= h;
     if (g.over) return;
   }

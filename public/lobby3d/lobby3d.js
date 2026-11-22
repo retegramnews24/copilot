@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=a31ed88000';
+import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=112a64ec4e';
 import {buildBalilla} from './balilla.js?v=38634e7426';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
@@ -15,7 +15,7 @@ import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
 import * as E from '../biliardo/engine.js?v=725086e1a6';
 import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
-import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=71b7184cd1';
+import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=dab50e1d8e';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 
@@ -1044,7 +1044,7 @@ export function createLobby3D(app) {
   }
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
   // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
-  const pinball=buildFlipper(scene,el,{audio:()=>audioContext,allowed:soundAllowed});
+  const pinball=buildFlipper(scene,el,{audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.()||[],sendScore:score=>app.pinballScore?.(score),me:()=>app.me?.()});
   const playing=()=>tableFootball.active||pinball.active; // si gioca al tavolo: niente camminata né avvisi
   scene.updateMatrixWorld(true);
   { const st=pinball.stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label:'Flipper · Gioca',where:'Sala giochi',pinball:true}); }
@@ -1634,7 +1634,7 @@ export function createLobby3D(app) {
       const gravity = 13, inAir = jumpHeight > 0;
       jumpHeight = Math.max(0, jumpHeight + verticalSpeed * dt - .5 * gravity * dt * dt);
       verticalSpeed = jumpHeight > 0 ? verticalSpeed - gravity * dt : 0;
-      if (inAir && jumpHeight === 0) fxSound('land', 0.9); // si tocca terra dopo il salto
+      if (inAir && jumpHeight === 0) { fxSound('land', 0.9); me.landBend = 0.28; } // si tocca terra: suono e ginocchia piegate
       me.root.position.y += jumpHeight;
     }
     const floor=cinemaFloor(pos.x,pos.z)+(stools[seating?.stool]?.y??0);
