@@ -71,6 +71,9 @@ export function createLobby3D(app) {
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild;
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
+  const dot = document.createElement('div');
+  dot.style.cssText = 'position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(255,255,255,.4);box-shadow:0 0 1px rgba(0,0,0,.5);pointer-events:none;z-index:3';
+  dot.hidden = touch; host.append(dot);
   hint.hidden = true; // i comandi sono spiegati in Settings → Personaggio e pallina
   hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
@@ -320,6 +323,7 @@ export function createLobby3D(app) {
   }
   function openBoard() {
     if (boardOpen) return;
+    if (document.pointerLockElement) document.exitPointerLock?.();
     boardOpen = true; resetMovement();
     const chatSlot = boardDom.querySelector('[data-slot="chat"]');
     moveInto(document.getElementById('chat-messages'), chatSlot);
@@ -491,7 +495,7 @@ export function createLobby3D(app) {
 
   // Card room beyond the north doorway. Aisles run between all nine tables.
   const avail = new Set(app.games ? app.games() : [...ARCADE,...BOARD].map(a=>a[0]).concat(['cinema-streamer','blackboard-spazio-libero','biliardo']));
-  const walnut=std('#583828',.42), brassTrim=std('#c3a064',.32,.64);
+  const walnut=std('#583828',.42), brassTrim=std('#c3a064',.32,.64), chairLeather=std('#773e36',.68);
   // sgabelli in pelle di tutti i colori (blender/sgabello.blend): quando ci si siede il pistone scende con un piccolo rimbalzo
   const stools=[],stoolColors=['#b3101a','#d2520a','#e0a412','#1f7a2a','#0f8a84','#1a3fa8','#5a1c8c','#d8456f'];
   new GLTFLoader().load(new URL('models/sgabello.glb',import.meta.url).href,gltf=>{
@@ -501,6 +505,12 @@ export function createLobby3D(app) {
       st.lift?.traverse(o=>{if(o.isMesh&&/^pelle_/.test(o.material.name)){o.material=o.material.clone();o.material.color.set(stoolColors[i%stoolColors.length])}});
     });
   });
+  const addStool=(x,z,yaw,where)=>{
+    stools.push({x,z,y:0,v:0});
+    spots.push({x,z,hx:.18,hz:.18,pad:.5,label:'Siediti',where,seat:true,px:x,pz:z,yaw});
+  };
+  for(const x of [9,11.6,14.4,17])for(const side of [-1,1])addStool(x,side*5.6,side>0?0:Math.PI,'Sala biliardo');
+  for(const side of [-1,1])for(const end of [-1,1])addStool(-13+side*1.7,end*1.9,end>0?0:Math.PI,'Sala giochi');
   function stepStools(dt){
     for(const st of stools){
       if(!st.lift)continue;
@@ -569,7 +579,9 @@ export function createLobby3D(app) {
       }
     }
     for(const side of [-1,1]){
-      stools.push({x:x+side*1.24,z,y:0,v:0});
+      box(.46,.39,.4,walnut,x+side*1.24,.2,z);
+      box(.52,.09,.49,chairLeather,x+side*1.24,.44,z);
+      box(.07,.39,.49,chairLeather,x+side*1.47,.63,z);
       spots.push({x:x+side*1.24,z:z+.62,hx:.2,hz:.12,pad:.5,label:'Siediti',where:'Sala tavoli',seat:true,px:x+side*1.24,pz:z,yaw:side*Math.PI/2});
     }
     solid(x-1.51,x+1.51,z-.72,z+.72);
@@ -1330,8 +1342,16 @@ export function createLobby3D(app) {
   };
   addEventListener('keydown', onKey); addEventListener('keyup', onKey);
   addEventListener('blur', resetMovement);
+  const locked = () => document.pointerLockElement === host;
+  let lockFailed = false;
+  document.addEventListener('pointerlockerror', () => { lockFailed = true; });
   host.addEventListener('pointerdown', (e) => {
     if (!active || tableFootball.active) return;
+    // primo clic col mouse: la vista si aggancia al mouse (Esc per liberarlo); quel clic non tira il colpo
+    if (e.pointerType === 'mouse' && !locked() && !boardOpen && !lockFailed && host.requestPointerLock && !e.target.closest?.('button,input,select,a,label')) {
+      try { const r = host.requestPointerLock(); r?.catch?.(() => { lockFailed = true; }); } catch (err) { lockFailed = true; }
+      if (e.button === 0) return;
+    }
     const r = stick.getBoundingClientRect();
     const inStick = touch && e.pointerType !== 'mouse' && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.45 && joy.id === null;
     try { host.setPointerCapture(e.pointerId); } catch (err) { /* puntatore finto */ }
@@ -1351,6 +1371,13 @@ export function createLobby3D(app) {
   host.addEventListener('pointermove', (e) => {
     if(tableFootball.active){tableFootball.move(e,host.getBoundingClientRect());return}
     if (e.pointerId === joy.id) return moveJoy(e);
+    // col mouse la vista lo segue sempre (agganciato o no); se il blocco non c'è, il cursore resta libero ma si mira col centro
+    if (e.pointerType === 'mouse' && !boardOpen) {
+      cam.yaw -= e.movementX * 0.0035;
+      cam.pitch = Math.max(firstPerson?-.95:seating?-.65:.08, Math.min(1.25, cam.pitch + e.movementY * 0.0025));
+      if (drags.get(e.pointerId)?.paddle) aimAtMonitor(e);
+      return;
+    }
     const d = drags.get(e.pointerId);
     if (!d) return;
     if(Math.hypot(e.clientX-d.startX,e.clientY-d.startY)>5)d.moved=true;
@@ -1461,6 +1488,17 @@ export function createLobby3D(app) {
     // cosa c'è vicino
     let best = null, bd = 1e9;
     for (const s of spots) { const d = rectDist(s, pos.x, pos.z); if (d < s.pad && d < bd) { bd = d; best = s; } }
+    if (!touch) {
+      const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
+      let ba = 0.45;
+      for (const s of spots) {
+        const d = rectDist(s, pos.x, pos.z); if (d > s.pad * 1.8) continue;
+        const qx = Math.max(s.x - s.hx, Math.min(s.x + s.hx, pos.x + fx * 0.8)) - pos.x, qz = Math.max(s.z - s.hz, Math.min(s.z + s.hz, pos.z + fz * 0.8)) - pos.z;
+        const l = Math.hypot(qx, qz); if (l < 0.05) continue;
+        const a = Math.acos(Math.max(-1, Math.min(1, (qx * fx + qz * fz) / l)));
+        if (a < ba) { ba = a; best = s; }
+      }
+    }
     if (best !== near) {
       near = best;
       actB.hidden = !near;
@@ -1621,7 +1659,8 @@ export function createLobby3D(app) {
   function aimAtMonitor(e){
     if(!monitor?.texture || Math.hypot(pos.x-monitor.spot.x,pos.z-monitor.spot.z)>2.4)return false;
     const bounds=host.getBoundingClientRect();
-    pointerNDC.set(2*(e.clientX-bounds.left)/bounds.width-1,1-2*(e.clientY-bounds.top)/bounds.height);
+    if(locked()||e.pointerType==='mouse')pointerNDC.set(0,0); // col mouse si mira con il centro della vista
+    else pointerNDC.set(2*(e.clientX-bounds.left)/bounds.width-1,1-2*(e.clientY-bounds.top)/bounds.height);
     monitorRay.setFromCamera(pointerNDC,camera);
     const hit=monitorRay.intersectObject(monitor.spot.screen,false)[0];
     if(!hit)return false;
@@ -1646,6 +1685,7 @@ export function createLobby3D(app) {
     return 0;
   }
   function launch(s) {
+    if(document.pointerLockElement&&!s?.seat&&!s?.sit)document.exitPointerLock?.();
     if (s.board) { s.act(); return; }
     if(seating||tableFootball.active)return;
     if(s.balilla){setFirst(true);resetMovement();tableFootball.open();return}
@@ -1688,6 +1728,7 @@ export function createLobby3D(app) {
     setTimeout(prepareLights, 1500);
   }
   function hide() {
+    if (document.pointerLockElement) document.exitPointerLock?.();
     closeBoard();
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
     active = false;audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
