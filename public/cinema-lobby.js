@@ -125,7 +125,13 @@ export function createCinemaLobby({
       try {
         const packet = JSON.parse(event.data);
         if (packet.type === 'rooms') {
+          const ended = cinemaMinimized && !cinemaPip && cinemaRooms.active?.screen && !packet.active?.screen;
           cinemaRooms = packet;
+          if (ended || (clubRoom && !packet.rooms.some(entry => entry.id === clubRoom && entry.screenId))) {
+            closeCinema();
+            projectionChanged?.();
+            return;
+          }
           projectionChanged?.();
           if (packet.active && !cinemaOpen()) {
             cinemaSend({ type: 'leave' });
@@ -161,10 +167,32 @@ export function createCinemaLobby({
       if (!expired) retryCinema();
     };
   }
-  const leaveCinema = () => (cinemaPip && !cinemaMinimized ? minimizeCinema() : closeCinema());
+  let clubRoom = null;
+  const sharePlayer = () => $('cinema-frame').contentWindow?.clubShare;
+  function leaveCinema() {
+    if (!cinemaMinimized && (cinemaPip || cinemaRooms.active?.screen || sharePlayer()?.capturing())) {
+      minimizeCinema();
+    } else closeCinema();
+  }
+  function clubStream(entry) {
+    if (!entry && clubRoom) {
+      closeCinema();
+      return null;
+    }
+    if (!entry) return null;
+    if (clubRoom && clubRoom !== entry.id) closeCinema();
+    if (!cinemaOpen() && cinemaSocket?.readyState === 1) {
+      clubRoom = cinemaRoom = entry.id;
+      cinemaMinimized = true;
+      cinemaEntry = { type: 'enter', room: entry.id };
+      $('cinema-frame').src = '/cinema/index.html?v=14';
+    }
+    return cinemaMinimized && cinemaRoom === entry.id ? sharePlayer()?.stream(entry.screenId) : null;
+  }
   function minimizeCinema() {
     if ($('cinema-overlay').hidden) return;
     cinemaMinimized = true;
+    sharePlayer()?.background(!cinemaPip);
     $('cinema-overlay').hidden = true;
     tg?.BackButton?.hide();
     try {
@@ -177,6 +205,8 @@ export function createCinemaLobby({
   function restoreCinema() {
     if (!cinemaMinimized) return;
     cinemaMinimized = false;
+    clubRoom = null;
+    sharePlayer()?.background(false);
     $('cinema-overlay').hidden = false;
     enterFullscreen();
     try {
@@ -189,6 +219,7 @@ export function createCinemaLobby({
     if (!cinemaOpen()) return;
     // Closed while reduced (picture in picture shut, room closed): the rest of the app is left as it is.
     const reduced = cinemaMinimized;
+    clubRoom = null;
     cinemaMinimized = false;
     cinemaPip = false;
     if (leave) cinemaSend({ type: 'leave' });
@@ -231,7 +262,7 @@ export function createCinemaLobby({
       tg?.disableVerticalSwipes?.();
     } catch {}
     $('cinema-overlay').hidden = false;
-    $('cinema-frame').src = '/cinema/index.html?v=13';
+    $('cinema-frame').src = '/cinema/index.html?v=14';
     tg?.BackButton?.show();
   }
   $('open-cinema').onclick = () => openCinema();
@@ -297,6 +328,7 @@ export function createCinemaLobby({
     const data = event.data;
     if (data?.type === 'cinema:ready') {
       cinemaReady = true;
+      sharePlayer()?.background(cinemaMinimized && !cinemaPip);
       cinemaPost('insets', { insets: safeInsets(tg) });
       cinemaPost('connection', { connected: cinemaSocket?.readyState === 1 });
       if (cinemaFavorites) cinemaPost('packet', { packet: cinemaFavorites });
@@ -352,7 +384,10 @@ export function createCinemaLobby({
     return items;
   }
   return {
+    clubStream,
     projection: () =>
+      cinemaRooms.rooms.find(r => r.id === cinemaRoom && r.screenId) ||
+      cinemaRooms.rooms.find(r => r.screenId) ||
       cinemaRooms.rooms.find(r => r.projection) ||
       cinemaRooms.rooms.find(r => r.channel) ||
       cinemaRooms.rooms[0] ||

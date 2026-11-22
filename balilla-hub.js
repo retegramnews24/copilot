@@ -63,17 +63,24 @@ export class BalillaHub {
       let slot = Number.isInteger(a.balilla.slot) ? a.balilla.slot : -1;
       if (slot >= 0 && !seated.length) {
         this.mode = a.balilla.mode === 4 ? 4 : 2;
-        this.field = newField({ target: a.balilla.target, bestOf: a.balilla.bestOf });
+        this.field = newField({ bar: a.balilla.bar, target: a.balilla.target, bestOf: a.balilla.bestOf });
       }
       if (slot > 3 || (this.mode === 2 && slot % 2) || seated.some(v => v.slot === slot)) slot = -1;
       this.viewers.set(ws, { id, slot, local: false });
     }
+    if (this.field.bar) this.updateBar();
   }
   remember(ws, member) {
     try {
       const a = ws.deserializeAttachment() || {};
       a.balilla = member
-        ? { slot: member.slot, mode: this.mode, target: this.field.target, bestOf: this.field.bestOf }
+        ? {
+            slot: member.slot,
+            bar: this.field.bar,
+            mode: this.mode,
+            target: this.field.target,
+            bestOf: this.field.bestOf
+          }
         : null;
       ws.serializeAttachment(a);
     } catch {}
@@ -129,6 +136,7 @@ export class BalillaHub {
         // chi apre il tavolo sceglie 1 contro 1 o 2 contro 2, i gol e se è secca o al meglio di 3
         this.mode = b.mode === 4 ? 4 : 2;
         this.field = newField({
+          bar: b.bar === true && this.mode === 2,
           target: TARGETS.includes(b.target) ? b.target : 5,
           bestOf: b.bestOf === 3 ? 3 : 1
         });
@@ -146,11 +154,20 @@ export class BalillaHub {
         return this.send(ws, member);
       member.slot = b.slot;
       this.remember(ws, member);
-      if (occupied.length + 1 === this.mode) this.start();
+      if (this.field.bar) this.updateBar();
+      else if (occupied.length + 1 === this.mode) this.start();
       this.broadcast(true);
     } else if (b.action === 'ready' && member.slot >= 0 && this.timer) {
       // rimessa: la fa partire chi deve rimettere (nel 2 contro 2 uno qualsiasi dei due)
-      if (Math.floor(member.slot / 2) === this.field.thrower && throwIn(this.field)) this.broadcast(true);
+      if (this.field.practice) {
+        this.field.thrower = member.slot / 2;
+        this.field.phase = 'throw';
+      }
+      if (
+        (this.field.practice || Math.floor(member.slot / 2) === this.field.thrower) &&
+        throwIn(this.field, Math.random, b.pair === 0 ? 0 : 1)
+      )
+        this.broadcast(true);
     } else if (
       b.action === 'input' &&
       member.slot >= 0 &&
@@ -159,9 +176,18 @@ export class BalillaHub {
     ) {
       const team = Math.floor(member.slot / 2),
         pair = this.mode === 4 ? member.slot % 2 : b.pair === 0 ? 0 : 1;
+      if (this.field.bar) {
+        rows.forEach((row, i) => {
+          if (row.team !== team || row.attack === pair) return;
+          const rod = this.field.rods[i];
+          rod.tShift = rod.shift / row.travel;
+          rod.tAngle = rod.angle;
+        });
+      }
       control(this.field, team, pair, b.slide, b.angle);
     } else if (b.action === 'again' && member.slot >= 0 && this.field.finished) {
-      this.field = newField({ target: this.field.target, bestOf: this.field.bestOf });
+      this.field = newField({ bar: this.field.bar, target: this.field.target, bestOf: this.field.bestOf });
+      if (this.field.bar) this.updateBar();
       this.swap = this.field.swap;
       this.start();
       this.broadcast(true);
@@ -176,8 +202,17 @@ export class BalillaHub {
         this.remember(ws, m);
       }
   }
+  updateBar() {
+    const seated = this.seated();
+    this.field.practice = seated.length === 1;
+    if (this.field.practice) {
+      this.field.score = [0, 0];
+      this.field.thrower = seated[0].slot / 2;
+    }
+    if (seated.length) this.start();
+  }
   start() {
-    if (this.timer || this.seated().length !== this.mode) return;
+    if (this.timer || (this.field.bar ? !this.seated().length : this.seated().length !== this.mode)) return;
     let last = Date.now(),
       carry = 0;
     this.timer = setInterval(() => {
@@ -211,11 +246,15 @@ export class BalillaHub {
       this.stop();
       const team = Math.floor(member.slot / 2);
       rows.forEach((row, i) => {
-        if (row.team === team && (this.mode === 2 || row.attack === member.slot % 2))
-          this.field.rods[i].tAngle = 0;
+        if (row.team === team && (this.mode === 2 || row.attack === member.slot % 2)) {
+          const rod = this.field.rods[i];
+          rod.tAngle = rod.angle;
+          rod.tShift = rod.shift / row.travel;
+        }
       });
     }
     if (!this.seated().length) this.field = newField();
+    else if (this.field.bar) this.updateBar();
     this.broadcast(true);
   }
   payload(slot, field, occupied, local) {

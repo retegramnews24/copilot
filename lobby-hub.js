@@ -107,6 +107,7 @@ export class LobbyHub {
         return {
           ...a.user,
           clubPose: a.clubPose ?? null,
+          stool: a.stool ?? null,
           status: own
             ? 'In partita ' + own.number
             : watching
@@ -133,6 +134,7 @@ export class LobbyHub {
     return {
       games,
       clubRadio: (await this.ctx.storage.get('clubRadio')) ?? null,
+      stools: (await this.ctx.storage.get('stools')) ?? {},
       tableVolume: (await this.ctx.storage.get('tableVolume')) ?? 80,
       users,
       // Chat: messages only (notices stored there by 1.0.41 are dropped).

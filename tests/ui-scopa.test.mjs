@@ -184,7 +184,7 @@ assert.match(get('cinema-rooms').textContent,/Sala 1Canale Uno.*Fausto/);
 get('cinema-rooms').querySelector('button').click();
 const cinemaFrame=get('cinema-frame');
 const cinemaEvent=(type,data={})=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:cinemaFrame.contentWindow,data:{type:'cinema:'+type,...data}}));
-assert.equal(cinemaFrame.getAttribute('src'),'/cinema/index.html?v=13');
+assert.match(cinemaFrame.getAttribute('src'),/^\/cinema\/index\.html\?v=\d+$/);
 cinemaEvent('ready');
 assert.deepEqual(cinemaMessages.at(-1),{type:'enter',room:cinemaId});
 cinemaSocket.onmessage({data:JSON.stringify({type:'rooms',rooms:cinemaRooms,active:{id:cinemaId}})});
