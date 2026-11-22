@@ -17,7 +17,7 @@ import {
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=853d4f7671';
+} from './balilla-rules.js?v=f7ca13c205';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -223,6 +223,8 @@ export function buildBalilla(scene, el, send, playSound) {
   ui.innerHTML =
     '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <button data-reset>Azzera</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
   el.append(ui);
+  // sul computer niente pannello: si gioca con i tasti (Spazio, Q, E, R, + e -); sul telefono servono i pulsanti
+  const noPanel = !matchMedia('(pointer: coarse)').matches;
   const sensitivity = ui.querySelector('input');
   sensitivity.value = '1';
   try {
@@ -272,11 +274,10 @@ export function buildBalilla(scene, el, send, playSound) {
     if (mouseLocked()) {
       hadLock = true;
       lockHint.hidden = true;
-      if (seated()) ui.hidden = true;
     } else if (hadLock) {
       if (document.hidden || !document.hasFocus() || performance.now() - blurredAt < 400) {
         hadLock = false;
-        ui.hidden = lockHint.hidden = false; // si riaggancia con un clic sul campo
+        ui.hidden = noPanel; // si riaggancia con un clic sul campo
       } else close();
     }
   });
@@ -461,7 +462,7 @@ export function buildBalilla(scene, el, send, playSound) {
       team = side;
       if (matchMedia('(any-pointer: fine)').matches || mouseLocked()) lockMouse();
       selectPair(pairIndex);
-      ui.hidden = false;
+      ui.hidden = noPanel;
       ui.querySelector('span').textContent = 'Collegamento al tavolo…';
       serveButton.disabled = true;
       lastWatch = performance.now();
@@ -485,7 +486,7 @@ export function buildBalilla(scene, el, send, playSound) {
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
       if (!wasSeated && seated()) selectPair(pair);
-      ui.hidden = seated() && mouseLocked(); // pannello solo finché il mouse non è agganciato
+      ui.hidden = noPanel;
       const status = ui.querySelector('span');
       status.textContent = seated()
         ? TEAM[team] + ' · Su/giù sposta · Destra/sinistra ruota · Q cambia coppia · E lascia'

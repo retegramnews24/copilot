@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=19ccb15db4';
+import {buildBalilla} from './balilla.js?v=7e973b7aa1';
 import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -819,7 +819,7 @@ export function createLobby3D(app) {
   let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false;
   const audioButton=document.createElement('button');
   audioButton.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 10px);right:8px;font-size:12px;padding:7px';
-  audioButton.hidden=true;el.append(audioButton);
+  audioButton.hidden=true; // non va nella pagina: il volume del cinema compare già entrando (Cinema nel mixer)
   function updateSoundButton(){
     audioButton.textContent=soundEnabled?'Audio cinema · On':'Attiva audio cinema';
     audioButton.setAttribute('aria-pressed',String(soundEnabled));
@@ -1841,6 +1841,8 @@ export function createLobby3D(app) {
     renderer.render(scene, camera);
     $('.l3d-load').hidden = true;
     raf = requestAnimationFrame(frame);
+    // prepara subito le luci di tutte le sale: entrando per la prima volta in una sala non si blocca
+    setTimeout(() => { prepareLights(); }, 1200);
     setTimeout(prepareLights, 1500);
   }
   function hide() {

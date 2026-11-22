@@ -221,7 +221,7 @@ function moveBall(f, dt) {
   const v = Math.hypot(b.vx, b.vz);
   if (v > 0) {
     // panno del campo: la palla rallenta (circa 0,3 m/s al secondo più un po' d'aria)
-    const k = (Math.max(0, v - 0.36 * dt) / v) * Math.exp(-0.36 * dt);
+    const k = (Math.max(0, v - 0.29 * dt) / v) * Math.exp(-0.29 * dt); // panno un filo più scorrevole
     b.vx *= k;
     b.vz *= k;
   }
