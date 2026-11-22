@@ -16,7 +16,7 @@ export const MAX_ANGLE = Math.PI;
 const LOW = Math.acos((ROD_H - 2 * R + 0.004) / FOOT); // oltre questo angolo il piede passa sopra la pallina
 const SPIN = 16;
 const SLIDE = 0.66;
-const MAX_SPEED = 2.1;
+const MAX_SPEED = 6; // solo un limite di sicurezza: la palla esce veloce quanto ruotava il piede al tocco
 export const TUNING_LIMITS = {
   ball: { min: 50, max: 150, step: 5, initial: 150 }, // velocità della pallina fissata al 150%
   slide: { min: 0.2, max: 1.2, step: 0.01, initial: 0.9 }, // asta dentro/fuori: 0,9 m/s
