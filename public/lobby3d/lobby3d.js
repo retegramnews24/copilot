@@ -814,7 +814,11 @@ export function createLobby3D(app) {
         // lungo il muro: verso il centro della porta (il pannello è largo 1,15 m, la porta 2,6 m)
         const along=ry?new THREE.Vector3(0,0,side*(DOOR+.02)):new THREE.Vector3(side*(DOOR+.02),0,0);
         pivot.position.set(cx+along.x,.04,cz+along.z);pivot.rotation.y=ry;
-        m.scale.x=(ry?side:-side)*.74; // un po' aperte al centro, come quelle del cinemapivot.add(m);scene.add(pivot);panels.push(pivot);
+        // Lascia una fessura al centro e registra il pivot per l'apertura di prossimità.
+        m.scale.x=(ry?side:-side)*.74;
+        pivot.add(m);
+        scene.add(pivot);
+        panels.push(pivot);
       }
       doorCurtains.push({cx,cz,panels});
     }
