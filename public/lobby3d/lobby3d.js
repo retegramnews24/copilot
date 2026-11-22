@@ -525,7 +525,7 @@ export function createLobby3D(app) {
     const b=document.createElement('button');b.textContent=label;b.onclick=fn;stoolBar.append(b);return b;
   }
   function changeHeight(delta){
-    const st=stools[seating?.stool];if(st)st.height=THREE.MathUtils.clamp(st.height+delta,-.12,.30);
+    const st=stools[seating?.stool];if(st)st.height=THREE.MathUtils.clamp(st.height+delta,-.12,.26); // oltre, lo stelo uscirebbe dal tubo
   }
   function stoolRequest(id,action,extra={}){
     if(requested)return;
@@ -744,7 +744,7 @@ export function createLobby3D(app) {
   });
   rugMap.wrapT=THREE.RepeatWrapping;rugMap.repeat.y=5;
   const aisleMat=new THREE.MeshStandardMaterial({map:rugMap,roughness:1});
-  const tierRise=.20;
+  const tierRise=.15;
   function cinemaFloor(x,z){
     if(Math.abs(x)>=7||z<=6.4||z>=15.44)return 0;
     if(z<7.285)return 4*tierRise*(z-6.4)/.885;
@@ -756,18 +756,19 @@ export function createLobby3D(app) {
     box(13.95,h,.148,tierCarpet,0,h/2,z);
     box(1.85,.012,.021,brassTrim,0,h+.006,z-.06);
   }
-  for(const x of [-2.55,2.55])plane(1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
+  for(const x of [0,-5.12,5.12])plane(x===0?2.13:1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
   const amber=glow('#ffbb6b',1.5);
+  for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
   const cinemaSofas=[];
   for(let row=0;row<5;row++){
     const z=8.1+row*1.63,level=(4-row)*tierRise;
     if(level)box(13.94,level,1.631,tierCarpet,0,level/2,z);
-    for(const x of [-2.55,2.55]){
-      plane(1.27,1.626,aisleMat,x,level+.009,z,0,-Math.PI/2);
-      box(1.12,.014,.025,amber,x,level+.014,z+.79);
+    for(const x of [-5.12,0,5.12]){
+      plane(x===0?2.13:1.27,1.626,aisleMat,x,level+.009,z,0,-Math.PI/2);
+      box(x===0?1.96:1.12,.014,.025,amber,x,level+.014,z+.79);
     }
     for(const side of [-1,1]){
-      const x=side*.735;
+      const x=side*2.66;
       const sofa=new THREE.Group();sofa.position.set(x,level,z);scene.add(sofa);cinemaSofas.push(sofa);
       // finché non arriva il divanetto in pelle nera fatto in Blender, una sagoma semplice
       const standIn=new THREE.Group();sofa.add(standIn);
@@ -786,15 +787,23 @@ export function createLobby3D(app) {
   // due posti con cuciture a canali, poggiatesta, braccioli con portabicchiere cromato e tasto di regolazione
   new GLTFLoader().load(new URL('models/divanetto.glb',import.meta.url).href,gltf=>{
     gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='tasto'){o.material.emissive=new THREE.Color('#3a8cff');o.material.emissiveIntensity=.9}});
-    const bounds=new THREE.Box3().setFromObject(gltf.scene);
-    for(const sofa of cinemaSofas){
-      const model=gltf.scene.clone();
-      model.scale.x*=1.47/(bounds.max.x-bounds.min.x);
-      sofa.clear();sofa.add(model);
-    }
+    for(const sofa of cinemaSofas){sofa.clear();sofa.add(gltf.scene.clone())}
   });
   point('#ffb782',3.2,0,2.55,10,11);point('#bac9f0',4.1,0,2.7,16,9);
-  for(const side of [-1,1])for(let i=0;i<8;i++)box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12);
+  const screenPleats=[];
+  for(const side of [-1,1])for(let i=0;i<8;i++)screenPleats.push(box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12));
+  new GLTFLoader().load(new URL('models/tende.glb',import.meta.url).href,gltf=>{
+    const door=gltf.scene.getObjectByName('tenda_porta'),wide=gltf.scene.getObjectByName('tenda_schermo');
+    gltf.scene.traverse(o=>{if(o.isMesh){o.material.side=THREE.DoubleSide;o.material.color?.multiplyScalar(1.15)}});
+    // ingresso: ogni pannello si apre ancora quando ci si avvicina (scala in larghezza)
+    curtains.forEach((panel,i)=>{
+      const side=i?1:-1,m=door.clone();m.position.set(0,.04,0);m.scale.x=-side;
+      panel.geometry=new THREE.BufferGeometry();panel.add(m);
+    });
+    // ai lati dello schermo: una tenda larga per parte al posto delle pieghe a blocchi
+    for(const b of screenPleats)b.removeFromParent();
+    for(const side of [-1,1]){const m=wide.clone();m.position.set(side*6.42,.02,18.2);m.scale.x=-side;scene.add(m)}
+  });
   box(5.16,2.97,.12,darkWood,0,1.77,18.08);
   const standby=new THREE.MeshBasicMaterial({map:neonText('BINOTTOLAND CINEMA','#f3c485',1024,576,'bold 69px Georgia'),color:0xccb99b});
   const screenMesh=plane(5.04,2.835,standby,0,1.77,17.99,Math.PI);
@@ -1348,6 +1357,8 @@ export function createLobby3D(app) {
     const tone=(hz,decay,lvl,end=hz*.6)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(hz,now);o.frequency.exponentialRampToValueAtTime(end,now+decay);g.gain.setValueAtTime(lvl,now);g.gain.exponentialRampToValueAtTime(.0001,now+decay);o.connect(g).connect(out);o.start(now);o.stop(now+decay+.02)};
     // colpo a segno: "pof" morbido e un piccolo tintinnio di stelline; parato: "tac" secco
     if(kind==='hit'){burst(170,1.2,.13,.9);tone(110,.12,.5);tone(1800,.25,.06,2600);tone(2400,.2,.04,3200)}
+    else if(kind==='step'){burst(260+Math.random()*120,1.4,.07,.32);burst(2600,2,.025,.05)}
+    else if(kind==='land'){burst(150,1.1,.16,.9);tone(85,.12,.45,55)}
     else{burst(1500,5,.06,.6);tone(820,.05,.18,600)}
   }
   // nome sopra la testa degli altri (si legge da ogni lato)
@@ -1388,7 +1399,7 @@ export function createLobby3D(app) {
     }
     for(const c of peers.values())c.root.visible=!!modelPose(c,c.pose);
   }
-  let jumpHeight = 0, verticalSpeed = 0;
+  let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0;
   function resetMovement() {
     tableFootball.blur();
     monitor?.frame.contentWindow.cabinetMonitor?.clear();
@@ -1423,6 +1434,7 @@ export function createLobby3D(app) {
     if (e.code === 'ControlLeft') { crouching = e.type === 'keydown'; e.preventDefault(); return; }
     const k = e.code === 'ShiftLeft' ? 'sprint' : e.key.toLowerCase();
     if (e.type === 'keydown') {
+      if ((k === 'e' || k === 'enter') && seating) { e.preventDefault(); if(!e.repeat)stand(); return; } // seduti: E per alzarsi
       if ((k === 'e' || k === 'enter') && near) { e.preventDefault(); if(!e.repeat)launch(near); return; }
       keys.add(k);
     } else keys.delete(k);
@@ -1458,8 +1470,8 @@ export function createLobby3D(app) {
   host.addEventListener('pointermove', (e) => {
     if(tableFootball.active){tableFootball.move(e,host.getBoundingClientRect());return}
     if (e.pointerId === joy.id) return moveJoy(e);
-    // col mouse la vista lo segue sempre (agganciato o no); se il blocco non c'è, il cursore resta libero ma si mira col centro
-    if (e.pointerType === 'mouse' && !boardOpen) {
+    // mouse agganciato (dopo un clic): la vista lo segue; libero (Esc): si trascina per guardarsi intorno, come prima
+    if (e.pointerType === 'mouse' && locked() && !boardOpen) {
       cam.yaw -= e.movementX * 0.0035;
       cam.pitch = Math.max(firstPerson?-.95:seating?-.65:.08, Math.min(1.25, cam.pitch + e.movementY * 0.0025));
       if (drags.get(e.pointerId)?.paddle) aimAtMonitor(e);
@@ -1557,11 +1569,14 @@ export function createLobby3D(app) {
     // collo: in terza persona la testa guarda verso dove guarda la telecamera
     { let lk = cam.yaw - heading; lk = Math.atan2(Math.sin(lk), Math.cos(lk)); me.lookYaw = seating ? 0 : Math.max(-0.9, Math.min(0.9, lk)); me.lookPitch = 0; }
     animateCharacter(me, moving, dt, t);
+    // un passo a ogni appoggio del piede (più piano abbassati, più forte correndo)
+    { const foot = Math.floor(me.phase / Math.PI); if (foot !== lastFoot) { lastFoot = foot; if (moving > 0.4 && !seating && jumpHeight === 0) fxSound('step', Math.min(1.2, moving / SPEED) * (crouching ? 0.45 : 1)); } }
     actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating }, dt, t);
     if (verticalSpeed !== 0 || jumpHeight > 0) {
-      const gravity = 13;
+      const gravity = 13, inAir = jumpHeight > 0;
       jumpHeight = Math.max(0, jumpHeight + verticalSpeed * dt - .5 * gravity * dt * dt);
       verticalSpeed = jumpHeight > 0 ? verticalSpeed - gravity * dt : 0;
+      if (inAir && jumpHeight === 0) fxSound('land', 0.9); // si tocca terra dopo il salto
       me.root.position.y += jumpHeight;
     }
     const floor=cinemaFloor(pos.x,pos.z)+(stools[seating?.stool]?.y??0);
@@ -1749,7 +1764,7 @@ export function createLobby3D(app) {
   function aimAtMonitor(e){
     if(!monitor?.texture || Math.hypot(pos.x-monitor.spot.x,pos.z-monitor.spot.z)>2.4)return false;
     const bounds=host.getBoundingClientRect();
-    if(locked()||e.pointerType==='mouse')pointerNDC.set(0,0); // col mouse si mira con il centro della vista
+    if(locked())pointerNDC.set(0,0); // col mouse agganciato si mira con il centro della vista
     else pointerNDC.set(2*(e.clientX-bounds.left)/bounds.width-1,1-2*(e.clientY-bounds.top)/bounds.height);
     monitorRay.setFromCamera(pointerNDC,camera);
     const hit=monitorRay.intersectObject(monitor.spot.screen,false)[0];
