@@ -92,12 +92,12 @@ test('La taratura cambia la fisica in singolo e si azzera al secondo ingresso', 
   send(a, 'join', { mode: 2, slot: 0, bar: true });
   send(b, 'watch');
   send(b, 'tune', { values: { ball: 50 } });
-  assert.equal(hub.field.tuning.ball, 100);
-  hub.field.ball.vx = 0.4;
-  send(a, 'tune', { values: { ball: 150, slide: 1.1, spin: 20 } });
-  assert.ok(Math.abs(hub.field.ball.vx - 0.6) < 1e-9);
-  assert.deepEqual(hub.field.tuning, { ball: 150, slide: 1.1, spin: 20 });
+  assert.equal(hub.field.tuning.ball, 150); // valori fissi: pallina al 150%
+  hub.field.ball.vx = 0.6;
+  send(a, 'tune', { values: { ball: 100, slide: 1.1, spin: 20 } });
+  assert.ok(Math.abs(hub.field.ball.vx - 0.4) < 1e-9);
+  assert.deepEqual(hub.field.tuning, { ball: 100, slide: 1.1, spin: 20 });
   send(b, 'join', { mode: 2, slot: 2, bar: true });
   send(a, 'tune', { values: { ball: 50 } });
-  assert.deepEqual(hub.field.tuning, { ball: 100, slide: 0.66, spin: 16 });
+  assert.deepEqual(hub.field.tuning, { ball: 150, slide: 0.9, spin: 21.5 });
 });

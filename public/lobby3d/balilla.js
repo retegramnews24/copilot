@@ -17,7 +17,7 @@ import {
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=f963af0d45';
+} from './balilla-rules.js?v=266d33236f';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -252,75 +252,9 @@ export function buildBalilla(scene, el, send, playSound) {
     dirty = false,
     lastInput = 0,
     finger = null;
-  const tuningBar = document.createElement('div');
-  tuningBar.style.cssText =
-    'position:absolute;top:calc(var(--ui-safe-top,0px) + 56px);right:12px;z-index:5;max-width:calc(100% - 24px);text-align:right';
-  tuningBar.hidden = true;
-  tuningBar.innerHTML = '<button type="button">Taratura (T)</button><div hidden></div>';
-  el.append(tuningBar);
-  const tuneButton = tuningBar.querySelector('button');
-  const panel = tuningBar.querySelector('div');
-  panel.style.cssText =
-    'background:#142026f5;color:#fff;text-align:left;padding:12px;border-radius:8px;min-width:min(270px,75vw);max-height:65vh;overflow:auto';
-  const fields = new Map();
-  const localSettings = { deadSlide: 0, deadSpin: 0, cameraPitch: 56 };
+  // valori fissi del tavolo (tarati a mano): nessuna zona morta, vista inclinata di 60° verso il campo
+  const localSettings = { deadSlide: 0, deadSpin: 0, cameraPitch: 60 };
   const deadState = { deadSlide: { sum: 0, time: -Infinity }, deadSpin: { sum: 0, time: -Infinity } };
-  let tuningDirty = false, lastTune = 0;
-  for (const [key, label, unit, limits] of [
-    ['ball', 'Velocità pallina', '%', TUNING_LIMITS.ball],
-    ['slide', 'Asta dentro/fuori', ' m/s', TUNING_LIMITS.slide],
-    ['spin', 'Rotazione asta', ' rad/s', TUNING_LIMITS.spin],
-    ['deadSlide', 'Zona morta dentro/fuori', ' px', { min: 0, max: 20, step: 1, initial: 0 }],
-    ['deadSpin', 'Zona morta rotazione', ' px', { min: 0, max: 20, step: 1, initial: 0 }],
-    ['cameraPitch', 'Inclinazione verso il campo', '°', { min: 30, max: 80, step: 1, initial: localSettings.cameraPitch }]
-  ]) {
-    const row = document.createElement('label');
-    row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:4px 10px;margin-bottom:9px';
-    const output = document.createElement('output');
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.style.cssText = 'grid-column:1/-1;width:100%;margin:0;touch-action:pan-x';
-    Object.assign(slider, { min: limits.min, max: limits.max, step: limits.step, value: limits.initial });
-    if (key in localSettings) {
-      try {
-        const saved = localStorage.getItem('balilla.' + key);
-        if (saved !== null && Number.isFinite(Number(saved))) {
-          slider.value = Math.max(limits.min, Math.min(limits.max, Number(saved)));
-          localSettings[key] = slider.valueAsNumber;
-        }
-      } catch {}
-    }
-    function showValue() {
-      output.textContent = Number(slider.value).toLocaleString('it', { maximumFractionDigits: 2 }) + unit;
-    }
-    showValue();
-    slider.addEventListener('input', () => {
-      showValue();
-      if (key in localSettings) {
-        localSettings[key] = slider.valueAsNumber;
-        if (key in deadState) deadState[key].time = -Infinity;
-        try { localStorage.setItem('balilla.' + key, slider.value); } catch {}
-      } else tuningDirty = true;
-    });
-    row.append(label, output, slider);
-    panel.append(row);
-    fields.set(key, { slider, showValue });
-  }
-  const tuneNote = document.createElement('small');
-  panel.append(tuneNote);
-  function toggleTuning() {
-    if (!seated()) return;
-    panel.hidden = !panel.hidden;
-    tuneButton.textContent = panel.hidden ? 'Taratura (T)' : 'Riprendi (T)';
-    if (panel.hidden) {
-      if (noPanel) lockMouse();
-    } else {
-      finger = null;
-      hadLock = false;
-      if (mouseLocked()) document.exitPointerLock();
-    }
-  }
-  tuneButton.onclick = toggleTuning;
   function deadZone(key, delta, now) {
     const limit = localSettings[key];
     if (!limit || !delta) return delta;
@@ -360,7 +294,7 @@ export function buildBalilla(scene, el, send, playSound) {
     } catch {}
   }
   document.addEventListener('pointerlockchange', () => {
-    if (!active || !panel.hidden) return;
+    if (!active) return;
     if (mouseLocked()) {
       hadLock = true;
       lockHint.hidden = true;
@@ -401,9 +335,6 @@ export function buildBalilla(scene, el, send, playSound) {
     if (watching) post('leave');
     active = watching = dirty = false;
     ui.hidden = true;
-    tuningBar.hidden = panel.hidden = true;
-    tuneButton.textContent = 'Taratura (T)';
-    tuningDirty = false;
     net = netBall = finger = null;
     grips.forEach(g => (g.material = rubber));
   }
@@ -414,7 +345,7 @@ export function buildBalilla(scene, el, send, playSound) {
   ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
-    if (!seated() || !panel.hidden || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
+    if (!seated() || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
     let dx = e.movementX || 0,
       dy = e.movementY || 0;
     if (e.type !== 'mousemove') {
@@ -435,7 +366,6 @@ export function buildBalilla(scene, el, send, playSound) {
     if (active && mouseLocked()) move(e);
   });
   host.addEventListener('pointerdown', e => {
-    if (!panel.hidden) return;
     if (active && e.pointerType === 'mouse' && !mouseLocked()) lockMouse();
     if (active && e.pointerType !== 'mouse') {
       finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -448,10 +378,7 @@ export function buildBalilla(scene, el, send, playSound) {
     });
   function input(e) {
     if (e.type !== 'keydown' || e.repeat) return false;
-    if (e.code === 'KeyT' && seated()) toggleTuning();
-    else if (!panel.hidden && e.code === 'Escape') toggleTuning();
-    else if (!panel.hidden && e.target instanceof Node && panel.contains(e.target)) return false;
-    else if (e.code === 'KeyE' || e.code === 'Escape') close();
+    if (e.code === 'KeyE' || e.code === 'Escape') close();
     else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
     else if (e.code === 'KeyR' && seated())
       post('reset'); // contapunti a zero
@@ -587,17 +514,6 @@ export function buildBalilla(scene, el, send, playSound) {
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
       if (!wasSeated && seated()) selectPair(pair);
-      tuningBar.hidden = !seated();
-      tuneNote.textContent = data.field.tuning ? 'Fisica regolabile in allenamento' : 'Fisica standard con due giocatori';
-      if (!data.field.tuning) tuningDirty = false;
-      for (const [key, limits] of Object.entries(TUNING_LIMITS)) {
-        const { slider, showValue } = fields.get(key);
-        slider.disabled = !data.field.tuning;
-        if (slider.disabled || (!tuningDirty && old?.tuning?.[key] !== data.field.tuning?.[key])) {
-          slider.value = data.field.tuning?.[key] ?? limits.initial;
-          showValue();
-        }
-      }
       ui.hidden = noPanel;
       const status = ui.querySelector('span');
       status.textContent = seated()
@@ -629,12 +545,6 @@ export function buildBalilla(scene, el, send, playSound) {
         lastWatch = now;
         post('watch');
         if (active && !seated()) join();
-      }
-      if (tuningDirty && seated() && net.field.tuning && now - lastTune >= 50) {
-        const values = Object.fromEntries(Object.keys(TUNING_LIMITS).map(key => [key, Number(fields.get(key).slider.value)]));
-        tuningDirty = false;
-        lastTune = now;
-        post('tune', { values });
       }
       if (dirty && seated() && now - lastInput >= 1000 / 60) {
         post('input', { pair, ...targets[pair] });

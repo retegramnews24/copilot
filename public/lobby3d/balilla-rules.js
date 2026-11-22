@@ -18,9 +18,9 @@ const SPIN = 16;
 const SLIDE = 0.66;
 const MAX_SPEED = 2.1;
 export const TUNING_LIMITS = {
-  ball: { min: 50, max: 150, step: 5, initial: 100 },
-  slide: { min: 0.2, max: 1.2, step: 0.01, initial: SLIDE },
-  spin: { min: 6, max: 28, step: 0.5, initial: SPIN }
+  ball: { min: 50, max: 150, step: 5, initial: 150 }, // velocità della pallina fissata al 150%
+  slide: { min: 0.2, max: 1.2, step: 0.01, initial: 0.9 }, // asta dentro/fuori: 0,9 m/s
+  spin: { min: 6, max: 28, step: 0.5, initial: 21.5 } // rotazione dell'asta: 21,5 rad/s
 };
 export function tableTuning(values = {}) {
   return Object.fromEntries(
@@ -186,53 +186,104 @@ function moveRods(f, dt) {
   });
 }
 
+// Il colpo del piede, come sul tavolo vero. Vista di lato: la gamba scende dall'asta (alta ROD_H) fino alla punta
+// (lunga FOOT), spessa 2,2 cm; vista dall'alto il piede è largo 2,8 cm, con spigoli e angoli.
+// - Il contatto è il punto della gamba più vicino al centro della palla: con il piede quasi verticale la gamba colpisce
+//   la palla a metà altezza (colpo pieno, tutto in orizzontale); col piede alzato è la punta a toccare la parte alta
+//   della palla: la spinge anche in giù (contro il campo), il tiro è più debole e, se il piede è lento, la palla resta
+//   bloccata sotto la punta.
+// - Bordi e angoli del piede: se la palla è fuori dal centro del piede la spinta ha anche una parte laterale, così la palla
+//   parte di sbieco tanto più quanto è decentrata.
+// - La velocità del piede nel punto di contatto è ω × (contatto − asse): più il contatto è lontano dall'asta più è veloce;
+//   se l'asta scorre mentre colpisce, l'attrito trascina la palla di lato (tiro "tagliato").
+const FOOT_HALF = 0.011, // mezzo spessore della gamba e del piede (vista di lato)
+  FOOT_WIDE = 0.014, // mezza larghezza del piede (lungo l'asta)
+  KICK_E = 0.45, // rimbalzo plastica dura contro la palla
+  KICK_MU = 0.25; // attrito tra piede e palla
 function kickFigures(f) {
-  const b = f.ball;
+  const b = f.ball,
+    sf = f.tuning.ball / 100;
   for (const [i, row] of rows.entries()) {
     const rod = f.rods[i];
-    if (Math.abs(rod.angle) > LOW) continue;
-    const fx = row.x + FOOT * Math.sin(rod.angle);
-    if (Math.abs(b.x - fx) > R + 0.02) {
-      continue;
-    }
-    const speedFactor = f.tuning.ball / 100;
-    const vfx = FOOT * Math.cos(rod.angle) * rod.va * speedFactor,
-      vfz = rod.vs * speedFactor;
+    const th = Math.atan2(Math.sin(rod.angle), Math.cos(rod.angle)),
+      c = Math.cos(th),
+      sn = Math.sin(th);
+    if (c <= 0.05 || Math.abs(b.x - row.x) > FOOT + R + FOOT_HALF) continue; // piede in alto o palla lontana
+    // gamba: dall'asse (row.x, ROD_H) alla punta; punto più vicino al centro della palla (b.x, R)
+    const ex = FOOT * sn,
+      ey = -FOOT * c;
+    const u = Math.max(0, Math.min(1, ((b.x - row.x) * ex + (R - ROD_H) * ey) / (FOOT * FOOT)));
+    const px = row.x + ex * u,
+      py = ROD_H + ey * u;
+    const hx = b.x - px,
+      hy = R - py,
+      dxy = Math.hypot(hx, hy);
+    const side = Math.max(0, dxy - FOOT_HALF); // distanza dalla superficie del piede, vista di lato
+    // velocità del punto di contatto (rotazione attorno all'asta) e dell'asta che scorre
+    const vfx = rod.va * (ROD_H - py) * sf,
+      vfy = rod.va * (px - row.x) * sf,
+      vfz = rod.vs * sf;
     for (let n = 0; n < row.count; n++) {
       const fz = figureZ(row, n, rod.shift);
-      // piede: rettangolo 2,2 × 2,8 cm visto dall'alto
-      const cx = Math.max(fx - 0.011, Math.min(fx + 0.011, b.x)),
-        cz = Math.max(fz - 0.014, Math.min(fz + 0.014, b.z));
-      let dx = b.x - cx,
-        dz = b.z - cz,
-        d = Math.hypot(dx, dz);
-      if (d >= R) continue;
-      if (d < 1e-6) {
-        dx = Math.sign(b.x - row.x) || 1;
-        dz = 0;
-        d = 1;
+      const oz = b.z - fz,
+        dz = Math.sign(oz) * Math.max(0, Math.abs(oz) - FOOT_WIDE); // fuori dal piede di lato: bordo o angolo
+      const dist = Math.hypot(side, dz);
+      if (dist >= R) continue;
+      // normale del contatto in 3D (x, su, z)
+      let nx, ny, nz;
+      if (dist < 1e-6) {
+        nx = Math.sign(b.x - row.x) || 1;
+        ny = 0;
+        nz = 0;
+      } else {
+        const k = dxy > 1e-9 ? side / dxy : 0;
+        nx = (hx * k) / dist;
+        ny = (hy * k) / dist;
+        nz = dz / dist;
       }
-      const nx = dx / d,
-        nz = dz / d;
-      const vn = (b.vx - vfx) * nx + (b.vz - vfz) * nz;
-      if (vn < 0) {
-        const e = 0.3; // figure in plastica dura: rimbalzo smorzato
-        b.vx -= (1 + e) * vn * nx;
-        b.vz -= (1 + e) * vn * nz;
-        // L’attrito agisce lungo il contatto e resta proporzionato all’impulso normale.
-        const tangent = (b.vz - vfz) * nx - (b.vx - vfx) * nz;
-        const grip = Math.max(0.15 * vn, Math.min(-0.15 * vn, tangent));
-        b.vx += grip * nz;
-        b.vz -= grip * nx;
-        if (-vn > 0.045) {
+      const ux = b.vx - vfx,
+        uy = -vfy,
+        uz = b.vz - vfz;
+      const un = ux * nx + uy * ny + uz * nz;
+      if (un < 0) {
+        const j = -(1 + KICK_E) * un; // impulso: la parte verticale la assorbe il campo
+        b.vx += j * nx;
+        b.vz += j * nz;
+        // attrito lungo il piede, più forte quando la punta preme la palla contro il campo (presa)
+        const mu = KICK_MU + 0.6 * Math.max(0, -ny);
+        const hl = Math.hypot(nx, nz) || 1,
+          hnx = nx / hl,
+          hnz = nz / hl;
+        const rx = b.vx - vfx,
+          rz = b.vz - vfz,
+          rn = rx * hnx + rz * hnz;
+        const tx = rx - rn * hnx,
+          tz = rz - rn * hnz,
+          tl = Math.hypot(tx, tz);
+        if (tl > 1e-9) {
+          const cut = Math.min(tl, mu * j);
+          b.vx -= (tx / tl) * cut;
+          b.vz -= (tz / tl) * cut;
+        }
+        // punta che schiaccia la palla piano: resta ferma sotto il piede (si sente un "tic")
+        const pressing = ny < -0.35 && Math.hypot(rod.va * FOOT, rod.vs) < 0.6;
+        if (pressing) {
+          b.vx = vfx + (b.vx - vfx) * 0.3;
+          b.vz = vfz + (b.vz - vfz) * 0.3;
+        }
+        if (j > 0.06) {
           f.hit++;
-          f.sound = 'kick';
-          f.power = Math.min(1, -vn / 1.65);
+          f.sound = pressing || j < 0.25 ? 'stop' : 'kick';
+          f.power = Math.min(1, j / 2.5);
         }
       }
-      const pd = d === 1 ? 0 : d;
-      b.x = cx + nx * R + (pd === 0 ? nx * 0.001 : 0);
-      b.z = cz + nz * R;
+      // la palla esce dal piede in orizzontale (non può entrare nel campo)
+      const pen = R - dist,
+        hl = Math.hypot(nx, nz);
+      if (hl > 0.2) {
+        b.x += (nx / hl) * pen;
+        b.z += (nz / hl) * pen;
+      } else b.x += (Math.sign(b.x - px) || 1) * pen;
     }
   }
 }
