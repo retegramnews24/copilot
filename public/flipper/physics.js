@@ -101,7 +101,7 @@ export function newGame() {
     nudge: 0,
     multiball: false,
     over: false,
-    message: 'Tieni premuto Invio e lascia per lanciare',
+    message: 'Tira giù la leva e lascia per lanciare',
     messageTime: 4,
     events: [], // suoni e luci per la pagina
     timeAcc: 0
@@ -158,8 +158,15 @@ export function pull(g, on) {
       }
     if (g.plunger > 0.05) emit(g, 'launch', g.plunger);
     g.plunger = 0;
+    g.dragging = false;
   }
   g.pulling = on;
+}
+// leva del lancio tirata a mano: amount da 0 (ferma) a 1 (tutta tirata); lasciandola parte la pallina
+export function drag(g, amount) {
+  if (g.over) return;
+  g.pulling = g.dragging = true;
+  g.plunger = Math.max(0, Math.min(1, amount));
 }
 export function nudge(g, dir = 0) {
   if (g.tilted || g.over) return;
@@ -430,7 +437,7 @@ export function simulate(g, dt) {
   while (g.timeAcc >= STEP) {
     g.timeAcc -= STEP;
     const h = STEP;
-    if (g.pulling) g.plunger = Math.min(1, g.plunger + h / 0.9);
+    if (g.pulling && !g.dragging) g.plunger = Math.min(1, g.plunger + h / 0.9); // da tastiera: più tieni, più tira
     moveFlippers(g, h);
     for (const b of [...g.balls]) {
       stepBall(g, b, h);

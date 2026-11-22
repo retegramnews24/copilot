@@ -2,6 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
+import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=9fd4aff503';
 import {buildBalilla} from './balilla.js?v=1b7c762dfd';
 import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
@@ -537,7 +538,7 @@ export function createLobby3D(app) {
     if(!ok)return;
     if(action==='drop'){carrying=null;near=null;actB.hidden=true;return} // l'avviso si ricalcola
     if(action!=='carry'&&action!=='sit')return;
-    if(!active||boardOpen||tableFootball.active||seating||carrying!==null){app.stoolSend?.({type:'stool',action:'cancel',id});return}
+    if(!active||boardOpen||playing()||seating||carrying!==null){app.stoolSend?.({type:'stool',action:'cancel',id});return}
     if(action==='carry')carrying=id;
     else launch(stools[id].spot,true);
   }
@@ -582,12 +583,12 @@ export function createLobby3D(app) {
       model.position.set(st.x,floor+(carried?.48:0)+(st.lift?0:st.y),st.z);
       if(st.lift)st.lift.position.y=st.base+st.y;
     }
-    const showCarry=!seating&&(carrying!==null||near?.stool!=null)&&!tableFootball.active&&!boardOpen;
+    const showCarry=!seating&&(carrying!==null||near?.stool!=null)&&!playing()&&!boardOpen;
     stoolBar.style.display=(mine&&touch)||showCarry?'flex':'none';
     carryButton.hidden=!showCarry;carryButton.textContent=carrying===null?'Prendi · G':'Posa · G';
     if(!touch){
       stoolBar.style.display='none';
-      if(carrying!==null&&!tableFootball.active){actB.hidden=false;actB.textContent='Posa lo sgabello (G)'}
+      if(carrying!==null&&!playing()){actB.hidden=false;actB.textContent='Posa lo sgabello (G)'}
     }
     lower.hidden=raise.hidden=rock.hidden=!mine;
   }
@@ -1022,6 +1023,12 @@ export function createLobby3D(app) {
     }else hit(900,4,.04,.15*p);
   }
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
+  // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
+  const pinball=buildFlipper(scene,el,{audio:()=>audioContext,allowed:soundAllowed});
+  const playing=()=>tableFootball.active||pinball.active; // si gioca al tavolo: niente camminata né avvisi
+  scene.updateMatrixWorld(true);
+  { const st=pinball.stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label:'Flipper · Gioca',where:'Sala giochi',pinball:true}); }
+  solid(FLIPPER_AT.x-.43,FLIPPER_AT.x+.43,FLIPPER_AT.z-.82,FLIPPER_AT.z+.8);
   solid(-13.73,-12.27,-.62,.62); // tavolo con manopole e manicotti
   for (const team of [0,1]) for (const pair of [0,1]) {
     const anchor = tableFootball.pose(team*2,2,pair);
@@ -1227,6 +1234,7 @@ export function createLobby3D(app) {
     if(parked)return parked;
     if(!active)return null;
     if(tableFootball.seat)return tableFootball.seat;
+    if(pinball.active)return {station:'flipper',slot:pinball.slot()};
     if(monitor&&pongAnchor&&Math.hypot(pos.x-pongAnchor.x,pos.z-pongAnchor.z)<.24)return {station:'pong',slot:pongAnchor.slot||0};
     // seduto al cinema: gli altri ti vedono seduto sul tuo posto del divano, con la testa che guarda dove guardi
     if(seating){
@@ -1287,6 +1295,13 @@ export function createLobby3D(app) {
     if(c!==me)c.walk=null;
     let anchor;
     if(p.station==='balilla')anchor=tableFootball.pose(p.slot,p.mode,p.pair);
+    else if(p.station==='flipper'){
+      // mani sui pulsanti dei flipper (o la destra sul pomello della leva), braccia sempre attaccate
+      const st=pinball.stand(),hs=pinball.hands(p.slot|0,c===me?pinball.plunger():0);if(!hs)return null;
+      const lx=v=>(v.x-st.x)*Math.cos(st.yaw)-(v.z-st.z)*Math.sin(st.yaw);
+      hs.sort((a,b)=>lx(a)-lx(b));
+      anchor={x:st.x,z:st.z,yaw:st.yaw,handles:hs};
+    }
     else{
       const station=spots.find(s=>s.station===p.station);if(!station)return null;
       const yaw=station.yaw,cs=Math.cos(yaw),sn=Math.sin(yaw);
@@ -1329,7 +1344,7 @@ export function createLobby3D(app) {
   }
   // Colpo (solo un effetto): prende chi è davanti, vicino (entro un metro e poco più). Se si sta riparando è parato.
   function punch(){
-    if(seating||boardOpen||tableFootball.active||!active)return;
+    if(seating||boardOpen||playing()||!active)return;
     (me.fx||(me.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0;punchCount++;
     const fx=-Math.sin(heading),fz=-Math.cos(heading);
     let best=null,bd=1.15;
@@ -1421,6 +1436,7 @@ export function createLobby3D(app) {
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat)setFirst(!firstPerson);e.preventDefault();return}
+    if(pinball.active){const r=pinball.input(e);if(r==='exit'){pinball.close();resetMovement()}else if(r)e.preventDefault();return}
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
     if(e.target?.matches?.('input,select'))return;
@@ -1451,6 +1467,7 @@ export function createLobby3D(app) {
   let lockFailed = false;
   document.addEventListener('pointerlockerror', () => { lockFailed = true; });
   host.addEventListener('pointerdown', (e) => {
+    if (active && pinball.active) { if (pinball.pointer(e)) e.preventDefault(); return; } // flipper: tasti del mouse e leva
     if (!active || tableFootball.active) return;
     // primo clic col mouse: la vista si aggancia al mouse (Esc per liberarlo); quel clic non tira il colpo
     if (e.pointerType === 'mouse' && !locked() && !boardOpen && !lockFailed && host.requestPointerLock && !e.target.closest?.('button,input,select,a,label')) {
@@ -1474,6 +1491,7 @@ export function createLobby3D(app) {
     knob.style.transform = `translate(${dx}px,${dy}px)`;
   };
   host.addEventListener('pointermove', (e) => {
+    if(pinball.active){pinball.pointer(e);return}
     if(tableFootball.active){tableFootball.move(e,host.getBoundingClientRect());return}
     if (e.pointerId === joy.id) return moveJoy(e);
     // mouse agganciato (dopo un clic): la vista lo segue; libero (Esc): si trascina per guardarsi intorno, come prima
@@ -1501,6 +1519,7 @@ export function createLobby3D(app) {
     d.x = e.clientX; d.y = e.clientY;
   });
   const up = (e) => {
+    if (pinball.active) { pinball.pointer(e); return; }
     if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; }
     const drag=drags.get(e.pointerId);
     // clic sinistro (senza trascinare): colpo; tasto destro lasciato: fine della parata
@@ -1556,7 +1575,7 @@ export function createLobby3D(app) {
     if (joy.id !== null) { ix += joy.x; iz += joy.y; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     let speed = 0;
-    if (!seating && !tableFootball.active && mag > 0.12) {
+    if (!seating && !playing() && mag > 0.12) {
       // avanti = lontano dalla telecamera
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
@@ -1707,8 +1726,8 @@ export function createLobby3D(app) {
     const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
-    tableVolume.wrap.style.display=tableRoomGain>0?'flex':'none';
-    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);placePeers();
+    tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // solo vicino al calcio balilla
+    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);pinball.update(camera,dt);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
     const nowMs=performance.now();
@@ -1717,9 +1736,9 @@ export function createLobby3D(app) {
     const anchor=modelPose(me,localPose);
     me.head.visible=!firstPerson;
     // al calcio balilla il tuo personaggio non copre il tavolo nella tua vista (gli altri lo vedono alle manopole)
-    if(!seating)me.root.visible=!tableFootball.active&&!boardOpen;
+    if(!seating)me.root.visible=!playing()&&!boardOpen;
     // al calcio balilla la telecamera la decide il tavolo (dal tuo lato, o dall'alto sullo stesso telefono)
-    if(firstPerson&&!seating&&!tableFootball.active&&!boardOpen){
+    if(firstPerson&&!seating&&!playing()&&!boardOpen){
       const yaw=anchor?.yaw??cam.yaw;
       if(!anchor)me.root.rotation.y=yaw;
       const eyeY=anchor?EYE_Y:me.root.position.y+EYE_Y;
@@ -1729,8 +1748,8 @@ export function createLobby3D(app) {
         camera.lookAt(target);
       }else camera.lookAt(camera.position.x-Math.sin(yaw),eyeY-Math.tan(cam.pitch),camera.position.z-Math.cos(yaw));
     }
-    if(tableFootball.active){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
-    moves.hidden=!touch||seating||tableFootball.active||boardOpen||!!parked;
+    if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
+    moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
   }
   function resize() {
@@ -1802,8 +1821,9 @@ export function createLobby3D(app) {
     if(s.stool!=null&&!approved){if(!seating)stoolRequest(s.stool,'sit');return}
     if(document.pointerLockElement&&!s?.balilla&&!s?.seat&&!s?.sit)document.exitPointerLock?.();
     if (s.board) { s.act(); return; }
-    if(seating||tableFootball.active)return;
+    if(seating||playing())return;
     if(s.balilla){setFirst(true);resetMovement();tableFootball.open(s.team,s.pair);return}
+    if(s.pinball){resetMovement();pinball.open();near=null;return} // al flipper: si gioca dalla barra
     if(s.pong){toggleMonitor(s);return}
     if(s.seat){
       // divani dell'atrio e sedie dei tavoli: ci si siede (se il posto è libero), "Alzati" per tornare a camminare

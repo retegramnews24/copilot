@@ -1,5 +1,5 @@
 // Flipper "Binottoland Grand Prix": disegno del tavolo, comandi e suoni (la fisica è in physics.js).
-import { newGame, simulate, setFlipper, pull, nudge, W, H, R, LANE_X, BALLS } from './physics.js';
+import { newGame, simulate, setFlipper, pull, drag, nudge, W, H, R, LANE_X, BALLS } from './physics.js';
 import { soundAllowed } from '../sound-pref.js';
 
 const canvas = document.getElementById('table');
@@ -12,7 +12,7 @@ function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   canvas.width = innerWidth * dpr;
   canvas.height = innerHeight * dpr;
-  const availH = innerHeight - HEAD - 12, availW = innerWidth - 12;
+  const availH = innerHeight - HEAD - 70, availW = innerWidth - 12; // sotto il tavolo: la leva del lancio
   scale = Math.min(availH / H, availW / W);
   ox = (innerWidth - W * scale) / 2;
   oy = HEAD + 6 + H * scale;
@@ -180,6 +180,11 @@ function drawPlayfield(g, time) {
     ctx.lineTo(X(LANE_X + 0.01 + (i % 2) * (W - LANE_X - 0.02)), Y(y));
   }
   ctx.stroke();
+  // leva del lancio sotto il tavolo: si afferra il pomello e si tira giù
+  const kx = (LANE_X + W) / 2, pullY = -0.012 - g.plunger * LEVER;
+  line(kx, -0.004, kx, pullY, '#c9d2da', S(0.007));
+  circle(kx, pullY - 0.012, 0.014, g.dragging ? '#ff4d4d' : '#d0202a', '#00000080', 1.5);
+  if (!g.over && g.balls.some(b => b.x > LANE_X && b.y < 0.06) && !g.pulling) text('TIRA', kx - 0.05, -0.03, 0.014, '#ffd23f');
   // palline d'acciaio
   for (const b of g.balls) {
     const grad = ctx.createRadialGradient(X(b.x) - S(R) * 0.4, Y(b.y) - S(R) * 0.4, 1, X(b.x), Y(b.y), S(R));
@@ -288,8 +293,33 @@ addEventListener('blur', () => { setFlipper(game, 0, false); setFlipper(game, 1,
 // sul telefono: metà sinistra = flipper sinistro, metà destra = flipper destri; con la pallina sul pistone,
 // il dito in basso a destra tira la molla
 const touches = new Map();
+// la leva: si prende il pomello (o la zona sotto la corsia di lancio) e si trascina in giù
+const LEVER = 0.045; // corsa della leva sul disegno (m)
+let lever = null;
+function onKnob(e) {
+  const kx = X((LANE_X + W) / 2), ky = Y(-0.024);
+  return Math.abs(e.clientX - kx) < Math.max(30, S(0.05)) && e.clientY > ky - 40;
+}
+canvas.addEventListener('pointerdown', e => {
+  if (!onKnob(e) || game.over) return;
+  unlock();
+  lever = { id: e.pointerId, y: e.clientY };
+  drag(game, 0);
+  canvas.setPointerCapture?.(e.pointerId);
+  e.stopImmediatePropagation();
+});
+canvas.addEventListener('pointermove', e => {
+  if (lever?.id === e.pointerId) drag(game, (e.clientY - lever.y) / Math.max(60, S(LEVER) * 2.2));
+});
+for (const ev of ['pointerup', 'pointercancel'])
+  canvas.addEventListener(ev, e => {
+    if (lever?.id !== e.pointerId) return;
+    lever = null;
+    pull(game, false); // si lascia la leva: parte con la forza di quanto era tirata
+  });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('mousedown', e => {
+  if (lever || onKnob(e)) return;
   unlock();
   if (game.over) { game = newGame(); return; }
   if (e.button === 0) setFlipper(game, 0, true);
