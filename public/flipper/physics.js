@@ -100,6 +100,10 @@ export function newGame() {
     tilted: false,
     nudge: 0,
     multiball: false,
+    kickback: true, // il blocco a sinistra è carico all'inizio
+    kickbackTimer: 0,
+    kickFlash: 0,
+    pitFlash: 0,
     over: false,
     message: 'Tira giù la leva e lascia per lanciare',
     messageTime: 4,
@@ -223,6 +227,7 @@ function hitSegment(g, b, s) {
   if (s.kicker && speed > 0.25 && !g.tilted) {
     b.vx += nx * s.kicker;
     b.vy += ny * s.kicker;
+    s.flash = 0.15;
     g.score += 10;
     emit(g, 'sling', 0.8);
   } else if (speed > 0.4) emit(g, 'wall', Math.min(1, speed / 4));
@@ -270,16 +275,19 @@ function hitFlipper(g, b, f) {
 }
 
 // ---------- un passo ----------
+// Flipper con la bobina vera: accelerano (non partono già alla velocità piena). Un tocco breve li alza solo in parte
+// e il colpo è morbido; tenuto premuto il colpo è pieno, e conta anche in che punto della corsa arriva la pallina.
+const FLIP_ACC = 2600, FLIP_MAX = 52, FLIP_DOWN = 26; // rad/s², rad/s su, rad/s giù
 function moveFlippers(g, h) {
   for (const f of g.t.flippers) {
     const on = f.side ? g.right : g.left;
-    const target = on ? f.up : f.rest;
-    const speed = on ? 30 : 18; // rad/s: su veloce, giù più piano
-    const dir = Math.sign(target - f.a);
-    const prev = f.a;
-    if (Math.abs(target - f.a) < speed * h) f.a = target;
-    else f.a += dir * speed * h;
-    f.w = (f.a - prev) / h;
+    const upDir = Math.sign(f.up - f.rest); // verso in cui si alza
+    if (on) f.w = upDir * Math.min(FLIP_MAX, Math.abs(f.w) * (Math.sign(f.w) === upDir ? 1 : 0) + FLIP_ACC * h);
+    else f.w = -upDir * Math.min(FLIP_DOWN, Math.abs(f.w) * (Math.sign(f.w) === -upDir ? 1 : 0) + FLIP_ACC * 0.6 * h);
+    f.a += f.w * h;
+    // fine corsa: in alto si ferma contro il fermo, in basso torna a riposo
+    if ((f.a - f.up) * upDir >= 0) { f.a = f.up; if (on) f.w = 0; }
+    if ((f.a - f.rest) * upDir <= 0) { f.a = f.rest; if (!on) f.w = 0; }
   }
 }
 function stepBall(g, b, h) {
@@ -322,6 +330,7 @@ function stepBall(g, b, h) {
     hitSegment(g, b, { ...tg, r: 0.004, e: 0.4 });
     if (before.vx !== b.vx || before.vy !== b.vy) {
       tg.down = true;
+      tg.flash = 0.25;
       g.score += 500;
       g.targetsHit++;
       emit(g, 'target', 1);
@@ -362,6 +371,7 @@ function stepBall(g, b, h) {
     b.y = t.pit.y;
     b.vx = b.vy = 0;
     b.held = 1.2;
+    g.pitFlash = 1.2;
     g.score += 1000;
     emit(g, 'pit', 1);
     if (g.multiball) {
@@ -374,6 +384,20 @@ function stepBall(g, b, h) {
       say(g, 'SORPASSO! Multiball', 3);
       addBall(g);
     } else say(g, 'Pit stop', 1.5);
+  }
+  // kickback: la pallina che scende nell'uscita sinistra viene ributtata su (se la luce KICK è accesa)
+  if (b.x < 0.047 && b.y < 0.16 && b.y > 0.05 && b.vy < 0) {
+    if (g.kickback && !g.tilted) {
+      b.x = 0.024;
+      b.vx = 0.08;
+      b.vy = 3.6;
+      g.kickback = false;
+      g.kickbackTimer = 20;
+      g.kickFlash = 0.4;
+      g.score += 500;
+      say(g, 'KICKBACK!', 1.5);
+      emit(g, 'kickback', 1);
+    }
   }
   // pallina sul pistone: resta ferma nella corsia
   if (b.x > LANE_X && b.y < PLUNGER_Y + 0.002 && b.vy <= 0) {
@@ -445,6 +469,14 @@ export function simulate(g, dt) {
     }
     for (let i = 0; i < g.balls.length; i++) for (let j = i + 1; j < g.balls.length; j++) ballsCollide(g.balls[i], g.balls[j]);
     for (const bm of g.t.bumpers) bm.flash = Math.max(0, bm.flash - h);
+    for (const w of g.t.walls) if (w.flash) w.flash = Math.max(0, w.flash - h);
+    for (const tg of g.t.targets) if (tg.flash) tg.flash = Math.max(0, tg.flash - h);
+    g.kickFlash = Math.max(0, g.kickFlash - h);
+    g.pitFlash = Math.max(0, g.pitFlash - h);
+    if (!g.kickback && (g.kickbackTimer -= h) <= 0) {
+      g.kickback = true;
+      say(g, 'Kickback pronto', 1.2);
+    }
     if (g.save > 0 && !g.balls.some(b => b.x > LANE_X && b.y < 0.1)) g.save = Math.max(0, g.save - h);
     if (g.resetTargets > 0 && (g.resetTargets -= h) <= 0) g.t.targets.forEach(x => (x.down = false));
     g.nudge = Math.max(0, g.nudge - h);

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import {
   newGame,
+  makeTable,
   simulate,
   setFlipper,
   pull,
@@ -14,9 +15,11 @@ import {
   R,
   LANE_X,
   BALLS
-} from '../flipper/physics.js?v=1724735c0d';
+} from '../flipper/physics.js?v=319279a440';
 
-export const FLIPPER_AT = { x: -9.2, z: 3.6, ry: Math.PI }; // nella sala giochi, rivolto verso il centro
+// contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro)
+const now0 = () => performance.now() / 1000;
+export const FLIPPER_AT = { x: -18.05, z: -3.0, ry: Math.PI / 2 };
 const STAND = 1.15; // dove sta il personaggio, davanti alla barra (in metri dal centro del cabinet)
 const LEVER_RUN = 0.06; // quanto torna indietro la leva tirata tutta
 
@@ -25,6 +28,7 @@ export function buildFlipper(scene, el, { audio, allowed }) {
   root.position.set(FLIPPER_AT.x, 0, FLIPPER_AT.z);
   root.rotation.y = FLIPPER_AT.ry;
   scene.add(root);
+  const glow = {};
   let piano = null,
     flips = [],
     lever = null,
@@ -107,6 +111,34 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     gltf.scene.traverse(o => {
       if (o.isMesh && o.material?.emissiveIntensity) o.material.emissiveIntensity *= 1.4;
     });
+    const table = makeTable();
+    const halo = (x, y, z, r, color) => {
+      const m = new THREE.Mesh(
+        new THREE.CircleGeometry(r, 28),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false
+        })
+      );
+      m.position.set(x - 0.26, z, -(y - 0.53));
+      m.rotation.x = -Math.PI / 2;
+      piano.add(m);
+      return m;
+    };
+    glow.bumpers = table.bumpers.map(b => halo(b.x, b.y, 0.075, 0.05, '#ff5a2a'));
+    glow.slings = table.walls
+      .filter(w => w.kicker)
+      .map(w =>
+        halo((w.ax + w.bx) / 2 + (w.sling ? 0.02 : -0.02), (w.ay + w.by) / 2 - 0.02, 0.045, 0.05, '#ff2a3a')
+      );
+    glow.targets = table.targets.map(t => halo((t.ax + t.bx) / 2, t.ay, 0.04, 0.03, '#ffd23f'));
+    glow.kick = halo(0.026, 0.1, 0.004, 0.022, '#3cff7a');
+    glow.pit = halo(0.4, 0.95, 0.03, 0.04, '#3cff7a');
+    glow.light = new THREE.PointLight('#ffb070', 0, 0.6, 1.6);
+    piano.add(glow.light);
     for (const b of balls) {
       b.visible = false;
       piano.add(b);
@@ -114,9 +146,17 @@ export function buildFlipper(scene, el, { audio, allowed }) {
   });
 
   // ---------- suoni (sintetizzati, come nell'anteprima) ----------
-  let noise = null;
+  let noise = null,
+    ownAudio = null;
+  function wakeAudio() {
+    try {
+      if (!audio()) ownAudio ??= new AudioContext();
+      const ac = audio() || ownAudio;
+      if (ac.state === 'suspended') ac.resume();
+    } catch {}
+  }
   function sound(type, power = 0.6) {
-    const ac = audio();
+    const ac = audio() || ownAudio;
     if (!ac || ac.state !== 'running' || !allowed()) return;
     const now = ac.currentTime,
       out = ac.createGain();
@@ -184,6 +224,34 @@ export function buildFlipper(scene, el, { audio, allowed }) {
   }
 
   // ---------- partita ----------
+  const hud = document.createElement('div');
+  hud.style.cssText =
+    'position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 10px);transform:translateX(-50%);display:none;gap:10px;align-items:flex-end;font:600 11px system-ui,sans-serif;color:#ffe2b8;text-shadow:0 1px 2px #000;pointer-events:none;z-index:4';
+  const bar = label => {
+    const w = document.createElement('div');
+    w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px';
+    const b = document.createElement('div');
+    b.style.cssText =
+      'width:84px;height:9px;border-radius:5px;background:#0009;border:1px solid #ffffff40;overflow:hidden';
+    const fill = document.createElement('div');
+    fill.style.cssText = 'height:100%;width:0;background:linear-gradient(90deg,#ffd23f,#ff5a2a)';
+    b.append(fill);
+    const t = document.createElement('span');
+    t.textContent = label;
+    w.append(b, t);
+    hud.append(w);
+    return { w, fill };
+  };
+  const bars = [bar('Flipper sinistro'), bar('Leva'), bar('Flipper destro')];
+  const tip = document.createElement('div');
+  tip.style.cssText =
+    'position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 46px);transform:translateX(-50%);display:none;font:600 11px system-ui,sans-serif;color:#ffe2b8cc;text-shadow:0 1px 2px #000;pointer-events:none;white-space:nowrap;z-index:4';
+  tip.textContent =
+    'Tocco breve = colpo morbido · Tenuto = colpo pieno · Leva: trascina il pomello (più tiri, più forte) · Spazio scossa';
+  el.append(hud, tip);
+  const look = { yaw: 0, pitch: 0 }; // la testa di chi gioca: si gira muovendo il mouse
+  const turn = new THREE.Quaternion(),
+    UP = new THREE.Vector3(0, 1, 0);
   let game = null,
     active = false,
     pressed = [false, false],
@@ -220,6 +288,7 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     },
     open() {
       active = true;
+      look.yaw = look.pitch = 0;
       game = newGame();
       pressed = [false, false];
       pulling = false;
@@ -234,6 +303,7 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     },
     // tastiera: Z / M (o Maiusc, frecce) i flipper, S o Freccia giù o Invio tirano la leva, Spazio la scossa, E o Esc escono
     input(e) {
+      wakeAudio();
       const down = e.type === 'keydown';
       if (e.repeat) return true;
       const c = e.code;
@@ -251,6 +321,7 @@ export function buildFlipper(scene, el, { audio, allowed }) {
     // mouse: tasto sinistro e destro i flipper; trascinando il pomello della leva la si tira (più la tiri, più parte forte)
     pointer(e) {
       if (!game) return false;
+      if (e.type === 'pointerdown') wakeAudio();
       if (e.type === 'pointerdown') {
         if (game.over) {
           api.open();
@@ -279,7 +350,12 @@ export function buildFlipper(scene, el, { audio, allowed }) {
       }
       if (e.type === 'pointermove') {
         if (grab?.id === e.pointerId) drag(game, (e.clientY - grab.y) / 110);
-        return !!grab;
+        else if (e.pointerType === 'mouse') {
+          // muovendo il mouse si gira la testa (entro un limite naturale), i tasti restano per i flipper
+          look.yaw = Math.max(-0.75, Math.min(0.75, look.yaw - (e.movementX || 0) * 0.003));
+          look.pitch = Math.max(-0.45, Math.min(0.35, look.pitch - (e.movementY || 0) * 0.003));
+        }
+        return true;
       }
       if (e.type === 'pointerup' || e.type === 'pointercancel') {
         if (grab?.id === e.pointerId) {
@@ -339,6 +415,42 @@ export function buildFlipper(scene, el, { audio, allowed }) {
       spring.scale.z = 1 - pullNow * 0.55;
       // pulsanti premuti
       buttons.forEach((b, i) => (b.position.x = buttonX[i] + (pressed[i] ? (i ? -0.008 : 0.008) : 0)));
+      // luci sui colpi
+      if (g && glow.bumpers) {
+        let best = 0,
+          at = null;
+        const set = (m, v, x, y) => {
+          m.material.opacity = Math.min(1, v);
+          if (v > best) {
+            best = v;
+            at = [x, y];
+          }
+        };
+        g.t.bumpers.forEach((b, i) => set(glow.bumpers[i], b.flash / 0.12, b.x, b.y));
+        g.t.walls
+          .filter(w => w.kicker)
+          .forEach((w, i) =>
+            set(glow.slings[i], (w.flash || 0) / 0.15, (w.ax + w.bx) / 2, (w.ay + w.by) / 2)
+          );
+        g.t.targets.forEach((t, i) =>
+          set(glow.targets[i], (t.flash || 0) / 0.25 + (t.down ? 0.25 : 0), (t.ax + t.bx) / 2, t.ay)
+        );
+        glow.kick.material.opacity = g.kickback ? 0.55 + 0.45 * Math.sin(now0() * 6) ** 2 : 0.08;
+        set(glow.pit, g.pitFlash, 0.4, 0.95);
+        if (g.kickFlash > 0) set(glow.kick, g.kickFlash / 0.4, 0.03, 0.1);
+        glow.light.intensity = best * 0.8;
+        if (at) glow.light.position.set(at[0] - 0.26, 0.08, -(at[1] - 0.53));
+      }
+      // barre della potenza
+      hud.style.display = tip.style.display = active ? 'flex' : 'none';
+      if (active) tip.style.display = 'block';
+      if (g) {
+        g.t.flippers.slice(0, 2).forEach((f, i) => {
+          const k = Math.max(0, Math.min(1, (f.a - f.rest) / (f.up - f.rest)));
+          bars[i ? 2 : 0].fill.style.width = (k * 100).toFixed(0) + '%';
+        });
+        bars[1].fill.style.width = (g.plunger * 100).toFixed(0) + '%';
+      }
       // display
       const now = performance.now();
       if (g && now - lastDmd > 120) {
@@ -354,9 +466,11 @@ export function buildFlipper(scene, el, { audio, allowed }) {
       // vista: dagli occhi di chi gioca, sul piano inclinato
       if (active) {
         const eye = root.localToWorld(new THREE.Vector3(0, 1.62, 1.08));
-        const look = root.localToWorld(new THREE.Vector3(0, 0.98, -0.12));
+        const target = root.localToWorld(new THREE.Vector3(0, 0.98, -0.12));
         cam.position.copy(eye);
-        cam.lookAt(look);
+        cam.lookAt(target);
+        cam.quaternion.premultiply(turn.setFromAxisAngle(UP, look.yaw));
+        cam.rotateX(look.pitch);
         if (g?.nudge > 0) cam.position.x += (Math.random() - 0.5) * 0.01;
       }
     }

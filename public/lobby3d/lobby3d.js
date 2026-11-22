@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=9fd4aff503';
+import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=a31ed88000';
 import {buildBalilla} from './balilla.js?v=1b7c762dfd';
 import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
@@ -373,6 +373,51 @@ export function createLobby3D(app) {
     box(.65,.04,.11,brassEdge,0,.72,.08,frame);box(.58,.014,.09,glow('#ffe0ad',1.3),0,.696,.08,frame);
   }
   framedPrint(clubArt,-18.88,3.25,Math.PI/2);framedPrint(racingArt,18.88,-3.25,-Math.PI/2);
+  // ---------- specchio sulla parete sinistra della Lobby (tra la porta della sala giochi e l'angolo del cinema) ----------
+  // Riflesso vero: la scena viene disegnata da una telecamera specchiata dietro il vetro (solo quando si vede)
+  const mirror = (() => {
+    const w = 1.3, h = 2.0, x = -6.83, z = 3.55, y = 1.4; // la faccia del muro è a x = -6,84
+    const target = new THREE.WebGLRenderTarget(512, 788, { type: THREE.HalfFloatType });
+    const textureMatrix = new THREE.Matrix4();
+    const glass = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.ShaderMaterial({
+      uniforms: { tDiffuse: { value: target.texture }, textureMatrix: { value: textureMatrix } },
+      vertexShader: 'uniform mat4 textureMatrix;varying vec4 vUv;void main(){vUv=textureMatrix*vec4(position,1.0);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+      fragmentShader: 'uniform sampler2D tDiffuse;varying vec4 vUv;void main(){vec4 c=texture2DProj(tDiffuse,vUv);gl_FragColor=vec4(c.rgb*vec3(0.9,0.93,0.95),1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}'
+    }));
+    glass.position.set(x, y, z); glass.rotation.y = Math.PI / 2; scene.add(glass);
+    // cornice dorata
+    const gold = std('#c9a25a', 0.3, 0.8);
+    for (const [sx, sy, px, py] of [[0.08, h + 0.16, 0, (w + 0.08) / 2], [0.08, h + 0.16, 0, -(w + 0.08) / 2], [w, 0.08, (h + 0.08) / 2, 0], [w, 0.08, -(h + 0.08) / 2, 0]])
+      box(0.05, sx === 0.08 ? h + 0.16 : 0.08, sx === 0.08 ? 0.08 : w, gold, x + 0.01, y + (sx === 0.08 ? 0 : px), z + (sx === 0.08 ? py : 0));
+    const virtual = new THREE.PerspectiveCamera(), normal = new THREE.Vector3(), mpos = new THREE.Vector3(), cpos = new THREE.Vector3(),
+      rot = new THREE.Matrix4(), lookAt = new THREE.Vector3(), aim = new THREE.Vector3(), view = new THREE.Vector3(),
+      plane = new THREE.Plane(), clip = new THREE.Vector4(), q = new THREE.Vector4();
+    glass.onBeforeRender = (r, sc, camera) => {
+      mpos.setFromMatrixPosition(glass.matrixWorld); cpos.setFromMatrixPosition(camera.matrixWorld);
+      rot.extractRotation(glass.matrixWorld); normal.set(0, 0, 1).applyMatrix4(rot);
+      view.subVectors(mpos, cpos); if (view.dot(normal) > 0) return;
+      view.reflect(normal).negate().add(mpos);
+      rot.extractRotation(camera.matrixWorld); lookAt.set(0, 0, -1).applyMatrix4(rot).add(cpos);
+      aim.subVectors(mpos, lookAt).reflect(normal).negate().add(mpos);
+      virtual.position.copy(view); virtual.up.set(0, 1, 0).applyMatrix4(rot).reflect(normal); virtual.lookAt(aim);
+      virtual.far = camera.far; virtual.updateMatrixWorld(); virtual.projectionMatrix.copy(camera.projectionMatrix);
+      textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1).multiply(virtual.projectionMatrix).multiply(virtual.matrixWorldInverse).multiply(glass.matrixWorld);
+      // piano di taglio obliquo: niente di quello che sta dietro lo specchio finisce nel riflesso
+      plane.setFromNormalAndCoplanarPoint(normal, mpos).applyMatrix4(virtual.matrixWorldInverse);
+      clip.set(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
+      const e = virtual.projectionMatrix.elements;
+      q.set((Math.sign(clip.x) + e[8]) / e[0], (Math.sign(clip.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
+      clip.multiplyScalar(2 / clip.dot(q));
+      e[2] = clip.x; e[6] = clip.y; e[10] = clip.z + 1 - 0.003; e[14] = clip.w;
+      glass.visible = false;
+      const was = r.getRenderTarget();
+      r.setRenderTarget(target); r.state.buffers.depth.setMask(true); if (r.autoClear === false) r.clear(); r.render(sc, virtual);
+      r.setRenderTarget(was);
+      const vp = camera.viewport; if (vp !== undefined) r.state.viewport(vp);
+      glass.visible = true;
+    };
+    return glass;
+  })();
   const sofaM = std('#3f5d7a', 0.9), legM = std('#2a1a12', 0.5);
   for (const sx of [-1, 1]) {
     const g = new THREE.Group();
@@ -717,7 +762,7 @@ export function createLobby3D(app) {
   wallX(-7.3,7.3,18.55,cinemaWall);
   doorSign('Sala cinema','#ffd496',0,Math.PI).position.set(0,2.92,5.96);
   // A pleated velvet panel, gathered halfway up and fuller at the hem.
-  const curtains=[];
+  const curtains=[],doorCurtains=[];
   const curtainMat=new THREE.MeshStandardMaterial({color:'#791e38',roughness:.94,side:THREE.DoubleSide});
   for(const side of [-1,1]){
     const fabric=new THREE.PlaneGeometry(1,1,44,12),vertices=fabric.attributes.position;
@@ -805,6 +850,19 @@ export function createLobby3D(app) {
       const side=i?1:-1,m=door.clone();m.position.set(0,.04,0);m.scale.x=-side;
       panel.geometry=new THREE.BufferGeometry();panel.add(m);
     });
+    // tende colorate nei passaggi delle altre sale (stesso velluto, un colore per sala); si aprono avvicinandosi
+    for(const [cx,cz,ry,color] of [[-7,0,Math.PI/2,'#5a1f96'],[7,0,Math.PI/2,'#1d6a3a'],[0,-6.23,0,'#1c4a9c']]){
+      const tint=door.material.clone();tint.color.set(color);tint.side=THREE.DoubleSide;
+      const panels=[];
+      for(const side of [-1,1]){
+        const pivot=new THREE.Group(),m=door.clone();m.material=tint;
+        // lungo il muro: verso il centro della porta (il pannello è largo 1,15 m, la porta 2,6 m)
+        const along=ry?new THREE.Vector3(0,0,side*(DOOR+.02)):new THREE.Vector3(side*(DOOR+.02),0,0);
+        pivot.position.set(cx+along.x,.04,cz+along.z);pivot.rotation.y=ry;
+        m.scale.x=(ry?side:-side)*.74; // un po' aperte al centro, come quelle del cinemapivot.add(m);scene.add(pivot);panels.push(pivot);
+      }
+      doorCurtains.push({cx,cz,panels});
+    }
     // ai lati dello schermo: una tenda larga per parte al posto delle pieghe a blocchi
     for(const b of screenPleats)b.removeFromParent();
     for(const side of [-1,1]){const m=wide.clone();m.position.set(side*6.42,.02,18.2);m.scale.x=-side;scene.add(m)}
@@ -1028,7 +1086,9 @@ export function createLobby3D(app) {
   const playing=()=>tableFootball.active||pinball.active; // si gioca al tavolo: niente camminata né avvisi
   scene.updateMatrixWorld(true);
   { const st=pinball.stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label:'Flipper · Gioca',where:'Sala giochi',pinball:true}); }
-  solid(FLIPPER_AT.x-.43,FLIPPER_AT.x+.43,FLIPPER_AT.z-.82,FLIPPER_AT.z+.8);
+  { const c=Math.cos(FLIPPER_AT.ry),sn=Math.sin(FLIPPER_AT.ry),xs=[],zs=[];
+    for(const [lx,lz] of [[-.43,-.82],[.43,-.82],[-.43,.8],[.43,.8]]){xs.push(FLIPPER_AT.x+lx*c+lz*sn);zs.push(FLIPPER_AT.z-lx*sn+lz*c)}
+    solid(Math.min(...xs),Math.max(...xs),Math.min(...zs),Math.max(...zs)); }
   solid(-13.73,-12.27,-.62,.62); // tavolo con manopole e manicotti
   for (const team of [0,1]) for (const pair of [0,1]) {
     const anchor = tableFootball.pose(team*2,2,pair);
@@ -1649,6 +1709,7 @@ export function createLobby3D(app) {
     const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Lobby';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     lightRoom(where);
+    mirror.visible = where === 'Lobby';
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
     tmp.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -1697,6 +1758,7 @@ export function createLobby3D(app) {
     if(!active)return;
     const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
     for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
+    for(const d of doorCurtains){const o=THREE.MathUtils.clamp(1-Math.hypot(pos.x-d.cx,pos.z-d.cz)/2.4,0,1);for(const p of d.panels)p.scale.x=THREE.MathUtils.lerp(p.scale.x,1-o*.67,1-Math.exp(-dt*7))}
     const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
     clubInRange=inRange && Math.abs(pos.x)<7 && pos.z<18.3;
     const depth=pos.z-6.23;
