@@ -1,3 +1,4 @@
+import { changeStool } from './club-stools.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -667,9 +668,17 @@ export class Room extends DurableObject {
         await this.lobbyHub.lobbyBroadcast();
         return;
       }
+      if (b.type === 'stool' && a.inClub && !a.closed)
+        return this.ctx.blockConcurrencyWhile(async () => {
+          await changeStool(this.ctx, ws, b);
+          await this.lobbyHub.lobbyBroadcast(false);
+        });
       if (b.type !== 'presence') return;
       a.inClub = b.inClub === true && !b.away;
-      if (!a.inClub) this.balilla.leave(ws);
+      if (!a.inClub) {
+        delete a.stool;
+        this.balilla.leave(ws);
+      }
       a.room = typeof b.room === 'string' && /^[a-f0-9-]{36}$/.test(b.room) ? b.room : null;
       a.seen = Date.now();
       a.closed = !!b.away;
@@ -700,6 +709,9 @@ export class Room extends DurableObject {
               // seduti: altezza del posto e dove guarda la testa
               ...(pose.station === 'seat'
                 ? {
+                    ...(a.stool?.action === 'sit' && Number.isFinite(pose.roll)
+                      ? { roll: Math.max(-0.35, Math.min(0.35, pose.roll)) }
+                      : {}),
                     y: Number.isFinite(pose.y) ? Math.round(Math.max(-1, Math.min(3, pose.y)) * 20) / 20 : 0,
                     look: Number.isFinite(pose.look)
                       ? Math.round(Math.max(-3.2, Math.min(3.2, pose.look)) * 20) / 20

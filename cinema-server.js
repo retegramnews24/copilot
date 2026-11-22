@@ -2,11 +2,10 @@ import {normalizeAppearance} from './public/appearance.js';
 import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
-// Sala con proiezione accesa ma vuota: dopo 12 ore dall'ultimo cambio si può riusare.
-export const ROOM_KEEP=12*3600_000;
+// Le proiezioni restano aperte anche senza spettatori.
 // Sale ancora in uso (le altre si possono riusare quando se ne apre una nuova).
 export function liveRooms(rooms,occupied,now){
-  return rooms.filter(r=>occupied.has(r.id)||now-r.updated<3_600_000||((r.channel||r.queue?.length)&&now-r.updated<ROOM_KEEP));
+  return rooms.filter(r=>r.number===1||occupied.has(r.id)||now-r.updated<3_600_000||r.channel||r.queue?.length);
 }
 const response=(message,status)=>Response.json({error:message},{status});
 const SCREEN_VIEWERS=3;
@@ -309,8 +308,7 @@ export class Cinema {
         if(input.type==='create'){
           if(room)throw Error('Esci dalla sala prima di aprirne un’altra.');
           const occupied=new Set(this.connections().map(c=>c.info.room));
-          // Una sala resta finché qualcuno è dentro o è stata toccata nell'ultima ora; con la proiezione accesa
-          // (si vede anche nella Lobby 3D) fino a 12 ore dall'ultimo cambio, poi si libera anche se nessuno l'ha spenta.
+
           const rooms=liveRooms(data.rooms,occupied,Date.now());
           if(rooms.length>=MAX_ROOMS)throw Error('Tutte le sale sono occupate.');
           let number=1;while(rooms.some(r=>r.number===number))number++;

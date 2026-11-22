@@ -500,25 +500,85 @@ export function createLobby3D(app) {
   const stools=[],stoolColors=['#b3101a','#d2520a','#e0a412','#1f7a2a','#0f8a84','#1a3fa8','#5a1c8c','#d8456f'];
   new GLTFLoader().load(new URL('models/sgabello.glb',import.meta.url).href,gltf=>{
     stools.forEach((st,i)=>{
-      const m=gltf.scene.clone(true);m.position.set(st.x,0,st.z);scene.add(m);
+      const m=gltf.scene.clone(true);st.model=m;st.placeholder.visible=false;m.position.set(st.x,0,st.z);scene.add(m);
       st.lift=m.getObjectByName('sgabello_alzata');st.base=st.lift?.position.y||0;
       st.lift?.traverse(o=>{if(o.isMesh&&/^pelle_/.test(o.material.name)){o.material=o.material.clone();o.material.color.set(stoolColors[i%stoolColors.length])}});
     });
   });
   const addStool=(x,z,yaw,where)=>{
-    stools.push({x,z,y:0,v:0});
-    spots.push({x,z,hx:.18,hz:.18,pad:.5,label:'Siediti',where,seat:true,px:x,pz:z,yaw});
+    const id=stools.length,spot={x,z,hx:.18,hz:.18,pad:.65,label:'Siediti',where,seat:true,px:x,pz:z,yaw,stool:id};
+    const placeholder=new THREE.Group();
+    box(.42,.10,.42,std(stoolColors[id%stoolColors.length],.7),0,.64,0,placeholder);
+    box(.08,.59,.08,brassTrim,0,.31,0,placeholder);
+    scene.add(placeholder);
+    stools.push({id,x,z,homeX:x,homeZ:z,y:0,v:0,roll:0,spin:0,height:0,spot,placeholder});
+    spots.push(spot);
   };
   for(const x of [9,11.6,14.4,17])for(const side of [-1,1])addStool(x,side*5.6,side>0?0:Math.PI,'Sala biliardo');
   for(const side of [-1,1])for(const end of [-1,1])addStool(-13+side*1.7,end*1.9,end>0?0:Math.PI,'Sala giochi');
+  let carrying=null,requested=null;
+  const stoolBar=document.createElement('div');
+  stoolBar.style.cssText='position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 58px);display:flex;gap:4px;white-space:nowrap';
+  el.append(stoolBar);
+  function stoolButton(label,fn){
+    const b=document.createElement('button');b.textContent=label;b.onclick=fn;stoolBar.append(b);return b;
+  }
+  function changeHeight(delta){
+    const st=stools[seating?.stool];if(st)st.height=THREE.MathUtils.clamp(st.height+delta,-.12,.30);
+  }
+  function stoolRequest(id,action,extra={}){
+    if(requested)return;
+    if(app.stoolSend?.({type:'stool',id,action,...extra}))requested={id,action,at:performance.now()};
+  }
+  function stoolResult({id,action,ok}){
+    if(requested?.id!==id||requested.action!==action)return;
+    requested=null;
+    if(!ok)return;
+    if(action==='drop'){carrying=null;return}
+    if(action!=='carry'&&action!=='sit')return;
+    if(!active||boardOpen||tableFootball.active||seating||carrying!==null){app.stoolSend?.({type:'stool',action:'cancel',id});return}
+    if(action==='carry')carrying=id;
+    else launch(stools[id].spot,true);
+  }
+  function carryPoint(x,z,yaw){return {x:x-.63*Math.sin(yaw),z:z-.63*Math.cos(yaw)}}
+  function toggleCarry(){
+    if(seating)return;
+    if(carrying===null){if(near?.stool!=null)stoolRequest(near.stool,'carry');return}
+    const to=carryPoint(pos.x,pos.z,cam.yaw),test={...to};
+    collide(test);
+    if(Math.hypot(test.x-to.x,test.z-to.z)>.025||stools.some(st=>st.id!==carrying&&Math.hypot(st.x-to.x,st.z-to.z)<.50))return;
+    stoolRequest(carrying,'drop',to);
+  }
+  const carryButton=stoolButton('Prendi · G',toggleCarry);
+  const lower=stoolButton('↓ W',()=>changeHeight(-.05)),raise=stoolButton('↑ S',()=>changeHeight(.05));
+  const rock=stoolButton('Ondula',()=>{const st=stools[seating?.stool];if(st)st.spin+=st.roll>0?-1.1:1.1});
   function stepStools(dt){
+    const people=app.peers?.()||[],layout=app.stoolLayout?.()||{};
+    if(requested&&performance.now()-requested.at>4500){app.stoolSend?.({type:'stool',action:'cancel',id:requested.id});requested=null}
+    const mine=stools[seating?.stool];
+    if(mine)changeHeight((Number(keys.has('s'))-Number(keys.has('w')))*dt*.27);
     for(const st of stools){
-      if(!st.lift)continue;
-      let busy=seating&&Math.abs(seating.px-st.x)<.05&&Math.abs(seating.pz-st.z)<.05;
-      if(!busy)for(const c of peers.values())if(c.pose?.station==='seat'&&Math.abs(c.pose.x-st.x)<.25&&Math.abs(c.pose.z-st.z)<.25){busy=true;break}
-      st.v+=((busy?-.14:0)-st.y)*140*dt;st.v*=Math.exp(-11*dt);st.y+=st.v*dt;
-      st.lift.position.y=st.base+st.y;
+      const owner=people.find(u=>u.stool?.id===st.id),remote=owner&&String(owner.id)!==String(app.me?.()?.id);
+      const carried=carrying===st.id||remote&&owner.stool.action==='carry'&&owner.clubPose?.station==='walk';
+      const saved=layout[st.id];
+      const point=carried?(carrying===st.id?carryPoint(pos.x,pos.z,cam.yaw):carryPoint(owner.clubPose.x,owner.clubPose.z,owner.clubPose.yaw)):(saved??{x:st.homeX,z:st.homeZ});
+      st.x=point.x;st.z=point.z;
+      Object.assign(st.spot,{x:st.x,z:st.z,px:st.x,pz:st.z});
+      const seated=mine===st||remote&&owner.stool.action==='sit';
+      const floor=cinemaFloor(st.x,st.z);
+      if(mine!==st)st.height=saved?.height??0;
+      const level=remote&&seated&&owner.clubPose?.station==='seat'?owner.clubPose.y-floor:st.height-(seated?.07:0);
+      const lean=mine===st?(Number(keys.has('d'))-Number(keys.has('a')))*.14:(remote&&seated?owner.clubPose?.roll??0:0);
+      st.spin+=((lean-st.roll)*50-st.spin*4)*dt;st.roll+=st.spin*dt;
+      st.v+=((level-st.y)*110-st.v*7)*dt;st.y+=st.v*dt;
+      const model=st.model??st.placeholder;
+      model.position.set(st.x,floor+(carried?.48:0)+(st.lift?0:st.y),st.z);
+      if(st.lift){st.lift.position.y=st.base+st.y;st.lift.rotation.z=st.roll}else model.rotation.z=st.roll;
     }
+    const showCarry=!seating&&(carrying!==null||near?.stool!=null)&&!tableFootball.active&&!boardOpen;
+    stoolBar.style.display=mine||showCarry?'flex':'none';
+    carryButton.hidden=!showCarry;carryButton.textContent=carrying===null?'Prendi · G':'Posa · G';
+    lower.hidden=raise.hidden=rock.hidden=!mine;
   }
   const darkWood=std('#2b211d',.55);
   box(2.89,.04,.45,brassTrim,0,.002,-6.16);
@@ -677,30 +737,30 @@ export function createLobby3D(app) {
   });
   rugMap.wrapT=THREE.RepeatWrapping;rugMap.repeat.y=5;
   const aisleMat=new THREE.MeshStandardMaterial({map:rugMap,roughness:1});
+  const tierRise=.20;
   function cinemaFloor(x,z){
     if(Math.abs(x)>=7||z<=6.4||z>=15.44)return 0;
-    if(z<7.285)return Math.min(.6,(z-6.4)*.68);
-    return Math.max(0,(4-Math.floor((z-7.285)/1.63))*.15);
+    if(z<7.285)return 4*tierRise*(z-6.4)/.885;
+    return Math.max(0,(4-Math.floor((z-7.285)/1.63))*tierRise);
   }
   const tierCarpet=std('#482435',.98);
   for(let i=0;i<6;i++){
-    const h=(i+1)*.10,z=6.4+(i+.5)*.1475;
+    const h=(i+1)*4*tierRise/6,z=6.4+(i+.5)*.1475;
     box(13.95,h,.148,tierCarpet,0,h/2,z);
     box(1.85,.012,.021,brassTrim,0,h+.006,z-.06);
   }
-  for(const x of [0,-5.12,5.12])plane(x===0?2.13:1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
+  for(const x of [-2.55,2.55])plane(1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
   const amber=glow('#ffbb6b',1.5);
-  for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
   const cinemaSofas=[];
   for(let row=0;row<5;row++){
-    const z=8.1+row*1.63,level=(4-row)*.15;
+    const z=8.1+row*1.63,level=(4-row)*tierRise;
     if(level)box(13.94,level,1.631,tierCarpet,0,level/2,z);
-    for(const x of [-5.12,0,5.12]){
-      plane(x===0?2.13:1.27,1.626,aisleMat,x,level+.009,z,0,-Math.PI/2);
-      box(x===0?1.96:1.12,.014,.025,amber,x,level+.014,z+.79);
+    for(const x of [-2.55,2.55]){
+      plane(1.27,1.626,aisleMat,x,level+.009,z,0,-Math.PI/2);
+      box(1.12,.014,.025,amber,x,level+.014,z+.79);
     }
     for(const side of [-1,1]){
-      const x=side*2.66;
+      const x=side*.735;
       const sofa=new THREE.Group();sofa.position.set(x,level,z);scene.add(sofa);cinemaSofas.push(sofa);
       // finché non arriva il divanetto in pelle nera fatto in Blender, una sagoma semplice
       const standIn=new THREE.Group();sofa.add(standIn);
@@ -719,7 +779,12 @@ export function createLobby3D(app) {
   // due posti con cuciture a canali, poggiatesta, braccioli con portabicchiere cromato e tasto di regolazione
   new GLTFLoader().load(new URL('models/divanetto.glb',import.meta.url).href,gltf=>{
     gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='tasto'){o.material.emissive=new THREE.Color('#3a8cff');o.material.emissiveIntensity=.9}});
-    for(const sofa of cinemaSofas){sofa.clear();sofa.add(gltf.scene.clone())}
+    const bounds=new THREE.Box3().setFromObject(gltf.scene);
+    for(const sofa of cinemaSofas){
+      const model=gltf.scene.clone();
+      model.scale.x*=1.47/(bounds.max.x-bounds.min.x);
+      sofa.clear();sofa.add(model);
+    }
   });
   point('#ffb782',3.2,0,2.55,10,11);point('#bac9f0',4.1,0,2.7,16,9);
   for(const side of [-1,1])for(let i=0;i<8;i++)box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12);
@@ -1143,7 +1208,7 @@ export function createLobby3D(app) {
       let look=cam.yaw-Math.PI;look=Math.atan2(Math.sin(look),Math.cos(look));
       const yaw=seating.seat?seating.yaw:Math.PI;
       look=cam.yaw-yaw;look=Math.atan2(Math.sin(look),Math.cos(look));
-      return {station:'seat',x:r(pos.x),z:r(pos.z),y:r(cinemaFloor(pos.x,pos.z)),yaw:r(yaw),look:r(look),pitch:r(cam.pitch)};
+      return {station:'seat',...(seating.stool!=null?{roll:r(stools[seating.stool].roll)}:{}),x:r(pos.x),z:r(pos.z),y:r(cinemaFloor(pos.x,pos.z)+(stools[seating.stool]?.y??0)),yaw:r(yaw),look:r(look),pitch:r(cam.pitch)};
     }
     // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
     const r=v=>Math.round(v*20)/20;
@@ -1164,7 +1229,7 @@ export function createLobby3D(app) {
     let d=p.yaw-w.yaw;d=Math.atan2(Math.sin(d),Math.cos(d));w.yaw+=d*Math.min(1,peerDt*10);
     const speed=Math.hypot(w.x-ox,w.z-oz)/Math.max(1e-3,peerDt);
     w.speed=(w.speed||0)+(speed-(w.speed||0))*Math.min(1,peerDt*8);
-    c.root.position.set(w.x,0,w.z);c.root.rotation.y=w.yaw;
+    c.root.position.set(w.x,0,w.z);c.root.rotation.set(0,w.yaw,0);
     for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1}
     c.lookYaw=Number(p.look)||0;c.lookPitch=0;
     animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
@@ -1174,7 +1239,7 @@ export function createLobby3D(app) {
   function seatPose(c,p){
     if(c===me)return null;
     c.walk=null;
-    c.root.position.set(p.x,(Number(p.y)||0)-.16,p.z);c.root.rotation.y=Number(p.yaw)||Math.PI;
+    c.root.position.set(p.x,(Number(p.y)||0)-.16,p.z);c.root.rotation.set(0,Number.isFinite(p.yaw)?p.yaw:Math.PI,Number(p.roll)||0);
     sitJoints(c);
     const k=Math.min(1,peerDt*8);
     c.head.rotation.y+=(Math.max(-1.2,Math.min(1.2,Number(p.look)||0))-c.head.rotation.y)*k;
@@ -1329,6 +1394,7 @@ export function createLobby3D(app) {
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
     if(e.target?.matches?.('input,select'))return;
+    if(e.code==='KeyG'&&!seating){if(e.type==='keydown'&&!e.repeat)toggleCarry();return}
     if(monitor && ['KeyI','KeyK'].includes(e.code)){
       e.preventDefault();monitor.frame.contentWindow.cabinetMonitor?.key(e.code,e.type==='keydown');return;
     }
@@ -1470,7 +1536,7 @@ export function createLobby3D(app) {
       if (hint.style.opacity !== '0' && t > 1.5) hint.style.opacity = '0';
     }
     moving += (speed - moving) * Math.min(1, dt * 10);
-    me.root.position.x = pos.x; me.root.position.z = pos.z; me.root.rotation.y = heading;
+    me.root.position.x = pos.x; me.root.position.z = pos.z; me.root.rotation.set(0,heading,0);
     // collo: in terza persona la testa guarda verso dove guarda la telecamera
     { let lk = cam.yaw - heading; lk = Math.atan2(Math.sin(lk), Math.cos(lk)); me.lookYaw = seating ? 0 : Math.max(-0.9, Math.min(0.9, lk)); me.lookPitch = 0; }
     animateCharacter(me, moving, dt, t);
@@ -1481,7 +1547,7 @@ export function createLobby3D(app) {
       verticalSpeed = jumpHeight > 0 ? verticalSpeed - gravity * dt : 0;
       me.root.position.y += jumpHeight;
     }
-    const floor=cinemaFloor(pos.x,pos.z);
+    const floor=cinemaFloor(pos.x,pos.z)+(stools[seating?.stool]?.y??0);
     me.root.position.y+=floor;
     blob.scale.setScalar(1 - jumpHeight * .24);
     if(seating){
@@ -1536,6 +1602,7 @@ export function createLobby3D(app) {
     if(pos.z>6.45)camera.position.z=Math.max(6.43,camera.position.z);
     camera.lookAt(tgt);
     if(seating){
+      camera.up.set(Math.sin(stools[seating.stool]?.roll??0),1,0).normalize();
       actB.hidden=true;
       cam.yaw+=(Number(keys.has('arrowleft'))-Number(keys.has('arrowright')))*dt*1.7;
       cam.pitch=THREE.MathUtils.clamp(cam.pitch+(Number(keys.has('arrowdown'))-Number(keys.has('arrowup')))*dt,-.65,.8);
@@ -1677,7 +1744,8 @@ export function createLobby3D(app) {
   enterButton.textContent='Entra nel cinema';standButton.textContent='Alzati';seatActions.append(enterButton,standButton);el.append(seatActions);seatActions.hidden=true;
   function stand(){
     if(!seating)return;
-    seating=null;seatActions.hidden=true;Object.assign(pos,returnPoint);collide(pos);me.root.visible=true;
+    if(seating.stool!=null)app.stoolSend?.({type:'stool',action:'stand',id:seating.stool,height:stools[seating.stool].height});
+    camera.up.set(0,1,0);seating=null;seatActions.hidden=true;Object.assign(pos,returnPoint);collide(pos);me.root.visible=true;
     stick.hidden=!touch;near=null;resetMovement();
   }
   enterButton.onclick=()=>{if(seating){const seat=seating;parked=currentPose();hide();seat.act();app.launched?.(seat)}};
@@ -1689,7 +1757,9 @@ export function createLobby3D(app) {
     for(let k=0;k<(s.seats||1);k++)if(!taken.has(k))return k;
     return 0;
   }
-  function launch(s) {
+  function launch(s,approved=false) {
+    if(carrying!==null||requested)return;
+    if(s.stool!=null&&!approved){if(!seating)stoolRequest(s.stool,'sit');return}
     if(document.pointerLockElement&&!s?.seat&&!s?.sit)document.exitPointerLock?.();
     if (s.board) { s.act(); return; }
     if(seating||tableFootball.active)return;
@@ -1707,8 +1777,9 @@ export function createLobby3D(app) {
       resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;enterButton.hidden=false;actB.hidden=true;stick.hidden=true;cam.pitch=.03;
       pos.x=s.x;pos.z=s.z;heading=Math.PI;cam.yaw=Math.PI;
       // posto libero sul divano da due: a sinistra se non c'è già qualcuno
-      const busy=(app.peers?.()||[]).some(u=>u.clubPose?.station==='seat'&&Math.abs(u.clubPose.x-(s.x-.3))<.12&&Math.abs(u.clubPose.z-s.z)<.3);
-      s.side=busy?.3:-.3;pos.x=s.x+s.side;
+      const free=[-.3,.3].find(off=>!(app.peers?.()||[]).some(u=>u.clubPose?.station==='seat'&&Math.abs(u.clubPose.x-(s.x+off))<.12&&Math.abs(u.clubPose.z-s.z)<.3));
+      if(free===undefined){stand();return}
+      s.side=free;pos.x=s.x+s.side;
       me.root.visible=false;
       return;
     }
@@ -1734,7 +1805,8 @@ export function createLobby3D(app) {
   }
   function hide() {
     if (document.pointerLockElement) document.exitPointerLock?.();
-    closeBoard();
+    if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
+    carrying=null;requested=null;closeBoard();
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
     active = false;clubInRange=false;app.clubStream?.(null);audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
@@ -1772,7 +1844,7 @@ export function createLobby3D(app) {
       try { await done; } catch (e) { /* si compila al primo passaggio */ }
     }
   }
-  const api = { setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }
