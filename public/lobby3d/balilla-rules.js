@@ -23,10 +23,12 @@ export const TUNING_LIMITS = {
   spin: { min: 6, max: 28, step: 0.5, initial: SPIN }
 };
 export function tableTuning(values = {}) {
-  return Object.fromEntries(Object.entries(TUNING_LIMITS).map(([key, {min, max, initial}]) => {
-    const value = values?.[key];
-    return [key, Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : initial];
-  }));
+  return Object.fromEntries(
+    Object.entries(TUNING_LIMITS).map(([key, { min, max, initial }]) => {
+      const value = values?.[key];
+      return [key, Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : initial];
+    })
+  );
 }
 export function tuneField(field, values) {
   const tuning = tableTuning(values);
@@ -109,7 +111,7 @@ export function throwIn(f, random = Math.random, practicePair = 1) {
     x: 0,
     z: side * (W - R - 0.002),
     vx: (random() - 0.5) * 0.14 * scale,
-    vz: -side * (0.28 + random() * 0.06) * scale
+    vz: -side * (0.5 + random() * 0.12) * scale // entra dal foro decisa, verso il centro
   });
   // anche da soli la palla esce sempre dal foro laterale di centrocampo (non davanti all'attacco)
   void practicePair;
@@ -251,7 +253,7 @@ function moveBall(f, dt) {
     b.vx *= k;
     b.vz *= k;
   }
-  const speedLimit = MAX_SPEED * f.tuning.ball / 100;
+  const speedLimit = (MAX_SPEED * f.tuning.ball) / 100;
   const speed = Math.hypot(b.vx, b.vz);
   if (speed > speedLimit) {
     b.vx *= speedLimit / speed;
