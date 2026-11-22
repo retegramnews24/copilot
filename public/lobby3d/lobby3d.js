@@ -373,51 +373,6 @@ export function createLobby3D(app) {
     box(.65,.04,.11,brassEdge,0,.72,.08,frame);box(.58,.014,.09,glow('#ffe0ad',1.3),0,.696,.08,frame);
   }
   framedPrint(clubArt,-18.88,3.25,Math.PI/2);framedPrint(racingArt,18.88,-3.25,-Math.PI/2);
-  // ---------- specchio sulla parete sinistra della Lobby (tra la porta della sala giochi e l'angolo del cinema) ----------
-  // Riflesso vero: la scena viene disegnata da una telecamera specchiata dietro il vetro (solo quando si vede)
-  const mirror = (() => {
-    const w = 1.3, h = 2.0, x = -6.83, z = 3.55, y = 1.4; // la faccia del muro è a x = -6,84
-    const target = new THREE.WebGLRenderTarget(512, 788, { type: THREE.HalfFloatType });
-    const textureMatrix = new THREE.Matrix4();
-    const glass = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.ShaderMaterial({
-      uniforms: { tDiffuse: { value: target.texture }, textureMatrix: { value: textureMatrix } },
-      vertexShader: 'uniform mat4 textureMatrix;varying vec4 vUv;void main(){vUv=textureMatrix*vec4(position,1.0);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
-      fragmentShader: 'uniform sampler2D tDiffuse;varying vec4 vUv;void main(){vec4 c=texture2DProj(tDiffuse,vUv);gl_FragColor=vec4(c.rgb*vec3(0.9,0.93,0.95),1.0);\n#include <tonemapping_fragment>\n#include <colorspace_fragment>\n}'
-    }));
-    glass.position.set(x, y, z); glass.rotation.y = Math.PI / 2; scene.add(glass);
-    // cornice dorata
-    const gold = std('#c9a25a', 0.3, 0.8);
-    for (const [sx, sy, px, py] of [[0.08, h + 0.16, 0, (w + 0.08) / 2], [0.08, h + 0.16, 0, -(w + 0.08) / 2], [w, 0.08, (h + 0.08) / 2, 0], [w, 0.08, -(h + 0.08) / 2, 0]])
-      box(0.05, sx === 0.08 ? h + 0.16 : 0.08, sx === 0.08 ? 0.08 : w, gold, x + 0.01, y + (sx === 0.08 ? 0 : px), z + (sx === 0.08 ? py : 0));
-    const virtual = new THREE.PerspectiveCamera(), normal = new THREE.Vector3(), mpos = new THREE.Vector3(), cpos = new THREE.Vector3(),
-      rot = new THREE.Matrix4(), lookAt = new THREE.Vector3(), aim = new THREE.Vector3(), view = new THREE.Vector3(),
-      plane = new THREE.Plane(), clip = new THREE.Vector4(), q = new THREE.Vector4();
-    glass.onBeforeRender = (r, sc, camera) => {
-      mpos.setFromMatrixPosition(glass.matrixWorld); cpos.setFromMatrixPosition(camera.matrixWorld);
-      rot.extractRotation(glass.matrixWorld); normal.set(0, 0, 1).applyMatrix4(rot);
-      view.subVectors(mpos, cpos); if (view.dot(normal) > 0) return;
-      view.reflect(normal).negate().add(mpos);
-      rot.extractRotation(camera.matrixWorld); lookAt.set(0, 0, -1).applyMatrix4(rot).add(cpos);
-      aim.subVectors(mpos, lookAt).reflect(normal).negate().add(mpos);
-      virtual.position.copy(view); virtual.up.set(0, 1, 0).applyMatrix4(rot).reflect(normal); virtual.lookAt(aim);
-      virtual.far = camera.far; virtual.updateMatrixWorld(); virtual.projectionMatrix.copy(camera.projectionMatrix);
-      textureMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1).multiply(virtual.projectionMatrix).multiply(virtual.matrixWorldInverse).multiply(glass.matrixWorld);
-      // piano di taglio obliquo: niente di quello che sta dietro lo specchio finisce nel riflesso
-      plane.setFromNormalAndCoplanarPoint(normal, mpos).applyMatrix4(virtual.matrixWorldInverse);
-      clip.set(plane.normal.x, plane.normal.y, plane.normal.z, plane.constant);
-      const e = virtual.projectionMatrix.elements;
-      q.set((Math.sign(clip.x) + e[8]) / e[0], (Math.sign(clip.y) + e[9]) / e[5], -1, (1 + e[10]) / e[14]);
-      clip.multiplyScalar(2 / clip.dot(q));
-      e[2] = clip.x; e[6] = clip.y; e[10] = clip.z + 1 - 0.003; e[14] = clip.w;
-      glass.visible = false;
-      const was = r.getRenderTarget();
-      r.setRenderTarget(target); r.state.buffers.depth.setMask(true); if (r.autoClear === false) r.clear(); r.render(sc, virtual);
-      r.setRenderTarget(was);
-      const vp = camera.viewport; if (vp !== undefined) r.state.viewport(vp);
-      glass.visible = true;
-    };
-    return glass;
-  })();
   const sofaM = std('#3f5d7a', 0.9), legM = std('#2a1a12', 0.5);
   for (const sx of [-1, 1]) {
     const g = new THREE.Group();
@@ -1709,7 +1664,6 @@ export function createLobby3D(app) {
     const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Lobby';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     lightRoom(where);
-    mirror.visible = where === 'Lobby';
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
     tmp.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
