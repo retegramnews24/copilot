@@ -1,4 +1,5 @@
 import { changeStool } from './club-stools.js';
+import { recordPinball } from './club-pinball.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -666,6 +667,13 @@ export class Room extends DurableObject {
         if (b.type === 'table-volume') await this.ctx.storage.put('tableVolume', b.percent);
         else await this.ctx.storage.put('clubRadio', b.station);
         await this.lobbyHub.lobbyBroadcast();
+        return;
+      }
+      // flipper della Lobby 3D: il punteggio di fine partita entra nella classifica (top 10 con il nome)
+      if (b.type === 'pinball-score' && a.inClub && !a.closed) {
+        const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score));
+        ws.serializeAttachment(a);
+        if (better) await this.lobbyHub.lobbyBroadcast();
         return;
       }
       if (b.type === 'stool' && a.inClub && !a.closed)

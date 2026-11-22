@@ -196,8 +196,14 @@ assert.equal(document.querySelectorAll('#notices-list .notice-item').length, 2);
   .click();
 assert.equal(entered, 'room-3');
 document.getElementById('notices-bell').click();
+assert.equal(
+  document.querySelectorAll('#notices-list .notice-item').length,
+  1,
+  'an approved notice (Entra) disappears'
+);
 document.querySelector('#notices-list .notice-remove').click();
-assert.equal(document.querySelectorAll('#notices-list .notice-item').length, 1, '× removes the notice');
+assert.equal(document.querySelectorAll('#notices-list .notice-item').length, 0, '× removes the notice');
+assert.deepEqual(bell.items(), [], 'the Lobby 3D board shows the same notices as the bell');
 // Forza 4: full columns disabled, winning discs marked, a click sends the column.
 const { renderConnect4 } = await import('../public/connect4-ui.js');
 const board = document.createElement('div'),

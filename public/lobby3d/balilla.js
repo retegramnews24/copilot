@@ -11,13 +11,13 @@ import {
   ROD_H,
   ROD_R,
   MAX_ANGLE,
-  SLIDE,
-  SPIN,
+  TUNING_LIMITS,
+  rodTurnStep,
   rodStep,
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=6b6704b060';
+} from './balilla-rules.js?v=7491db9621';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -34,7 +34,8 @@ export function buildBalilla(scene, el, send, playSound) {
     chrome = material('#bccbd4', 0.82),
     rubber = material('#202228'),
     white = material('#fff1cc'),
-    pitch = material('#16181b'); // campo nero come il tavolo vero
+    pitch = material('#267943'),
+    railLining = material('#3e6591');
   const brass = material('#c7a16c', 0.7),
     sole = material('#17202c'),
     skin = material('#e0b390'),
@@ -75,7 +76,7 @@ export function buildBalilla(scene, el, send, playSound) {
   box(2 * L, 0.014, 2 * W, pitch, 0, TOP, 0);
   for (const s of [-1, 1]) {
     const z = s * RAIL;
-    rbox(2 * END + 0.04, 0.16, 0.03, 0.008, frame, 0, 0.82, z);
+    rbox(2 * END + 0.04, 0.16, 0.03, 0.008, railLining, 0, 0.82, z);
     rbox(2 * END + 0.04, 0.012, 0.036, 0.005, chrome, 0, 0.895, z);
     // foro laterale di centrocampo da cui entra la palla
     const h = mesh(new THREE.CircleGeometry(0.022, 20), hole, 0, TOP + 0.026, z - s * 0.0155);
@@ -133,10 +134,15 @@ export function buildBalilla(scene, el, send, playSound) {
   mesh(new THREE.RingGeometry(0.076, 0.079, 48), white, 0, TOP + 0.009, 0).rotation.x = -Math.PI / 2;
   fallbackLines.push(...table.children.slice(middleStart));
   const cabinetParts = table.children.slice(cabinetStart);
-  // tavolo da bar fatto in Blender: mobile nero con gambe squadrate e piedini, sponde interne bianche, campo nero
+  // tavolo da bar fatto in Blender: mobile nero con gambe squadrate e piedini, sponde blu, campo verde
   // con le righe, rialzi negli angoli, bulloni in ottone, targhette Binottoland e Calcio balilla, uscita della palla
   new GLTFLoader().load(new URL('models/tavolo-balilla.glb', import.meta.url).href, gltf => {
     for (const part of cabinetParts) part.removeFromParent();
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.material.name === 'bal_campo') o.material.color.copy(pitch.color);
+      if (o.material.name === 'bal_sponda') o.material.color.copy(railLining.color);
+    });
     table.add(gltf.scene);
   });
   // pallottoliere del punteggio sulla sponda dal lato dei rossi: 10 palline per squadra
@@ -246,6 +252,24 @@ export function buildBalilla(scene, el, send, playSound) {
     dirty = false,
     lastInput = 0,
     finger = null;
+  // valori fissi del tavolo (tarati a mano): nessuna zona morta, vista inclinata di 60° verso il campo
+  const localSettings = { deadSlide: 0, deadSpin: 0, cameraPitch: 60 };
+  const deadState = { deadSlide: { sum: 0, time: -Infinity }, deadSpin: { sum: 0, time: -Infinity } };
+  function deadZone(key, delta, now) {
+    const limit = localSettings[key];
+    if (!limit || !delta) return delta;
+    const state = deadState[key];
+    if (now - state.time > 120) {
+      state.sum = 0;
+      state.passed = false;
+    }
+    state.time = now;
+    if (state.passed) return delta;
+    state.sum += delta;
+    if (Math.abs(state.sum) <= limit) return 0;
+    state.passed = true;
+    return state.sum - Math.sign(state.sum) * limit;
+  }
   const mouseLocked = () => document.pointerLockElement === host;
   let hadLock = false,
     blurredAt = -1e9;
@@ -333,8 +357,9 @@ export function buildBalilla(scene, el, send, playSound) {
     }
     const t = targets[pair],
       gain = Number(sensitivity.value) * (team ? -1 : 1);
-    t.slide = clamp(t.slide + (dy * gain * 0.7) / 170, 1); // 0,7: sensibilità più bassa
-    t.angle = clamp(t.angle + (dx * gain * 0.7 * Math.PI) / 210, MAX_ANGLE);
+    const now = performance.now();
+    t.slide = clamp(t.slide + (deadZone('deadSlide', dy, now) * gain * 0.7) / 170, 1);
+    t.angle = clamp(t.angle + (deadZone('deadSpin', dx, now) * gain * 0.7 * Math.PI) / 210, MAX_ANGLE);
     dirty = true;
   }
   host.addEventListener('mousemove', e => {
@@ -395,8 +420,9 @@ export function buildBalilla(scene, el, send, playSound) {
       const row = rows[i];
       if (seated() && row.team === team && row.attack === pair) {
         const target = targets[pair];
-        s.position.z = rodStep(s.position.z, target.slide * row.travel, SLIDE * dt);
-        s.rotation.z = rodStep(s.rotation.z, target.angle, SPIN * dt);
+        const slide = f.tuning?.slide ?? TUNING_LIMITS.slide.initial;
+        s.position.z = rodStep(s.position.z, target.slide * row.travel, slide * dt);
+        s.rotation.z = rodTurnStep(s.rotation.z, target.angle, dt, f.tuning?.spin);
         return;
       }
       const kk = smooth;
@@ -417,11 +443,12 @@ export function buildBalilla(scene, el, send, playSound) {
     const vf = THREE.MathUtils.degToRad(camera.fov),
       hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
     camera.up.set(0, 1, 0);
-    const dir = team === 0 ? 1 : -1,
-      p = 0.95;
+    const dir = team === 0 ? 1 : -1;
+    const pitch = THREE.MathUtils.degToRad(localSettings.cameraPitch);
     const d = Math.max(1.2, (L + 0.16) / Math.tan(hf / 2));
-    camera.position.set(TX, TOP + d * Math.sin(p), dir * d * Math.cos(p));
-    camera.lookAt(TX, TOP, dir * 0.05);
+    const focusZ = dir * 0.05;
+    camera.position.set(TX, TOP + d * Math.sin(pitch), focusZ + dir * d * Math.cos(pitch));
+    camera.lookAt(TX, TOP, focusZ);
   }
 
   function pose(slot, poseMode, pairIndex) {
@@ -460,6 +487,7 @@ export function buildBalilla(scene, el, send, playSound) {
     open(side, pairIndex) {
       active = watching = true;
       team = side;
+      for (const state of Object.values(deadState)) state.time = -Infinity;
       if (matchMedia('(any-pointer: fine)').matches || mouseLocked()) lockMouse();
       selectPair(pairIndex);
       ui.hidden = noPanel;

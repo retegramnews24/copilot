@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BalillaHub } from '../balilla-hub.js';
-import { L, W, R, rows, newField, simulate, cornerHeight } from '../public/lobby3d/balilla-rules.js';
+import { L, W, R, rows, control, newField, simulate, cornerHeight } from '../public/lobby3d/balilla-rules.js';
 
 test('Le quattro rampe fanno uscire una pallina ferma', () => {
   for (const x of [-1, 1])
@@ -63,4 +63,41 @@ test('Ingresso libero, rimessa manuale, cambio aste e segnapunti condiviso', t =
   hub.leave(a);
   assert.equal(hub.field.practice, true);
   assert.equal(b.state.playing, true);
+});
+
+test('Il tocco lento imprime meno velocità di un tiro rapido', () => {
+  function shot(angle) {
+    const field = newField();
+    field.phase = 'play';
+    Object.assign(field.ball, { x: rows[0].x + R + 0.0111, z: 0 });
+    control(field, 0, 0, 0, angle);
+    simulate(field, 0.02);
+    return field.ball.vx;
+  }
+  const soft = shot(0.012);
+  const hard = shot(0.9);
+  assert.ok(soft > 0 && soft < 0.15);
+  assert.ok(hard > 0.8 && hard > soft * 5);
+});
+
+test('La taratura cambia la fisica in singolo e si azzera al secondo ingresso', t => {
+  const hub = new BalillaHub();
+  t.after(() => hub.stop());
+  const a = { send() {} };
+  const b = { send() {} };
+  function send(ws, action, extra = {}) {
+    hub.message(ws, ws === a ? 'a' : 'b', { action, ...extra });
+  }
+  send(a, 'watch');
+  send(a, 'join', { mode: 2, slot: 0, bar: true });
+  send(b, 'watch');
+  send(b, 'tune', { values: { ball: 50 } });
+  assert.equal(hub.field.tuning.ball, 150); // valori fissi: pallina al 150%
+  hub.field.ball.vx = 0.6;
+  send(a, 'tune', { values: { ball: 100, slide: 1.1, spin: 20 } });
+  assert.ok(Math.abs(hub.field.ball.vx - 0.4) < 1e-9);
+  assert.deepEqual(hub.field.tuning, { ball: 100, slide: 1.1, spin: 20 });
+  send(b, 'join', { mode: 2, slot: 2, bar: true });
+  send(a, 'tune', { values: { ball: 50 } });
+  assert.deepEqual(hub.field.tuning, { ball: 150, slide: 0.9, spin: 21.5 });
 });
