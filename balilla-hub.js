@@ -1,4 +1,4 @@
-// Calcio balilla della Lobby 3D (prova su staging): la partita online gira sul server della Lobby.
+// Calcio balilla della Lobby 3D: la partita online gira sul server della Lobby.
 // Regole e fisica in public/lobby3d/balilla-rules.js (le stesse del telefono), decisioni in docs/balilla.md.
 // Chi guarda o gioca è segnato anche nella connessione (attachment.balilla): se il server va in pausa
 // (ibernazione) la lista si ricostruisce da lì, così chi era seduto al tavolo non perde il posto.

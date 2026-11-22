@@ -1,4 +1,4 @@
-// Lobby 3D (prova su staging): un "guscio" facoltativo della Lobby. Si cammina con il proprio personaggio tra
+// Lobby 3D: un "guscio" facoltativo della Lobby. Si cammina con il proprio personaggio tra
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
@@ -956,7 +956,7 @@ export function createLobby3D(app) {
 
   // ---------- comandi ----------
   const keys = new Set();
-  let firstPerson=false,parked=null,pongAnchor=null,localPose=null,lastPoseKey='',peerList=null;
+  let firstPerson=false,parked=null,pongAnchor=null,localPose=null,lastPoseKey='',lastPoseSent=0,peerList=null;
   const peers=new Map(),downArm=new THREE.Vector3(0,-1,0);
   const viewButton=document.createElement('button');
   $('.l3d-top').append(viewButton);
@@ -970,14 +970,35 @@ export function createLobby3D(app) {
     if(!active)return null;
     if(tableFootball.seat)return tableFootball.seat;
     if(monitor&&pongAnchor&&Math.hypot(pos.x-pongAnchor.x,pos.z-pongAnchor.z)<.24)return {station:'pong',slot:pongAnchor.slot||0};
-    return null;
+    // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
+    if(seating)return null;
+    const r=v=>Math.round(v*20)/20;
+    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20};
   }
   function descriptor(){
     const pose=currentPose();if(!pose)return null;
     const look=readLook();return {...pose,shirt:look.shirt,shorts:look.shorts,accent:look.accent,hair:look.hair,skin:look.skin};
   }
+  // gli altri che camminano: il personaggio va verso l'ultima posizione ricevuta, gira piano e muove le gambe
+  let peerDt=1/60;
+  function walkPose(c,p){
+    if(c===me)return null; // il tuo personaggio lo muovi tu
+    const w=c.walk||(c.walk={x:p.x,z:p.z,yaw:p.yaw});
+    const k=1-Math.exp(-peerDt*7);
+    const ox=w.x,oz=w.z;
+    w.x+=(p.x-w.x)*k;w.z+=(p.z-w.z)*k;
+    let d=p.yaw-w.yaw;d=Math.atan2(Math.sin(d),Math.cos(d));w.yaw+=d*Math.min(1,peerDt*10);
+    const speed=Math.hypot(w.x-ox,w.z-oz)/Math.max(1e-3,peerDt);
+    w.speed=(w.speed||0)+(speed-(w.speed||0))*Math.min(1,peerDt*8);
+    c.root.position.set(w.x,0,w.z);c.root.rotation.y=w.yaw;
+    for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1}
+    animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
+    return {x:w.x,z:w.z,yaw:w.yaw};
+  }
   function modelPose(c,p){
     if(!p)return null;
+    if(p.station==='walk')return Number.isFinite(p.x)&&Number.isFinite(p.z)?walkPose(c,p):null;
+    if(c!==me)c.walk=null;
     let anchor;
     if(p.station==='balilla')anchor=tableFootball.pose(p.slot,p.mode,p.pair);
     else{
@@ -996,19 +1017,32 @@ export function createLobby3D(app) {
     });
     return anchor;
   }
+  // nome sopra la testa degli altri (si legge da ogni lato)
+  function headName(n){
+    const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:nameTag(String(n).slice(0,22)),depthWrite:false,transparent:true}));
+    tag.scale.set(.9,.17,1);tag.position.y=2.05;return tag;
+  }
   function placePeers(){
     const list=app.peers?.();if(!list)return;
     if(peerList!==list){
       peerList=list;const present=new Set();
       for(const user of list){
-        if(!user.clubPose||String(user.id)===String(app.me?.()?.id))continue;
+        if(String(user.id)===String(app.me?.()?.id))continue;
+        // chi è nella Lobby classica (senza 3D aperta) sta in piedi nell'atrio, attorno al tappeto, rivolto al centro
+        let pose=user.clubPose;
+        if(!pose&&user.status==='In Lobby'&&!user.game&&!user.viewingRoom){
+          let h=0;for(const ch of String(user.id))h=(h*31+ch.charCodeAt(0))>>>0;
+          const a=(h%360)*Math.PI/180,x=Math.cos(a)*3.1,z=.6+Math.sin(a)*2.7;
+          pose={station:'walk',x,z,yaw:Math.atan2(x,z-.6)};
+        }
+        if(!pose)continue;
         present.add(user.id);let c=peers.get(user.id);
-        if(!c){c=makeCharacter(user.clubPose);c.root.add(shirtName(user.name||''));scene.add(c.root);peers.set(user.id,c)}
-        c.pose=user.clubPose;setLook(c,user.clubPose);
+        if(!c){c=makeCharacter(pose);c.root.add(shirtName(user.name||''));c.root.add(headName(user.name||''));scene.add(c.root);peers.set(user.id,c)}
+        c.pose=pose;if(user.clubPose)setLook(c,user.clubPose);
       }
       for(const [id,c] of peers)if(!present.has(id)){
         c.root.removeFromParent();
-        const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh){geometries.add(o.geometry);materials.add(o.material)}});
+        const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh||o.isSprite){geometries.add(o.geometry);materials.add(o.material)}});
         for(const g of geometries)g.dispose();for(const m of materials){m.map?.dispose();m.dispose()}peers.delete(id);
       }
     }
@@ -1253,10 +1287,12 @@ export function createLobby3D(app) {
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
     tableVolume.wrap.style.display=tableRoomGain>0?'flex':'none';
-    tableFootball.update(camera,dt,tableRoomGain>0);placePeers();
+    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
-    if(poseKey!==lastPoseKey){lastPoseKey=poseKey;app.poseChanged?.()}
-    if(!localPose)for(const arm of me.arms){arm.scale.y=1;arm.rotation.y=0}
+    // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
+    const nowMs=performance.now();
+    if(poseKey!==lastPoseKey&&nowMs-lastPoseSent>=200){lastPoseKey=poseKey;lastPoseSent=nowMs;app.poseChanged?.()}
+    if(!localPose||localPose.station==='walk')for(const arm of me.arms){arm.scale.y=1;arm.rotation.y=0}
     const anchor=modelPose(me,localPose);
     me.head.visible=!firstPerson;
     // al calcio balilla il tuo personaggio non copre il tavolo nella tua vista (gli altri lo vedono alle manopole)

@@ -1,5 +1,5 @@
 import {categories,countryName,loadCatalog,searchChannels} from './catalog.js?v=e83d11a028';
-import {avatarSVG} from '../labyrinth/avatar.js?v=8c61edfe0e';
+import {avatarSVG} from '../labyrinth/avatar.js?v=32e186daf3';
 import {youtubeId,youtubeChannelId,positionAt} from './media.js?v=65b3956eb7';
 import {embedYouTube} from './youtube.js?v=c237aa9fc5';
 import {applyInsets} from '../safe-area.js';

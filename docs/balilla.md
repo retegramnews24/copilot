@@ -1,6 +1,6 @@
 # Calcio balilla (Lobby 3D) — decisioni prima del rifacimento
 
-Si gioca **solo nella Lobby 3D**, al tavolo della sala giochi. Stato: realizzato su staging.
+Si gioca **solo nella Lobby 3D**, al tavolo della sala giochi. Stato: pubblicato in Binottoland Playground (1.0.41).
 
 ## File
 | File | Cosa fa |

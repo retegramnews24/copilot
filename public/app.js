@@ -4,7 +4,7 @@ import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=caf3baf8cd';
 import {readAppearance} from './appearance.js?v=a866c9e8ce';
-import './labyrinth/avatar.js?v=8c61edfe0e';
+import './labyrinth/avatar.js?v=32e186daf3';
 import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=bff5f99338';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
@@ -36,7 +36,7 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.40',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.43',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -62,7 +62,7 @@ const f1=createF1Link({...linkBase,games:()=>games,roomClosed:selected=>{games=g
 // Biliardo (public/biliardo/): sala giochi 3D, palla 8, snooker, 5 birilli e boccette; online a due (see biliardo-link.js).
 const biliardo=createBiliardoLink({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
 initCatalog();
-// Lobby 3D (prova su staging, public/lobby3d/): guscio facoltativo della Lobby. Lavagna = Settings, tavoli = Biliardo,
+// Lobby 3D (public/lobby3d/): guscio facoltativo della Lobby. Lavagna = Settings, tavoli = Biliardo,
 // cabinati = giochi arcade: apre le schermate che ci sono già e torna da sola quando le chiudi.
 const LOBBY3D_KEY='binottoland-lobby3d';let sharedTableVolume=80,lobby3d=null,lobby3dBack=0,lobby3dIdle=0;
 const lobbyIdle=()=>!$('page-game').hidden&&!$('lobby').hidden&&![...document.querySelectorAll('[id$="-overlay"]')].some(o=>!o.hidden)&&$('game-sheet')?.hidden!==false&&!document.querySelector('dialog[open]');
@@ -74,10 +74,10 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=6b4feaba75');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=2c856628a6');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}}})}
+}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}sendPresence()}})}
  lobby3d.show();
 }
 $('lobby3d-open').onclick=()=>openLobby3D().catch(e=>err('Lobby 3D: '+e.message));

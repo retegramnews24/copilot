@@ -89,7 +89,14 @@ export class LobbyHub {
       if (!tag || !a || a.accessTag !== tag || a.kind !== 'lobby' || a.closed || Date.now() - a.seen > 65000)
         continue;
       const prior = unique.get(a.user.id);
-      if (!prior || a.room) unique.set(a.user.id, a);
+      // più connessioni della stessa persona (es. una vecchia rimasta aperta in Telegram): conta quella con una
+      // partita aperta, altrimenti la più recente (che porta la posizione aggiornata nella Lobby 3D)
+      if (
+        !prior ||
+        (a.room && !prior.room) ||
+        (!!a.room === !!prior.room && (a.seen || 0) >= (prior.seen || 0))
+      )
+        unique.set(a.user.id, a);
     }
     const users = [...unique.values()]
       .map(a => {

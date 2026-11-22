@@ -1,4 +1,4 @@
-import {avatarSVG} from '../labyrinth/avatar.js?v=8c61edfe0e';
+import {avatarSVG} from '../labyrinth/avatar.js?v=32e186daf3';
 import {BOARD_WIDTH, BOARD_HEIGHT, CHALKS, MAX_POINTS, ERASER, DEFAULT_SIZE} from './chalk.js?v=4027e504f0';
 
 const board = document.createElement('canvas');
