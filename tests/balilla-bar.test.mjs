@@ -79,3 +79,25 @@ test('Il tocco lento imprime meno velocità di un tiro rapido', () => {
   assert.ok(soft > 0 && soft < 0.15);
   assert.ok(hard > 0.8 && hard > soft * 5);
 });
+
+test('La taratura cambia la fisica in singolo e si azzera al secondo ingresso', t => {
+  const hub = new BalillaHub();
+  t.after(() => hub.stop());
+  const a = { send() {} };
+  const b = { send() {} };
+  function send(ws, action, extra = {}) {
+    hub.message(ws, ws === a ? 'a' : 'b', { action, ...extra });
+  }
+  send(a, 'watch');
+  send(a, 'join', { mode: 2, slot: 0, bar: true });
+  send(b, 'watch');
+  send(b, 'tune', { values: { ball: 50 } });
+  assert.equal(hub.field.tuning.ball, 100);
+  hub.field.ball.vx = 0.4;
+  send(a, 'tune', { values: { ball: 150, slide: 1.1, spin: 20 } });
+  assert.ok(Math.abs(hub.field.ball.vx - 0.6) < 1e-9);
+  assert.deepEqual(hub.field.tuning, { ball: 150, slide: 1.1, spin: 20 });
+  send(b, 'join', { mode: 2, slot: 2, bar: true });
+  send(a, 'tune', { values: { ball: 50 } });
+  assert.deepEqual(hub.field.tuning, { ball: 100, slide: 0.66, spin: 16 });
+});

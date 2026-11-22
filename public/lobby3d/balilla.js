@@ -11,13 +11,13 @@ import {
   ROD_H,
   ROD_R,
   MAX_ANGLE,
-  SLIDE,
+  TUNING_LIMITS,
   rodTurnStep,
   rodStep,
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=93d8070e81';
+} from './balilla-rules.js?v=9dcbd53479';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -252,6 +252,86 @@ export function buildBalilla(scene, el, send, playSound) {
     dirty = false,
     lastInput = 0,
     finger = null;
+  const tuningBar = document.createElement('div');
+  tuningBar.style.cssText =
+    'position:absolute;top:calc(var(--ui-safe-top,0px) + 56px);right:12px;z-index:5;max-width:calc(100% - 24px);text-align:right';
+  tuningBar.hidden = true;
+  tuningBar.innerHTML = '<button type="button">Taratura (T)</button><div hidden></div>';
+  el.append(tuningBar);
+  const tuneButton = tuningBar.querySelector('button');
+  const panel = tuningBar.querySelector('div');
+  panel.style.cssText =
+    'background:#142026f5;color:#fff;text-align:left;padding:12px;border-radius:8px;min-width:min(270px,75vw);max-height:65vh;overflow:auto';
+  const fields = new Map();
+  const deadZones = { deadSlide: 0, deadSpin: 0 };
+  const deadState = { deadSlide: { sum: 0, time: -Infinity }, deadSpin: { sum: 0, time: -Infinity } };
+  let tuningDirty = false, lastTune = 0;
+  for (const [key, label, unit, limits] of [
+    ['ball', 'Velocità pallina', '%', TUNING_LIMITS.ball],
+    ['slide', 'Asta dentro/fuori', ' m/s', TUNING_LIMITS.slide],
+    ['spin', 'Rotazione asta', ' rad/s', TUNING_LIMITS.spin],
+    ['deadSlide', 'Zona morta dentro/fuori', ' px', { min: 0, max: 20, step: 1, initial: 0 }],
+    ['deadSpin', 'Zona morta rotazione', ' px', { min: 0, max: 20, step: 1, initial: 0 }]
+  ]) {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:4px 10px;margin-bottom:9px';
+    const output = document.createElement('output');
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.style.cssText = 'grid-column:1/-1;width:100%;margin:0;touch-action:pan-x';
+    Object.assign(slider, { min: limits.min, max: limits.max, step: limits.step, value: limits.initial });
+    if (key in deadZones) {
+      try {
+        deadZones[key] = Math.max(0, Math.min(20, Number(localStorage.getItem('balilla.' + key)) || 0));
+        slider.value = deadZones[key];
+      } catch {}
+    }
+    function showValue() {
+      output.textContent = Number(slider.value).toLocaleString('it', { maximumFractionDigits: 2 }) + unit;
+    }
+    showValue();
+    slider.addEventListener('input', () => {
+      showValue();
+      if (key in deadZones) {
+        deadZones[key] = Number(slider.value);
+        deadState[key].time = -Infinity;
+        try { localStorage.setItem('balilla.' + key, slider.value); } catch {}
+      } else tuningDirty = true;
+    });
+    row.append(label, output, slider);
+    panel.append(row);
+    fields.set(key, { slider, showValue });
+  }
+  const tuneNote = document.createElement('small');
+  panel.append(tuneNote);
+  function toggleTuning() {
+    if (!seated()) return;
+    panel.hidden = !panel.hidden;
+    tuneButton.textContent = panel.hidden ? 'Taratura (T)' : 'Riprendi (T)';
+    if (panel.hidden) {
+      if (noPanel) lockMouse();
+    } else {
+      finger = null;
+      hadLock = false;
+      if (mouseLocked()) document.exitPointerLock();
+    }
+  }
+  tuneButton.onclick = toggleTuning;
+  function deadZone(key, delta, now) {
+    const limit = deadZones[key];
+    if (!limit || !delta) return delta;
+    const state = deadState[key];
+    if (now - state.time > 120) {
+      state.sum = 0;
+      state.passed = false;
+    }
+    state.time = now;
+    if (state.passed) return delta;
+    state.sum += delta;
+    if (Math.abs(state.sum) <= limit) return 0;
+    state.passed = true;
+    return state.sum - Math.sign(state.sum) * limit;
+  }
   const mouseLocked = () => document.pointerLockElement === host;
   let hadLock = false,
     blurredAt = -1e9;
@@ -276,7 +356,7 @@ export function buildBalilla(scene, el, send, playSound) {
     } catch {}
   }
   document.addEventListener('pointerlockchange', () => {
-    if (!active) return;
+    if (!active || !panel.hidden) return;
     if (mouseLocked()) {
       hadLock = true;
       lockHint.hidden = true;
@@ -317,6 +397,9 @@ export function buildBalilla(scene, el, send, playSound) {
     if (watching) post('leave');
     active = watching = dirty = false;
     ui.hidden = true;
+    tuningBar.hidden = panel.hidden = true;
+    tuneButton.textContent = 'Taratura (T)';
+    tuningDirty = false;
     net = netBall = finger = null;
     grips.forEach(g => (g.material = rubber));
   }
@@ -327,7 +410,7 @@ export function buildBalilla(scene, el, send, playSound) {
   ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
-    if (!seated() || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
+    if (!seated() || !panel.hidden || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
     let dx = e.movementX || 0,
       dy = e.movementY || 0;
     if (e.type !== 'mousemove') {
@@ -339,14 +422,16 @@ export function buildBalilla(scene, el, send, playSound) {
     }
     const t = targets[pair],
       gain = Number(sensitivity.value) * (team ? -1 : 1);
-    t.slide = clamp(t.slide + (dy * gain * 0.7) / 170, 1); // 0,7: sensibilità più bassa
-    t.angle = clamp(t.angle + (dx * gain * 0.7 * Math.PI) / 210, MAX_ANGLE);
+    const now = performance.now();
+    t.slide = clamp(t.slide + (deadZone('deadSlide', dy, now) * gain * 0.7) / 170, 1);
+    t.angle = clamp(t.angle + (deadZone('deadSpin', dx, now) * gain * 0.7 * Math.PI) / 210, MAX_ANGLE);
     dirty = true;
   }
   host.addEventListener('mousemove', e => {
     if (active && mouseLocked()) move(e);
   });
   host.addEventListener('pointerdown', e => {
+    if (!panel.hidden) return;
     if (active && e.pointerType === 'mouse' && !mouseLocked()) lockMouse();
     if (active && e.pointerType !== 'mouse') {
       finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
@@ -359,7 +444,10 @@ export function buildBalilla(scene, el, send, playSound) {
     });
   function input(e) {
     if (e.type !== 'keydown' || e.repeat) return false;
-    if (e.code === 'KeyE' || e.code === 'Escape') close();
+    if (e.code === 'KeyT' && seated()) toggleTuning();
+    else if (!panel.hidden && e.code === 'Escape') toggleTuning();
+    else if (!panel.hidden && e.target instanceof Node && panel.contains(e.target)) return false;
+    else if (e.code === 'KeyE' || e.code === 'Escape') close();
     else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
     else if (e.code === 'KeyR' && seated())
       post('reset'); // contapunti a zero
@@ -401,8 +489,9 @@ export function buildBalilla(scene, el, send, playSound) {
       const row = rows[i];
       if (seated() && row.team === team && row.attack === pair) {
         const target = targets[pair];
-        s.position.z = rodStep(s.position.z, target.slide * row.travel, SLIDE * dt);
-        s.rotation.z = rodTurnStep(s.rotation.z, target.angle, dt);
+        const slide = f.tuning?.slide ?? TUNING_LIMITS.slide.initial;
+        s.position.z = rodStep(s.position.z, target.slide * row.travel, slide * dt);
+        s.rotation.z = rodTurnStep(s.rotation.z, target.angle, dt, f.tuning?.spin);
         return;
       }
       const kk = smooth;
@@ -466,6 +555,7 @@ export function buildBalilla(scene, el, send, playSound) {
     open(side, pairIndex) {
       active = watching = true;
       team = side;
+      for (const state of Object.values(deadState)) state.time = -Infinity;
       if (matchMedia('(any-pointer: fine)').matches || mouseLocked()) lockMouse();
       selectPair(pairIndex);
       ui.hidden = noPanel;
@@ -492,6 +582,17 @@ export function buildBalilla(scene, el, send, playSound) {
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
       if (!wasSeated && seated()) selectPair(pair);
+      tuningBar.hidden = !seated();
+      tuneNote.textContent = data.field.tuning ? 'Fisica regolabile in allenamento' : 'Fisica standard con due giocatori';
+      if (!data.field.tuning) tuningDirty = false;
+      for (const [key, limits] of Object.entries(TUNING_LIMITS)) {
+        const { slider, showValue } = fields.get(key);
+        slider.disabled = !data.field.tuning;
+        if (slider.disabled || (!tuningDirty && old?.tuning?.[key] !== data.field.tuning?.[key])) {
+          slider.value = data.field.tuning?.[key] ?? limits.initial;
+          showValue();
+        }
+      }
       ui.hidden = noPanel;
       const status = ui.querySelector('span');
       status.textContent = seated()
@@ -523,6 +624,12 @@ export function buildBalilla(scene, el, send, playSound) {
         lastWatch = now;
         post('watch');
         if (active && !seated()) join();
+      }
+      if (tuningDirty && seated() && net.field.tuning && now - lastTune >= 50) {
+        const values = Object.fromEntries(Object.keys(TUNING_LIMITS).map(key => [key, Number(fields.get(key).slider.value)]));
+        tuningDirty = false;
+        lastTune = now;
+        post('tune', { values });
       }
       if (dirty && seated() && now - lastInput >= 1000 / 60) {
         post('input', { pair, ...targets[pair] });

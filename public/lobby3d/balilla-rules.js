@@ -17,6 +17,24 @@ const LOW = Math.acos((ROD_H - 2 * R + 0.004) / FOOT); // oltre questo angolo il
 const SPIN = 16;
 const SLIDE = 0.66;
 const MAX_SPEED = 2.1;
+export const TUNING_LIMITS = {
+  ball: { min: 50, max: 150, step: 5, initial: 100 },
+  slide: { min: 0.2, max: 1.2, step: 0.01, initial: SLIDE },
+  spin: { min: 6, max: 28, step: 0.5, initial: SPIN }
+};
+export function tableTuning(values = {}) {
+  return Object.fromEntries(Object.entries(TUNING_LIMITS).map(([key, {min, max, initial}]) => {
+    const value = values?.[key];
+    return [key, Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : initial];
+  }));
+}
+export function tuneField(field, values) {
+  const tuning = tableTuning(values);
+  const ratio = tuning.ball / field.tuning.ball;
+  field.ball.vx *= ratio;
+  field.ball.vz *= ratio;
+  field.tuning = tuning;
+}
 export const CORNER_RUN = 0.12;
 export const CORNER_RISE = 0.016;
 export function cornerHeight(x, z) {
@@ -53,6 +71,7 @@ export const TARGETS = [5, 8, 10];
 export function newField(opts = {}, random = Math.random) {
   const f = {
     bar: opts.bar === true,
+    tuning: tableTuning(opts.tuning),
     practice: false,
     target: TARGETS.includes(opts.target) ? opts.target : 5,
     bestOf: opts.bestOf === 3 ? 3 : 1,
@@ -85,11 +104,12 @@ function holdInHole(f) {
 export function throwIn(f, random = Math.random, practicePair = 1) {
   if (f.phase !== 'throw') return false;
   const side = f.thrower === 0 ? 1 : -1;
+  const scale = f.tuning.ball / 100;
   Object.assign(f.ball, {
     x: 0,
     z: side * (W - R - 0.002),
-    vx: (random() - 0.5) * 0.14,
-    vz: -side * (0.28 + random() * 0.06)
+    vx: (random() - 0.5) * 0.14 * scale,
+    vz: -side * (0.28 + random() * 0.06) * scale
   });
   // anche da soli la palla esce sempre dal foro laterale di centrocampo (non davanti all'attacco)
   void practicePair;
@@ -143,12 +163,12 @@ function reachable(f) {
 export function rodStep(current, target, maxDelta) {
   return current + Math.max(-maxDelta, Math.min(maxDelta, target - current));
 }
-export function rodTurnStep(current, target, dt) {
+export function rodTurnStep(current, target, dt, spin = SPIN) {
   // Una correzione piccola muove il piede piano, un gesto ampio può raggiungere il limite.
   const error = target - current;
   if (Math.abs(error) < 0.0002) return target;
-  const speed = 48 * error;
-  return rodStep(current, target, Math.min(SPIN, Math.abs(speed)) * dt);
+  const speed = (48 * error * spin) / SPIN;
+  return rodStep(current, target, Math.min(spin, Math.abs(speed)) * dt);
 }
 export { SLIDE, SPIN };
 function moveRods(f, dt) {
@@ -157,8 +177,8 @@ function moveRods(f, dt) {
     const ts = r.tShift * row.travel,
       s0 = r.shift,
       a0 = r.angle;
-    r.shift = rodStep(r.shift, ts, SLIDE * dt);
-    r.angle = rodTurnStep(r.angle, r.tAngle, dt);
+    r.shift = rodStep(r.shift, ts, f.tuning.slide * dt);
+    r.angle = rodTurnStep(r.angle, r.tAngle, dt, f.tuning.spin);
     r.vs = (r.shift - s0) / dt;
     r.va = (r.angle - a0) / dt;
   });
@@ -173,8 +193,9 @@ function kickFigures(f) {
     if (Math.abs(b.x - fx) > R + 0.02) {
       continue;
     }
-    const vfx = FOOT * Math.cos(rod.angle) * rod.va,
-      vfz = rod.vs;
+    const speedFactor = f.tuning.ball / 100;
+    const vfx = FOOT * Math.cos(rod.angle) * rod.va * speedFactor,
+      vfz = rod.vs * speedFactor;
     for (let n = 0; n < row.count; n++) {
       const fz = figureZ(row, n, rod.shift);
       // piede: rettangolo 2,2 × 2,8 cm visto dall'alto
@@ -201,10 +222,10 @@ function kickFigures(f) {
         const grip = Math.max(0.15 * vn, Math.min(-0.15 * vn, tangent));
         b.vx += grip * nz;
         b.vz -= grip * nx;
-        if (-vn > 0.15) {
+        if (-vn > 0.045) {
           f.hit++;
           f.sound = 'kick';
-          f.power = Math.min(1, -vn / 4);
+          f.power = Math.min(1, -vn / 1.65);
         }
       }
       const pd = d === 1 ? 0 : d;
@@ -226,24 +247,25 @@ function moveBall(f, dt) {
   // rotolamento sul campo
   const v = Math.hypot(b.vx, b.vz);
   if (v > 0) {
-    // panno del campo: la palla rallenta (circa 0,3 m/s al secondo più un po' d'aria)
-    const k = (Math.max(0, v - 0.29 * dt) / v) * Math.exp(-0.29 * dt); // panno un filo più scorrevole
+    const k = (Math.max(0, v - 0.23 * dt) / v) * Math.exp(-0.25 * dt);
     b.vx *= k;
     b.vz *= k;
   }
-  if (v > MAX_SPEED) {
-    b.vx *= MAX_SPEED / v;
-    b.vz *= MAX_SPEED / v;
+  const speedLimit = MAX_SPEED * f.tuning.ball / 100;
+  const speed = Math.hypot(b.vx, b.vz);
+  if (speed > speedLimit) {
+    b.vx *= speedLimit / speed;
+    b.vz *= speedLimit / speed;
   }
   // sponde laterali
   if (Math.abs(b.z) > W - R) {
     const s = Math.sign(b.z);
     b.z = s * (W - R);
     if (b.vz * s > 0) {
-      if (Math.abs(b.vz) > 0.2) {
+      if (Math.abs(b.vz) > 0.06) {
         f.hit++;
         f.sound = 'rail';
-        f.power = Math.min(1, Math.abs(b.vz) / 3);
+        f.power = Math.min(1, Math.abs(b.vz) / 2.1);
       }
       b.vz = -b.vz * 0.35;
     }
@@ -269,7 +291,7 @@ function moveBall(f, dt) {
             b.vz -= 1.35 * vn * nz;
             f.hit++;
             f.sound = 'post';
-            f.power = Math.min(1, -vn / 3);
+            f.power = Math.min(1, -vn / 2.1);
           }
           b.x = s * L + nx * R;
           b.z = post + nz * R;
@@ -277,10 +299,10 @@ function moveBall(f, dt) {
       } else {
         b.x = s * (L - R);
         if (b.vx * s > 0) {
-          if (Math.abs(b.vx) > 0.2) {
+          if (Math.abs(b.vx) > 0.06) {
             f.hit++;
             f.sound = 'rail';
-            f.power = Math.min(1, Math.abs(b.vx) / 3);
+            f.power = Math.min(1, Math.abs(b.vx) / 2.1);
           }
           b.vx = -b.vx * 0.35;
         }
@@ -298,7 +320,7 @@ function goal(f, team) {
   if (!f.practice) f.score[team]++;
   f.hit++;
   f.sound = 'goal';
-  f.power = Math.min(1, Math.hypot(f.ball.vx, f.ball.vz) / 5);
+  f.power = Math.min(1, Math.hypot(f.ball.vx, f.ball.vz) / 2.1);
   f.thrower = f.practice ? f.lastThrower : 1 - team; // in partita rimette chi ha subito
   f.timer = 1.4;
   f.phase = 'goal';

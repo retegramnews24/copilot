@@ -3,8 +3,8 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=a31ed88000';
-import {buildBalilla} from './balilla.js?v=4b40bc72cd';
-import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
+import {buildBalilla} from './balilla.js?v=525ac55051';
+import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -1009,12 +1009,14 @@ export function createLobby3D(app) {
     if(!tableBus){tableBus=ctx.createGain();tableBus.connect(ctx.destination)}
     tableBus.gain.value=tableLevel*tableRoomGain;
     // suoni veri registrati al tavolo (finché non sono caricati resta il suono sintetizzato qui sotto)
-    if(playBalillaSound(ctx,tableBus,type,Math.max(.15,Math.min(1,Number(power)||.5))))return;
+    const intensity=THREE.MathUtils.clamp(power,0,1);
+    const p=.035+.965*Math.pow(intensity,1.3);
+    if(playBalillaSound(ctx,tableBus,type,p))return;
     if(!tableNoise){
       tableNoise=ctx.createBuffer(1,Math.floor(ctx.sampleRate*.3),ctx.sampleRate);
       const d=tableNoise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
     }
-    const now=ctx.currentTime,p=Math.max(.15,Math.min(1,Number(power)||.5));
+    const now=ctx.currentTime;
     const hit=(freq,q,decay,level,delay=0)=>{
       const src=ctx.createBufferSource(),bp=ctx.createBiquadFilter(),g=ctx.createGain();
       src.buffer=tableNoise;bp.type='bandpass';bp.frequency.value=freq;bp.Q.value=q;
@@ -1033,8 +1035,8 @@ export function createLobby3D(app) {
     else if(type==='rail'){hit(520,3.5,.075,.28*p);tone(170,.09,.11*p)}
     else if(type==='post'){hit(1900,12,.14,.17*p);tone(1180,.18,.06*p);tone(2650,.12,.025*p)}
     else if(type==='goal'){
-      hit(320,2.5,.14,.42*p+.08);tone(105,.16,.2);
-      for(let i=0;i<8;i++)hit(1450-i*70,6,.03,.11*(1-i/9),.2+i*.075+Math.random()*.02);
+      hit(320,2.5,.14,.5*p);tone(105,.16,.2*p);
+      for(let i=0;i<8;i++)hit(1450-i*70,6,.03,.11*p*(1-i/9),.2+i*.075+Math.random()*.02);
     }else if(type==='throw'){
       hit(1300,6,.03,.12,0);hit(1200,6,.03,.09,.06);hit(800,3,.18,.06,.1);
     }else hit(900,4,.04,.15*p);

@@ -38,7 +38,7 @@ export function playBalillaSound(ctx, out, type, power = 0.6) {
     g = ctx.createGain();
   src.buffer = buf;
   src.playbackRate.value = 0.94 + Math.random() * 0.12; // ogni colpo un filo diverso
-  const level = vol * (0.3 + 0.7 * Math.max(0, Math.min(1, power)));
+  const level = vol * power;
   g.gain.setValueAtTime(level, now);
   g.gain.setValueAtTime(level, now + Math.max(0, dur - 0.025));
   g.gain.linearRampToValueAtTime(0.0001, now + dur);

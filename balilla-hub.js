@@ -9,6 +9,7 @@ import {
   throwIn,
   control,
   swapSides,
+  tuneField,
   TARGETS
 } from './public/lobby3d/balilla-rules.js';
 
@@ -22,6 +23,7 @@ export function publicField(f) {
     sound: f.sound,
     power: round(f.power || 0),
     phase: f.phase,
+    ...(f.practice && { tuning: f.tuning }),
     thrower: f.thrower,
     wait: round(Math.max(0, f.wait)),
     target: f.target,
@@ -157,6 +159,9 @@ export class BalillaHub {
       if (this.field.bar) this.updateBar();
       else if (occupied.length + 1 === this.mode) this.start();
       this.broadcast(true);
+    } else if (b.action === 'tune' && member.slot >= 0 && this.field.practice) {
+      tuneField(this.field, b.values);
+      this.broadcast(true);
     } else if (b.action === 'ready' && member.slot >= 0 && this.timer) {
       // rimessa: la fa partire chi deve rimettere (nel 2 contro 2 uno qualsiasi dei due)
       if (this.field.practice) {
@@ -187,7 +192,12 @@ export class BalillaHub {
       control(this.field, team, pair, b.slide, b.angle);
     } else if (member.slot >= 0 && ((b.action === 'again' && this.field.finished) || b.action === 'reset')) {
       // nuova partita, oppure contapunti azzerati da chi è al tavolo
-      this.field = newField({ bar: this.field.bar, target: this.field.target, bestOf: this.field.bestOf });
+      this.field = newField({
+        bar: this.field.bar,
+        target: this.field.target,
+        bestOf: this.field.bestOf,
+        tuning: this.field.tuning
+      });
       if (this.field.bar) this.updateBar();
       this.swap = this.field.swap;
       this.start();
@@ -209,7 +219,7 @@ export class BalillaHub {
     if (this.field.practice) {
       this.field.score = [0, 0];
       this.field.thrower = seated[0].slot / 2;
-    }
+    } else tuneField(this.field);
     if (seated.length) this.start();
   }
   start() {
