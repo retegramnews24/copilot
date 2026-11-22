@@ -376,6 +376,10 @@ export function createLobby3D(app) {
     for (const ax of [-1.02, 1.02]) rbox(0.2, 0.55, 0.9, 0.07, sofaM, ax, 0.42, 0, g);
     for (const lx of [-0.95, 0.95]) for (const lz of [-0.35, 0.35]) box(0.06, 0.1, 0.06, legM, lx, 0.05, lz, g);
     g.position.set(sx * 3.6, 0, 5.3); scene.add(g);
+    // divani capitonné in pelle a due colori fatti in Blender (blender/divano_lobby.blend): petrolio e senape, bordeaux e crema
+    new GLTFLoader().load(new URL(sx < 0 ? 'models/divano_lobby.glb' : 'models/divano_lobby_bordeaux.glb', import.meta.url).href, (gltf) => {
+      g.clear(); gltf.scene.rotation.y = Math.PI; g.add(gltf.scene);
+    });
     for (const o of [-0.5, 0.5]) spots.push({ x: sx * 3.6 + o, z: 4.75, hx: 0.25, hz: 0.12, pad: 0.45, label: 'Siediti', where: 'Atrio', seat: true, px: sx * 3.6 + o, pz: 5.2, yaw: 0 });
     solid(sx * 3.6 - 1.12, sx * 3.6 + 1.12, 4.85, 5.8);
   }
@@ -487,7 +491,25 @@ export function createLobby3D(app) {
 
   // Card room beyond the north doorway. Aisles run between all nine tables.
   const avail = new Set(app.games ? app.games() : [...ARCADE,...BOARD].map(a=>a[0]).concat(['cinema-streamer','blackboard-spazio-libero','biliardo']));
-  const walnut=std('#583828',.42), brassTrim=std('#c3a064',.32,.64), chairLeather=std('#773e36',.68);
+  const walnut=std('#583828',.42), brassTrim=std('#c3a064',.32,.64);
+  // sgabelli in pelle di tutti i colori (blender/sgabello.blend): quando ci si siede il pistone scende con un piccolo rimbalzo
+  const stools=[],stoolColors=['#b3101a','#d2520a','#e0a412','#1f7a2a','#0f8a84','#1a3fa8','#5a1c8c','#d8456f'];
+  new GLTFLoader().load(new URL('models/sgabello.glb',import.meta.url).href,gltf=>{
+    stools.forEach((st,i)=>{
+      const m=gltf.scene.clone(true);m.position.set(st.x,0,st.z);scene.add(m);
+      st.lift=m.getObjectByName('sgabello_alzata');st.base=st.lift?.position.y||0;
+      st.lift?.traverse(o=>{if(o.isMesh&&/^pelle_/.test(o.material.name)){o.material=o.material.clone();o.material.color.set(stoolColors[i%stoolColors.length])}});
+    });
+  });
+  function stepStools(dt){
+    for(const st of stools){
+      if(!st.lift)continue;
+      let busy=seating&&Math.abs(seating.px-st.x)<.05&&Math.abs(seating.pz-st.z)<.05;
+      if(!busy)for(const c of peers.values())if(c.pose?.station==='seat'&&Math.abs(c.pose.x-st.x)<.25&&Math.abs(c.pose.z-st.z)<.25){busy=true;break}
+      st.v+=((busy?-.14:0)-st.y)*140*dt;st.v*=Math.exp(-11*dt);st.y+=st.v*dt;
+      st.lift.position.y=st.base+st.y;
+    }
+  }
   const darkWood=std('#2b211d',.55);
   box(2.89,.04,.45,brassTrim,0,.002,-6.16);
   const cardWall=std('#8d7665',.92);
@@ -547,9 +569,7 @@ export function createLobby3D(app) {
       }
     }
     for(const side of [-1,1]){
-      box(.46,.39,.4,walnut,x+side*1.24,.2,z);
-      box(.52,.09,.49,chairLeather,x+side*1.24,.44,z);
-      box(.07,.39,.49,chairLeather,x+side*1.47,.63,z);
+      stools.push({x:x+side*1.24,z,y:0,v:0});
       spots.push({x:x+side*1.24,z:z+.62,hx:.2,hz:.12,pad:.5,label:'Siediti',where:'Sala tavoli',seat:true,px:x+side*1.24,pz:z,yaw:side*Math.PI/2});
     }
     solid(x-1.51,x+1.51,z-.72,z+.72);
@@ -659,6 +679,7 @@ export function createLobby3D(app) {
   for(const x of [0,-5.12,5.12])plane(x===0?2.13:1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
   const amber=glow('#ffbb6b',1.5);
   for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
+  const cinemaSofas=[];
   for(let row=0;row<5;row++){
     const z=8.1+row*1.63,level=(4-row)*.15;
     if(level)box(13.94,level,1.631,tierCarpet,0,level/2,z);
@@ -668,19 +689,12 @@ export function createLobby3D(app) {
     }
     for(const side of [-1,1]){
       const x=side*2.66;
-      const sofa=new THREE.Group();sofa.position.set(x,level,z);scene.add(sofa);
-      box(1.28,.19,.88,darkWood,0,.18,0,sofa);
-      for(const off of [-.30,.30]){
-        const cushion=new THREE.Mesh(new THREE.SphereGeometry(1,24,16),velvet);
-        cushion.scale.set(.326,.145,.46);cushion.position.set(off,.39,0);sofa.add(cushion);
-        const back=cushion.clone();back.scale.set(.33,.35,.13);back.position.set(off,.67,-.35);back.rotation.x=-.14;sofa.add(back);
-        for(const u of [-.09,.09])box(.022,.022,.013,piping,off+u,.67,-.224,sofa);
-      }
-      for(const off of [-.66,.66]){
-        box(.14,.36,.87,velvet,off,.44,0,sofa);box(.15,.045,.80,walnut,off,.636,0,sofa);
-        const cup=new THREE.Mesh(new THREE.RingGeometry(.035,.047,20),brassTrim);
-        cup.rotation.x=-Math.PI/2;cup.position.set(off,.66,.26);sofa.add(cup);
-      }
+      const sofa=new THREE.Group();sofa.position.set(x,level,z);scene.add(sofa);cinemaSofas.push(sofa);
+      // finché non arriva il divanetto in pelle nera fatto in Blender, una sagoma semplice
+      const standIn=new THREE.Group();sofa.add(standIn);
+      box(1.28,.19,.88,darkWood,0,.18,0,standIn);
+      for(const off of [-.30,.30])box(.5,.16,.62,velvet,off,.42,-.07,standIn),box(.5,.66,.2,velvet,off,.82,-.33,standIn);
+      for(const off of [-.66,.66])box(.15,.58,.86,velvet,off,.4,0,standIn);
       solid(x-.74,x+.74,z-.56,z+.51);
       spots.push({x,z,hx:.74,hz:.5,pad:.68,label:'Siediti · Cinema',sit:true,act:()=>app.sit?app.sit(app.projection()?.id):app.open('cinema-streamer')});
     }
@@ -689,6 +703,12 @@ export function createLobby3D(app) {
       box(.13,.37,.15,amber,side*6.86,1.91,z);
     }
   }
+  // divanetti reclinabili in pelle nera fatti in Blender (blender/divanetto.blend → models/divanetto.glb):
+  // due posti con cuciture a canali, poggiatesta, braccioli con portabicchiere cromato e tasto di regolazione
+  new GLTFLoader().load(new URL('models/divanetto.glb',import.meta.url).href,gltf=>{
+    gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='tasto'){o.material.emissive=new THREE.Color('#3a8cff');o.material.emissiveIntensity=.9}});
+    for(const sofa of cinemaSofas){sofa.clear();sofa.add(gltf.scene.clone())}
+  });
   point('#ffb782',3.2,0,2.55,10,11);point('#bac9f0',4.1,0,2.7,16,9);
   for(const side of [-1,1])for(let i=0;i<8;i++)box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12);
   box(5.16,2.97,.12,darkWood,0,1.77,18.08);
@@ -1538,7 +1558,7 @@ export function createLobby3D(app) {
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
     tableVolume.wrap.style.display=tableRoomGain>0?'flex':'none';
-    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);placePeers();
+    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);placePeers();stepStools(dt);
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
     const nowMs=performance.now();
