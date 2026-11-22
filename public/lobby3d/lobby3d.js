@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=46850092ec';
+import {buildBalilla} from './balilla.js?v=19ccb15db4';
 import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -519,7 +519,7 @@ export function createLobby3D(app) {
   for(const side of [-1,1])for(const end of [-1,1])addStool(-13+side*1.7,end*1.9,end>0?0:Math.PI,'Sala giochi');
   let carrying=null,requested=null;
   const stoolBar=document.createElement('div');
-  stoolBar.style.cssText='position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 58px);display:flex;gap:4px;white-space:nowrap';
+  stoolBar.style.cssText='position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 112px);display:flex;gap:4px;white-space:nowrap';
   el.append(stoolBar);
   function stoolButton(label,fn){
     const b=document.createElement('button');b.textContent=label;b.onclick=fn;stoolBar.append(b);return b;
@@ -535,7 +535,7 @@ export function createLobby3D(app) {
     if(requested?.id!==id||requested.action!==action)return;
     requested=null;
     if(!ok)return;
-    if(action==='drop'){carrying=null;return}
+    if(action==='drop'){carrying=null;near=null;actB.hidden=true;return} // l'avviso si ricalcola
     if(action!=='carry'&&action!=='sit')return;
     if(!active||boardOpen||tableFootball.active||seating||carrying!==null){app.stoolSend?.({type:'stool',action:'cancel',id});return}
     if(action==='carry')carrying=id;
@@ -583,8 +583,12 @@ export function createLobby3D(app) {
       if(st.lift)st.lift.position.y=st.base+st.y;
     }
     const showCarry=!seating&&(carrying!==null||near?.stool!=null)&&!tableFootball.active&&!boardOpen;
-    stoolBar.style.display=mine||showCarry?'flex':'none';
+    stoolBar.style.display=(mine&&touch)||showCarry?'flex':'none';
     carryButton.hidden=!showCarry;carryButton.textContent=carrying===null?'Prendi · G':'Posa · G';
+    if(!touch){
+      stoolBar.style.display='none';
+      if(carrying!==null&&!tableFootball.active){actB.hidden=false;actB.textContent='Posa lo sgabello (G)'}
+    }
     lower.hidden=raise.hidden=rock.hidden=!mine;
   }
   const darkWood=std('#2b211d',.55);
@@ -906,7 +910,7 @@ export function createLobby3D(app) {
     if(key===previewKey&&(!stream||previewVideo?.srcObject===stream)){syncTransport();return}
     playbackVersion='';
     stopProjection();if(!key)return;
-    previewKey=key;audioButton.hidden=false;
+    previewKey=key;
     const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5}};
     if(p.youtube&&/^[\w-]{11}$/.test(p.youtube)){
       disposeYT=embedYouTube(projection,p.youtube,{
@@ -1357,7 +1361,7 @@ export function createLobby3D(app) {
     const tone=(hz,decay,lvl,end=hz*.6)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(hz,now);o.frequency.exponentialRampToValueAtTime(end,now+decay);g.gain.setValueAtTime(lvl,now);g.gain.exponentialRampToValueAtTime(.0001,now+decay);o.connect(g).connect(out);o.start(now);o.stop(now+decay+.02)};
     // colpo a segno: "pof" morbido e un piccolo tintinnio di stelline; parato: "tac" secco
     if(kind==='hit'){burst(170,1.2,.13,.9);tone(110,.12,.5);tone(1800,.25,.06,2600);tone(2400,.2,.04,3200)}
-    else if(kind==='step'){burst(260+Math.random()*120,1.4,.07,.32);burst(2600,2,.025,.05)}
+    else if(kind==='step'){burst(105+Math.random()*35,1,.1,.2);burst(210,1.6,.05,.05)}
     else if(kind==='land'){burst(150,1.1,.16,.9);tone(85,.12,.45,55)}
     else{burst(1500,5,.06,.6);tone(820,.05,.18,600)}
   }
@@ -1402,6 +1406,7 @@ export function createLobby3D(app) {
   let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0;
   function resetMovement() {
     tableFootball.blur();
+    crouching = false; guarding = false; // finestra persa (Alt+Tab): nessun tasto resta premuto
     monitor?.frame.contentWindow.cabinetMonitor?.clear();
     keys.clear();
     jumpHeight = verticalSpeed = moving = 0;
@@ -1414,12 +1419,13 @@ export function createLobby3D(app) {
     if (!active || document.querySelector('dialog[open]')) return;
     // bacheca aperta: si scrive nella chat; Esc la chiude
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
+    if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat)setFirst(!firstPerson);e.preventDefault();return}
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
     if(e.target?.matches?.('input,select'))return;
     if(e.code==='KeyG'&&!seating){if(e.type==='keydown'&&!e.repeat)toggleCarry();return}
-    if(seating?.stool!=null&&['KeyA','KeyD'].includes(e.code)){
+    if(seating?.stool!=null&&e.code==='Space'){ // seduti sullo sgabello: Spazio fa molleggiare
       if(e.type==='keydown'&&!e.repeat)bounceStool();
       e.preventDefault();return;
     }
@@ -1606,7 +1612,7 @@ export function createLobby3D(app) {
       actB.hidden = !near;
       if (near?.pong) actB.textContent = monitor ? 'Spegni Pong · '+(touch?'tocca il monitor':'racchetta I/K') : 'Avvia Pong'+(touch?'':' (E)');
       else if (near?.balilla) actB.textContent = near.label + (touch ? ' · Gioca' : ' · Gioca (E)');
-      else if (near) actB.textContent = (near.sit?'':'Apri · ') + near.label + (touch ? '' : '  (E)');
+      else if (near) actB.textContent = (near.sit||near.seat?'':'Apri · ') + near.label + (touch ? '' : '  (E)') + (near.stool!=null&&!touch ? ' · Prendi (G)' : '');
     }
     ring.visible = !!near && !!near.mq;
     for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
@@ -1635,6 +1641,7 @@ export function createLobby3D(app) {
     if(pos.z>6.45)camera.position.z=Math.max(6.43,camera.position.z);
     camera.lookAt(tgt);
     if(seating){
+      standButton.hidden=!touch;seatActions.hidden=!touch&&enterButton.hidden;
       actB.hidden=true;
       cam.yaw+=(Number(keys.has('arrowleft'))-Number(keys.has('arrowright')))*dt*1.7;
       cam.pitch=THREE.MathUtils.clamp(cam.pitch+(Number(keys.has('arrowdown'))-Number(keys.has('arrowup')))*dt,-.65,.8);
