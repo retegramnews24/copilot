@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=7e973b7aa1';
+import {buildBalilla} from './balilla.js?v=1b7c762dfd';
 import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -65,7 +65,7 @@ export function createLobby3D(app) {
   const el = document.createElement('div');
   el.className = 'l3d'; el.hidden = true;
   el.innerHTML = `<div class="l3d-gl"></div><div class="l3d-load">Carico la Lobby 3D…</div>
-<div class="l3d-top"><button class="l3d-exit" aria-label="Torna alla Lobby classica">✕ Lobby classica</button><span class="l3d-where">Atrio</span></div>
+<div class="l3d-top"><button class="l3d-exit" aria-label="Torna alla Lobby classica">✕ Lobby classica</button><span class="l3d-where">Lobby</span></div>
 <div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div>`;
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
@@ -221,12 +221,12 @@ export function createLobby3D(app) {
   plane(2.5, 1.56, new THREE.MeshStandardMaterial({ map: blackboard(), roughness: 0.95 }), bbX, 1.55, -5.9);
   rbox(2.6, 0.05, 0.12, 0.015, std('#5a3a22', 0.55), bbX, 0.68, -5.86);
   for (let i = 0; i < 3; i++) box(0.07, 0.016, 0.016, std(['#f5f5f0', '#f7d36b', '#9ad0f5'][i], 0.9), bbX - 0.9 + i * 0.12, 0.712, -5.86);
-  spots.push({ x: bbX, z: -5.6, hx: 1.35, hz: 0.3, pad: 1.1, label: 'Impostazioni', where: 'Atrio', act: () => app.openSettings() });
+  spots.push({ x: bbX, z: -5.6, hx: 1.35, hz: 0.3, pad: 1.1, label: 'Impostazioni', where: 'Lobby', act: () => app.openSettings() });
   // cartellone = Giochi
   const gpX = 3.4;
   rbox(1.5, 2.05, 0.06, 0.025, std('#3b2416', 0.5), gpX, 1.45, -5.96);
   plane(1.36, 1.92, new THREE.MeshStandardMaterial({ map: gamesPoster(), roughness: 0.7 }), gpX, 1.45, -5.92);
-  spots.push({ x: gpX, z: -5.6, hx: 0.75, hz: 0.3, pad: 1.1, label: 'Tutti i giochi', where: 'Atrio', act: () => app.openGames() });
+  spots.push({ x: gpX, z: -5.6, hx: 0.75, hz: 0.3, pad: 1.1, label: 'Tutti i giochi', where: 'Lobby', act: () => app.openGames() });
   // ---------- bacheca e avvisi (parete di sinistra dell'atrio, a sinistra della lavagna dei Settings) ----------
   // Da lontano si vedono i foglietti appuntati sul sughero: avvisi, chat, podio e top 5. Con "Apri" la vista si mette
   // davanti alla bacheca e la bacheca diventa vera: la chat e gli avvisi dell'app stanno sopra il sughero (si legge,
@@ -237,7 +237,7 @@ export function createLobby3D(app) {
   boardCanvas.width = BW; boardCanvas.height = BH;
   const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.colorSpace = THREE.SRGBColorSpace; boardTex.anisotropy = 4;
   const boardMesh = plane(bdW, bdH, new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.9 }), bdX, 1.5, bdZ, Math.PI / 2);
-  spots.push({ x: bdX + 0.32, z: bdZ, hx: 0.3, hz: bdW / 2, pad: 1.1, label: 'Bacheca e avvisi', where: 'Atrio', board: true, act: () => openBoard() });
+  spots.push({ x: bdX + 0.32, z: bdZ, hx: 0.3, hz: bdW / 2, pad: 1.1, label: 'Bacheca e avvisi', where: 'Lobby', board: true, act: () => openBoard() });
   const firstName = n => String(n || '').split(' ')[0].slice(0, 14);
   const cork = (() => {
     const c = document.createElement('canvas'); c.width = BW; c.height = BH; const g = c.getContext('2d');
@@ -385,7 +385,7 @@ export function createLobby3D(app) {
     new GLTFLoader().load(new URL(sx < 0 ? 'models/divano_lobby.glb' : 'models/divano_lobby_bordeaux.glb', import.meta.url).href, (gltf) => {
       g.clear(); gltf.scene.rotation.y = Math.PI; g.add(gltf.scene);
     });
-    for (const o of [-0.5, 0.5]) spots.push({ x: sx * 3.6 + o, z: 4.75, hx: 0.25, hz: 0.12, pad: 0.45, label: 'Siediti', where: 'Atrio', seat: true, px: sx * 3.6 + o, pz: 5.2, yaw: 0 });
+    for (const o of [-0.5, 0.5]) spots.push({ x: sx * 3.6 + o, z: 4.75, hx: 0.25, hz: 0.12, pad: 0.45, label: 'Siediti', where: 'Lobby', seat: true, px: sx * 3.6 + o, pz: 5.2, yaw: 0 });
     solid(sx * 3.6 - 1.12, sx * 3.6 + 1.12, 4.85, 5.8);
   }
   const table = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 32), new THREE.MeshPhysicalMaterial({ color: '#6b4226', roughness: 0.35, clearcoat: 0.8 }));
@@ -435,10 +435,10 @@ export function createLobby3D(app) {
   // (staccati di qualche centimetro dalla parete, sopra l'architrave a 2,5 m)
   doorSign('Sala biliardo','#82ddbd',6.8,-Math.PI/2);
   doorSign('Sala giochi','#61d7ff',-6.8,Math.PI/2);
-  doorSign('Atrio', '#ffd23f', 7.2, Math.PI / 2);
-  doorSign('Atrio', '#ffd23f', -7.2, -Math.PI / 2);
-  doorSign('Atrio', '#ffd23f', 0, Math.PI).position.set(0, 2.92, -6.34);
-  doorSign('Atrio', '#ffd23f', 0, 0).position.set(0, 2.92, 6.34);
+  doorSign('Lobby', '#ffd23f', 7.2, Math.PI / 2);
+  doorSign('Lobby', '#ffd23f', -7.2, -Math.PI / 2);
+  doorSign('Lobby', '#ffd23f', 0, Math.PI).position.set(0, 2.92, -6.34);
+  doorSign('Lobby', '#ffd23f', 0, 0).position.set(0, 2.92, 6.34);
 
   // ========== SALA BILIARDO (x 7…19): i tavoli veri del gioco ==========
   const pools = [];
@@ -1627,7 +1627,7 @@ export function createLobby3D(app) {
       if(reducedMotion||Math.abs(pos.x-demo.x)>12)continue;
       demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
     }
-    const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Atrio';
+    const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Lobby';
     if (whereEl.textContent !== where) whereEl.textContent = where;
     lightRoom(where);
     // telecamera dietro il personaggio, che non passa i muri
@@ -1861,23 +1861,23 @@ export function createLobby3D(app) {
   // Luci per stanza: ogni luce in più pesa su ogni oggetto disegnato (sui telefoni si sente). Si accendono solo
   // quelle della stanza dove sei e dell'atrio; dall'atrio, che vede tutte le porte, la luce principale di ogni sala.
   // Le combinazioni si preparano subito dopo l'apertura, così cambiare stanza non dà scatti.
-  const roomOf = (x, z) => (z > 6.15 ? 'Sala cinema' : z < -6.15 ? 'Sala tavoli' : x > 7 ? 'Sala biliardo' : x < -7 ? 'Sala giochi' : 'Atrio');
+  const roomOf = (x, z) => (z > 6.15 ? 'Sala cinema' : z < -6.15 ? 'Sala tavoli' : x > 7 ? 'Sala biliardo' : x < -7 ? 'Sala giochi' : 'Lobby');
   const roomLights = [];
   scene.traverse((o) => { if (o.isLight && !o.isHemisphereLight) roomLights.push({ light: o, room: roomOf(o.getWorldPosition(new THREE.Vector3()).x, o.getWorldPosition(new THREE.Vector3()).z) }); });
   const mainLight = new Map();
-  for (const r of roomLights) if (r.room !== 'Atrio' && !r.light.isSpotLight && (!mainLight.has(r.room) || r.light.intensity > mainLight.get(r.room).intensity)) mainLight.set(r.room, r.light);
+  for (const r of roomLights) if (r.room !== 'Lobby' && !r.light.isSpotLight && (!mainLight.has(r.room) || r.light.intensity > mainLight.get(r.room).intensity)) mainLight.set(r.room, r.light);
   let litRoom = '';
   function lightRoom(where) {
     if (where === litRoom) return;
     litRoom = where;
-    for (const { light, room } of roomLights) light.visible = room === where || room === 'Atrio' || (where === 'Atrio' && mainLight.get(room) === light);
+    for (const { light, room } of roomLights) light.visible = room === where || room === 'Lobby' || (where === 'Lobby' && mainLight.get(room) === light);
   }
   let lightsReady = false;
   async function prepareLights() {
     if (lightsReady || !renderer.compileAsync) return;
     lightsReady = true;
     const keep = litRoom;
-    for (const room of ['Atrio', 'Sala biliardo', 'Sala giochi', 'Sala tavoli', 'Sala cinema']) {
+    for (const room of ['Lobby', 'Sala biliardo', 'Sala giochi', 'Sala tavoli', 'Sala cinema']) {
       if (room === keep) continue;
       // compileAsync legge le luci subito: si rimettono quelle giuste prima di aspettare, così non si vede niente
       lightRoom(room);
