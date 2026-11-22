@@ -39,11 +39,11 @@ export function makeMatch(room, number, user, now, body) {
     phase: 'waiting',
     created: now,
     revision: 1,
-    // 2 = uno contro uno; 3 = due contro uno; 4 = due contro due
-    capacity: [2, 3, 4].includes(body.players) ? body.players : 2,
+    // 2 = uno contro uno; da 3 a 8 a squadre (fino a 4 per squadra, i compagni li scelgono i giocatori)
+    capacity: Number.isInteger(body.players) && body.players >= 2 && body.players <= 8 ? body.players : 2,
     ptr: [0, 0],
     owner: user.player,
-    players: [{ id: user.player, name: String(user.name || 'Giocatore').slice(0, 40) }],
+    players: [{ id: user.player, name: String(user.name || 'Giocatore').slice(0, 40), team: 0 }],
     seats: [],
     match: null,
     prev: null,
@@ -59,7 +59,21 @@ export function joinMatch(m, user) {
   if (m.players.some((p) => p.id === user.player)) return false;
   if (m.phase !== 'waiting') throw Error('La partita è già cominciata.');
   if (m.players.length >= m.capacity) throw Error('Partita al completo.');
-  m.players.push({ id: user.player, name: String(user.name || 'Giocatore').slice(0, 40) });
+  // entra nella squadra con meno giocatori (poi può cambiarla finché la partita non parte)
+  const count = (t) => m.players.filter((p) => (p.team ?? 0) === t).length;
+  m.players.push({ id: user.player, name: String(user.name || 'Giocatore').slice(0, 40), team: count(1) < count(0) ? 1 : 0 });
+  m.revision++;
+  return true;
+}
+// Scelta del compagno: prima della partenza ognuno può passare nell'altra squadra (al massimo 4 per squadra)
+export function teamMatch(m, player, team) {
+  if (m.phase !== 'waiting') throw Error('La partita è già cominciata.');
+  if (team !== 0 && team !== 1) throw Error('Squadra non valida.');
+  const me = m.players.find((p) => p.id === player);
+  if (!me) throw Error('Non sei in questa partita.');
+  if ((me.team ?? 0) === team) return false;
+  if (m.players.filter((p) => (p.team ?? 0) === team).length >= E.MAX_TEAM) throw Error('Quella squadra è al completo.');
+  me.team = team;
   m.revision++;
   return true;
 }
@@ -77,11 +91,15 @@ export function startMatch(m, player, now) {
   if (m.phase !== 'waiting') throw Error('La partita è già cominciata.');
   if (player !== m.owner) throw Error('Solo chi ha creato la partita la fa partire.');
   if (m.players.length < 2) throw Error('Serve un avversario.');
-  // posti nell'ordine di arrivo: squadre alternate (1° e 3° contro 2° e 4°)
-  m.seats = m.players.slice(0, m.capacity).map((p) => p.id);
+  // squadre scelte dai giocatori; l'ordine dei compagni è quello di arrivo e resta fisso per tutta la partita
+  const players = m.players.slice(0, m.capacity);
+  const teams = [0, 1].map((t) => players.filter((p) => (p.team ?? 0) === t).map((p) => p.id));
+  if (!teams[0].length || !teams[1].length) throw Error('Servono giocatori in tutte e due le squadre.');
+  m.teams = teams;
+  m.seats = players.map((p) => p.id);
   m.ptr = [0, 0];
   const nameOf = (id) => m.players.find((p) => p.id === id).name;
-  const names = [0, 1].map((side) => ({ name: E.teamName(E.teamSeats(m.seats, side).map(nameOf)) }));
+  const names = [0, 1].map((side) => ({ name: E.teamName(m.teams[side].map(nameOf)) }));
   m.match = E.newGame(m.variant, names, { ...m.opts, seed: m.seed });
   E.setStarter(m.match, m.seed % 2);
   m.phase = 'playing';
@@ -116,7 +134,7 @@ export function cleanShot(body) {
 }
 
 // chi deve tirare adesso (id del giocatore)
-export const shooter = (m) => (m.match ? E.shooterId(m.seats, m.ptr || [0, 0], m.match.cur) : null);
+export const shooter = (m) => (m.match ? E.shooterOf(m, m.match.cur) : null);
 export function playMatch(m, player, body, now, auto = false) {
   if (m.phase !== 'playing') throw Error('La partita non è in corso.');
   const g = m.match;
@@ -141,8 +159,9 @@ export function playMatch(m, player, body, now, auto = false) {
   E.playShot(g, input);
   m.last = { seat, by, input, ...(auto ? { auto: true } : {}) };
   m.n++;
-  // la squadra lascia il tavolo: la prossima volta tira il compagno successivo
-  if (g.cur !== seat) m.ptr[seat] = (m.ptr[seat] || 0) + 1;
+  // turni obbligati tra compagni: palla 8, palla 9 e boccette a ogni colpo; le altre specialità quando la
+  // squadra lascia il tavolo. Il prossimo a tirare per quella squadra è sempre il compagno successivo.
+  if (E.EVERY_SHOT.includes(m.variant) || g.cur !== seat) m.ptr[seat] = (m.ptr[seat] || 0) + 1;
   // colpi del pilota automatico di fila: se nessuno gioca più (tre giri a testa) la partita finisce
   m.idle = auto ? m.idle + 1 : 0;
   const abandoned = m.idle >= 6;
@@ -152,7 +171,7 @@ export function playMatch(m, player, body, now, auto = false) {
     m.turnAt = null;
     m.abandoned = !g.over;
     // vince tutta la squadra
-    const ids = g.over && g.winner >= 0 ? E.teamSeats(m.seats, g.winner) : [];
+    const ids = g.over && g.winner >= 0 ? E.teamOf(m, g.winner) : [];
     m.winners = m.players.filter((p) => ids.includes(p.id));
   } else m.turnAt = now + TURN;
   m.revision++;
@@ -185,7 +204,7 @@ export class BiliardoRoom {
       capacity,
       // posto di chi tira (per il "Tocca a te" della campanella)
       turn: m.match ? Math.max(0, m.seats.indexOf(shooter(m))) : 0,
-      players: (m.seats.length ? m.seats.map((id) => m.players.find((p) => p.id === id)) : m.players).map(({ id, name }) => ({ id, name })),
+      players: (m.seats.length ? m.seats.map((id) => m.players.find((p) => p.id === id)) : m.players).map(({ id, name, team }) => ({ id, name, team: team ?? 0 })),
       expires: null
     };
   }
@@ -249,6 +268,7 @@ export class BiliardoRoom {
           // posti pieni: si parte da soli
           if (changed && m.players.length >= m.capacity) startMatch(m, m.owner, now);
         } else if (action === 'leave') changed = leaveMatch(m, user.player);
+        else if (action === 'team') changed = teamMatch(m, user.player, body.team);
         else if (action === 'start') startMatch(m, user.player, now);
         else if (action === 'play') playMatch(m, user.player, body, now);
         else return json({ error: 'Operazione non disponibile.' }, 404);

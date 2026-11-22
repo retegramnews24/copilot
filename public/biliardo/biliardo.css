@@ -120,3 +120,10 @@ input[type=range] { width: 100%; padding: 0; margin: 0; border: 0; background: n
   #hud .bottom .shoot { min-width: 80px; }
   #viewB { padding: 9px 8px; }
 }
+
+/* online a squadre: da 2 a 8 giocatori, i tasti vanno a capo; sala d'attesa con le due squadre */
+.row.np { flex-wrap: wrap; gap: 4px; justify-content: flex-end; }
+.row.np .seg { min-width: 34px; }
+#waitList li.team { margin: 4px 0; }
+#waitTeam { width: 100%; }
+

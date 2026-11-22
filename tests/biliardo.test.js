@@ -11,7 +11,8 @@ import {
   playMatch,
   advanceMatch,
   cleanShot,
-  shooter
+  shooter,
+  teamMatch
 } from '../biliardo-server.js';
 
 const anna = { player: 'p-anna', name: 'Anna' },
@@ -325,4 +326,46 @@ for (const variant of Object.keys(E.VARIANTS)) {
   assert.equal(o.n, 1, variant + ' online');
 }
 
+// ---- squadre scelte fino a 8: cambio squadra, massimo 4 per squadra, turni obbligati tra compagni ----
+{
+  const ps = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((k) => ({ player: 'p-' + k, name: k.toUpperCase() }));
+  const room = '00000000-0000-4000-8000-0000000000b8';
+  const o = makeMatch(room, 9, ps[0], 0, { variant: 'otto', players: 8 });
+  assert.equal(o.capacity, 8);
+  for (const p of ps.slice(1, 7)) joinMatch(o, p);
+  // squadre bilanciate all'ingresso, poi ognuno può cambiare
+  assert.deepEqual(o.players.map((p) => p.team), [0, 1, 0, 1, 0, 1, 0]);
+  teamMatch(o, 'p-c', 1);
+  assert.deepEqual(o.players.filter((p) => p.team === 1).map((p) => p.id), ['p-b', 'p-c', 'p-d', 'p-f']);
+  assert.throws(() => teamMatch(o, 'p-a', 1), /al completo/, 'al massimo 4 per squadra');
+  assert.throws(() => teamMatch(o, 'p-a', 2), /non valida/);
+  startMatch(o, 'p-a', 0);
+  assert.deepEqual(o.teams, [['p-a', 'p-e', 'p-g'], ['p-b', 'p-c', 'p-d', 'p-f']]);
+  assert.throws(() => teamMatch(o, 'p-e', 1), /cominciata/);
+  // palla 8 (doppio "scotch" WPA): i compagni si alternano a OGNI colpo, anche se la squadra resta al tavolo
+  const seen = [[], []];
+  for (let k = 0; k < 14 && o.phase === 'playing'; k++) {
+    const side = o.match.cur, who = shooter(o);
+    seen[side].push(who);
+    // chi non è di turno non può tirare, nemmeno un compagno
+    for (const id of o.teams[side]) if (id !== who) assert.throws(() => playMatch(o, id, E.autoShot(o.match), 1), /Non tocca a te/);
+    playMatch(o, who, E.autoShot(o.match), 1);
+  }
+  for (const [side, list] of seen.entries())
+    list.forEach((id, i) => assert.equal(id, o.teams[side][i % o.teams[side].length], 'ordine fisso dei compagni'));
+  // con una squadra vuota non si parte
+  const lonely = makeMatch(room, 10, ps[0], 0, { variant: 'snooker', players: 3 });
+  joinMatch(lonely, ps[1]);
+  teamMatch(lonely, 'p-b', 0);
+  assert.throws(() => startMatch(lonely, 'p-a', 0), /tutte e due le squadre/);
+  // snooker (doppio WPBSA): i compagni si alternano a ogni turno al tavolo, non a ogni colpo
+  teamMatch(lonely, 'p-b', 1);
+  joinMatch(lonely, ps[2]);
+  startMatch(lonely, 'p-a', 0);
+  assert.deepEqual(lonely.teams, [['p-a', 'p-c'], ['p-b']]);
+  const before = lonely.ptr.slice(), side = lonely.match.cur;
+  playMatch(lonely, shooter(lonely), E.autoShot(lonely.match), 1);
+  if (lonely.match.cur === side) assert.deepEqual(lonely.ptr, before, 'stesso giocatore finché la squadra resta al tavolo');
+  else assert.equal(lonely.ptr[side], before[side] + 1);
+}
 console.log('biliardo: ok');

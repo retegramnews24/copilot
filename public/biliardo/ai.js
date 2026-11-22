@@ -2,7 +2,7 @@
 // accosti al pallino…), li simula con la fisica vera e le stesse regole, e sceglie il migliore.
 // Il livello decide quanto sbaglia la mira.
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=2db7d98a7f';
+import * as E from './engine.js?v=725086e1a6';
 
 const LEVELS = {
   facile: { err: 0.022, pick: 5, spin: false, budget: 24 },

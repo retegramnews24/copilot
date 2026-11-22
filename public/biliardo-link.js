@@ -166,7 +166,7 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
       } finally {
         pending = false;
       }
-    } else if (data?.type === 'bil:action' && ['start', 'play', 'close', 'leave'].includes(data.kind)) {
+    } else if (data?.type === 'bil:action' && ['start', 'play', 'close', 'leave', 'team'].includes(data.kind)) {
       const selected = room;
       if (!selected) return;
       try {

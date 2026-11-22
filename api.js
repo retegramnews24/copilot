@@ -92,7 +92,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.43', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.44', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
@@ -144,7 +144,9 @@ async function route(req, env) {
       new Request(u.origin + '/cinema/youtube' + u.search, req)
     );
 
-  const bil = u.pathname.match(/^\/api\/biliardo\/([a-f0-9-]{36})\/(state|join|leave|start|play|close)$/);
+  const bil = u.pathname.match(
+    /^\/api\/biliardo\/([a-f0-9-]{36})\/(state|join|leave|start|play|close|team)$/
+  );
   if (bil)
     return env.ROOMS.get(env.ROOMS.idFromName('biliardo:' + bil[1])).fetch(
       new Request(u.origin + '/biliardo/' + bil[2] + u.search, req)

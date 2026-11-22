@@ -687,12 +687,43 @@ export class Room extends DurableObject {
               accent: /^#[0-9a-f]{6}$/i.test(pose.accent) ? pose.accent : '#d62828',
               hair: /^#[0-9a-f]{6}$/i.test(pose.hair) ? pose.hair : '#4a2a17',
               skin: /^#[0-9a-f]{6}$/i.test(pose.skin) ? pose.skin : '#d79a6b',
-              // in giro per il club (station 'walk'): posizione e direzione, arrotondate
-              ...(pose.station === 'walk' && Number.isFinite(pose.x) && Number.isFinite(pose.z)
+              // in giro per il club (station 'walk') o seduti al cinema ('seat'): posizione e direzione, arrotondate
+              ...((pose.station === 'walk' || pose.station === 'seat') &&
+              Number.isFinite(pose.x) &&
+              Number.isFinite(pose.z)
                 ? {
                     x: Math.round(Math.max(-30, Math.min(30, pose.x)) * 20) / 20,
                     z: Math.round(Math.max(-30, Math.min(30, pose.z)) * 20) / 20,
                     yaw: Number.isFinite(pose.yaw) ? Math.round(pose.yaw * 20) / 20 : 0
+                  }
+                : {}),
+              // seduti: altezza del posto e dove guarda la testa
+              ...(pose.station === 'seat'
+                ? {
+                    y: Number.isFinite(pose.y) ? Math.round(Math.max(-1, Math.min(3, pose.y)) * 20) / 20 : 0,
+                    look: Number.isFinite(pose.look)
+                      ? Math.round(Math.max(-3.2, Math.min(3.2, pose.look)) * 20) / 20
+                      : 0,
+                    pitch: Number.isFinite(pose.pitch)
+                      ? Math.round(Math.max(-1.6, Math.min(1.6, pose.pitch)) * 20) / 20
+                      : 0
+                  }
+                : {}),
+              // azioni solo visive mentre si cammina: abbassato, in parata, colpi dati e a chi (niente salute)
+              ...(pose.station === 'walk'
+                ? {
+                    ...(Number.isFinite(pose.look) && pose.look !== 0
+                      ? { look: Math.round(Math.max(-0.9, Math.min(0.9, pose.look)) * 20) / 20 }
+                      : {}),
+                    ...(pose.crouch ? { crouch: 1 } : {}),
+                    ...(pose.guard ? { guard: 1 } : {}),
+                    ...(Number.isInteger(pose.punch) && pose.punch > 0 ? { punch: pose.punch % 1e9 } : {}),
+                    ...(pose.hit &&
+                    typeof pose.hit.id === 'string' &&
+                    /^[\w:-]{1,64}$/.test(pose.hit.id) &&
+                    Number.isInteger(pose.hit.n)
+                      ? { hit: { id: pose.hit.id, n: pose.hit.n % 1e9, blocked: pose.hit.blocked === true } }
+                      : {})
                   }
                 : {})
             }

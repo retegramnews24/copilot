@@ -32,13 +32,13 @@ export function tableNotice(user, game, number, room, summary = null) {
       ' auto, ' +
       summary.laps +
       (summary.laps === 1 ? ' giro)' : ' giri)');
-  // Biliardo: the specialty, the teams (3 = two against one, 4 = two against two) and the players wanted
+  // Biliardo: the specialty, the teams (from 3 players: teams chosen by the players, up to 8) and the players wanted
   if (game === 'biliardo' && summary?.variant) {
     const cap = summary.capacity || 2;
     where +=
       ' · ' +
       (BILIARDO_NAMES[summary.variant] || 'Biliardo') +
-      (cap === 3 ? ' · 2 contro 1' : cap === 4 ? ' · 2 contro 2' : '') +
+      (cap > 2 ? ' · a squadre, ' + cap + ' giocatori' : '') +
       ' · cerca ' +
       (cap - 1) +
       (cap === 2 ? ' giocatore' : ' giocatori');

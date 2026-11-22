@@ -3414,6 +3414,21 @@ button.uno-card:not(:disabled) {
 .window-mode[hidden] {
   display: none;
 }
+/* Avvio in 3D: finché la Lobby 3D non è pronta copre la Lobby classica con un caricamento (niente lampo del 2D). */
+html.boot3d body::after {
+  content: 'Carico la Lobby 3D…';
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 45%, #241a30, #0b0810 70%);
+  color: #cfc6e6;
+  font:
+    600 16px system-ui,
+    sans-serif;
+}
 /* Lobby 3D: tasto che apre il guscio 3D (public/lobby3d/). */
 .lobby3d-open {
   width: auto;

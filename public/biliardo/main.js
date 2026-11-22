@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=2db7d98a7f';
-import { plan } from './ai.js?v=daf9ff5d64';
+import * as E from './engine.js?v=725086e1a6';
+import { plan } from './ai.js?v=f1e7559cc5';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
@@ -59,7 +59,7 @@ const cfg = {
   guide: store.get('guide', '1') === '1',
   view: store.get('view', 'over'),
   sens: +store.get('sens', '100') / 100,
-  netPlayers: [2, 3, 4].includes(+store.get('np', '2')) ? +store.get('np', '2') : 2,
+  netPlayers: +store.get('np', '2') >= 2 && +store.get('np', '2') <= 8 ? +store.get('np', '2') : 2,
   cush: +store.get('cush', '3'),
   bright: +store.get('bright', '75') / 100,
   charge: store.get('charge', 'normale'),
@@ -133,10 +133,10 @@ function newGame() {
 // ---------- turni ----------
 const cur = () => m.players[m.cur];
 // online (anche a squadre): tocca a chi deve tirare per la squadra di turno; chi non è seduto guarda
-const shooterId = () => (net && net.seats ? E.shooterId(net.seats, net.ptr || [0, 0], m.cur) : null);
+const shooterId = () => (net && net.seats ? E.shooterOf(net, m.cur) : null);
 const nameOfId = (id) => { const p = net && net.players.find((q) => q.id === id); return p ? p.name : ''; };
 const myTurn = () => (net ? !!me && shooterId() === me.player && net.phase === 'playing' : !cur().cpu);
-const mySide = () => (net && me ? net.seats.indexOf(me.player) % 2 : -1); // -1: spettatore (indexOf -1 → -1 % 2 = -1)
+const mySide = () => (net && me ? E.sideOf(net, me.player) : -1); // -1: spettatore
 const shooterName = () => (net ? nameOfId(shooterId()) || cur().name : cur().name);
 const cueBall = () => m.balls[E.cueId(m)];
 
@@ -643,8 +643,7 @@ function showStart() {
   $('modeInfo').textContent = cfg.mode === '1' ? 'Giochi contro il computer.'
     : cfg.mode === '2' ? 'Due giocatori a turno sullo stesso telefono o PC.'
       : embedded ? (np === 2 ? 'Partita online contro un altro giocatore di Binottoland'
-        : np === 3 ? 'Partita online a squadre, 2 contro 1: nella squadra da due i compagni tirano a turno'
-          : 'Partita online a squadre, 2 contro 2: i compagni tirano a turno, come nel doppio') +
+        : `Partita online a squadre, ${np} giocatori: nella sala d’attesa ognuno sceglie la sua squadra (fino a 4), poi i compagni tirano a turno, ${E.EVERY_SHOT.includes(cfg.variant) ? 'a ogni colpo' : 'a ogni turno al tavolo'}`) +
         ': compare negli avvisi e nella Lobby, chi arriva dopo guarda. 1 minuto a colpo, poi tira il pilota automatico.'
         : 'Online solo aprendo il gioco da Binottoland.';
   // punteggio da raggiungere / rosse (gli stessi valori che accetta il motore)
@@ -765,13 +764,22 @@ function showWait(st) {
   $('start').hidden = true; $('hud').hidden = true; $('wait').hidden = false;
   const v = E.VARIANTS[st.variant];
   const cap = st.capacity || 2, missing = cap - st.players.length;
-  $('waitT').textContent = `${v.name} online · sala ${st.number}` + (cap > 2 ? ` · ${cap === 3 ? '2 contro 1' : '2 contro 2'}` : '');
+  $('waitT').textContent = `${v.name} online · sala ${st.number}` + (cap > 2 ? ` · a squadre, ${cap} giocatori` : '');
   $('waitS').textContent = missing > 0
     ? `Aspetto ${missing === 1 ? 'un giocatore' : missing + ' giocatori'}: la partita è negli avvisi e nella Lobby di Binottoland.` + (st.players.length >= 2 ? ' Chi l’ha creata può anche partire ora.' : '')
     : 'Pronti!';
-  // squadre: posti in ordine di arrivo, 1° e 3° contro 2° e 4°
+  // squadre: ognuno sceglie la sua (il compagno), fino a 4 per squadra; i compagni tirano a turno nell'ordine di arrivo
   const esc = (s) => String(s).replace(/[<&>"]/g, '');
-  $('waitList').innerHTML = st.players.map((p, i) => `<li>${esc(p.name)}${p.id === (me && me.player) ? ' (tu)' : ''}${cap > 2 ? ` · squadra ${i % 2 ? 'B' : 'A'}` : ''}</li>`).join('');
+  const mine = st.players.find((p) => p.id === (me && me.player));
+  if (cap > 2) {
+    const team = (t) => st.players.filter((p) => (p.team ?? 0) === t);
+    $('waitList').innerHTML = [0, 1].map((t) => `<li class="team"><b>Squadra ${t ? 'B' : 'A'}</b> (${team(t).length}/${E.MAX_TEAM}): ${team(t).map((p, k) => `${k + 1}. ${esc(p.name)}${p === mine ? ' (tu)' : ''}`).join(' · ') || '—'}</li>`).join('')
+      + `<li class="muted">${E.EVERY_SHOT.includes(st.variant) ? 'I compagni si alternano a ogni colpo, in quest\u2019ordine.' : 'I compagni si alternano a ogni turno al tavolo, in quest\u2019ordine.'}</li>`;
+  } else $('waitList').innerHTML = st.players.map((p) => `<li>${esc(p.name)}${p === mine ? ' (tu)' : ''}</li>`).join('');
+  const other = mine ? 1 - (mine.team ?? 0) : 0;
+  $('waitTeam').hidden = cap <= 2 || !mine;
+  $('waitTeam').textContent = `Passa nella squadra ${other ? 'B' : 'A'}`;
+  $('waitTeam').disabled = !!mine && st.players.filter((p) => (p.team ?? 0) === other).length >= E.MAX_TEAM;
   const owner = st.owner === (me && me.player);
   $('waitStart').hidden = !owner || st.players.length < 2;
   $('waitStart').textContent = missing > 0 ? `Parti ora (${st.players.length})` : 'Parti';
@@ -779,6 +787,7 @@ function showWait(st) {
   if (!m || m.variant !== st.variant) { m = E.newGame(st.variant, [{ name: 'A' }, { name: 'B' }], {}); stage(m); }
 }
 $('waitStart').onclick = () => toApp('action', { kind: 'start' });
+$('waitTeam').onclick = () => { const mine = net && net.players.find((p) => p.id === (me && me.player)); if (mine) toApp('action', { kind: 'team', payload: { team: 1 - (mine.team ?? 0) } }); };
 $('waitLeave').onclick = () => toApp('action', { kind: net && net.owner === (me && me.player) ? 'close' : 'leave' });
 
 addEventListener('message', (e) => {

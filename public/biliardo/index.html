@@ -7,7 +7,7 @@
 <title>Biliardo</title>
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-512.png">
-<link rel="stylesheet" href="biliardo.css?v=2f074fbd2c">
+<link rel="stylesheet" href="biliardo.css?v=32d8eb2e0c">
 </head>
 <body>
 <div id="app">
@@ -52,7 +52,7 @@
       <div id="vDesc" class="muted"></div>
       <div class="row seg3"><button class="seg" data-m="1">1 giocatore</button><button class="seg" data-m="2">2 giocatori</button><button class="seg" data-m="net">Online</button></div>
       <div id="modeInfo" class="muted"></div>
-      <div class="row" id="netRow" hidden><span>Giocatori</span><span class="sp"></span><button class="seg" data-np="2">2</button><button class="seg" data-np="3">3</button><button class="seg" data-np="4">4</button></div>
+      <div class="row" id="netRow" hidden><span>Giocatori</span><span class="sp"></span><span class="row np"><button class="seg" data-np="2">2</button><button class="seg" data-np="3">3</button><button class="seg" data-np="4">4</button><button class="seg" data-np="5">5</button><button class="seg" data-np="6">6</button><button class="seg" data-np="7">7</button><button class="seg" data-np="8">8</button></span></div>
       <div class="row" id="lvRow"><span>Computer</span><span class="sp"></span><button class="seg" data-l="facile">Facile</button><button class="seg" data-l="medio">Medio</button><button class="seg" data-l="difficile">Difficile</button></div>
       <div class="row" id="cushRow" hidden><span>Tipo</span><span class="sp"></span><button class="seg" data-cu="0">Libera</button><button class="seg" data-cu="1">1 sponda</button><button class="seg" data-cu="3">3 sponde</button></div>
       <div class="row" id="tgRow"><span id="tgLbl">Punti</span><span class="sp"></span><span id="tgBtns" class="row"></span></div>
@@ -72,6 +72,7 @@
       <b class="big" id="waitT">Partita online</b>
       <div id="waitS" class="muted"></div>
       <ul id="waitList"></ul>
+      <button id="waitTeam" hidden>Passa nell'altra squadra</button>
       <div class="row"><button id="waitLeave">Esci</button><span class="sp"></span><button id="waitStart" class="pri" hidden>Parti</button></div>
     </div>
   </div>
@@ -123,6 +124,6 @@
   </div>
 </div>
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
-<script type="module" src="main.js?v=011c15b639"></script>
+<script type="module" src="main.js?v=bc6417fa69"></script>
 </body>
 </html>
