@@ -117,6 +117,19 @@ export function shooterId(seats, ptr, side) {
   const list = teamSeats(seats, side);
   return list.length ? list[(ptr[side] || 0) % list.length] : null;
 }
+// Squadre scelte dai giocatori (online da 2 a 8, fino a 4 per squadra): net.teams = [[id…], [id…]].
+// Le partite vecchie senza teams usano i posti alterni (teamSeats).
+export const teamOf = (net, side) => (net.teams ? net.teams[side] || [] : teamSeats(net.seats || [], side));
+export function shooterOf(net, side) {
+  const list = teamOf(net, side);
+  return list.length ? list[((net.ptr || [0, 0])[side] || 0) % list.length] : null;
+}
+export const sideOf = (net, id) => (net.teams ? net.teams.findIndex((t) => t.includes(id)) : (net.seats || []).indexOf(id) % 2);
+// Doppio secondo i regolamenti: palla 8 e palla 9 come lo "scotch doubles" WPA (i compagni si alternano a ogni
+// colpo), boccette a coppie FIBiS (ognuno la sua bocciata, a turno); snooker, 5 birilli e carambola: i compagni si
+// alternano a ogni turno al tavolo. In ogni caso l'ordine dei compagni è fisso e obbligato.
+export const EVERY_SHOT = ['otto', 'nove', 'boccette'];
+export const MAX_TEAM = 4;
 export function teamName(names) {
   return names.length > 1 ? names.slice(0, -1).join(', ') + ' e ' + names[names.length - 1] : names[0] || 'Giocatore';
 }

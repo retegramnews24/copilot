@@ -49,6 +49,13 @@ niente doppio sul pallino in penitenza dopo un fallo d'acchito (art. 13 a), lanc
 - Con 2 giocatori parte da sola. Ogni colpo `{dx, dz, speed, sy, sx, px?, pz?, qx?, qz?, call?}` va a `/api/biliardo/<sala>/play`:
   il server lo rifà con `engine.playShot` e salva tavolo prima, colpo e tavolo dopo; gli altri telefoni rifanno il colpo e ottengono lo stesso tavolo.
 - 1 minuto a colpo, poi tira il pilota automatico; 6 colpi automatici di fila chiudono la partita. Il vincitore va nelle classifiche.
+- **A squadre, da 3 a 8 giocatori** (al massimo 4 per squadra): chi entra va nella squadra con meno giocatori e nella sala
+  d'attesa può passare nell'altra ("Passa nella squadra A/B"), così ci si sceglie il compagno. Si parte solo con
+  giocatori in tutte e due le squadre. I compagni tirano in un ordine fisso (quello di arrivo) e obbligato: il server
+  accetta il colpo solo da chi è di turno.
+  - Palla 8 e Palla 9: doppio "scotch" WPA, i compagni si alternano a **ogni colpo**, anche se la squadra resta al tavolo.
+  - Boccette: a coppie FIBiS, ognuno la sua bocciata a turno (**ogni colpo**).
+  - Snooker, 5 birilli, Carambola: i compagni si alternano a **ogni turno al tavolo** (quando la squadra lo riprende).
 
 ## Dove è collegato nell'app
 

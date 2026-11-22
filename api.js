@@ -144,7 +144,9 @@ async function route(req, env) {
       new Request(u.origin + '/cinema/youtube' + u.search, req)
     );
 
-  const bil = u.pathname.match(/^\/api\/biliardo\/([a-f0-9-]{36})\/(state|join|leave|start|play|close)$/);
+  const bil = u.pathname.match(
+    /^\/api\/biliardo\/([a-f0-9-]{36})\/(state|join|leave|start|play|close|team)$/
+  );
   if (bil)
     return env.ROOMS.get(env.ROOMS.idFromName('biliardo:' + bil[1])).fetch(
       new Request(u.origin + '/biliardo/' + bil[2] + u.search, req)

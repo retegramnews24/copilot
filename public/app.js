@@ -29,7 +29,7 @@ import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=cbf0a82bb6';
 import {createArcadeLink} from './arcade-link.js?v=34fb67f403';
 import {createF1Link} from './f1-link.js?v=28d33c1b41';
-import {createBiliardoLink} from './biliardo-link.js?v=bb0b63f788';
+import {createBiliardoLink} from './biliardo-link.js?v=e5268414c2';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
@@ -62,9 +62,12 @@ const f1=createF1Link({...linkBase,games:()=>games,roomClosed:selected=>{games=g
 // Biliardo (public/biliardo/): sala giochi 3D, palla 8, snooker, 5 birilli e boccette; online a due (see biliardo-link.js).
 const biliardo=createBiliardoLink({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
 initCatalog();
-// Lobby 3D (public/lobby3d/): guscio facoltativo della Lobby. Lavagna = Settings, tavoli = Biliardo,
-// cabinati = giochi arcade: apre le schermate che ci sono già e torna da sola quando le chiudi.
-const LOBBY3D_KEY='binottoland-lobby3d';let sharedTableVolume=80,lobby3d=null,lobby3dBack=0,lobby3dIdle=0;
+// Lobby 3D (public/lobby3d/): è la Lobby principale. Lavagna = Settings, bacheca = chat, avvisi e classifica,
+// tavoli = Biliardo, cabinati = giochi arcade: apre le schermate che ci sono già e torna da sola quando le chiudi.
+// Il tasto "Lobby classica" passa al 2D: la scelta (2D o 3D) resta ricordata su questo telefono in ogni caso,
+// anche entrando e uscendo dai giochi. Chiave: '0' = 2D; assente o '1' = 3D.
+const LOBBY3D_KEY='binottoland-lobby3d';let sharedTableVolume=80,lobby3d=null,lobby3dBack=0,lobby3dIdle=0,lastLobby=null;
+const want3D=()=>{try{return localStorage.getItem(LOBBY3D_KEY)!=='0'}catch{return true}};
 const lobbyIdle=()=>!$('page-game').hidden&&!$('lobby').hidden&&![...document.querySelectorAll('[id$="-overlay"]')].some(o=>!o.hidden)&&$('game-sheet')?.hidden!==false&&!document.querySelector('dialog[open]');
 let clubStation=null;
 function clubAudio(){
@@ -74,17 +77,19 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=2c856628a6');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=43a9003a26');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.removeItem(LOBBY3D_KEY)}catch{}sendPresence()}})}
+}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot3d');sendPresence()}})}
  lobby3d.show();
+ document.documentElement.classList.remove('boot3d');
 }
+// caricamento dell'avvio in 3D: sparisce quando la 3D è aperta, scegliendo il 2D, o al massimo dopo 15 secondi
+setTimeout(()=>document.documentElement.classList.remove('boot3d'),15000);
 $('lobby3d-open').onclick=()=>openLobby3D().catch(e=>err('Lobby 3D: '+e.message));
-// Back in the Lobby after a screen opened from 3D (game closed, Settings left): after two quiet checks the 3D comes back.
-// Also at start, when it was left on: it opens as soon as the Lobby is free (after the splash).
-setInterval(()=>{if(!lobby3dBack||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dBack=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
-try{if(localStorage.getItem(LOBBY3D_KEY)==='1')lobby3dBack=1}catch{}
+// In 3D: ogni volta che la Lobby è libera (all'avvio dopo lo splash, uscendo da un gioco, tornando da Settings o
+// da Giochi) dopo due controlli tranquilli la 3D si riapre da sola. Appena aperto un gioco si aspetta un attimo.
+setInterval(()=>{if(!want3D()||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
 let simSummary=null,simSummaryAt=0;
 // Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
 async function loadSimSummary(force=false){
@@ -385,7 +390,7 @@ function connectLobby(){
  clearTimeout(lobbyRetry);if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
  socket.onopen=()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();renderSocial()};
- socket.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
+ socket.onmessage=e=>{try{const data=JSON.parse(e.data);if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
  socket.onclose=()=>{clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }

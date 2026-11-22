@@ -10,10 +10,11 @@ import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
-import * as E from '../biliardo/engine.js?v=2db7d98a7f';
+import * as E from '../biliardo/engine.js?v=725086e1a6';
 import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
-import { makeCharacter, animateCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=4dedab54c1';
+import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=dbec3e8544';
+import { gameTitle } from '../game-info.js?v=dab50e1d8e';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 
 const H = 3.4; // altezza delle stanze
@@ -70,6 +71,7 @@ export function createLobby3D(app) {
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild;
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
+  hint.hidden = true; // i comandi sono spiegati in Settings → Personaggio e pallina
   hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
   const renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true, powerPreference: 'high-performance' });
@@ -221,6 +223,131 @@ export function createLobby3D(app) {
   rbox(1.5, 2.05, 0.06, 0.025, std('#3b2416', 0.5), gpX, 1.45, -5.96);
   plane(1.36, 1.92, new THREE.MeshStandardMaterial({ map: gamesPoster(), roughness: 0.7 }), gpX, 1.45, -5.92);
   spots.push({ x: gpX, z: -5.6, hx: 0.75, hz: 0.3, pad: 1.1, label: 'Tutti i giochi', where: 'Atrio', act: () => app.openGames() });
+  // ---------- bacheca e avvisi (parete di sinistra dell'atrio, a sinistra della lavagna dei Settings) ----------
+  // Da lontano si vedono i foglietti appuntati sul sughero: avvisi, chat, podio e top 5. Con "Apri" la vista si mette
+  // davanti alla bacheca e la bacheca diventa vera: la chat e gli avvisi dell'app stanno sopra il sughero (si legge,
+  // si scrive, si apre un avviso), senza finestre a parte. Esc o ✕ sulla bacheca per tornare a camminare.
+  const bdX = -6.765, bdZ = -3.6, bdW = 1.62, bdH = 1.5, BW = 1024, BH = 948; // guarda verso +x (il centro dell'atrio)
+  rbox(bdW + 0.1, bdH + 0.1, 0.07, 0.025, std('#5a3a22', 0.55), bdX - 0.04, 1.5, bdZ).rotation.y = Math.PI / 2;
+  const boardCanvas = document.createElement('canvas');
+  boardCanvas.width = BW; boardCanvas.height = BH;
+  const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.colorSpace = THREE.SRGBColorSpace; boardTex.anisotropy = 4;
+  const boardMesh = plane(bdW, bdH, new THREE.MeshStandardMaterial({ map: boardTex, roughness: 0.9 }), bdX, 1.5, bdZ, Math.PI / 2);
+  spots.push({ x: bdX + 0.32, z: bdZ, hx: 0.3, hz: bdW / 2, pad: 1.1, label: 'Bacheca e avvisi', where: 'Atrio', board: true, act: () => openBoard() });
+  const firstName = n => String(n || '').split(' ')[0].slice(0, 14);
+  const cork = (() => {
+    const c = document.createElement('canvas'); c.width = BW; c.height = BH; const g = c.getContext('2d');
+    g.fillStyle = '#b98a5a'; g.fillRect(0, 0, BW, BH);
+    for (let i = 0; i < 2600; i++) { g.fillStyle = 'rgba(' + (90 + Math.random() * 60 | 0) + ',' + (55 + Math.random() * 40 | 0) + ',25,' + (0.18 + Math.random() * 0.25) + ')'; g.fillRect(Math.random() * BW, Math.random() * BH, 3 + Math.random() * 5, 2 + Math.random() * 4); }
+    return c;
+  })();
+  const PODIUM = [[1, '#c3c7cf', 0.66], [0, '#d9b44a', 1], [2, '#c98b52', 0.48]]; // 2°, 1°, 3°
+  let boardKey = '', boardAt = 0;
+  // disegno della bacheca vista da lontano (sughero, foglietti, podio)
+  function paintBoard(force) {
+    const data = app.board?.() || {};
+    const notices = (data.notices || []).slice(-4).reverse(), chat = (data.messages || []).slice(-6), top = (data.leaderboard || []).slice(0, 5);
+    const key = JSON.stringify([notices.map(n => n.id), chat.map(m => m.id || m.at), top.map(r => [r.id, r.wins])]);
+    if (!force && key === boardKey) return;
+    boardKey = key;
+    const g = boardCanvas.getContext('2d');
+    g.drawImage(cork, 0, 0);
+    g.fillStyle = '#2b2140'; g.font = 'bold 60px "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.fillText('Bacheca e avvisi', BW / 2, 70);
+    const note = (x, y, nw, nh, color, title, tilt, body) => {
+      g.save(); g.translate(x + nw / 2, y + nh / 2); g.rotate(tilt); g.translate(-nw / 2, -nh / 2);
+      g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 14; g.shadowOffsetY = 6; g.fillStyle = color; g.fillRect(0, 0, nw, nh); g.shadowColor = 'transparent';
+      g.fillStyle = '#d62828'; g.beginPath(); g.arc(nw / 2, 16, 11, 0, 7); g.fill();
+      g.fillStyle = '#2a2230'; g.textAlign = 'left'; g.font = 'bold 38px Arial, sans-serif'; g.fillText(title, 22, 68);
+      body(nw, nh); g.restore();
+    };
+    const lines = (list, nw, y0, step, font) => {
+      g.font = font; g.fillStyle = '#2a2230'; g.textAlign = 'left';
+      list.forEach((t, i) => { let s2 = String(t); while (g.measureText(s2).width > nw - 44 && s2.length > 3) s2 = s2.slice(0, -2); if (s2 !== String(t)) s2 += '…'; g.fillText(s2, 22, y0 + i * step); });
+    };
+    note(30, 105, 450, 420, '#fff6b8', '🔔 Avvisi', -0.02, nw => lines(notices.length ? notices.map(n => n.text) : ['Nessun avviso'], nw, 118, 72, '28px Arial, sans-serif'));
+    note(505, 100, 490, 815, '#d8f1ff', '💬 Chat', 0.012, nw => lines(chat.length ? chat.flatMap(m => [firstName(m.name) + ':', '  ' + (m.text || '')]) : ['Scrivi alla Lobby'], nw, 118, 56, '28px "Segoe Print", "Comic Sans MS", Arial, sans-serif'));
+    note(30, 545, 450, 375, '#e6ffd8', '🏆 Classifica', -0.012, () => {
+      // podio disegnato: 2° · 1° · 3°, con il nome sopra ogni gradino
+      PODIUM.forEach(([i, color, k], col) => {
+        const x = 30 + col * 132, hgt = 120 * k, y = 250 - hgt;
+        g.fillStyle = color; g.fillRect(x, y, 120, hgt); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x, y + hgt - 6, 120, 6);
+        g.fillStyle = '#fff'; g.font = 'bold 44px "Arial Black", Arial'; g.textAlign = 'center'; g.fillText(String(i + 1), x + 60, y + hgt / 2 + 16);
+        g.fillStyle = '#2a2230'; g.font = 'bold 24px Arial'; g.fillText(top[i] ? firstName(top[i].name) : '—', x + 60, y - 12);
+      });
+      g.textAlign = 'left'; g.font = '24px Arial';
+      top.slice(3, 5).forEach((r, i) => g.fillText((i + 4) + '. ' + r.name + ' · ' + r.wins, 30, 300 + i * 34));
+      if (!top.length) g.fillText('Nessuna vittoria', 30, 300);
+    });
+    boardTex.needsUpdate = true;
+  }
+  paintBoard(true);
+  // la bacheca "vera": un foglio grande come la bacheca, messo sul sughero con la prospettiva della telecamera
+  const boardDom = document.createElement('div');
+  boardDom.className = 'l3d-cork'; boardDom.hidden = true;
+  boardDom.innerHTML = '<div class="cork-title">Bacheca e avvisi<button class="cork-close" aria-label="Torna a camminare">✕</button></div>'
+    + '<section class="cork-note cork-yellow cork-notices"><h3>🔔 Avvisi</h3><div data-slot="notices"></div></section>'
+    + '<section class="cork-note cork-blue cork-chat"><h3>💬 Chat</h3><div data-slot="chat"></div></section>'
+    + '<section class="cork-note cork-green cork-rank"><h3>🏆 Classifica</h3><div class="cork-podium"></div><ol class="cork-top"></ol></section>';
+  el.append(boardDom);
+  const boardStyle = document.createElement('style');
+  boardStyle.textContent = '.l3d-cork{position:absolute;left:0;top:0;width:' + BW + 'px;height:' + BH + 'px;transform-origin:0 0;z-index:2;background:url(' + cork.toDataURL('image/jpeg', 0.8) + ');color:#2a2230;font:26px/1.3 system-ui,Arial,sans-serif}'
+    + '.l3d-cork[hidden]{display:none}.cork-title{position:absolute;left:0;right:0;top:14px;text-align:center;font:bold 56px "Arial Black",Arial,sans-serif;color:#2b2140}'
+    + '.l3d-cork .cork-close{position:absolute;right:20px;top:0;width:68px!important;height:68px;min-height:68px;padding:0!important;font-size:34px!important;border-radius:50%;background:#2b2140!important;color:#fff!important;border:0!important}'
+    + '.cork-note{position:absolute;box-shadow:0 8px 18px #0006;padding:14px 20px;overflow:hidden;display:flex;flex-direction:column}.cork-note h3{margin:0 0 8px;font:bold 36px Arial,sans-serif}'
+    + '.cork-yellow{background:#fff6b8;left:30px;top:105px;width:450px;height:420px;transform:rotate(-1deg)}.cork-blue{background:#d8f1ff;left:505px;top:100px;width:490px;height:815px;transform:rotate(.6deg)}.cork-green{background:#e6ffd8;left:30px;top:545px;width:450px;height:375px;transform:rotate(-.6deg)}'
+    + '.cork-note [data-slot]{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:8px}'
+    + '.l3d-cork #chat-messages{flex:1;min-height:0;max-height:none;overflow:auto;font-size:24px}'
+    + '.l3d-cork .chat-message{display:flex;gap:10px;align-items:flex-start;margin:6px 0}.l3d-cork .chat-message.mine{flex-direction:row-reverse}'
+    + '.l3d-cork .chat-copy{background:#fffdf4!important;color:#2a2230!important;border:2px solid #2a2230;border-radius:16px;padding:8px 14px;box-shadow:2px 3px 0 #2a223055;max-width:80%;font-family:\"Comic Sans MS\",\"Comic Neue\",\"Segoe Print\",cursive}'
+    + '.l3d-cork .chat-message.mine .chat-copy{background:#fff1c2!important}.l3d-cork .chat-copy small{display:block;font-size:18px;color:#6a5d70!important}.l3d-cork .chat-copy p{margin:2px 0 0;font-size:25px;color:#2a2230!important}'
+    + '.l3d-cork #chat-form{display:flex;gap:8px;order:2}.l3d-cork #chat-input{flex:1;font-size:26px;padding:10px;border-radius:10px;border:2px solid #8fb3c9;background:#fff;color:#111}.l3d-cork #chat-send{width:auto!important;font-size:24px!important;padding:8px 16px!important}'
+    + '.l3d-cork #notices-list{font-size:22px;color:#2a2230}.l3d-cork #notices-list *{color:#2a2230}.l3d-cork #notices-list button{font-size:20px!important;width:auto!important}'
+    + '.cork-podium{display:flex;align-items:flex-end;gap:10px;height:190px}.cork-podium div{flex:1;text-align:center;border-radius:10px 10px 0 0;font:bold 24px Arial;color:#231400;padding-top:8px;position:relative}.cork-podium div span{position:absolute;left:0;right:0;top:-34px;font:bold 22px Arial;color:#2a2230}'
+    + '.cork-top{margin:8px 0 0;padding-left:34px;font-size:22px}.cork-top li{margin:2px 0}';
+  document.head.append(boardStyle);
+  const moved = [];
+  let boardOpen = false;
+  function moveInto(node, slot) { if (!node) return; moved.push([node, node.parentNode, node.nextSibling]); slot.append(node); }
+  function paintRank() {
+    const rows = (app.board?.() || {}).leaderboard || [];
+    const pod = boardDom.querySelector('.cork-podium'); pod.replaceChildren();
+    for (const [i, color, k] of PODIUM) {
+      const d = document.createElement('div'); d.style.background = color; d.style.height = Math.round(150 * k) + 'px'; d.textContent = String(i + 1);
+      const n = document.createElement('span'); n.textContent = rows[i] ? firstName(rows[i].name) + ' · ' + rows[i].wins : '—'; d.append(n); pod.append(d);
+    }
+    const ol = boardDom.querySelector('.cork-top'); ol.replaceChildren(); ol.start = 4;
+    rows.slice(3, 5).forEach(r => { const li = document.createElement('li'); li.textContent = r.name + ' · ' + r.wins; ol.append(li); });
+  }
+  function openBoard() {
+    if (boardOpen) return;
+    boardOpen = true; resetMovement();
+    const chatSlot = boardDom.querySelector('[data-slot="chat"]');
+    moveInto(document.getElementById('chat-messages'), chatSlot);
+    moveInto(document.getElementById('chat-form'), chatSlot);
+    moveInto(document.getElementById('notices-list'), boardDom.querySelector('[data-slot="notices"]'));
+    paintRank();
+    boardDom.hidden = false; actB.hidden = true;
+  }
+  function closeBoard() {
+    if (!boardOpen) return;
+    boardOpen = false; boardDom.hidden = true;
+    for (const [node, parent, next] of moved.splice(0).reverse()) parent.insertBefore(node, next && next.parentNode === parent ? next : null);
+  }
+  boardDom.addEventListener('click', e => { if (e.target.closest('.cork-close')) closeBoard(); });
+  // la vista davanti alla bacheca e il foglio sopra il sughero, con la stessa prospettiva della scena
+  const boardM = new THREE.Matrix4(), boardVp = new THREE.Matrix4();
+  const boardPx = new THREE.Matrix4().set(bdW / BW, 0, 0, -bdW / 2, 0, -bdH / BH, 0, bdH / 2, 0, 0, 1, 0, 0, 0, 0, 1);
+  function focusBoard() {
+    const vf = THREE.MathUtils.degToRad(camera.fov), hf = 2 * Math.atan(Math.tan(vf / 2) * camera.aspect);
+    const d = Math.max((bdH / 2 + 0.05) / Math.tan(vf / 2), (bdW / 2 + 0.04) / Math.tan(hf / 2));
+    camera.up.set(0, 1, 0); camera.position.set(bdX + d, 1.5, bdZ); camera.lookAt(bdX, 1.5, bdZ); camera.updateMatrixWorld();
+    const w = host.clientWidth / 2, h = host.clientHeight / 2;
+    boardVp.set(w, 0, 0, w, 0, -h, 0, h, 0, 0, 1, 0, 0, 0, 0, 1);
+    boardMesh.updateMatrixWorld();
+    boardM.copy(boardVp).multiply(camera.projectionMatrix).multiply(camera.matrixWorldInverse).multiply(boardMesh.matrixWorld).multiply(boardPx);
+    boardDom.style.transform = 'matrix3d(' + boardM.elements.join(',') + ')';
+  }
+  for (const ev of ['pointerdown', 'keydown', 'keyup', 'wheel']) boardDom.addEventListener(ev, e => e.stopPropagation());
   // tappeto, divani, piante
   const loader=new THREE.TextureLoader();
   function loadPrint(file){
@@ -249,6 +376,7 @@ export function createLobby3D(app) {
     for (const ax of [-1.02, 1.02]) rbox(0.2, 0.55, 0.9, 0.07, sofaM, ax, 0.42, 0, g);
     for (const lx of [-0.95, 0.95]) for (const lz of [-0.35, 0.35]) box(0.06, 0.1, 0.06, legM, lx, 0.05, lz, g);
     g.position.set(sx * 3.6, 0, 5.3); scene.add(g);
+    for (const o of [-0.5, 0.5]) spots.push({ x: sx * 3.6 + o, z: 4.75, hx: 0.25, hz: 0.12, pad: 0.45, label: 'Siediti', where: 'Atrio', seat: true, px: sx * 3.6 + o, pz: 5.2, yaw: 0 });
     solid(sx * 3.6 - 1.12, sx * 3.6 + 1.12, 4.85, 5.8);
   }
   const table = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.05, 32), new THREE.MeshPhysicalMaterial({ color: '#6b4226', roughness: 0.35, clearcoat: 0.8 }));
@@ -279,7 +407,7 @@ export function createLobby3D(app) {
     leaves.position.set(x,0,z);scene.add(leaves);groundTint(x,z,.85,.85,contact);
     solid(x - 0.3, x + 0.3, z - 0.3, z + 0.3);
   };
-  plant(-6.4, -5.4); plant(6.4, -5.4); plant(-6.4, 5.4); plant(6.4, 5.4);
+  plant(-6.4, -5.4); plant(6.4, -5.4); plant(-6.4, 5.4);
   // cartelli sopra le porte
   function doorSign(title,color,x,yaw){
     const group=new THREE.Group();group.position.set(x,2.92,0);group.rotation.y=yaw;scene.add(group);
@@ -318,7 +446,7 @@ export function createLobby3D(app) {
     if (game.pins) Table3D.prototype.setPins.call(view, game.pins);
     const hx = T.L + T.cush + T.rail, hz = T.W + T.cush + T.rail;
     solid(x - hx, x + hx, z - hz, z + hz);
-    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', where: 'Sala biliardo', act: () => app.open('biliardo') });
+    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => app.open('biliardo') });
     // lampada sopra il tavolo
     const lampW = hx * 1.6;
     box(lampW, 0.065, 0.095, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
@@ -422,9 +550,10 @@ export function createLobby3D(app) {
       box(.46,.39,.4,walnut,x+side*1.24,.2,z);
       box(.52,.09,.49,chairLeather,x+side*1.24,.44,z);
       box(.07,.39,.49,chairLeather,x+side*1.47,.63,z);
+      spots.push({x:x+side*1.24,z:z+.62,hx:.2,hz:.12,pad:.5,label:'Siediti',where:'Sala tavoli',seat:true,px:x+side*1.24,pz:z,yaw:side*Math.PI/2});
     }
     solid(x-1.51,x+1.51,z-.72,z+.72);
-    spots.push({x,z,hx:1.50,hz:.72,pad:.81,label:title,where:'Sala tavoli',act:()=>app.open(key)});
+    spots.push({x,z,hx:1.50,hz:.72,pad:.81,label:title,key,where:'Sala tavoli',act:()=>app.open(key)});
   });
   function poster(x,z,angle,title,subtitle,palette,motif){
     const map=canvasTex(384,512,(g,w,h)=>{
@@ -957,6 +1086,8 @@ export function createLobby3D(app) {
   // ---------- comandi ----------
   const keys = new Set();
   let firstPerson=false,parked=null,pongAnchor=null,localPose=null,lastPoseKey='',lastPoseSent=0,peerList=null;
+  // azioni (solo visive): Ctrl sinistro abbassato, clic sinistro colpo col braccio destro, tasto destro parata
+  let crouching=false,guarding=false,punchCount=0,hitN=0,lastHit=null,fxNoise=null;
   const peers=new Map(),downArm=new THREE.Vector3(0,-1,0);
   const viewButton=document.createElement('button');
   $('.l3d-top').append(viewButton);
@@ -970,10 +1101,17 @@ export function createLobby3D(app) {
     if(!active)return null;
     if(tableFootball.seat)return tableFootball.seat;
     if(monitor&&pongAnchor&&Math.hypot(pos.x-pongAnchor.x,pos.z-pongAnchor.z)<.24)return {station:'pong',slot:pongAnchor.slot||0};
+    // seduto al cinema: gli altri ti vedono seduto sul tuo posto del divano, con la testa che guarda dove guardi
+    if(seating){
+      const r=v=>Math.round(v*20)/20;
+      let look=cam.yaw-Math.PI;look=Math.atan2(Math.sin(look),Math.cos(look));
+      const yaw=seating.seat?seating.yaw:Math.PI;
+      look=cam.yaw-yaw;look=Math.atan2(Math.sin(look),Math.cos(look));
+      return {station:'seat',x:r(pos.x),z:r(pos.z),y:r(cinemaFloor(pos.x,pos.z)),yaw:r(yaw),look:r(look),pitch:r(cam.pitch)};
+    }
     // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
-    if(seating)return null;
     const r=v=>Math.round(v*20)/20;
-    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20};
+    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(lastHit?{hit:lastHit}:{})};
   }
   function descriptor(){
     const pose=currentPose();if(!pose)return null;
@@ -992,11 +1130,32 @@ export function createLobby3D(app) {
     w.speed=(w.speed||0)+(speed-(w.speed||0))*Math.min(1,peerDt*8);
     c.root.position.set(w.x,0,w.z);c.root.rotation.y=w.yaw;
     for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1}
+    c.lookYaw=Number(p.look)||0;c.lookPitch=0;
     animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
+    actCharacter(c,{crouch:p.crouch,guard:p.guard},peerDt,t);
     return {x:w.x,z:w.z,yaw:w.yaw};
+  }
+  function seatPose(c,p){
+    if(c===me)return null;
+    c.walk=null;
+    c.root.position.set(p.x,(Number(p.y)||0)-.16,p.z);c.root.rotation.y=Number(p.yaw)||Math.PI;
+    sitJoints(c);
+    const k=Math.min(1,peerDt*8);
+    c.head.rotation.y+=(Math.max(-1.2,Math.min(1.2,Number(p.look)||0))-c.head.rotation.y)*k;
+    c.head.rotation.x+=(-(Number(p.pitch)||0)*.8-c.head.rotation.x)*k;
+    c.torso.rotation.y=0;c.root.updateMatrixWorld(true);
+    return {x:p.x,z:p.z};
+  }
+  // seduto: cosce in avanti, ginocchia piegate ad angolo retto, mani appoggiate sulle gambe
+  function sitJoints(c){
+    for(const leg of c.legs)leg.rotation.set(Math.PI/2,0,0);
+    for(const knee of c.knees)knee.rotation.set(-Math.PI/2,0,0);
+    for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1;arm.rotation.set(.3,0,0)}
+    for(const elbow of c.elbows)elbow.rotation.set(.85,0,0);
   }
   function modelPose(c,p){
     if(!p)return null;
+    if(p.station==='seat')return Number.isFinite(p.x)&&Number.isFinite(p.z)?seatPose(c,p):null;
     if(p.station==='walk')return Number.isFinite(p.x)&&Number.isFinite(p.z)?walkPose(c,p):null;
     if(c!==me)c.walk=null;
     let anchor;
@@ -1009,13 +1168,73 @@ export function createLobby3D(app) {
       const hs=station.handles?.[slot]||[[-.18,1.15],[.12,1.07]];
       anchor={x:station.x+.13*sn+ox*cs,z:station.z+.13*cs-ox*sn,yaw,handles:hs.map(([x,y])=>new THREE.Vector3(station.x+x*cs-.25*sn,y,station.z-x*sn-.25*cs))};
     }
-    c.root.position.set(anchor.x,0,anchor.z);c.root.rotation.y=anchor.yaw;c.root.updateMatrixWorld(true);
+    c.root.position.set(anchor.x,0,anchor.z);c.root.rotation.y=anchor.yaw;
+    for(const e of c.elbows)e.rotation.set(0,0,0); // braccia tese fino alle manopole
+    for(const k of c.knees)k.rotation.set(0,0,0);
+    c.root.updateMatrixWorld(true);
     c.arms.forEach((arm,i)=>{
       const tip=c.root.worldToLocal(anchor.handles[i].clone()).sub(arm.position);
       arm.quaternion.setFromUnitVectors(downArm,tip.clone().normalize());
       arm.scale.y=tip.length()/ARM_LEN;
     });
     return anchor;
+  }
+  // dove sta chi gioca: tavolo o cabinato del suo gioco (dalle partite aperte nella Lobby)
+  const slugOf=t=>String(t).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  function activityPose(user){
+    const room=user.game||user.viewingRoom;if(!room)return null;
+    const g=(app.board?.()?.games||[]).find(x=>x.room===room);if(!g)return null;
+    const key=slugOf(gameTitle(g));
+    let h=0;for(const ch of String(user.id))h=(h*31+ch.charCodeAt(0))>>>0;
+    const seat=Math.max(0,(g.players||[]).findIndex(pl=>String(pl.id)===String(user.player)));
+    const cab=spots.find(sp=>sp.station===key);
+    if(cab)return {station:key,slot:seat%(cab.seats||1)};
+    const tables=spots.filter(sp=>sp.key===key);if(!tables.length)return null;
+    const sp=tables[h%tables.length];
+    if(sp.where==='Sala tavoli'&&seat<2){
+      // seduto su una delle due sedie, rivolto al tavolo
+      const side=seat?1:-1;
+      return {station:'seat',x:sp.x+side*1.24,z:sp.z,y:0,yaw:side*Math.PI/2,look:0,pitch:.35};
+    }
+    // in piedi lungo il lato lungo del tavolo, rivolto al tavolo
+    const zs=(seat%2?1:-1),x=sp.x+(((seat>>1)%3)-1)*.6,z=sp.z+zs*(sp.hz+.45);
+    return {station:'walk',x,z,yaw:Math.atan2(0,zs)};
+  }
+  // Colpo (solo un effetto): prende chi è davanti, vicino (entro un metro e poco più). Se si sta riparando è parato.
+  function punch(){
+    if(seating||boardOpen||tableFootball.active||!active)return;
+    (me.fx||(me.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0;punchCount++;
+    const fx=-Math.sin(heading),fz=-Math.cos(heading);
+    let best=null,bd=1.15;
+    for(const [id,c] of peers){
+      if(!c.root.visible||c.pose?.station!=='walk')continue;
+      const dx=c.root.position.x-pos.x,dz=c.root.position.z-pos.z,d=Math.hypot(dx,dz);
+      if(d<bd&&d>.01&&(dx*fx+dz*fz)/d>.45){bd=d;best=[id,c]}
+    }
+    // il colpo arriva quando il braccio cala (dopo circa 0,2 s), non al clic
+    if(best)setTimeout(()=>{
+      const blocked=!!best[1].pose?.guard;
+      lastHit={id:String(best[0]),n:++hitN,blocked};
+      struck(String(best[0]),blocked,me);
+    },200);
+  }
+  // colpo arrivato a qualcuno (anche a te): stelline se non era parato, e il suo suono
+  function struck(id,blocked,from){
+    const mine=String(app.me?.()?.id??'')===id, target=mine?me:peers.get(id);
+    if(!target)return;
+    if(!blocked)(target.fx||(target.fx={crouch:0,guard:0,punch:9,starsUntil:0})).starsUntil=t+2.6;
+    const near=Math.hypot(target.root.position.x-pos.x,target.root.position.z-pos.z);
+    if(mine||from===me||near<6)fxSound(blocked?'block':'hit',mine||from===me?1:Math.max(.2,1-near/6));
+  }
+  function fxSound(kind,level=1){
+    const ctx=audioContext;if(!active||!soundAllowed()||ctx?.state!=='running')return;
+    if(!fxNoise){fxNoise=ctx.createBuffer(1,Math.floor(ctx.sampleRate*.25),ctx.sampleRate);const d=fxNoise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1}
+    const now=ctx.currentTime,out=ctx.createGain();out.gain.value=.5*level;out.connect(ctx.destination);
+    const burst=(freq,q,decay,lvl,delay=0)=>{const src=ctx.createBufferSource(),bp=ctx.createBiquadFilter(),g=ctx.createGain();src.buffer=fxNoise;bp.type='bandpass';bp.frequency.value=freq;bp.Q.value=q;g.gain.setValueAtTime(lvl,now+delay);g.gain.exponentialRampToValueAtTime(.0001,now+delay+decay);src.connect(bp).connect(g).connect(out);src.start(now+delay);src.stop(now+delay+decay+.02)};
+    const tone=(hz,decay,lvl,end=hz*.6)=>{const o=ctx.createOscillator(),g=ctx.createGain();o.frequency.setValueAtTime(hz,now);o.frequency.exponentialRampToValueAtTime(end,now+decay);g.gain.setValueAtTime(lvl,now);g.gain.exponentialRampToValueAtTime(.0001,now+decay);o.connect(g).connect(out);o.start(now);o.stop(now+decay+.02)};
+    // colpo a segno: "pof" morbido e un piccolo tintinnio di stelline; parato: "tac" secco
+    if(kind==='hit'){burst(170,1.2,.13,.9);tone(110,.12,.5);tone(1800,.25,.06,2600);tone(2400,.2,.04,3200)}
+    else{burst(1500,5,.06,.6);tone(820,.05,.18,600)}
   }
   // nome sopra la testa degli altri (si legge da ogni lato)
   function headName(n){
@@ -1028,8 +1247,10 @@ export function createLobby3D(app) {
       peerList=list;const present=new Set();
       for(const user of list){
         if(String(user.id)===String(app.me?.()?.id))continue;
-        // chi è nella Lobby classica (senza 3D aperta) sta in piedi nell'atrio, attorno al tappeto, rivolto al centro
-        let pose=user.clubPose;
+        // chi gioca senza la 3D aperta (dalla Lobby classica) compare accanto al suo gioco: seduto al tavolo della sala
+        // tavoli, in piedi al tavolo del biliardo, alla pulsantiera del cabinato. Chi è nella Lobby classica e basta sta
+        // in piedi nell'atrio, attorno al tappeto, rivolto al centro.
+        let pose=user.clubPose||activityPose(user);
         if(!pose&&user.status==='In Lobby'&&!user.game&&!user.viewingRoom){
           let h=0;for(const ch of String(user.id))h=(h*31+ch.charCodeAt(0))>>>0;
           const a=(h%360)*Math.PI/180,x=Math.cos(a)*3.1,z=.6+Math.sin(a)*2.7;
@@ -1039,6 +1260,11 @@ export function createLobby3D(app) {
         present.add(user.id);let c=peers.get(user.id);
         if(!c){c=makeCharacter(pose);c.root.add(shirtName(user.name||''));c.root.add(headName(user.name||''));scene.add(c.root);peers.set(user.id,c)}
         c.pose=pose;if(user.clubPose)setLook(c,user.clubPose);
+        // un colpo nuovo di questo giocatore: si vede il braccio; se ha preso qualcuno, stelline e suono
+        const cp=user.clubPose||{};
+        if(c.seenPunch===undefined){c.seenPunch=cp.punch||0;c.seenHit=cp.hit?.n||0}
+        if((cp.punch||0)!==c.seenPunch){c.seenPunch=cp.punch||0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0}
+        if(cp.hit&&cp.hit.n!==c.seenHit){c.seenHit=cp.hit.n;struck(String(cp.hit.id),!!cp.hit.blocked,c)}
       }
       for(const [id,c] of peers)if(!present.has(id)){
         c.root.removeFromParent();
@@ -1061,6 +1287,8 @@ export function createLobby3D(app) {
   let pinch = 0;
   const onKey = (e) => {
     if (!active || document.querySelector('dialog[open]')) return;
+    // bacheca aperta: si scrive nella chat; Esc la chiude
+    if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat)setFirst(!firstPerson);e.preventDefault();return}
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
@@ -1073,6 +1301,7 @@ export function createLobby3D(app) {
       if (!seating && e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
       return;
     }
+    if (e.code === 'ControlLeft') { crouching = e.type === 'keydown'; e.preventDefault(); return; }
     const k = e.code === 'ShiftLeft' ? 'sprint' : e.key.toLowerCase();
     if (e.type === 'keydown') {
       if ((k === 'e' || k === 'enter') && near) { e.preventDefault(); if(!e.repeat)launch(near); return; }
@@ -1090,6 +1319,7 @@ export function createLobby3D(app) {
       joy.id = e.pointerId; joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2;
       moveJoy(e);
     } else drags.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX,startY:e.clientY, moved:false, paddle:e.button===0&&aimAtMonitor(e) });
+    if (e.pointerType === 'mouse' && e.button === 2) guarding = true;
   });
   const moveJoy = (e) => {
     let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy;
@@ -1121,9 +1351,9 @@ export function createLobby3D(app) {
   const up = (e) => {
     if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; }
     const drag=drags.get(e.pointerId);
-    if(e.type==='pointerup' && e.pointerType==='mouse' && drag && !drag.moved && (e.button===0||e.button===2)){
-      me.expression=e.button===0?'surprise':'laugh';me.expressionEnd=t+1.2;
-    }
+    // clic sinistro (senza trascinare): colpo; tasto destro lasciato: fine della parata
+    if(e.type==='pointerup' && e.pointerType==='mouse' && drag && !drag.moved && e.button===0 && !drag.paddle)punch();
+    if(e.pointerType==='mouse' && (e.button===2 || e.type!=='pointerup'))guarding=false;
     drags.delete(e.pointerId);
     if (drags.size < 2) pinch = 0;
   };
@@ -1131,6 +1361,23 @@ export function createLobby3D(app) {
   host.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.max(1.8, Math.min(9, cam.dist * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
   host.addEventListener('contextmenu', (e) => e.preventDefault());
   actB.onclick = () => near && launch(near);
+  // sul telefono: tasti per colpo, parata (tenere premuto) e abbassarsi (acceso/spento)
+  const moves = document.createElement('div');
+  moves.className = 'l3d-moves'; moves.hidden = true;
+  moves.innerHTML = '<button data-m="punch" aria-label="Colpo">👊</button><button data-m="guard" aria-label="Parata (tieni premuto)">🛡️</button><button data-m="crouch" aria-label="Abbassati">⬇️</button>';
+  el.append(moves);
+  const movesCss = document.createElement('style');
+  movesCss.textContent = '.l3d-moves{position:absolute;right:calc(var(--ui-safe-right,0px) + 16px);bottom:calc(var(--ui-safe-bottom,0px) + 96px);display:flex;flex-direction:column;gap:10px;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{width:58px!important;height:58px;min-height:58px;padding:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
+  document.head.append(movesCss);
+  moves.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest('[data-m]'); if (!b) return; e.stopPropagation(); e.preventDefault();
+    if (b.dataset.m === 'punch') punch();
+    if (b.dataset.m === 'guard') { guarding = true; b.classList.add('on'); }
+    if (b.dataset.m === 'crouch') { crouching = !crouching; b.classList.toggle('on', crouching); }
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) moves.addEventListener(ev, (e) => {
+    const b = e.target.closest('[data-m="guard"]'); if (b) { guarding = false; b.classList.remove('on'); }
+  });
   $('.l3d-exit').onclick = () => { hide(); app.exit && app.exit(); };
 
   // ---------- movimento e collisioni ----------
@@ -1162,7 +1409,7 @@ export function createLobby3D(app) {
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
       const dx = ((ix * c + iz * s) / n) * mag, dz = ((-ix * s + iz * c) / n) * mag;
-      const pace = keys.has('sprint') ? SPEED * 1.75 : SPEED;
+      const pace = (keys.has('sprint') ? SPEED * 1.75 : SPEED) * (crouching ? 0.45 : 1);
       speed = pace * mag;
       pos.x += dx * pace * dt; pos.z += dz * pace * dt;
       collide(pos);
@@ -1173,7 +1420,10 @@ export function createLobby3D(app) {
     }
     moving += (speed - moving) * Math.min(1, dt * 10);
     me.root.position.x = pos.x; me.root.position.z = pos.z; me.root.rotation.y = heading;
+    // collo: in terza persona la testa guarda verso dove guarda la telecamera
+    { let lk = cam.yaw - heading; lk = Math.atan2(Math.sin(lk), Math.cos(lk)); me.lookYaw = seating ? 0 : Math.max(-0.9, Math.min(0.9, lk)); me.lookPitch = 0; }
     animateCharacter(me, moving, dt, t);
+    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating }, dt, t);
     if (verticalSpeed !== 0 || jumpHeight > 0) {
       const gravity = 13;
       jumpHeight = Math.max(0, jumpHeight + verticalSpeed * dt - .5 * gravity * dt * dt);
@@ -1184,8 +1434,8 @@ export function createLobby3D(app) {
     me.root.position.y+=floor;
     blob.scale.setScalar(1 - jumpHeight * .24);
     if(seating){
-      me.root.position.y=-.22;
-      for(const leg of me.legs)leg.rotation.x=1.25;
+      me.root.position.y=floor-.16;
+      sitJoints(me);
     }
     blob.position.set(pos.x, floor+0.008, pos.z);
     // cosa c'è vicino
@@ -1205,6 +1455,7 @@ export function createLobby3D(app) {
       banks[1].emissiveIntensity=.85+.22*Math.sin(t*.84+Math.PI);
     }
     if(!reducedMotion)for(const m of motes)m.rotation.y+=dt*.012;
+    if(t-boardAt>2){boardAt=t;paintBoard()}
     for(const demo of demoMaterials){
       if(reducedMotion||Math.abs(pos.x-demo.x)>12)continue;
       demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
@@ -1296,9 +1547,9 @@ export function createLobby3D(app) {
     const anchor=modelPose(me,localPose);
     me.head.visible=!firstPerson;
     // al calcio balilla il tuo personaggio non copre il tavolo nella tua vista (gli altri lo vedono alle manopole)
-    if(!seating)me.root.visible=!tableFootball.active;
+    if(!seating)me.root.visible=!tableFootball.active&&!boardOpen;
     // al calcio balilla la telecamera la decide il tavolo (dal tuo lato, o dall'alto sullo stesso telefono)
-    if(firstPerson&&!seating&&!tableFootball.active){
+    if(firstPerson&&!seating&&!tableFootball.active&&!boardOpen){
       const yaw=anchor?.yaw??cam.yaw;
       if(!anchor)me.root.rotation.y=yaw;
       const eyeY=anchor?EYE_Y:me.root.position.y+EYE_Y;
@@ -1308,8 +1559,9 @@ export function createLobby3D(app) {
         camera.lookAt(target);
       }else camera.lookAt(camera.position.x-Math.sin(yaw),eyeY-Math.tan(cam.pitch),camera.position.z-Math.cos(yaw));
     }
-    if(tableFootball.active){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch;actB.hidden=!near}
-    alignProjection();renderer.render(scene, camera);
+    if(tableFootball.active){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
+    moves.hidden=!touch||seating||tableFootball.active||boardOpen||!!parked;
+    if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
   }
   function resize() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -1364,7 +1616,7 @@ export function createLobby3D(app) {
     seating=null;seatActions.hidden=true;Object.assign(pos,returnPoint);collide(pos);me.root.visible=true;
     stick.hidden=!touch;near=null;resetMovement();
   }
-  enterButton.onclick=()=>{if(seating){const seat=seating;hide();seat.act();app.launched?.(seat)}};
+  enterButton.onclick=()=>{if(seating){const seat=seating;parked=currentPose();hide();seat.act();app.launched?.(seat)}};
   standButton.onclick=stand;
   // primo posto libero al cabinato (gli altri giocatori del club lo occupano con la loro posa)
   function freeSeat(s){
@@ -1374,12 +1626,24 @@ export function createLobby3D(app) {
     return 0;
   }
   function launch(s) {
+    if (s.board) { s.act(); return; }
     if(seating||tableFootball.active)return;
     if(s.balilla){setFirst(true);resetMovement();tableFootball.open();return}
     if(s.pong){toggleMonitor(s);return}
+    if(s.seat){
+      // divani dell'atrio e sedie dei tavoli: ci si siede (se il posto è libero), "Alzati" per tornare a camminare
+      const taken=(app.peers?.()||[]).some(u=>u.clubPose?.station==='seat'&&Math.abs(u.clubPose.x-s.px)<.15&&Math.abs(u.clubPose.z-s.pz)<.15);
+      if(taken)return;
+      resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;enterButton.hidden=true;actB.hidden=true;stick.hidden=true;cam.pitch=.12;
+      pos.x=s.px;pos.z=s.pz;heading=s.yaw;cam.yaw=s.yaw;me.root.visible=false;
+      return;
+    }
     if(s.sit){
-      resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;actB.hidden=true;stick.hidden=true;cam.pitch=.03;
+      resetMovement();returnPoint={...pos};seating=s;seatActions.hidden=false;enterButton.hidden=false;actB.hidden=true;stick.hidden=true;cam.pitch=.03;
       pos.x=s.x;pos.z=s.z;heading=Math.PI;cam.yaw=Math.PI;
+      // posto libero sul divano da due: a sinistra se non c'è già qualcuno
+      const busy=(app.peers?.()||[]).some(u=>u.clubPose?.station==='seat'&&Math.abs(u.clubPose.x-(s.x-.3))<.12&&Math.abs(u.clubPose.z-s.z)<.3);
+      s.side=busy?.3:-.3;pos.x=s.x+s.side;
       me.root.visible=false;
       return;
     }
@@ -1404,6 +1668,7 @@ export function createLobby3D(app) {
     setTimeout(prepareLights, 1500);
   }
   function hide() {
+    closeBoard();
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
     active = false;audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
@@ -1441,7 +1706,7 @@ export function createLobby3D(app) {
       try { await done; } catch (e) { /* si compila al primo passaggio */ }
     }
   }
-  const api = { setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), get active() { return active; }, el };
+  const api = { setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }
