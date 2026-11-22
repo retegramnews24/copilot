@@ -187,6 +187,7 @@ $('start-video').onclick=()=>{
   else tune(room?.channel,true);
 };
 
+let clubBackground=false;
 const screenShare=new WindowShare($('share-video'),action,(text,button)=>{
   if(!room?.screen){if(text)notice(text);return;}
   $('share-message').textContent=text;
@@ -212,9 +213,21 @@ function drawScreenShare(){
   button.disabled=!connected||!!active&&!active.local;
   $('share-video').hidden=!active||!settings.monitor;
   if(!active||!settings.monitor)$('share-placeholder').hidden=true;
-  screenShare.update(room,settings.monitor&&!multisala.open,settings.volume);
+  screenShare.update(room,clubBackground||(settings.monitor&&!multisala.open),clubBackground?0:settings.volume);
   screenShare.reportAudio();
 }
+window.clubShare={
+  capturing:()=>!!screenShare.capture,
+  stream(id){
+    if(screenShare.capture?.id===id){
+      const capture=screenShare.capture;
+      // Monitor locale silenzioso per evitare il ritorno dell'audio catturato.
+      return capture.clubVideo??=new MediaStream(capture.stream.getVideoTracks());
+    }
+    return screenShare.share?.id===id?$('share-video').srcObject:null;
+  },
+  background(value){clubBackground=value;drawScreenShare();}
+};
 $('share-window').onclick=async()=>{
   if(room?.screen?.local){screenShare.stop();return;}
   if(!connected||!room)return;

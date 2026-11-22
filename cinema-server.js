@@ -175,7 +175,7 @@ export class Cinema {
     const shares=new Map(clients.filter(({info})=>info.screen).map(entry=>[entry.info.room,entry]));
     const rooms=data.rooms.map(({id,number,channel,playback})=>({
       projection: !shares.has(id) && channel && !channel.inbox && !channel.group && !channel.file && !channel.image ? {url:channel.url,youtube:channel.youtube||null,live:!!channel.live,playback} : null,
-      id,number,channel:shares.has(id)?'Finestra condivisa':channel?.inbox?'Coda Telegram':channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
+      id,number,screenId:shares.get(id)?.info.screen.id??null,channel:shares.has(id)?'Finestra condivisa':channel?.inbox?'Coda Telegram':channel?.name??null,viewers:[...(seats.get(id)?.values()??[])]
     }));
     const viewScreen=(sharing,socket)=>sharing?{id:sharing.info.screen.id,peer:sharing.info.client,name:sharing.info.user.name,local:sharing.socket===socket}:null;
     const favorites=sendFavorites?JSON.stringify({type:'favorites',items:data.favorites}):null;

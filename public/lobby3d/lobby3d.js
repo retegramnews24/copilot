@@ -788,7 +788,7 @@ export function createLobby3D(app) {
     mediaNodes.forEach(node=>node.disconnect());mediaNodes=[];projection.style.zIndex='';
     lastYT=-1;previewKey='';screenMesh.material=standby;projection.hidden=true;
     hls?.destroy();hls=null;
-    if(previewVideo){previewVideo.pause();previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
+    if(previewVideo){previewVideo.pause();previewVideo.srcObject=null;previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
     projection.replaceChildren();
   }
   let currentProgram=null,playbackVersion='';
@@ -814,12 +814,15 @@ export function createLobby3D(app) {
     if(previewVideo){previewVideo.volume=0;previewVideo.muted=true}
     if(yt){yt.setVolume(0);yt.mute();lastYT=0}
   }
+  let clubInRange=false;
   function playProjection(data){
-    const p=data?.projection;
+    const share=data?.screenId;
+    const stream=app.clubStream?.(share&&active&&clubInRange&&!document.hidden?data:null);
+    const p=share?(stream?{live:true,share,stream}:null):data?.projection;
     const play=p?.playback;
     currentProgram=p;
-    const key=p?JSON.stringify([data.id,p.url,p.youtube]):'';
-    if(key===previewKey){syncTransport();return}
+    const key=p?JSON.stringify([data.id,p.share,p.url,p.youtube]):'';
+    if(key===previewKey&&(!stream||previewVideo?.srcObject===stream)){syncTransport();return}
     playbackVersion='';
     stopProjection();if(!key)return;
     previewKey=key;audioButton.hidden=false;
@@ -837,6 +840,7 @@ export function createLobby3D(app) {
     const v=document.createElement('video');previewVideo=v;v.volume=heard;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=play?.playing!==false;
     v.style.cssText='width:100%;height:100%;object-fit:contain';projection.append(v);
     v.onloadeddata=()=>{if(v===previewVideo){ready();syncTransport(true)}};
+    if(stream){v.srcObject=stream;return}
     const canMix=()=>{mixEligible=true;try{if(audioContext?.state==='running')cinemaMix(v)}catch{}};
     if(new URL(p.url,location.href).origin===location.origin)canMix();
     if(/\.m3u8?(?:[?#]|$)/i.test(p.url)&&!v.canPlayType('application/vnd.apple.mpegurl')){
@@ -1568,6 +1572,7 @@ export function createLobby3D(app) {
     const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
     for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
     const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
+    clubInRange=inRange && Math.abs(pos.x)<7 && pos.z<18.3;
     const depth=pos.z-6.23;
     const signedDistance=depth>0 && Math.abs(pos.x)<7 ? depth : -Math.hypot(Math.max(0,Math.abs(pos.x)-1.45),Math.min(0,depth));
     const blend=THREE.MathUtils.clamp((signedDistance+1)/2,0,1);
@@ -1731,11 +1736,11 @@ export function createLobby3D(app) {
     if (document.pointerLockElement) document.exitPointerLock?.();
     closeBoard();
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
-    active = false;audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
+    active = false;clubInRange=false;app.clubStream?.(null);audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
-  document.addEventListener('visibilitychange', () => { if(document.hidden){quietProjection();resetMovement();cancelAnimationFrame(raf);last=0}
+  document.addEventListener('visibilitychange', () => { if(document.hidden){app.clubStream?.(null);quietProjection();resetMovement();cancelAnimationFrame(raf);last=0}
     else {playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}} });
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
