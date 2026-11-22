@@ -5,6 +5,7 @@
 // ginocchio (coscia + stinco). Così cammina piegando le ginocchia, si abbassa, si siede, si para e tiene le manopole.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 
 export const SPEED = 3.1;
 export const ARM_LEN = 0.6; // dalla spalla alla punta della mano
@@ -28,6 +29,7 @@ const COLOR_OF = {
   pg_skin: 'skin'
 };
 
+const hairBase = roundBoxGeometry(0.453, 0.082, 0.452, 0.022);
 let model = null;
 const waiting = [];
 new GLTFLoader().load(new URL('models/personaggio.glb', import.meta.url).href, gltf => {
@@ -112,6 +114,13 @@ function fill(c) {
       }
       o.castShadow = true;
     });
+    if (kind === 'head' && c.mats.pg_hair) {
+      // Una base continua copre la sommità della testa tra le ciocche del modello.
+      const crown = new THREE.Mesh(hairBase.clone(), c.mats.pg_hair);
+      crown.position.set(0, 0.419, 0.002);
+      crown.castShadow = true;
+      copy.add(crown);
+    }
     pivot.add(copy);
     // ginocchio e gomito: lo stinco è figlio della coscia, l'avambraccio del braccio (perni fatti in Blender)
     const side = index ? 'L' : 'R';

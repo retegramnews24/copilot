@@ -143,6 +143,13 @@ function reachable(f) {
 export function rodStep(current, target, maxDelta) {
   return current + Math.max(-maxDelta, Math.min(maxDelta, target - current));
 }
+export function rodTurnStep(current, target, dt) {
+  // Una correzione piccola muove il piede piano, un gesto ampio può raggiungere il limite.
+  const error = target - current;
+  if (Math.abs(error) < 0.0002) return target;
+  const speed = 48 * error;
+  return rodStep(current, target, Math.min(SPIN, Math.abs(speed)) * dt);
+}
 export { SLIDE, SPIN };
 function moveRods(f, dt) {
   rows.forEach((row, i) => {
@@ -151,13 +158,13 @@ function moveRods(f, dt) {
       s0 = r.shift,
       a0 = r.angle;
     r.shift = rodStep(r.shift, ts, SLIDE * dt);
-    r.angle = rodStep(r.angle, r.tAngle, SPIN * dt);
+    r.angle = rodTurnStep(r.angle, r.tAngle, dt);
     r.vs = (r.shift - s0) / dt;
     r.va = (r.angle - a0) / dt;
   });
 }
 
-function kickFigures(f, dt) {
+function kickFigures(f) {
   const b = f.ball;
   for (const [i, row] of rows.entries()) {
     const rod = f.rods[i];
@@ -189,8 +196,11 @@ function kickFigures(f, dt) {
         const e = 0.3; // figure in plastica dura: rimbalzo smorzato
         b.vx -= (1 + e) * vn * nx;
         b.vz -= (1 + e) * vn * nz;
-        // un filo di attrito laterale col piede
-        b.vz += (vfz - b.vz) * 0.15;
+        // L’attrito agisce lungo il contatto e resta proporzionato all’impulso normale.
+        const tangent = (b.vz - vfz) * nx - (b.vx - vfx) * nz;
+        const grip = Math.max(0.15 * vn, Math.min(-0.15 * vn, tangent));
+        b.vx += grip * nz;
+        b.vz -= grip * nx;
         if (-vn > 0.15) {
           f.hit++;
           f.sound = 'kick';
@@ -348,7 +358,7 @@ export function simulate(f, dt, random = Math.random) {
       continue;
     }
     if (f.phase !== 'play') return;
-    kickFigures(f, h);
+    kickFigures(f);
     const scored = moveBall(f, h);
     if (scored >= 0) {
       goal(f, scored);

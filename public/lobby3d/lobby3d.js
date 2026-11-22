@@ -3,7 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=a31ed88000';
-import {buildBalilla} from './balilla.js?v=1b7c762dfd';
+import {buildBalilla} from './balilla.js?v=4b40bc72cd';
 import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -15,7 +15,7 @@ import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
 import * as E from '../biliardo/engine.js?v=725086e1a6';
 import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
-import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=dbec3e8544';
+import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=71b7184cd1';
 import { gameTitle } from '../game-info.js?v=dab50e1d8e';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 
@@ -126,14 +126,14 @@ export function createLobby3D(app) {
     plane(x1 - x0, 12, std(ceilC, 1), (x0 + x1) / 2, H, 0, 0, Math.PI / 2);
     const finish = new THREE.MeshStandardMaterial({ map: wallFinish(x0 === -7 ? 'atrium' : x0 > 0 ? 'pool' : 'arcade'), roughness: 0.84 });
     if(x0===-7){
-      wallX(x0,-1.45,-6.15,finish);wallX(1.45,x1,-6.15,finish);
+      wallX(x0,-DOOR,-6.15,finish);wallX(DOOR,x1,-6.15,finish);
       // architrave della porta della sala tavoli: anche lui ferma la telecamera
-      wallMeshes.push(box(2.9,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,-6.15));
+      wallMeshes.push(box(2*DOOR,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,-6.15));
     }else wallX(x0, x1, -6.15, finish);
     if(x0===-7){
       // porte della sala tavoli (nord) e del cinema (sud): stipiti e architrave arrotondati che attraversano il muro
       const jamb = std('#3b2416', 0.5);
-      for (const [hw, zz] of [[1.45, -6.15], [1.65, 6.15]]) {
+      for (const [hw, zz] of [[DOOR, -6.15], [1.65, 6.15]]) {
         for (const sx of [-1, 1]) rbox(0.1, DOOR_H, 0.38, 0.02, jamb, sx * (hw + 0.03), DOOR_H / 2, zz);
         rbox(hw * 2 + 0.16, 0.1, 0.38, 0.02, jamb, 0, DOOR_H + 0.03, zz);
       }
@@ -1248,7 +1248,18 @@ export function createLobby3D(app) {
     firstPerson=value;viewButton.textContent=value?'Vista esterna (V)':'Vista dagli occhi (V)';
     viewButton.setAttribute('aria-pressed',String(value));
   }
-  setFirst(false);viewButton.onclick=()=>setFirst(!firstPerson);
+  let activityView = null;
+  function saveActivityView() {
+    activityView ??= { firstPerson, cam: { ...cam } };
+  }
+  function restoreActivityView() {
+    if (!activityView) return;
+    setFirst(activityView.firstPerson);
+    Object.assign(cam, activityView.cam);
+    activityView = null;
+  }
+  setFirst(false);
+  viewButton.onclick=()=>{if(!activityView)setFirst(!firstPerson)};
   function currentPose(){
     if(parked)return parked;
     if(!active)return null;
@@ -1454,7 +1465,7 @@ export function createLobby3D(app) {
     // bacheca aperta: si scrive nella chat; Esc la chiude
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
-    if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat)setFirst(!firstPerson);e.preventDefault();return}
+    if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
     if(pinball.active){const r=pinball.input(e);if(r==='exit'){pinball.close();resetMovement()}else if(r)e.preventDefault();return}
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
@@ -1691,6 +1702,7 @@ export function createLobby3D(app) {
 
   function frame(now) {
     if (!active) return;
+    if (!seating && !playing() && !monitor && !boardOpen) restoreActivityView();
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
@@ -1840,9 +1852,10 @@ export function createLobby3D(app) {
     if(carrying!==null||requested)return;
     if(s.stool!=null&&!approved){if(!seating)stoolRequest(s.stool,'sit');return}
     if(document.pointerLockElement&&!s?.balilla&&!s?.seat&&!s?.sit)document.exitPointerLock?.();
-    if (s.board) { s.act(); return; }
     if(seating||playing())return;
-    if(s.balilla){setFirst(true);resetMovement();tableFootball.open(s.team,s.pair);return}
+    saveActivityView();
+    if (s.board) { s.act(); return; }
+    if(s.balilla){resetMovement();tableFootball.open(s.team,s.pair);return}
     if(s.pinball){resetMovement();pinball.open();near=null;return} // al flipper: si gioca dalla barra
     if(s.pong){toggleMonitor(s);return}
     if(s.seat){
@@ -1871,6 +1884,7 @@ export function createLobby3D(app) {
   }
   function show() {
     if (active) return;
+    restoreActivityView();
     parked=null;playProjection(app.projection?.());syncTransport(true);el.hidden = false; active = true; last = 0;
     app.clubVisibility?.();setTag();
     // l'aspetto può essere cambiato in Settings
@@ -1889,7 +1903,7 @@ export function createLobby3D(app) {
     if (document.pointerLockElement) document.exitPointerLock?.();
     if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
     carrying=null;requested=null;closeBoard();
-    tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();stand();stopMonitor();heard=0;
+    tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();if(pinball.active)pinball.close();stand();stopMonitor();heard=0;
     active = false;clubInRange=false;app.clubStream?.(null);audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;

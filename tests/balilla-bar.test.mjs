@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { BalillaHub } from '../balilla-hub.js';
-import { L, W, R, rows, newField, simulate, cornerHeight } from '../public/lobby3d/balilla-rules.js';
+import { L, W, R, rows, control, newField, simulate, cornerHeight } from '../public/lobby3d/balilla-rules.js';
 
 test('Le quattro rampe fanno uscire una pallina ferma', () => {
   for (const x of [-1, 1])
@@ -63,4 +63,19 @@ test('Ingresso libero, rimessa manuale, cambio aste e segnapunti condiviso', t =
   hub.leave(a);
   assert.equal(hub.field.practice, true);
   assert.equal(b.state.playing, true);
+});
+
+test('Il tocco lento imprime meno velocità di un tiro rapido', () => {
+  function shot(angle) {
+    const field = newField();
+    field.phase = 'play';
+    Object.assign(field.ball, { x: rows[0].x + R + 0.0111, z: 0 });
+    control(field, 0, 0, 0, angle);
+    simulate(field, 0.02);
+    return field.ball.vx;
+  }
+  const soft = shot(0.012);
+  const hard = shot(0.9);
+  assert.ok(soft > 0 && soft < 0.15);
+  assert.ok(hard > 0.8 && hard > soft * 5);
 });

@@ -12,12 +12,12 @@ import {
   ROD_R,
   MAX_ANGLE,
   SLIDE,
-  SPIN,
+  rodTurnStep,
   rodStep,
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=6b6704b060';
+} from './balilla-rules.js?v=93d8070e81';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -34,7 +34,8 @@ export function buildBalilla(scene, el, send, playSound) {
     chrome = material('#bccbd4', 0.82),
     rubber = material('#202228'),
     white = material('#fff1cc'),
-    pitch = material('#16181b'); // campo nero come il tavolo vero
+    pitch = material('#267943'),
+    railLining = material('#3e6591');
   const brass = material('#c7a16c', 0.7),
     sole = material('#17202c'),
     skin = material('#e0b390'),
@@ -75,7 +76,7 @@ export function buildBalilla(scene, el, send, playSound) {
   box(2 * L, 0.014, 2 * W, pitch, 0, TOP, 0);
   for (const s of [-1, 1]) {
     const z = s * RAIL;
-    rbox(2 * END + 0.04, 0.16, 0.03, 0.008, frame, 0, 0.82, z);
+    rbox(2 * END + 0.04, 0.16, 0.03, 0.008, railLining, 0, 0.82, z);
     rbox(2 * END + 0.04, 0.012, 0.036, 0.005, chrome, 0, 0.895, z);
     // foro laterale di centrocampo da cui entra la palla
     const h = mesh(new THREE.CircleGeometry(0.022, 20), hole, 0, TOP + 0.026, z - s * 0.0155);
@@ -133,10 +134,15 @@ export function buildBalilla(scene, el, send, playSound) {
   mesh(new THREE.RingGeometry(0.076, 0.079, 48), white, 0, TOP + 0.009, 0).rotation.x = -Math.PI / 2;
   fallbackLines.push(...table.children.slice(middleStart));
   const cabinetParts = table.children.slice(cabinetStart);
-  // tavolo da bar fatto in Blender: mobile nero con gambe squadrate e piedini, sponde interne bianche, campo nero
+  // tavolo da bar fatto in Blender: mobile nero con gambe squadrate e piedini, sponde blu, campo verde
   // con le righe, rialzi negli angoli, bulloni in ottone, targhette Binottoland e Calcio balilla, uscita della palla
   new GLTFLoader().load(new URL('models/tavolo-balilla.glb', import.meta.url).href, gltf => {
     for (const part of cabinetParts) part.removeFromParent();
+    gltf.scene.traverse(o => {
+      if (!o.isMesh) return;
+      if (o.material.name === 'bal_campo') o.material.color.copy(pitch.color);
+      if (o.material.name === 'bal_sponda') o.material.color.copy(railLining.color);
+    });
     table.add(gltf.scene);
   });
   // pallottoliere del punteggio sulla sponda dal lato dei rossi: 10 palline per squadra
@@ -396,7 +402,7 @@ export function buildBalilla(scene, el, send, playSound) {
       if (seated() && row.team === team && row.attack === pair) {
         const target = targets[pair];
         s.position.z = rodStep(s.position.z, target.slide * row.travel, SLIDE * dt);
-        s.rotation.z = rodStep(s.rotation.z, target.angle, SPIN * dt);
+        s.rotation.z = rodTurnStep(s.rotation.z, target.angle, dt);
         return;
       }
       const kk = smooth;
