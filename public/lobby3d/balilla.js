@@ -263,7 +263,7 @@ export function buildBalilla(scene, el, send, playSound) {
   panel.style.cssText =
     'background:#142026f5;color:#fff;text-align:left;padding:12px;border-radius:8px;min-width:min(270px,75vw);max-height:65vh;overflow:auto';
   const fields = new Map();
-  const deadZones = { deadSlide: 0, deadSpin: 0 };
+  const localSettings = { deadSlide: 0, deadSpin: 0, cameraPitch: 56 };
   const deadState = { deadSlide: { sum: 0, time: -Infinity }, deadSpin: { sum: 0, time: -Infinity } };
   let tuningDirty = false, lastTune = 0;
   for (const [key, label, unit, limits] of [
@@ -271,7 +271,8 @@ export function buildBalilla(scene, el, send, playSound) {
     ['slide', 'Asta dentro/fuori', ' m/s', TUNING_LIMITS.slide],
     ['spin', 'Rotazione asta', ' rad/s', TUNING_LIMITS.spin],
     ['deadSlide', 'Zona morta dentro/fuori', ' px', { min: 0, max: 20, step: 1, initial: 0 }],
-    ['deadSpin', 'Zona morta rotazione', ' px', { min: 0, max: 20, step: 1, initial: 0 }]
+    ['deadSpin', 'Zona morta rotazione', ' px', { min: 0, max: 20, step: 1, initial: 0 }],
+    ['cameraPitch', 'Inclinazione verso il campo', '°', { min: 30, max: 80, step: 1, initial: localSettings.cameraPitch }]
   ]) {
     const row = document.createElement('label');
     row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:4px 10px;margin-bottom:9px';
@@ -280,10 +281,13 @@ export function buildBalilla(scene, el, send, playSound) {
     slider.type = 'range';
     slider.style.cssText = 'grid-column:1/-1;width:100%;margin:0;touch-action:pan-x';
     Object.assign(slider, { min: limits.min, max: limits.max, step: limits.step, value: limits.initial });
-    if (key in deadZones) {
+    if (key in localSettings) {
       try {
-        deadZones[key] = Math.max(0, Math.min(20, Number(localStorage.getItem('balilla.' + key)) || 0));
-        slider.value = deadZones[key];
+        const saved = localStorage.getItem('balilla.' + key);
+        if (saved !== null && Number.isFinite(Number(saved))) {
+          slider.value = Math.max(limits.min, Math.min(limits.max, Number(saved)));
+          localSettings[key] = slider.valueAsNumber;
+        }
       } catch {}
     }
     function showValue() {
@@ -292,9 +296,9 @@ export function buildBalilla(scene, el, send, playSound) {
     showValue();
     slider.addEventListener('input', () => {
       showValue();
-      if (key in deadZones) {
-        deadZones[key] = Number(slider.value);
-        deadState[key].time = -Infinity;
+      if (key in localSettings) {
+        localSettings[key] = slider.valueAsNumber;
+        if (key in deadState) deadState[key].time = -Infinity;
         try { localStorage.setItem('balilla.' + key, slider.value); } catch {}
       } else tuningDirty = true;
     });
@@ -318,7 +322,7 @@ export function buildBalilla(scene, el, send, playSound) {
   }
   tuneButton.onclick = toggleTuning;
   function deadZone(key, delta, now) {
-    const limit = deadZones[key];
+    const limit = localSettings[key];
     if (!limit || !delta) return delta;
     const state = deadState[key];
     if (now - state.time > 120) {
@@ -512,11 +516,12 @@ export function buildBalilla(scene, el, send, playSound) {
     const vf = THREE.MathUtils.degToRad(camera.fov),
       hf = 2 * Math.atan(Math.tan(vf / 2) * aspect);
     camera.up.set(0, 1, 0);
-    const dir = team === 0 ? 1 : -1,
-      p = 0.95;
+    const dir = team === 0 ? 1 : -1;
+    const pitch = THREE.MathUtils.degToRad(localSettings.cameraPitch);
     const d = Math.max(1.2, (L + 0.16) / Math.tan(hf / 2));
-    camera.position.set(TX, TOP + d * Math.sin(p), dir * d * Math.cos(p));
-    camera.lookAt(TX, TOP, dir * 0.05);
+    const focusZ = dir * 0.05;
+    camera.position.set(TX, TOP + d * Math.sin(pitch), focusZ + dir * d * Math.cos(pitch));
+    camera.lookAt(TX, TOP, focusZ);
   }
 
   function pose(slot, poseMode, pairIndex) {
