@@ -251,7 +251,7 @@ export function createLobby3D(app) {
   // disegno della bacheca vista da lontano (sughero, foglietti, podio)
   function paintBoard(force) {
     const data = app.board?.() || {};
-    const notices = (data.notices || []).slice(-4).reverse(), chat = (data.messages || []).slice(-6), top = (data.leaderboard || []).slice(0, 5);
+    const notices = (app.notices?.() || (data.notices || []).slice().reverse()).slice(0, 4), chat = (data.messages || []).slice(-6), top = (data.leaderboard || []).slice(0, 5);
     const key = JSON.stringify([notices.map(n => n.id), chat.map(m => m.id || m.at), top.map(r => [r.id, r.wins])]);
     if (!force && key === boardKey) return;
     boardKey = key;
@@ -331,6 +331,7 @@ export function createLobby3D(app) {
     moveInto(document.getElementById('chat-messages'), chatSlot);
     moveInto(document.getElementById('chat-form'), chatSlot);
     moveInto(document.getElementById('notices-list'), boardDom.querySelector('[data-slot="notices"]'));
+    app.noticesSeen?.(); // bacheca aperta: avvisi letti e lista aggiornata
     paintRank();
     boardDom.hidden = false; actB.hidden = true;
   }
@@ -1730,7 +1731,7 @@ export function createLobby3D(app) {
     if(!active)return;
     const opening=THREE.MathUtils.clamp(1-Math.hypot(pos.x,pos.z-6.22)/2.4,0,1);
     for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
-    for(const d of doorCurtains){const o=THREE.MathUtils.clamp(1-Math.hypot(pos.x-d.cx,pos.z-d.cz)/2.4,0,1);for(const p of d.panels)p.scale.x=THREE.MathUtils.lerp(p.scale.x,1-o*.67,1-Math.exp(-dt*7))}
+    for(const d of doorCurtains)for(const p of d.panels)p.scale.x=.33; // tende delle sale sempre aperte (raccolte ai lati)
     const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
     clubInRange=inRange && Math.abs(pos.x)<7 && pos.z<18.3;
     const depth=pos.z-6.23;

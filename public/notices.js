@@ -66,8 +66,9 @@ export function createNotices({ me, isOpen, open }) {
     count.hidden = !unread;
     count.textContent = unread > 9 ? '9+' : String(unread);
     bell.setAttribute('aria-label', unread ? 'Avvisi: ' + unread + ' nuovi' : 'Avvisi');
-    if (sheet.hidden) return;
+    // la lista si aggiorna sempre (anche a campanella chiusa): così la bacheca della Lobby 3D è sempre in pari
     const box = $('notices-list');
+    if (!box) return;
     if (!items.length && !pinned.length) {
       const empty = document.createElement('p');
       empty.className = 'hint';
@@ -96,6 +97,10 @@ export function createNotices({ me, isOpen, open }) {
           go.type = 'button';
           go.textContent = label;
           go.onclick = () => {
+            if (!notice.pinned) {
+              hidden.add(notice.id);
+              store(HIDDEN_KEY, [...hidden].slice(-200));
+            }
             close();
             if (notice.action) notice.action();
             else open(notice.room);
@@ -163,6 +168,14 @@ export function createNotices({ me, isOpen, open }) {
       local = [...local, { ...item, id: 'local-' + ++localId + '-' + Date.now(), at: Date.now() }].slice(-20);
       render();
     },
-    render
+    render,
+    // Gli avvisi come li mostra la campanella (partite aperte in cima): per la bacheca della Lobby 3D.
+    items: () =>
+      [...pinned, ...list()].map(n => ({ id: n.id, text: n.text, pinned: !!n.pinned, urgent: !!n.urgent })),
+    // Bacheca aperta: gli avvisi contano come letti (il numero sulla campanella si azzera)
+    seen: () => {
+      markRead();
+      render();
+    }
   };
 }
