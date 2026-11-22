@@ -16,7 +16,7 @@ import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} fro
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=6f9a6958a5';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=56908653f4';
-import {createCinemaLobby} from './cinema-lobby.js?v=clubshare14';
+import {createCinemaLobby} from './cinema-lobby.js?v=2c676bfbeb';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
 import {createLobbyChips} from './lobby-chips.js?v=34f547ad4a';
@@ -77,7 +77,7 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=clubshare14');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=434534fe1d');lobby3d=m.createLobby3D({tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot3d');sendPresence()}})}
