@@ -2,10 +2,12 @@ import {normalizeAppearance} from './public/appearance.js';
 import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
-// Le proiezioni restano aperte anche senza spettatori.
+// La Sala 1 resta sempre. Le altre con la proiezione accesa (o una coda) restano anche vuote,
+// ma dopo 12 ore dall'ultimo cambio si liberano: le sale sono al massimo 24 e altrimenti finirebbero.
+export const ROOM_KEEP=12*3600_000;
 // Sale ancora in uso (le altre si possono riusare quando se ne apre una nuova).
 export function liveRooms(rooms,occupied,now){
-  return rooms.filter(r=>r.number===1||occupied.has(r.id)||now-r.updated<3_600_000||r.channel||r.queue?.length);
+  return rooms.filter(r=>r.number===1||occupied.has(r.id)||now-r.updated<3_600_000||((r.channel||r.queue?.length)&&now-r.updated<ROOM_KEEP));
 }
 const response=(message,status)=>Response.json({error:message},{status});
 const SCREEN_VIEWERS=3;

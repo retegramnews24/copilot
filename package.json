@@ -1,12 +1,12 @@
 {
   "name": "binottoland-motore",
-  "version": "1.0.45",
+  "version": "1.0.46",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "test": "node tests/scopa-ai.test.js && node tests/sea-cards.test.js && node tests/new-table-games.test.js && node tests/uno.test.js && node tests/connect4.test.js && node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js && node tests/labyrinth-graphics.test.js && node tests/moto-trial.test.js && node tests/golf.test.js && node tests/f1.test.js && node tests/balilla.test.js && node tests/cinema-rooms.test.js && node tests/biliardo.test.js && node tests/cinema-search.test.js && node tests/simulator.test.js && node tests/radio-dns.test.js && node tests/simulator-ui.test.js && node tests/giulio-autosave.test.js && node tests/encoding.test.js && node tests/lobby-modules.test.mjs && node tests/app-modules.test.mjs && node tests/chess-board.test.mjs && node tests/turn-notices.test.js && node tests/table-rules.test.js && node scripts/release.mjs --check",
+    "test": "node tests/scopa-ai.test.js && node tests/sea-cards.test.js && node tests/new-table-games.test.js && node tests/uno.test.js && node tests/connect4.test.js && node tests/checkers.test.js && node tests/radio-metadata.test.js && node tests/labyrinth.test.js && node tests/labyrinth-adventure.test.js && node tests/labyrinth-render.test.js && node tests/expedition.test.js && node tests/safe-area.test.js && node tests/labyrinth-graphics.test.js && node tests/moto-trial.test.js && node tests/golf.test.js && node tests/f1.test.js && node tests/balilla-bar.test.mjs && node tests/cinema-rooms.test.js && node tests/biliardo.test.js && node tests/cinema-search.test.js && node tests/simulator.test.js && node tests/radio-dns.test.js && node tests/simulator-ui.test.js && node tests/giulio-autosave.test.js && node tests/encoding.test.js && node tests/lobby-modules.test.mjs && node tests/app-modules.test.mjs && node tests/chess-board.test.mjs && node tests/turn-notices.test.js && node tests/table-rules.test.js && node scripts/release.mjs --check",
     "test:multiplayer-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/expedition-runtime.test.js .test-bundle/worker.js",
     "test:table-runtime": "wrangler deploy --dry-run --outdir .test-bundle && node tests/table-ai-runtime.test.js .test-bundle/worker.js && node tests/turn-clock-runtime.test.js .test-bundle/worker.js && node tests/backup-runtime.test.js .test-bundle/worker.js && node tests/f1-runtime.test.js .test-bundle/worker.js && node tests/biliardo-runtime.test.js .test-bundle/worker.js",
     "release": "node scripts/release.mjs",

@@ -709,10 +709,9 @@ export class Room extends DurableObject {
               // seduti: altezza del posto e dove guarda la testa
               ...(pose.station === 'seat'
                 ? {
-                    ...(a.stool?.action === 'sit' && Number.isFinite(pose.roll)
-                      ? { roll: Math.max(-0.35, Math.min(0.35, pose.roll)) }
-                      : {}),
-                    y: Number.isFinite(pose.y) ? Math.round(Math.max(-1, Math.min(3, pose.y)) * 20) / 20 : 0,
+                    y: Number.isFinite(pose.y)
+                      ? Math.round(Math.max(-1, Math.min(3, pose.y)) * 1000) / 1000
+                      : 0,
                     look: Number.isFinite(pose.look)
                       ? Math.round(Math.max(-3.2, Math.min(3.2, pose.look)) * 20) / 20
                       : 0,

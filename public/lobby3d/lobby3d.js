@@ -2,7 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildBalilla} from './balilla.js?v=5c5bbb18cb';
+import {buildBalilla} from './balilla.js?v=46850092ec';
+import {playBalillaSound} from './balilla-sounds.js?v=52d42c8b1a';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -511,7 +512,7 @@ export function createLobby3D(app) {
     box(.42,.10,.42,std(stoolColors[id%stoolColors.length],.7),0,.64,0,placeholder);
     box(.08,.59,.08,brassTrim,0,.31,0,placeholder);
     scene.add(placeholder);
-    stools.push({id,x,z,homeX:x,homeZ:z,y:0,v:0,roll:0,spin:0,height:0,spot,placeholder});
+    stools.push({id,x,z,homeX:x,homeZ:z,y:0,v:0,height:0,spot,placeholder});
     spots.push(spot);
   };
   for(const x of [9,11.6,14.4,17])for(const side of [-1,1])addStool(x,side*5.6,side>0?0:Math.PI,'Sala biliardo');
@@ -550,13 +551,17 @@ export function createLobby3D(app) {
     stoolRequest(carrying,'drop',to);
   }
   const carryButton=stoolButton('Prendi · G',toggleCarry);
-  const lower=stoolButton('↓ W',()=>changeHeight(-.05)),raise=stoolButton('↑ S',()=>changeHeight(.05));
-  const rock=stoolButton('Ondula',()=>{const st=stools[seating?.stool];if(st)st.spin+=st.roll>0?-1.1:1.1});
+  const raise=stoolButton('↑ W',()=>changeHeight(.05)),lower=stoolButton('↓ S',()=>changeHeight(-.05));
+  function bounceStool(){
+    const st=stools[seating?.stool];
+    if(st)st.v=-.30;
+  }
+  const rock=stoolButton('Molleggia',bounceStool);
   function stepStools(dt){
     const people=app.peers?.()||[],layout=app.stoolLayout?.()||{};
     if(requested&&performance.now()-requested.at>4500){app.stoolSend?.({type:'stool',action:'cancel',id:requested.id});requested=null}
     const mine=stools[seating?.stool];
-    if(mine)changeHeight((Number(keys.has('s'))-Number(keys.has('w')))*dt*.27);
+    if(mine)changeHeight((Number(keys.has('w'))-Number(keys.has('s')))*dt*.27); // W alza, S abbassa
     for(const st of stools){
       const owner=people.find(u=>u.stool?.id===st.id),remote=owner&&String(owner.id)!==String(app.me?.()?.id);
       const carried=carrying===st.id||remote&&owner.stool.action==='carry'&&owner.clubPose?.station==='walk';
@@ -567,13 +572,15 @@ export function createLobby3D(app) {
       const seated=mine===st||remote&&owner.stool.action==='sit';
       const floor=cinemaFloor(st.x,st.z);
       if(mine!==st)st.height=saved?.height??0;
-      const level=remote&&seated&&owner.clubPose?.station==='seat'?owner.clubPose.y-floor:st.height-(seated?.07:0);
-      const lean=mine===st?(Number(keys.has('d'))-Number(keys.has('a')))*.14:(remote&&seated?owner.clubPose?.roll??0:0);
-      st.spin+=((lean-st.roll)*50-st.spin*4)*dt;st.roll+=st.spin*dt;
-      st.v+=((level-st.y)*110-st.v*7)*dt;st.y+=st.v*dt;
+      const level=remote&&seated&&owner.clubPose?.station==='seat'?owner.clubPose.y-floor:st.height-(seated?.02:0);
+      if(remote&&seated){st.y=level;st.v=0}
+      else{
+        st.v+=((level-st.y)*100-st.v*6)*dt;
+        st.y=THREE.MathUtils.clamp(st.y+st.v*dt,level-.03,level+.03);
+      }
       const model=st.model??st.placeholder;
       model.position.set(st.x,floor+(carried?.48:0)+(st.lift?0:st.y),st.z);
-      if(st.lift){st.lift.position.y=st.base+st.y;st.lift.rotation.z=st.roll}else model.rotation.z=st.roll;
+      if(st.lift)st.lift.position.y=st.base+st.y;
     }
     const showCarry=!seating&&(carrying!==null||near?.stool!=null)&&!tableFootball.active&&!boardOpen;
     stoolBar.style.display=mine||showCarry?'flex':'none';
@@ -970,6 +977,8 @@ export function createLobby3D(app) {
     const ctx=audioContext;if(!active||!tableRoomGain||!soundAllowed()||ctx?.state!=='running')return;
     if(!tableBus){tableBus=ctx.createGain();tableBus.connect(ctx.destination)}
     tableBus.gain.value=tableLevel*tableRoomGain;
+    // suoni veri registrati al tavolo (finché non sono caricati resta il suono sintetizzato qui sotto)
+    if(playBalillaSound(ctx,tableBus,type,Math.max(.15,Math.min(1,Number(power)||.5))))return;
     if(!tableNoise){
       tableNoise=ctx.createBuffer(1,Math.floor(ctx.sampleRate*.3),ctx.sampleRate);
       const d=tableNoise.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
@@ -1001,7 +1010,11 @@ export function createLobby3D(app) {
   }
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
   solid(-13.73,-12.27,-.62,.62); // tavolo con manopole e manicotti
-  spots.push({x:-13,z:0,hx:.73,hz:.62,pad:.7,label:'Calcio balilla',balilla:true});
+  for (const team of [0,1]) for (const pair of [0,1]) {
+    const anchor = tableFootball.pose(team*2,2,pair);
+    const station = {x:anchor.x,z:anchor.z,hx:.13,hz:.14,pad:.35,label:pair?'Balilla · Attacco':'Balilla · Difesa',balilla:true,team,pair};
+    spots.push(station);
+  }
   const speakers=[];
   const grille=std('#15171a',.88),cone=std('#333941',.55);
   for(const [cx,cz,halfX,halfZ] of [[0,0,6.4,5.5],[-13,0,5.4,5.5],[13,0,5.4,5.5],[0,-12,6.4,5.4]]){
@@ -1208,7 +1221,7 @@ export function createLobby3D(app) {
       let look=cam.yaw-Math.PI;look=Math.atan2(Math.sin(look),Math.cos(look));
       const yaw=seating.seat?seating.yaw:Math.PI;
       look=cam.yaw-yaw;look=Math.atan2(Math.sin(look),Math.cos(look));
-      return {station:'seat',...(seating.stool!=null?{roll:r(stools[seating.stool].roll)}:{}),x:r(pos.x),z:r(pos.z),y:r(cinemaFloor(pos.x,pos.z)+(stools[seating.stool]?.y??0)),yaw:r(yaw),look:r(look),pitch:r(cam.pitch)};
+      return {station:'seat',x:r(pos.x),z:r(pos.z),y:Math.round((cinemaFloor(pos.x,pos.z)+(stools[seating.stool]?.y??0))*1000)/1000,yaw:r(yaw),look:r(look),pitch:r(cam.pitch)};
     }
     // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
     const r=v=>Math.round(v*20)/20;
@@ -1239,7 +1252,7 @@ export function createLobby3D(app) {
   function seatPose(c,p){
     if(c===me)return null;
     c.walk=null;
-    c.root.position.set(p.x,(Number(p.y)||0)-.16,p.z);c.root.rotation.set(0,Number.isFinite(p.yaw)?p.yaw:Math.PI,Number(p.roll)||0);
+    c.root.position.set(p.x,(Number(p.y)||0)-.16,p.z);c.root.rotation.set(0,Number.isFinite(p.yaw)?p.yaw:Math.PI,0);
     sitJoints(c);
     const k=Math.min(1,peerDt*8);
     c.head.rotation.y+=(Math.max(-1.2,Math.min(1.2,Number(p.look)||0))-c.head.rotation.y)*k;
@@ -1395,6 +1408,10 @@ export function createLobby3D(app) {
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
     if(e.target?.matches?.('input,select'))return;
     if(e.code==='KeyG'&&!seating){if(e.type==='keydown'&&!e.repeat)toggleCarry();return}
+    if(seating?.stool!=null&&['KeyA','KeyD'].includes(e.code)){
+      if(e.type==='keydown'&&!e.repeat)bounceStool();
+      e.preventDefault();return;
+    }
     if(monitor && ['KeyI','KeyK'].includes(e.code)){
       e.preventDefault();monitor.frame.contentWindow.cabinetMonitor?.key(e.code,e.type==='keydown');return;
     }
@@ -1521,7 +1538,7 @@ export function createLobby3D(app) {
     if (joy.id !== null) { ix += joy.x; iz += joy.y; }
     const mag = Math.min(1, Math.hypot(ix, iz));
     let speed = 0;
-    if (!seating && mag > 0.12) {
+    if (!seating && !tableFootball.active && mag > 0.12) {
       // avanti = lontano dalla telecamera
       const s = Math.sin(cam.yaw), c = Math.cos(cam.yaw);
       const n = Math.hypot(ix, iz);
@@ -1558,7 +1575,7 @@ export function createLobby3D(app) {
     // cosa c'è vicino
     let best = null, bd = 1e9;
     for (const s of spots) { const d = rectDist(s, pos.x, pos.z); if (d < s.pad && d < bd) { bd = d; best = s; } }
-    if (!touch) {
+    if (!touch && !best?.balilla) {
       const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw);
       let ba = 0.45;
       for (const s of spots) {
@@ -1573,6 +1590,7 @@ export function createLobby3D(app) {
       near = best;
       actB.hidden = !near;
       if (near?.pong) actB.textContent = monitor ? 'Spegni Pong · '+(touch?'tocca il monitor':'racchetta I/K') : 'Avvia Pong'+(touch?'':' (E)');
+      else if (near?.balilla) actB.textContent = near.label + (touch ? ' · Gioca' : ' · Gioca (E)');
       else if (near) actB.textContent = (near.sit?'':'Apri · ') + near.label + (touch ? '' : '  (E)');
     }
     ring.visible = !!near && !!near.mq;
@@ -1602,7 +1620,6 @@ export function createLobby3D(app) {
     if(pos.z>6.45)camera.position.z=Math.max(6.43,camera.position.z);
     camera.lookAt(tgt);
     if(seating){
-      camera.up.set(Math.sin(stools[seating.stool]?.roll??0),1,0).normalize();
       actB.hidden=true;
       cam.yaw+=(Number(keys.has('arrowleft'))-Number(keys.has('arrowright')))*dt*1.7;
       cam.pitch=THREE.MathUtils.clamp(cam.pitch+(Number(keys.has('arrowdown'))-Number(keys.has('arrowup')))*dt,-.65,.8);
@@ -1617,6 +1634,7 @@ export function createLobby3D(app) {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
     last = now; t += dt;
+    stepStools(dt);
     step(dt);
     const listenerYaw=Math.atan2(-camera.matrixWorld.elements[2],camera.matrixWorld.elements[0]);
     window.binottolandClubRadio?.locate?.(speakers,pos,listenerYaw);
@@ -1668,7 +1686,7 @@ export function createLobby3D(app) {
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
     tableVolume.wrap.style.display=tableRoomGain>0?'flex':'none';
-    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);placePeers();stepStools(dt);
+    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
     const nowMs=performance.now();
@@ -1760,10 +1778,10 @@ export function createLobby3D(app) {
   function launch(s,approved=false) {
     if(carrying!==null||requested)return;
     if(s.stool!=null&&!approved){if(!seating)stoolRequest(s.stool,'sit');return}
-    if(document.pointerLockElement&&!s?.seat&&!s?.sit)document.exitPointerLock?.();
+    if(document.pointerLockElement&&!s?.balilla&&!s?.seat&&!s?.sit)document.exitPointerLock?.();
     if (s.board) { s.act(); return; }
     if(seating||tableFootball.active)return;
-    if(s.balilla){setFirst(true);resetMovement();tableFootball.open();return}
+    if(s.balilla){setFirst(true);resetMovement();tableFootball.open(s.team,s.pair);return}
     if(s.pong){toggleMonitor(s);return}
     if(s.seat){
       // divani dell'atrio e sedie dei tavoli: ci si siede (se il posto è libero), "Alzati" per tornare a camminare
