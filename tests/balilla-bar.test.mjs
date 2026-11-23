@@ -65,6 +65,32 @@ test('Ingresso libero, rimessa manuale, cambio aste e segnapunti condiviso', t =
   assert.equal(b.state.playing, true);
 });
 
+test('Chi si ricollega con una connessione nuova riprende il suo posto al tavolo', t => {
+  const hub = new BalillaHub();
+  t.after(() => hub.stop());
+  const conn = id => ({
+    id,
+    send(raw) {
+      this.state = JSON.parse(raw);
+    }
+  });
+  const old = conn('anna'),
+    fresh = conn('anna');
+  const send = (ws, action, data = {}) => hub.message(ws, 'anna', { action, ...data });
+  send(old, 'watch');
+  send(old, 'join', { mode: 2, slot: 0, target: 10, bar: true });
+  assert.equal(old.state.slot, 0);
+  // la vecchia connessione resta aperta (morta): quella nuova chiede lo stesso posto
+  send(fresh, 'watch');
+  send(fresh, 'join', { mode: 2, slot: 0, target: 10, bar: true });
+  assert.equal(fresh.state.slot, 0, 'il posto passa alla connessione nuova');
+  assert.equal(hub.seated().length, 1);
+  assert.ok(hub.timer, 'la partita gira');
+  simulate(hub.field, 5);
+  send(fresh, 'ready');
+  assert.equal(hub.field.phase, 'play', 'il rilancio funziona');
+});
+
 test('Il tocco lento imprime meno velocità di un tiro rapido', () => {
   function shot(angle) {
     const field = newField();

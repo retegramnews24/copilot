@@ -190,6 +190,23 @@ export class BalillaHub {
     }
     if (b.action === 'join') {
       if (member.slot >= 0) return;
+      // Ricollegato con una connessione nuova (rete caduta un attimo): la vecchia, ormai morta, teneva ancora il
+      // posto e da qui si era solo spettatori (aste ferme, rilancio ignorato). La persona riprende il suo posto.
+      if (id != null)
+        for (const [peer, other] of [...this.viewers])
+          if (peer !== ws && other.id === id) {
+            const slot = other.slot;
+            this.viewers.delete(peer);
+            this.remember(peer, null);
+            if (slot >= 0 && b.slot === slot) {
+              member.slot = slot;
+              this.remember(ws, member);
+              if (this.field.bar) this.updateBar();
+              else this.start();
+              this.broadcast(true);
+              return;
+            }
+          }
       const occupied = this.seated();
       if (!occupied.length && !this.busy()) {
         // chi apre il tavolo sceglie 1 contro 1 o 2 contro 2, i gol e se è secca o al meglio di 3
