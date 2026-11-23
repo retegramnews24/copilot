@@ -48,6 +48,7 @@ const CSS = `
 .l3d-gl,.l3d-gl canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .l3d-top{position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);right:calc(var(--ui-safe-right,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 10px);display:flex;gap:8px;align-items:center;pointer-events:none}
 .l3d-top>*{pointer-events:auto;flex:none;width:auto;margin:0}
+@media (max-width:520px){.l3d-top{gap:5px}.l3d-top>*{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(10.5px,3.3vw,14px)!important;padding:7px 9px!important}.l3d-where{padding:6px 8px!important}}
 .l3d button{font:inherit;color:#fff;background:rgba(18,14,28,.72);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer}
 .l3d-where{margin-left:auto;padding:7px 12px;border-radius:999px;background:rgba(18,14,28,.6);font-weight:600;font-size:14px}
 .l3d-hint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + 58px);padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.45);font-size:13px;color:#e7e1f3;text-align:center;max-width:86vw;transition:opacity .6s;pointer-events:none}
@@ -1272,7 +1273,8 @@ export function createLobby3D(app) {
   const viewButton=document.createElement('button');
   $('.l3d-top').append(viewButton);
   function setFirst(value){
-    firstPerson=value;viewButton.textContent=value?'Vista esterna (V)':'Vista dagli occhi (V)';
+    // sul telefono niente "(V)": la tastiera non c'è e la barra in alto deve stare nella larghezza
+    firstPerson=value;viewButton.textContent=(value?'Vista esterna':'Vista dagli occhi')+(touch?'':' (V)');
     viewButton.setAttribute('aria-pressed',String(value));
   }
   let activityView = null;
@@ -1838,16 +1840,17 @@ export function createLobby3D(app) {
   const DESCENT_TIME = 3.5;
   const descent = { on: false, done: false, t: 0 };
   const dTop = new THREE.Vector3(), dEye = new THREE.Vector3(), dLook = new THREE.Vector3(), dAhead = new THREE.Vector3();
-  function startDescent() {
+  // hold: sotto lo splash la telecamera resta ferma in alto; la discesa parte quando lo splash si chiude
+  function startDescent(hold = false) {
     if (descent.done) return;
     descent.done = true;
     if (reducedMotion) { setFirst(true); return; }
-    Object.assign(descent, { on: true, t: 0 });
+    Object.assign(descent, { on: true, t: 0, hold });
     cam.pitch = 0.05;
   }
   function descentFrame(dt) {
     resetMovement();
-    descent.t = Math.min(1, descent.t + dt / DESCENT_TIME);
+    if (!descent.hold) descent.t = Math.min(1, descent.t + dt / DESCENT_TIME);
     const k = descent.t * descent.t * (3 - 2 * descent.t); // parte e arriva piano
     const yaw = cam.yaw, ground = cinemaFloor(pos.x, pos.z);
     dTop.set(pos.x + 0.35 * Math.sin(yaw), H - 0.3, pos.z + 0.35 * Math.cos(yaw));
@@ -1975,8 +1978,10 @@ export function createLobby3D(app) {
     $('.l3d-load').hidden = true;
     // la prima volta la Lobby si apre sotto lo splash: la discesa dall'alto parte quando lo splash si chiude
     const splash = document.getElementById('playground-intro');
-    if (splash?.open && !descent.done) { cam.pitch = 0.05; splash.addEventListener('close', startDescent, { once: true }); }
-    else startDescent();
+    if (splash?.open && !descent.done) {
+      startDescent(true);
+      splash.addEventListener('close', () => { descent.hold = false; }, { once: true });
+    } else startDescent();
     raf = requestAnimationFrame(frame);
     // prepara subito le luci di tutte le sale: entrando per la prima volta in una sala non si blocca
     setTimeout(() => { prepareLights(); }, 1200);

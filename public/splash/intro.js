@@ -37,14 +37,20 @@ function closeSplash() {
 
 function followLobby(started) {
   // la Lobby 3D si prepara solo per chi la usa: senza, lo splash fa i suoi 2 secondi e basta
-  const state = () => window.binottolandLobbyLoading?.() ?? null;
+  // Chi usa la 3D si legge subito qui (come fa l'app): il codice dell'app sul telefono può arrivare dopo qualche
+  // secondo, e intanto lo splash deve aspettare invece di chiudersi sulla Lobby classica.
+  let want3D = true;
+  try {
+    want3D = localStorage.getItem('binottoland-lobby3d') !== '0';
+  } catch {}
+  const state = () => window.binottolandLobbyLoading?.() ?? (want3D ? { progress: 0, ready: false } : null);
   let readyAt = null;
   clearInterval(poll);
   poll = setInterval(() => {
     const now = Date.now() - started;
     const s = state();
     if (!s) {
-      if (now >= duration + 1200) closeSplash(); // niente Lobby 3D in arrivo
+      if (now >= duration) closeSplash(); // Lobby classica: i soliti 2 secondi
       return;
     }
     bar.hidden = false;
