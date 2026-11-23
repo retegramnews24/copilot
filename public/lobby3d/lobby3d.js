@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=53736e542d';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=5ce7ccb69f';
 import {buildBalilla} from './balilla.js?v=1373ac706c';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
@@ -1047,10 +1047,15 @@ export function createLobby3D(app) {
   }
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
   // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
-  const pinball=buildFlipper(scene,el,{audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.()||[],sendScore:score=>app.pinballScore?.(score),me:()=>app.me?.()});
-  // volume del flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarlo
-  const pinballVolume=volumeControl('Flipper','club3d-flipper-volume',.8,v=>{pinball.setVolume(v);pinball.wake()});
-  pinball.setVolume(pinballVolume.read());mixPanel.append(pinballVolume.wrap);
+  // due flipper uno accanto all'altro: Grand Prix (F1) e Binotto GT (endurance), ognuno con la sua classifica.
+  // "pinball" è quello a cui stai giocando (o il Grand Prix se non giochi): il resto della Lobby parla con lui
+  const tables={gp:null,gt:null};
+  for(const kind of ['gp','gt'])tables[kind]=buildFlipper(scene,el,{kind,audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.(kind)||[],sendScore:score=>app.pinballScore?.(score,kind),me:()=>app.me?.()});
+  let pinballKind='gp';
+  const pinball=new Proxy({},{get:(_,k)=>{const t=tables[pinballKind];const v=t[k];return typeof v==='function'?v.bind(t):v}});
+  // volume dei flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarli
+  const pinballVolume=volumeControl('Flipper','club3d-flipper-volume',.8,v=>{for(const t of Object.values(tables)){t.setVolume(v);t.wake()}});
+  for(const t of Object.values(tables))t.setVolume(pinballVolume.read());mixPanel.append(pinballVolume.wrap);
   const pinballExit=document.createElement('button');
   pinballExit.textContent='✕';pinballExit.setAttribute('aria-label','Lascia il flipper');
   pinballExit.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 10px);right:calc(var(--ui-safe-right,0px) + 14px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:20px!important;background:rgba(18,14,28,.6)!important;z-index:5;display:none';
@@ -1058,10 +1063,12 @@ export function createLobby3D(app) {
   el.append(pinballExit);
   const playing=()=>tableFootball.active||pinball.active; // si gioca al tavolo: niente camminata né avvisi
   scene.updateMatrixWorld(true);
-  { const st=pinball.stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label:'Flipper · Gioca',where:'Sala giochi',pinball:true}); }
-  { const c=Math.cos(FLIPPER_AT.ry),sn=Math.sin(FLIPPER_AT.ry),xs=[],zs=[];
-    for(const [lx,lz] of [[-.43,-.82],[.43,-.82],[-.43,.8],[.43,.8]]){xs.push(FLIPPER_AT.x+lx*c+lz*sn);zs.push(FLIPPER_AT.z-lx*sn+lz*c)}
-    solid(Math.min(...xs),Math.max(...xs),Math.min(...zs),Math.max(...zs)); }
+  for(const [kind,at,label] of [['gp',FLIPPER_AT,'Flipper Grand Prix · Gioca'],['gt',GT_AT,'Flipper Binotto GT · Gioca']]){
+    const st=tables[kind].stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label,where:'Sala giochi',pinball:kind});
+    const c=Math.cos(at.ry),sn=Math.sin(at.ry),xs=[],zs=[];
+    for(const [lx,lz] of [[-.43,-.82],[.43,-.82],[-.43,.8],[.43,.8]]){xs.push(at.x+lx*c+lz*sn);zs.push(at.z-lx*sn+lz*c)}
+    solid(Math.min(...xs),Math.max(...xs),Math.min(...zs),Math.max(...zs));
+  }
   solid(-13.73,-12.27,-.62,.62); // tavolo con manopole e manicotti
   for (const team of [0,1]) for (const pair of [0,1]) {
     const anchor = tableFootball.pose(team*2,2,pair);
@@ -1278,7 +1285,7 @@ export function createLobby3D(app) {
     if(parked)return parked;
     if(!active)return null;
     if(tableFootball.seat)return tableFootball.seat;
-    if(pinball.active)return {station:'flipper',slot:pinball.slot()};
+    if(pinball.active)return {station:pinballKind==='gt'?'flipper-gt':'flipper',slot:pinball.slot()};
     if(monitor&&pongAnchor&&Math.hypot(pos.x-pongAnchor.x,pos.z-pongAnchor.z)<.24)return {station:'pong',slot:pongAnchor.slot||0};
     // seduto al cinema: gli altri ti vedono seduto sul tuo posto del divano, con la testa che guarda dove guardi
     if(seating){
@@ -1339,9 +1346,10 @@ export function createLobby3D(app) {
     if(c!==me)c.walk=null;
     let anchor;
     if(p.station==='balilla')anchor=tableFootball.pose(p.slot,p.mode,p.pair);
-    else if(p.station==='flipper'){
+    else if(p.station==='flipper'||p.station==='flipper-gt'){
       // mani sui pulsanti dei flipper (o la destra sul pomello della leva), braccia sempre attaccate
-      const st=pinball.stand(),hs=pinball.hands(p.slot|0,c===me?pinball.plunger():0);if(!hs)return null;
+      const t=tables[p.station==='flipper-gt'?'gt':'gp'];
+      const st=t.stand(),hs=t.hands(p.slot|0,c===me?t.plunger():0);if(!hs)return null;
       const lx=v=>(v.x-st.x)*Math.cos(st.yaw)-(v.z-st.z)*Math.sin(st.yaw);
       hs.sort((a,b)=>lx(a)-lx(b));
       anchor={x:st.x,z:st.z,yaw:st.yaw,handles:hs};
@@ -1788,10 +1796,10 @@ export function createLobby3D(app) {
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
     tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&!(touch&&tableFootball.active)&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // vicino al calcio balilla; da telefono non mentre giochi (coprirebbe il tavolo)
-    const pinballSpot=pinball.stand();
-    pinballVolume.wrap.style.display=!tableFootball.active&&!(touch&&pinball.active)&&Math.hypot(pos.x-pinballSpot.x,pos.z-pinballSpot.z)<3?'flex':'none'; // vicino al flipper
+    const nearPinball=Object.values(tables).some(t=>{const s=t.stand();return Math.hypot(pos.x-s.x,pos.z-s.z)<3});
+    pinballVolume.wrap.style.display=!tableFootball.active&&!(touch&&pinball.active)&&nearPinball?'flex':'none'; // vicino ai flipper
     pinballExit.style.display=touch&&pinball.active?'':'none';
-    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);pinball.update(camera,dt);placePeers();
+    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);for(const t of Object.values(tables))t.update(camera,dt);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
     const nowMs=performance.now();
@@ -1890,7 +1898,7 @@ export function createLobby3D(app) {
     saveActivityView();
     if (s.board) { s.act(); return; }
     if(s.balilla){resetMovement();tableFootball.open(s.team,s.pair);return}
-    if(s.pinball){resetMovement();pinball.open();near=null;return} // al flipper: si gioca dalla barra
+    if(s.pinball){resetMovement();pinballKind=s.pinball;pinball.open();near=null;return} // al flipper: si gioca dalla barra
     if(s.pong){toggleMonitor(s);return}
     if(s.seat){
       // divani dell'atrio e sedie dei tavoli: ci si siede (se il posto è libero), "Alzati" per tornare a camminare

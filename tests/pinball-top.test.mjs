@@ -28,6 +28,15 @@ for (const bad of [-5, 0, 1.5, 1e9, '100']) {
 for (let i = 0; i < 15; i++) await recordPinball(ctx, { user: { id: 'p' + i, name: 'P' + i } }, 100 + i);
 assert.equal(store.get('pinballTop').length, PINBALL_TOP);
 assert.equal(store.get('pinballTop')[0].name, 'Anna');
+// il Binotto GT ha la sua classifica, separata da quella del Grand Prix
+const carla = { user: { id: '9', name: 'Carla' } };
+assert.equal(await recordPinball(ctx, carla, 777, 'gt'), true);
+assert.equal(await recordPinball(ctx, carla, 999, 'gp'), true, 'un tavolo non blocca l’altro');
+assert.deepEqual(
+  store.get('pinballTopGT').map(e => e.name),
+  ['Carla']
+);
+assert.equal(await recordPinball(ctx, carla, 5, 'xx'), false, 'tavolo sconosciuto');
 console.log(
   'PASS classifica del flipper: top 10 con il nome, il migliore di ognuno, invii limitati e punteggi validi.'
 );

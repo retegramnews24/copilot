@@ -180,7 +180,7 @@ export function paintPlayfield(canvas) {
 // Vetro del tabellone: il collage della gara di notte. lamps: 0…1 per la cornice di lampadine che si rincorrono.
 // riquadro del punteggio sul vetro: cifre grandi in diretta (salgono mentre fai punti), pallina, bonus e messaggio;
 // in attesa mostra il record della classifica
-function scorePanel(g, w, h, time, info) {
+export function scorePanel(g, w, h, time, info) {
   const x0 = w * 0.07,
     y0 = h * 0.43,
     pw = w * 0.86,

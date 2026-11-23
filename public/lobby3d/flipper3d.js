@@ -1,38 +1,87 @@
-// Flipper "Binottoland Grand Prix" nella sala giochi della Lobby 3D. Il cabinet è fatto in Blender
-// (blender/flipper.blend → models/flipper.glb): mobile, tabellone con il display, piano con rampa, bumper,
-// respingenti e semafori. Si muovono i tre flipper (girano sul perno), la leva del lancio con la molla e i pulsanti.
-// La fisica è quella di ../flipper/physics.js (sul piano inclinato): qui la pallina d'acciaio viene messa sul piano 3D.
+// Flipper della sala giochi della Lobby 3D: due tavoli con lo stesso motore 3D, comandi, suoni e classifica.
+// - "Binottoland Grand Prix" (F1): blender/flipper.blend → models/flipper.glb, fisica ../flipper/physics.js
+// - "Binotto GT" (24 ore endurance, tre rampe di filo): blender/binotto-gt.blend → models/binotto-gt.glb,
+//   fisica ../flipper/physics-gt.js
+// Il cabinet è fatto in Blender: mobile, tabellone con il display, piano. Si muovono i tre flipper (girano sul perno),
+// la leva del lancio con la molla e i pulsanti. La fisica è sul piano inclinato: qui la pallina viene messa sul piano 3D.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
-import { paintPlayfield, paintBackglass } from './flipper-art.js?v=3aae8c64a6';
-import {
-  newGame,
-  makeTable,
-  rampPoint,
-  simulate,
-  setFlipper,
-  pull,
-  drag,
-  nudge,
-  R,
-  LANE_X,
-  BALLS
-} from '../flipper/physics.js?v=2c64ad27f0';
+import { paintPlayfield, paintBackglass } from './flipper-art.js?v=bfd8725542';
+import { paintPlayfieldGT, paintBackglassGT } from './gt-art.js?v=0105a1455e';
+import * as GP from '../flipper/physics.js?v=2c64ad27f0';
+import * as GT from '../flipper/physics-gt.js?v=0126ababe0';
 
-// contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro)
+// contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro);
+// il Binotto GT accanto, verso l'angolo
 const now0 = () => performance.now() / 1000;
 export const FLIPPER_AT = { x: -18.05, z: -3.0, ry: Math.PI / 2 };
+export const GT_AT = { x: -18.05, z: -4.4, ry: Math.PI / 2 };
 const STAND = 1.15; // dove sta il personaggio, davanti alla barra (in metri dal centro del cabinet)
 const LEVER_RUN = 0.06; // quanto torna indietro la leva tirata tutta
+
+// cosa cambia da un tavolo all'altro
+const TABLES = {
+  gp: {
+    physics: GP,
+    model: 'models/flipper.glb',
+    at: FLIPPER_AT,
+    recordKey: 'binottoland-flipper-record',
+    title: 'GRAND PRIX',
+    paintPlayfield,
+    paintBackglass,
+    rampPos: p => GP.rampPoint(p.ramp.s),
+    pit: [0.4, 0.95],
+    lamps: (table, lamp) => ({
+      lanes: table.lanes.map(x => lamp(x, 0.905, 0.016, '#ffd23f')),
+      mult: [0, 1, 2, 3].map(i => lamp(0.15 + i * 0.062, 0.36, 0.016, '#ffb020')),
+      lights: [0, 1, 2].map(i => lamp(0.205 + i * 0.035, 0.555, 0.013, '#ff2a2a')),
+      ramps: [lamp(0.105, 0.46, 0.028, '#ff8a1c')],
+      orbit: lamp(0.032, 0.63, 0.022, '#3cd8ff'),
+      save: lamp(0.241, 0.05, 0.03, '#3cff7a'),
+      extra: lamp(0.36, 0.92, 0.018, '#ff60ff'),
+      superj: lamp(0.44, 0.92, 0.018, '#ff60ff'),
+      pitArrow: lamp(0.37, 0.85, 0.024, '#3cff7a')
+    })
+  },
+  gt: {
+    physics: GT,
+    model: 'models/binotto-gt.glb?v=3', // cambiare il numero a ogni nuova esportazione (il browser tiene il vecchio)
+    at: GT_AT,
+    recordKey: 'binottoland-gt-record',
+    title: 'BINOTTO GT',
+    paintPlayfield: paintPlayfieldGT,
+    paintBackglass: paintBackglassGT,
+    rampPos: p => GT.rampPoint(p.ramp.k, p.ramp.s),
+    pit: [0.11, 0.76],
+    lamps: (table, lamp) => ({
+      lanes: table.lanes.map(x => lamp(x, 0.885, 0.015, '#c6ff1a')),
+      mult: [0, 1, 2, 3].map(i => lamp(0.15 + i * 0.062, 0.36, 0.016, '#ff9a2a')),
+      lights: table.targets.map(t => lamp((t.ax + t.bx) / 2, 0.655, 0.012, '#ffd23f')),
+      ramps: GT.RAMPS.map((r, k) =>
+        lamp(r.pts[0][0], r.pts[0][1] - 0.075, 0.02, ['#c6ff1a', '#ff9a2a', '#3ee7ff'][k])
+      ),
+      orbit: lamp(0.24, 0.5, 0.018, '#3cd8ff'),
+      save: lamp(0.241, 0.05, 0.03, '#3cff7a'),
+      extra: lamp(0.18, 0.7, 0.016, '#ff60ff'),
+      superj: lamp(0.06, 0.7, 0.016, '#ff60ff'),
+      pitArrow: lamp(0.15, 0.7, 0.02, '#3cff7a')
+    })
+  }
+};
 
 export function buildFlipper(
   scene,
   el,
-  { audio, allowed, top = () => [], sendScore = () => {}, me = () => null }
+  { audio, allowed, top = () => [], sendScore = () => {}, me = () => null, kind = 'gp' }
 ) {
+  const T = TABLES[kind];
+  const { newGame, makeTable, simulate, setFlipper, pull, drag, nudge, R, LANE_X, BALLS } = T.physics;
+  const paintPlayfield = T.paintPlayfield,
+    paintBackglass = T.paintBackglass;
+  const AT = T.at;
   const root = new THREE.Group();
-  root.position.set(FLIPPER_AT.x, 0, FLIPPER_AT.z);
-  root.rotation.y = FLIPPER_AT.ry;
+  root.position.set(AT.x, 0, AT.z);
+  root.rotation.y = AT.ry;
   scene.add(root);
   const glow = {},
     inner = { spring: null, tip: null, last: 0, slam: 0 };
@@ -45,7 +94,7 @@ export function buildFlipper(
   art.bgTexture.colorSpace = THREE.SRGBColorSpace;
   let record = 0;
   try {
-    record = Number(localStorage.getItem('binottoland-flipper-record')) || 0;
+    record = Number(localStorage.getItem(T.recordKey)) || 0;
   } catch {}
   let piano = null,
     flips = [],
@@ -88,7 +137,7 @@ export function buildFlipper(
     for (let y = 0; y < 64; y += 3) dmd.fillRect(0, y, 256, 1);
     dmdTexture.needsUpdate = true;
   }
-  drawDmd('GRAND PRIX', 'PREMI E PER GIOCARE');
+  drawDmd(T.title, 'PREMI E PER GIOCARE');
   // pallina d'acciaio (fino a 3 col multiball), figlie del piano: coordinate del gioco → piano
   const steel = new THREE.MeshStandardMaterial({ color: '#d8dde2', metalness: 1, roughness: 0.12 });
   const balls = [0, 1, 2].map(() => new THREE.Mesh(new THREE.SphereGeometry(R, 24, 16), steel));
@@ -102,7 +151,7 @@ export function buildFlipper(
     new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coil), 320, 0.002, 6),
     new THREE.MeshStandardMaterial({ color: '#c9d2da', metalness: 0.9, roughness: 0.25 })
   );
-  new GLTFLoader().load(new URL('models/flipper.glb', import.meta.url).href, gltf => {
+  new GLTFLoader().load(new URL(T.model, import.meta.url).href, gltf => {
     root.add(gltf.scene);
     piano = gltf.scene.getObjectByName('piano');
     flips = ['flipper_sx', 'flipper_dx', 'flipper_alto'].map(n => gltf.scene.getObjectByName(n));
@@ -168,7 +217,7 @@ export function buildFlipper(
       );
     glow.targets = table.targets.map(t => halo((t.ax + t.bx) / 2, t.ay, 0.04, 0.03, '#ffd23f'));
     glow.kick = halo(0.026, 0.1, 0.004, 0.022, '#3cff7a');
-    glow.pit = halo(0.4, 0.95, 0.03, 0.04, '#3cff7a');
+    glow.pit = halo(T.pit[0], T.pit[1], 0.03, 0.04, '#3cff7a');
     glow.light = new THREE.PointLight('#ffb070', 0, 0.6, 1.6);
     piano.add(glow.light);
     // piano dipinto (asfalto, cordoli, frecce dei tiri, logo): appena sopra il piano di Blender
@@ -188,17 +237,7 @@ export function buildFlipper(
     piano.add(field);
     // inserti luminosi: lampadine sotto il piano che si accendono con il gioco
     const lamp = (x, y, r, color) => halo(x, y, 0.0014, r, color);
-    art.lamps = {
-      lanes: table.lanes.map(x => lamp(x, 0.905, 0.016, '#ffd23f')),
-      mult: [0, 1, 2, 3].map(i => lamp(0.15 + i * 0.062, 0.36, 0.016, '#ffb020')),
-      lights: [0, 1, 2].map(i => lamp(0.205 + i * 0.035, 0.555, 0.013, '#ff2a2a')),
-      ramp: lamp(0.105, 0.46, 0.028, '#ff8a1c'),
-      orbit: lamp(0.032, 0.63, 0.022, '#3cd8ff'),
-      save: lamp(0.241, 0.05, 0.03, '#3cff7a'),
-      extra: lamp(0.36, 0.92, 0.018, '#ff60ff'),
-      superj: lamp(0.44, 0.92, 0.018, '#ff60ff'),
-      pitArrow: lamp(0.37, 0.85, 0.024, '#3cff7a')
-    };
+    art.lamps = T.lamps(table, lamp);
     {
       const coil = [];
       for (let i = 0; i <= 120; i++) {
@@ -457,7 +496,7 @@ export function buildFlipper(
     // dove sta chi gioca (davanti alla barra) e verso dove guarda
     stand() {
       const p = root.localToWorld(new THREE.Vector3(0, 0, STAND));
-      return { x: p.x, z: p.z, yaw: FLIPPER_AT.ry };
+      return { x: p.x, z: p.z, yaw: AT.ry };
     },
     setVolume(v) {
       volume = Math.max(0, Math.min(1, Number(v) || 0));
@@ -603,7 +642,7 @@ export function buildFlipper(
         const p = g?.balls[i];
         b.visible = !!p;
         if (p?.ramp) {
-          const q = rampPoint(p.ramp.s);
+          const q = T.rampPos(p);
           b.position.set(q.x - 0.26, q.z + 0.006 + R, -(q.y - 0.53));
         } else if (p) b.position.set(p.x - 0.26, R, -(p.y - 0.53));
       });
@@ -647,7 +686,7 @@ export function buildFlipper(
           set(glow.targets[i], (t.flash || 0) / 0.25 + (t.down ? 0.25 : 0), (t.ax + t.bx) / 2, t.ay)
         );
         glow.kick.material.opacity = g.kickback ? 0.55 + 0.45 * Math.sin(now0() * 6) ** 2 : 0;
-        set(glow.pit, g.pitFlash, 0.4, 0.95);
+        set(glow.pit, g.pitFlash, T.pit[0], T.pit[1]);
         if (g.kickFlash > 0) set(glow.kick, g.kickFlash / 0.4, 0.03, 0.1);
         glow.light.intensity = best * 0.8;
         if (at) glow.light.position.set(at[0] - 0.26, 0.08, -(at[1] - 0.53));
@@ -673,7 +712,7 @@ export function buildFlipper(
             ...L.lanes,
             ...L.mult,
             ...L.lights,
-            L.ramp,
+            ...L.ramps,
             L.orbit,
             L.save,
             L.extra,
@@ -690,7 +729,15 @@ export function buildFlipper(
           );
           L.mult.forEach((m, i) => set(m, g.mult >= i + 2));
           L.lights.forEach((m, i) => set(m, g.lights > i || (g.lights >= 3 && blink)));
-          set(L.ramp, g.multiball ? blink : g.comboTimer > 0 ? blink : true);
+          // rampe: lampeggiano in multiball e durante la combo, quella appena presa lampeggia per un secondo
+          L.ramps.forEach((m, k) =>
+            set(
+              m,
+              g.multiball || g.comboTimer > 0 || (g.rampFlash?.k === k && g.clock - (g.rampFlash.at ?? 0) < 1)
+                ? blink
+                : true
+            )
+          );
           set(L.orbit, g.comboTimer > 0 ? blink : g.laps > 0);
           set(L.save, g.save > 0 && (g.save > 2 || blink));
           set(L.extra, g.extraLit && blink);
@@ -718,7 +765,8 @@ export function buildFlipper(
             balls: BALLS,
             mult: g.mult || 1,
             flash: art.flash,
-            message: g.messageTime > 0 ? g.message : g.over ? 'S per ricominciare' : ''
+            message: g.messageTime > 0 ? g.message : g.over ? 'S per ricominciare' : '',
+            hour: g.hour
           };
         } else {
           const best = top()[0];
@@ -744,7 +792,7 @@ export function buildFlipper(
         if (g.score > record) {
           record = g.score;
           try {
-            localStorage.setItem('binottoland-flipper-record', String(record));
+            localStorage.setItem(T.recordKey, String(record));
           } catch {}
         }
         if (g.rank === 1 && g.score > 0) say('Nuovo record della classifica!');
@@ -761,7 +809,7 @@ export function buildFlipper(
             e.score.toLocaleString('it-IT'),
             art.topIndex + 1 + '. ' + e.name.toUpperCase().slice(0, 20)
           );
-        else drawDmd(list.length ? 'CLASSIFICA' : 'GRAND PRIX', 'E PER GIOCARE · 5 PALLINE');
+        else drawDmd(list.length ? 'CLASSIFICA' : T.title, 'E PER GIOCARE · 5 PALLINE');
       }
       // display
       const now = performance.now();

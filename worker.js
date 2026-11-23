@@ -671,7 +671,8 @@ export class Room extends DurableObject {
       }
       // flipper della Lobby 3D: il punteggio di fine partita entra nella classifica (top 10 con il nome)
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
-        const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score));
+        const table = b.table === 'gt' ? 'gt' : 'gp';
+        const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score, table));
         ws.serializeAttachment(a);
         if (better) await this.lobbyHub.lobbyBroadcast();
         return;
