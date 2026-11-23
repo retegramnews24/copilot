@@ -226,20 +226,22 @@ export function buildFlipper(
 
   // ---------- suoni (sintetizzati, come nell'anteprima) ----------
   let noise = null,
-    ownAudio = null;
+    ownAudio = null,
+    volume = 0.8; // cursore "Flipper" del mixer della Lobby
   function wakeAudio() {
     try {
       if (!audio()) ownAudio ??= new AudioContext();
-      const ac = audio() || ownAudio;
-      if (ac.state === 'suspended') ac.resume();
+      for (const ac of [audio(), ownAudio]) if (ac?.state === 'suspended') ac.resume().catch(() => {});
     } catch {}
   }
+  // l'audio della Lobby se è acceso, altrimenti il nostro (sul telefono quello della Lobby può restare sospeso)
+  const ctx = () => [audio(), ownAudio].find(ac => ac?.state === 'running') || audio() || ownAudio;
   function sound(type, power = 0.6) {
-    const ac = audio() || ownAudio;
-    if (!ac || ac.state !== 'running' || !allowed()) return;
+    const ac = ctx();
+    if (!ac || ac.state !== 'running' || !allowed() || volume <= 0) return;
     const now = ac.currentTime,
       out = ac.createGain();
-    out.gain.value = 0.3;
+    out.gain.value = 0.3 * volume;
     out.connect(ac.destination);
     if (!noise) {
       noise = ac.createBuffer(1, ac.sampleRate * 0.4, ac.sampleRate);
@@ -331,19 +333,19 @@ export function buildFlipper(
   function say(text) {
     try {
       const now = performance.now();
-      if (!allowed() || now - lastVoice < 1200 || !window.speechSynthesis) return;
+      if (!allowed() || volume <= 0 || now - lastVoice < 1200 || !window.speechSynthesis) return;
       lastVoice = now;
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'it-IT';
       u.rate = 1.15;
       u.pitch = 0.9;
-      u.volume = 0.8;
+      u.volume = Math.min(1, volume);
       speechSynthesis.speak(u);
     } catch {}
   }
   let motor = null;
   function engine(g) {
-    const ac = audio() || ownAudio;
+    const ac = ctx();
     if (!g || g.over || !active || !ac || ac.state !== 'running' || !allowed()) {
       if (motor) {
         motor.gain.gain.setTargetAtTime(0, ac?.currentTime || 0, 0.2);
@@ -373,7 +375,7 @@ export function buildFlipper(
     }
     const v = Math.max(0, ...g.balls.map(b => (b.ramp ? b.ramp.v : Math.hypot(b.vx, b.vy))));
     motor.osc.frequency.setTargetAtTime(42 + v * 22, ac.currentTime, 0.15);
-    motor.gain.gain.setTargetAtTime(0.018 + Math.min(0.03, v * 0.008), ac.currentTime, 0.2);
+    motor.gain.gain.setTargetAtTime((0.018 + Math.min(0.03, v * 0.008)) * volume, ac.currentTime, 0.2);
   }
 
   // ---------- partita ----------
@@ -457,6 +459,10 @@ export function buildFlipper(
       const p = root.localToWorld(new THREE.Vector3(0, 0, STAND));
       return { x: p.x, z: p.z, yaw: FLIPPER_AT.ry };
     },
+    setVolume(v) {
+      volume = Math.max(0, Math.min(1, Number(v) || 0));
+    },
+    wake: wakeAudio,
     open() {
       active = true;
       look.yaw = look.pitch = 0;
@@ -493,7 +499,8 @@ export function buildFlipper(
     // mouse: tasto sinistro e destro i flipper; trascinando il pomello della leva la si tira (più la tiri, più parte forte)
     pointer(e) {
       if (!game) return false;
-      if (e.type === 'pointerdown') wakeAudio();
+      // sul telefono l'audio si sblocca solo quando il dito si alza (il tocco giù non basta al browser)
+      if (e.type === 'pointerdown' || e.type === 'pointerup') wakeAudio();
       // Mouse: i flipper seguono i tasti davvero premuti (e.buttons). Con un tasto già giù il browser non manda il
       // "giù" e il "su" dell'altro tasto: leggendo lo stato dei tasti a ogni evento i flipper non restano mai bloccati.
       if (e.pointerType === 'mouse' && !game.over) {

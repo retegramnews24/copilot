@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=35e5548aa4';
+import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=53736e542d';
 import {buildBalilla} from './balilla.js?v=1373ac706c';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
@@ -849,6 +849,7 @@ export function createLobby3D(app) {
     try{audioContext??=new AudioContext();if(audioContext.state==='suspended')audioContext.resume().then(()=>{if(mixEligible&&previewVideo)cinemaMix(previewVideo)}).catch(()=>{});else if(mixEligible&&previewVideo)cinemaMix(previewVideo)}catch{}
   }
   el.addEventListener('pointerdown',unlockCinemaSound);
+  el.addEventListener('pointerup',unlockCinemaSound); // sul telefono l'audio si sblocca solo quando il dito si alza
   window.addEventListener('keydown',unlockCinemaSound);
   audioButton.onclick=()=>{
     soundEnabled=!soundEnabled;updateSoundButton();
@@ -1047,6 +1048,14 @@ export function createLobby3D(app) {
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
   // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
   const pinball=buildFlipper(scene,el,{audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.()||[],sendScore:score=>app.pinballScore?.(score),me:()=>app.me?.()});
+  // volume del flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarlo
+  const pinballVolume=volumeControl('Flipper','club3d-flipper-volume',.8,v=>{pinball.setVolume(v);pinball.wake()});
+  pinball.setVolume(pinballVolume.read());mixPanel.append(pinballVolume.wrap);
+  const pinballExit=document.createElement('button');
+  pinballExit.textContent='✕';pinballExit.setAttribute('aria-label','Lascia il flipper');
+  pinballExit.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 10px);right:calc(var(--ui-safe-right,0px) + 14px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:20px!important;background:rgba(18,14,28,.6)!important;z-index:5;display:none';
+  pinballExit.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();pinball.close();resetMovement()});
+  el.append(pinballExit);
   const playing=()=>tableFootball.active||pinball.active; // si gioca al tavolo: niente camminata né avvisi
   scene.updateMatrixWorld(true);
   { const st=pinball.stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label:'Flipper · Gioca',where:'Sala giochi',pinball:true}); }
@@ -1779,6 +1788,9 @@ export function createLobby3D(app) {
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
     tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&!(touch&&tableFootball.active)&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // vicino al calcio balilla; da telefono non mentre giochi (coprirebbe il tavolo)
+    const pinballSpot=pinball.stand();
+    pinballVolume.wrap.style.display=!tableFootball.active&&!(touch&&pinball.active)&&Math.hypot(pos.x-pinballSpot.x,pos.z-pinballSpot.z)<3?'flex':'none'; // vicino al flipper
+    pinballExit.style.display=touch&&pinball.active?'':'none';
     peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);pinball.update(camera,dt);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
