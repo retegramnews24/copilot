@@ -35,10 +35,9 @@ function closeSplash() {
   else splash.removeAttribute('open');
 }
 
-// verso la Lobby 3D: lo splash sfuma in 0,6 secondi e intanto la telecamera comincia già a scendere
+// verso la Lobby 3D (già aperta sotto): lo splash sfuma in 0,6 secondi
 function fadeIntoLobby() {
   clearInterval(poll);
-  splash.dispatchEvent(new Event('fading'));
   splash.style.transition = 'opacity .6s';
   splash.style.opacity = '0';
   setTimeout(() => {

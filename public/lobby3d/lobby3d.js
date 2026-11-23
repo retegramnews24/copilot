@@ -1830,44 +1830,9 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
-    topBar.style.visibility=(touch&&playing())||descent.on?'hidden':''; // da telefono al calcio balilla e al flipper (e mentre si entra) la barra in alto sparisce
+    topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
-    if(descent.on)descentFrame(dt);
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
-  }
-  // Entrata (la prima volta, appena finito lo splash): inquadratura dall'alto sopra il personaggio che scende piano
-  // piano fino ai suoi occhi; alla fine si resta nella vista dagli occhi (V per cambiarla).
-  const DESCENT_TIME = 3.5;
-  const descent = { on: false, done: false, t: 0 };
-  const dTop = new THREE.Vector3(), dEye = new THREE.Vector3(), dLook = new THREE.Vector3(), dAhead = new THREE.Vector3();
-  // hold: sotto lo splash la telecamera resta ferma in alto; la discesa parte quando lo splash si chiude
-  function startDescent(hold = false) {
-    if (descent.done) return;
-    descent.done = true;
-    if (reducedMotion) { setFirst(true); return; }
-    Object.assign(descent, { on: true, t: 0, hold, from: null });
-    cam.pitch = 0.05;
-  }
-  function descentFrame(dt) {
-    resetMovement();
-    // la discesa segue l'orologio, non i fotogrammi: se all'uscita dallo splash il telefono rallenta per un attimo
-    // (video, radio, prima immagine sullo schermo) la telecamera non resta ferma in alto, recupera
-    if (!descent.hold) {
-      descent.from ??= performance.now();
-      descent.t = Math.min(1, (performance.now() - descent.from) / 1000 / DESCENT_TIME);
-    }
-    const k = descent.t * descent.t * (3 - 2 * descent.t); // parte e arriva piano
-    const yaw = cam.yaw, ground = cinemaFloor(pos.x, pos.z);
-    dTop.set(pos.x + 0.35 * Math.sin(yaw), H - 0.3, pos.z + 0.35 * Math.cos(yaw));
-    dEye.set(pos.x - 0.09 * Math.sin(yaw), ground + EYE_Y, pos.z - 0.09 * Math.cos(yaw));
-    camera.position.lerpVectors(dTop, dEye, k);
-    // dall'alto guarda giù sul personaggio, agli occhi guarda avanti
-    dLook.set(pos.x, ground + 0.9, pos.z);
-    dAhead.set(dEye.x - Math.sin(yaw), dEye.y - Math.tan(cam.pitch), dEye.z - Math.cos(yaw));
-    camera.lookAt(dLook.lerp(dAhead, k));
-    me.root.visible = true;
-    me.head.visible = k < 0.4; // prima che la telecamera ci arrivi la testa sparisce: si entra negli occhi
-    if (descent.t >= 1) { descent.on = false; setFirst(true); }
   }
   function resize() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -1981,15 +1946,6 @@ export function createLobby3D(app) {
     lightRoom(roomOf(pos.x, pos.z));
     renderer.render(scene, camera);
     $('.l3d-load').hidden = true;
-    // la prima volta la Lobby si apre sotto lo splash: la discesa dall'alto parte quando lo splash si chiude
-    const splash = document.getElementById('playground-intro');
-    if (splash?.open && !descent.done) {
-      startDescent(true);
-      // la discesa parte mentre lo splash sfuma (e comunque alla chiusura)
-      const go = () => { if (descent.hold) { descent.hold = false; descent.from = performance.now(); } };
-      splash.addEventListener('fading', go, { once: true });
-      splash.addEventListener('close', go, { once: true });
-    } else startDescent();
     raf = requestAnimationFrame(frame);
     // prepara subito le luci di tutte le sale: entrando per la prima volta in una sala non si blocca
     setTimeout(() => { prepareLights(); }, 1200);
