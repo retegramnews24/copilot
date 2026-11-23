@@ -1778,7 +1778,7 @@ export function createLobby3D(app) {
     const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
-    tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // solo vicino al calcio balilla
+    tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&!(touch&&tableFootball.active)&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // vicino al calcio balilla; da telefono non mentre giochi (coprirebbe il tavolo)
     peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);pinball.update(camera,dt);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
