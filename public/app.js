@@ -90,8 +90,8 @@ async function openLobby3D(){
  document.documentElement.classList.remove('boot3d');
 }
 // splash: legge quanto manca al caricamento della Lobby 3D (null se non si usa la 3D)
-window.binottolandLobbyLoading=()=>lobby3d?.loading?.()??null;
-if(want3D())makeLobby3D().catch(()=>{});
+window.binottolandLobbyLoading=()=>want3D()?(lobby3d?.loading?.()??{progress:lobbyImport,ready:false}):null;
+let lobbyImport=0;if(want3D()){const t0=Date.now(),tick=setInterval(()=>{lobbyImport=Math.min(.12,(Date.now()-t0)/25000);if(lobby3d)clearInterval(tick)},200);makeLobby3D().catch(()=>{})}
 // finito lo splash (Lobby pronta) si entra subito nella 3D, senza aspettare il controllo periodico
 document.getElementById('playground-intro')?.addEventListener('close',()=>{if(want3D()&&lobbyIdle())openLobby3D().catch(()=>{})});
 // caricamento dell'avvio in 3D: sparisce quando la 3D è aperta, scegliendo il 2D, o al massimo dopo 15 secondi
