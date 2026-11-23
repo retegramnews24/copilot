@@ -48,6 +48,7 @@ const CSS = `
 .l3d-gl,.l3d-gl canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 .l3d-top{position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);right:calc(var(--ui-safe-right,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 10px);display:flex;gap:8px;align-items:center;pointer-events:none}
 .l3d-top>*{pointer-events:auto;flex:none;width:auto;margin:0}
+@media (max-width:520px){.l3d-top{gap:5px}.l3d-top>*{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(10.5px,3.3vw,14px)!important;padding:7px 9px!important}.l3d-where{padding:6px 8px!important}}
 .l3d button{font:inherit;color:#fff;background:rgba(18,14,28,.72);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer}
 .l3d-where{margin-left:auto;padding:7px 12px;border-radius:999px;background:rgba(18,14,28,.6);font-weight:600;font-size:14px}
 .l3d-hint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + 58px);padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.45);font-size:13px;color:#e7e1f3;text-align:center;max-width:86vw;transition:opacity .6s;pointer-events:none}
@@ -74,6 +75,11 @@ export function createLobby3D(app) {
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
+  // caricamento: modelli e texture passano tutti dal gestore predefinito di three.js. Lo splash ne mostra
+  // l'avanzamento; finito tutto si preparano subito le luci di ogni sala, così aprendo la Lobby non scatta
+  const loading = { done: 0, total: 0, idle: false, warm: false };
+  THREE.DefaultLoadingManager.onProgress = (_, done, total) => { loading.done = done; loading.total = total; loading.idle = false; };
+  THREE.DefaultLoadingManager.onLoad = () => { loading.idle = true; setTimeout(() => Promise.resolve(prepareLights()).finally(() => { loading.warm = true; }), 0); };
   const dot = document.createElement('div');
   dot.style.cssText = 'position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(255,255,255,.4);box-shadow:0 0 1px rgba(0,0,0,.5);pointer-events:none;z-index:3';
   dot.hidden = touch; host.append(dot);
@@ -922,6 +928,7 @@ export function createLobby3D(app) {
     if(yt){yt.setVolume(0);yt.mute();lastYT=0}
   }
   let clubInRange=false;
+  let projectionReady='';
   function playProjection(data){
     const share=data?.screenId;
     const stream=app.clubStream?.(share&&active&&clubInRange&&!document.hidden?data:null);
@@ -933,7 +940,7 @@ export function createLobby3D(app) {
     playbackVersion='';
     stopProjection();if(!key)return;
     previewKey=key;
-    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5}};
+    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5;projectionReady=key}};
     if(p.youtube&&/^[\w-]{11}$/.test(p.youtube)){
       disposeYT=embedYouTube(projection,p.youtube,{
         ready(player){
@@ -1266,7 +1273,8 @@ export function createLobby3D(app) {
   const viewButton=document.createElement('button');
   $('.l3d-top').append(viewButton);
   function setFirst(value){
-    firstPerson=value;viewButton.textContent=value?'Vista esterna (V)':'Vista dagli occhi (V)';
+    // sul telefono niente "(V)": la tastiera non c'è e la barra in alto deve stare nella larghezza
+    firstPerson=value;viewButton.textContent=(value?'Vista esterna':'Vista dagli occhi')+(touch?'':' (V)');
     viewButton.setAttribute('aria-pressed',String(value));
   }
   let activityView = null;
@@ -1985,7 +1993,17 @@ export function createLobby3D(app) {
       try { await done; } catch (e) { /* si compila al primo passaggio */ }
     }
   }
-  const api = { stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  // per lo splash: quanto è caricato, da 0 a 1. Modelli e texture, poi le luci di tutte le sale preparate, poi il
+  // film del cinema se ce n'è uno in proiezione (la radio no: il browser la fa suonare solo dopo il primo tocco)
+  function loadingState() {
+    if (!active) playProjection(app.projection?.());
+    const models = loading.total ? loading.done / loading.total : 0;
+    const lights = loading.warm || (loading.idle && !renderer.compileAsync);
+    const film = !previewKey || projectionReady === previewKey;
+    const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
+    return { progress, ready: loading.idle && lights && film };
+  }
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

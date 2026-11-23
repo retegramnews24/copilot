@@ -1411,29 +1411,6 @@ body {
   margin: 6px 0;
 }
 
-.access-screen {
-  display: grid;
-  place-items: center;
-  background: var(--bg);
-}
-.access-card {
-  width: min(100%, 390px);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background: var(--panel);
-  padding: 25px;
-}
-.access-card h1 {
-  font-size: 30px;
-  letter-spacing: -1px;
-  margin: 5px 0 12px;
-}
-.access-card p {
-  font-size: 13px;
-}
-#access-error {
-  color: var(--error);
-}
 .catalog-card {
   display: grid;
   grid-template-columns: 90px 1fr;
@@ -1718,13 +1695,6 @@ body {
   padding: var(--ui-safe-top) calc(var(--ui-safe-right) + 10px) var(--ui-safe-bottom)
     calc(var(--ui-safe-left) + 10px);
 }
-.access-screen {
-  height: var(--app-height, 100dvh);
-  min-height: 0;
-  overflow: auto;
-  padding: calc(var(--ui-safe-top) + 18px) calc(var(--ui-safe-right) + 18px)
-    calc(var(--ui-safe-bottom) + 18px) calc(var(--ui-safe-left) + 18px);
-}
 .modal-backdrop {
   padding: calc(var(--ui-safe-top) + 12px) calc(var(--ui-safe-right) + 12px)
     calc(var(--ui-safe-bottom) + 12px) calc(var(--ui-safe-left) + 12px);
@@ -1777,9 +1747,6 @@ body {
   width: min(100%, 760px);
   margin-inline: auto;
   min-height: 0;
-}
-.access-screen {
-  width: 100%;
 }
 #labyrinth-overlay {
   width: 100%;
@@ -3414,20 +3381,13 @@ button.uno-card:not(:disabled) {
 .window-mode[hidden] {
   display: none;
 }
-/* Avvio in 3D: finché la Lobby 3D non è pronta copre la Lobby classica con un caricamento (niente lampo del 2D). */
-html.boot3d body::after {
-  content: 'Carico la Lobby 3D…';
-  position: fixed;
-  inset: 0;
-  z-index: 55;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: radial-gradient(circle at 50% 45%, #241a30, #0b0810 70%);
-  color: #cfc6e6;
-  font:
-    600 16px system-ui,
-    sans-serif;
+/* Avvio: la pagina è scura come lo splash e la Lobby classica non si vede, finché c'è lo splash e (per chi usa la
+   3D) finché la Lobby 3D non è aperta. Niente lampi della schermata d'accesso o del 2D. */
+html.boot body {
+  background: #10111a;
+}
+html.boot #app-shell {
+  visibility: hidden;
 }
 /* Lobby 3D: tasto che apre il guscio 3D (public/lobby3d/). */
 .lobby3d-open {
