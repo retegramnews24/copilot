@@ -59,13 +59,6 @@ const CSS = `
 .l3d-stick.l3d-look{left:auto;right:calc(var(--ui-safe-right,0px) + 26px)}
 .l3d-load[hidden]{display:none}
 .l3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:#cfc6e6;pointer-events:none}
-.l3d-intro{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:calc(var(--ui-safe-bottom,0px) + 9vh);pointer-events:auto;background:linear-gradient(180deg,rgba(5,6,15,.55),rgba(5,6,15,0) 30%,rgba(5,6,15,0) 62%,rgba(5,6,15,.7));transition:opacity .6s}
-.l3d-intro[hidden]{display:none}.l3d-intro.off{opacity:0;pointer-events:none}
-.l3d-intro b{font:900 clamp(30px,8vw,64px)/1 Impact,"Arial Black",sans-serif;letter-spacing:.04em;color:#fff;text-shadow:0 0 18px #3ee7ff,0 2px 0 #000}
-.l3d-intro em{font:800 clamp(13px,3vw,20px)/1.4 system-ui,sans-serif;font-style:normal;letter-spacing:.5em;color:#c6ff1a;margin:6px 0 18px}
-.l3d-intro i{display:block;width:min(320px,70vw);height:6px;border-radius:3px;background:rgba(255,255,255,.18);overflow:hidden}
-.l3d-intro i::after{content:"";display:block;height:100%;width:var(--p,0%);background:linear-gradient(90deg,#3ee7ff,#c6ff1a);transition:width .3s}
-.l3d-intro small{margin-top:10px;font:600 13px system-ui,sans-serif;color:#cfd8e6}
 `;
 
 // ---------- il mondo ----------
@@ -81,10 +74,11 @@ export function createLobby3D(app) {
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
-  // caricamento: modelli e texture passano tutti dal gestore predefinito di three.js; l'intro ne mostra l'avanzamento
-  const loading = { done: 0, total: 0, idle: false };
+  // caricamento: modelli e texture passano tutti dal gestore predefinito di three.js. Lo splash ne mostra
+  // l'avanzamento; finito tutto si preparano subito le luci di ogni sala, così aprendo la Lobby non scatta
+  const loading = { done: 0, total: 0, idle: false, warm: false };
   THREE.DefaultLoadingManager.onProgress = (_, done, total) => { loading.done = done; loading.total = total; loading.idle = false; };
-  THREE.DefaultLoadingManager.onLoad = () => { loading.idle = true; };
+  THREE.DefaultLoadingManager.onLoad = () => { loading.idle = true; setTimeout(() => Promise.resolve(prepareLights()).finally(() => { loading.warm = true; }), 0); };
   const dot = document.createElement('div');
   dot.style.cssText = 'position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(255,255,255,.4);box-shadow:0 0 1px rgba(0,0,0,.5);pointer-events:none;z-index:3';
   dot.hidden = touch; host.append(dot);
@@ -933,6 +927,7 @@ export function createLobby3D(app) {
     if(yt){yt.setVolume(0);yt.mute();lastYT=0}
   }
   let clubInRange=false;
+  let projectionReady='';
   function playProjection(data){
     const share=data?.screenId;
     const stream=app.clubStream?.(share&&active&&clubInRange&&!document.hidden?data:null);
@@ -944,7 +939,7 @@ export function createLobby3D(app) {
     playbackVersion='';
     stopProjection();if(!key)return;
     previewKey=key;
-    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5}};
+    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5;projectionReady=key}};
     if(p.youtube&&/^[\w-]{11}$/.test(p.youtube)){
       disposeYT=embedYouTube(projection,p.youtube,{
         ready(player){
@@ -1833,10 +1828,38 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
-    topBar.style.visibility=(touch&&playing())||intro.on?'hidden':''; // da telefono al calcio balilla e al flipper (e durante l'intro) la barra in alto sparisce
+    topBar.style.visibility=(touch&&playing())||descent.on?'hidden':''; // da telefono al calcio balilla e al flipper (e mentre si entra) la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
-    if(intro.on||intro.drone&&intro.away>0)introFrame(dt);
+    if(descent.on)descentFrame(dt);
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
+  }
+  // Entrata (la prima volta, appena finito lo splash): inquadratura dall'alto sopra il personaggio che scende piano
+  // piano fino ai suoi occhi; alla fine si resta nella vista dagli occhi (V per cambiarla).
+  const DESCENT_TIME = 3.5;
+  const descent = { on: false, done: false, t: 0 };
+  const dTop = new THREE.Vector3(), dEye = new THREE.Vector3(), dLook = new THREE.Vector3(), dAhead = new THREE.Vector3();
+  function startDescent() {
+    if (descent.done) return;
+    descent.done = true;
+    if (reducedMotion) { setFirst(true); return; }
+    Object.assign(descent, { on: true, t: 0 });
+    cam.pitch = 0.05;
+  }
+  function descentFrame(dt) {
+    resetMovement();
+    descent.t = Math.min(1, descent.t + dt / DESCENT_TIME);
+    const k = descent.t * descent.t * (3 - 2 * descent.t); // parte e arriva piano
+    const yaw = cam.yaw, ground = cinemaFloor(pos.x, pos.z);
+    dTop.set(pos.x + 0.35 * Math.sin(yaw), H - 0.3, pos.z + 0.35 * Math.cos(yaw));
+    dEye.set(pos.x - 0.09 * Math.sin(yaw), ground + EYE_Y, pos.z - 0.09 * Math.cos(yaw));
+    camera.position.lerpVectors(dTop, dEye, k);
+    // dall'alto guarda giù sul personaggio, agli occhi guarda avanti
+    dLook.set(pos.x, ground + 0.9, pos.z);
+    dAhead.set(dEye.x - Math.sin(yaw), dEye.y - Math.tan(cam.pitch), dEye.z - Math.cos(yaw));
+    camera.lookAt(dLook.lerp(dAhead, k));
+    me.root.visible = true;
+    me.head.visible = k < 0.4; // prima che la telecamera ci arrivi la testa sparisce: si entra negli occhi
+    if (descent.t >= 1) { descent.on = false; setFirst(true); }
   }
   function resize() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -1936,71 +1959,6 @@ export function createLobby3D(app) {
     s.act();
     if (app.launched && s.label!=='Ruggine 89') app.launched(s);
   }
-  // ---------- intro: il volo del drone (la prima volta che si apre la Lobby) ----------
-  // Dopo lo splash la telecamera segue un drone (fatto in Blender: blender/drone.blend) che attraversa la Lobby e la
-  // sala giochi e poi scende alle spalle del personaggio. Intanto finisce il caricamento e la scheda grafica prepara
-  // le sale che attraversa, così quando prendi il comando non scatta. Un tocco la salta, a caricamento finito.
-  const INTRO_TIME = 6;
-  const intro = { on: false, done: false, u: 0, spent: 0, drone: null, props: [], away: 0 };
-  const introEl = document.createElement('div');
-  introEl.className = 'l3d-intro'; introEl.hidden = true;
-  introEl.innerHTML = '<b>BINOTTOLAND</b><em>LOBBY</em><i></i><small>Caricamento…</small>';
-  el.append(introEl);
-  const introPath = new THREE.CatmullRomCurve3([[0, 2.6, 4.5], [-4.5, 2.0, 0.5], [-9.5, 1.8, 0.3], [-14.5, 1.7, -1.8], [-9, 2.0, 0.9], [-3, 2.3, 1.5], [0, 2.2, 3.4]].map(p => new THREE.Vector3(...p)));
-  const introLook = new THREE.CatmullRomCurve3([[0, 1.2, -1], [-10, 1.2, 0], [-13, 0.9, 0], [-18, 1.3, -3.7], [0, 1.5, 0], [0, 1.4, 6.5], [0, 1.4, 0]].map(p => new THREE.Vector3(...p)));
-  new GLTFLoader().load(new URL('models/drone.glb?v=1', import.meta.url).href, gltf => {
-    intro.drone = gltf.scene; intro.drone.scale.setScalar(1.1);
-    intro.props = [0, 1, 2, 3].map(i => gltf.scene.getObjectByName('elica_' + i)).filter(Boolean);
-    intro.drone.visible = intro.on; scene.add(intro.drone);
-  });
-  const introReady = () => loading.idle || !loading.total || loading.done >= loading.total;
-  function startIntro() {
-    if (intro.done || reducedMotion) { intro.done = true; return; }
-    Object.assign(intro, { on: true, done: true, u: 0, spent: 0, away: 0 });
-    introEl.hidden = false; introEl.classList.remove('off');
-    if (intro.drone) intro.drone.visible = true;
-  }
-  function skipIntro() { if (intro.on && introReady()) intro.u = Math.max(intro.u, 0.86); }
-  introEl.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); skipIntro(); });
-  addEventListener('keydown', e => { if (intro.on && active) skipIntro(); });
-  const introPos = new THREE.Vector3(), introAt = new THREE.Vector3(), follow = new THREE.Vector3(), followAt = new THREE.Vector3();
-  function introFrame(dt) {
-    const ready = introReady();
-    const p = loading.total ? Math.min(1, loading.done / loading.total) : 1;
-    introEl.style.setProperty('--p', Math.round((ready ? 1 : p) * 100) + '%');
-    introEl.lastChild.textContent = ready ? (touch ? 'Tocca per entrare' : 'Clicca o premi un tasto per entrare') : 'Caricamento…';
-    intro.spent += dt;
-    // a fine volo, se manca ancora qualcosa, rallenta (ma dopo 14 secondi si entra comunque)
-    const slow = !ready && intro.u > 0.8 && intro.spent < 14;
-    intro.u = Math.min(1, intro.u + (dt / INTRO_TIME) * (slow ? 0.12 : 1));
-    if (intro.on) {
-      resetMovement();
-      // la telecamera "normale" (dietro il personaggio) è già calcolata: l'ultimo tratto del volo ci si posa sopra
-      follow.copy(camera.position);
-      followAt.set(pos.x, cinemaFloor(pos.x, pos.z) + 1.45, pos.z);
-      introPath.getPointAt(intro.u, introPos);
-      introLook.getPointAt(intro.u, introAt);
-      const k = THREE.MathUtils.smoothstep(intro.u, 0.82, 1);
-      camera.position.lerpVectors(introPos, follow, k);
-      camera.lookAt(introAt.lerp(followAt, k));
-      if (intro.u >= 1) {
-        intro.on = false;
-        intro.away = 1e-6; // il drone se ne va da solo
-        introEl.classList.add('off');
-        setTimeout(() => { if (!intro.on) introEl.hidden = true; }, 700);
-      }
-    } else intro.away += dt;
-    // il drone vola davanti alla telecamera, inclinato in avanti; alla fine sale e se ne va
-    const d = intro.drone;
-    if (!d) return;
-    const ahead = Math.min(1, intro.u + 0.07);
-    introPath.getPointAt(ahead, introPos);
-    const tan = introPath.getTangentAt(ahead);
-    d.position.copy(introPos).add(new THREE.Vector3(0, -0.35 + intro.away * 1.6, 0)).addScaledVector(tan, intro.away * 2.5);
-    d.rotation.set(-0.25, Math.atan2(tan.x, tan.z), Math.sin(intro.spent * 2) * 0.06, 'YXZ');
-    for (const e of intro.props) e.rotation.y += dt * 55;
-    if (intro.away > 1.8) { d.visible = false; intro.away = 0; intro.drone = null; scene.remove(d); }
-  }
   function show() {
     if (active) return;
     restoreActivityView();
@@ -2015,7 +1973,7 @@ export function createLobby3D(app) {
     lightRoom(roomOf(pos.x, pos.z));
     renderer.render(scene, camera);
     $('.l3d-load').hidden = true;
-    startIntro();
+    startDescent();
     raf = requestAnimationFrame(frame);
     // prepara subito le luci di tutte le sale: entrando per la prima volta in una sala non si blocca
     setTimeout(() => { prepareLights(); }, 1200);
@@ -2063,7 +2021,17 @@ export function createLobby3D(app) {
       try { await done; } catch (e) { /* si compila al primo passaggio */ }
     }
   }
-  const api = { stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  // per lo splash: quanto è caricato, da 0 a 1. Modelli e texture, poi le luci di tutte le sale preparate, poi il
+  // film del cinema se ce n'è uno in proiezione (la radio no: il browser la fa suonare solo dopo il primo tocco)
+  function loadingState() {
+    if (!active) playProjection(app.projection?.());
+    const models = loading.total ? loading.done / loading.total : 0;
+    const lights = loading.warm || (loading.idle && !renderer.compileAsync);
+    const film = !previewKey || projectionReady === previewKey;
+    const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
+    return { progress, ready: loading.idle && lights && film };
+  }
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }
