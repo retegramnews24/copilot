@@ -229,8 +229,17 @@ export function buildBalilla(scene, el, send, playSound) {
   ui.innerHTML =
     '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <button data-reset>Azzera</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
   el.append(ui);
-  // sul computer niente pannello: si gioca con i tasti (Spazio, Q, E, R, + e -); sul telefono servono i pulsanti
-  const noPanel = !matchMedia('(pointer: coarse)').matches;
+  // niente pannello, né sul computer (tasti Spazio, Q, E, R, + e -) né sul telefono (gesti sul tavolo):
+  // col dito si trascina per giocare, un tocco veloce butta la pallina, l'asta più vicina al dito sceglie difesa o attacco
+  const noPanel = true;
+  const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const exitChip = document.createElement('button');
+  exitChip.textContent = '✕';
+  exitChip.setAttribute('aria-label', 'Lascia il tavolo');
+  exitChip.style.cssText =
+    'position:absolute;right:calc(var(--ui-safe-right,0px) + 14px);bottom:calc(var(--ui-safe-bottom,0px) + 18px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:20px!important;background:rgba(18,14,28,.6)!important;z-index:4';
+  exitChip.hidden = true;
+  el.append(exitChip);
   const sensitivity = ui.querySelector('input');
   sensitivity.value = '1';
   try {
@@ -251,7 +260,8 @@ export function buildBalilla(scene, el, send, playSound) {
   let lastWatch = 0,
     dirty = false,
     lastInput = 0,
-    finger = null;
+    finger = null,
+    lastCamera = null;
   // valori fissi del tavolo (tarati a mano): nessuna zona morta, vista inclinata di 60° verso il campo
   const localSettings = { deadSlide: 0, deadSpin: 0, cameraPitch: 60 };
   const deadState = { deadSlide: { sum: 0, time: -Infinity }, deadSpin: { sum: 0, time: -Infinity } };
@@ -334,7 +344,7 @@ export function buildBalilla(scene, el, send, playSound) {
     lockHint.hidden = true;
     if (watching) post('leave');
     active = watching = dirty = false;
-    ui.hidden = true;
+    ui.hidden = exitChip.hidden = true;
     net = netBall = finger = null;
     grips.forEach(g => (g.material = rubber));
   }
@@ -342,6 +352,7 @@ export function buildBalilla(scene, el, send, playSound) {
   const serveButton = ui.querySelector('[data-serve]');
   serveButton.onclick = serve;
   ui.querySelector('[data-exit]').onclick = close;
+  exitChip.onclick = close;
   ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
@@ -368,13 +379,44 @@ export function buildBalilla(scene, el, send, playSound) {
   host.addEventListener('pointerdown', e => {
     if (active && e.pointerType === 'mouse' && !mouseLocked()) lockMouse();
     if (active && e.pointerType !== 'mouse') {
-      finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
-      host.setPointerCapture?.(e.pointerId);
+      finger = {
+        id: e.pointerId,
+        x: e.clientX,
+        y: e.clientY,
+        x0: e.clientX,
+        y0: e.clientY,
+        at: performance.now()
+      };
+      try {
+        host.setPointerCapture?.(e.pointerId);
+      } catch {}
+      // il dito sceglie la coppia: l'asta della tua squadra più vicina sullo schermo (difesa o attacco)
+      if (seated() && lastCamera) {
+        const r = host.getBoundingClientRect(),
+          p = new THREE.Vector3();
+        let best = -1,
+          bestD = Infinity;
+        rows.forEach((row, i) => {
+          if (row.team !== team) return;
+          p.set(TX + row.x, TOP, 0).project(lastCamera);
+          const d = Math.abs(r.left + ((p.x + 1) / 2) * r.width - e.clientX);
+          if (d < bestD) ((bestD = d), (best = i));
+        });
+        if (best >= 0 && rows[best].attack !== pair) selectPair(rows[best].attack);
+      }
     }
   });
   for (const ev of ['pointerup', 'pointercancel'])
     host.addEventListener(ev, e => {
-      if (finger?.id === e.pointerId) finger = null;
+      if (finger?.id !== e.pointerId) return;
+      // tocco veloce senza trascinare: butta (o rimette) la pallina, come Spazio
+      if (
+        e.type === 'pointerup' &&
+        performance.now() - finger.at < 300 &&
+        Math.hypot(e.clientX - finger.x0, e.clientY - finger.y0) < 10
+      )
+        serve();
+      finger = null;
     });
   function input(e) {
     if (e.type !== 'keydown' || e.repeat) return false;
@@ -491,6 +533,7 @@ export function buildBalilla(scene, el, send, playSound) {
       if (matchMedia('(any-pointer: fine)').matches || mouseLocked()) lockMouse();
       selectPair(pairIndex);
       ui.hidden = noPanel;
+      exitChip.hidden = !touchUI;
       ui.querySelector('span').textContent = 'Collegamento al tavolo…';
       serveButton.disabled = true;
       lastWatch = performance.now();
@@ -551,7 +594,7 @@ export function buildBalilla(scene, el, send, playSound) {
         dirty = false;
         lastInput = now;
       }
-      if (active) placeCamera(camera);
+      if (active) (placeCamera(camera), (lastCamera = camera));
       draw(net?.field, dt);
     },
     blur() {
