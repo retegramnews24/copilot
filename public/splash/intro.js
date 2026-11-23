@@ -1,10 +1,10 @@
 const splash = document.getElementById('playground-intro');
 const info = document.getElementById('playground-info');
 // Splash di apertura: almeno 2 secondi. Se si entra nella Lobby 3D resta aperto mentre la Lobby si carica di
-// nascosto (modelli, luci di ogni sala, film del cinema) e la barra ne mostra l'avanzamento vero; si chiude 2 secondi
-// dopo che è tutto pronto, al massimo dopo 15 secondi.
+// nascosto (codice, modelli, luci di ogni sala, film del cinema) e la barra ne mostra l'avanzamento vero. Pronta, la
+// Lobby si apre sotto lo splash, che si chiude 2 secondi dopo (al massimo dopo 25 secondi).
 const duration = 2000;
-const longest = 15000;
+const longest = 25000;
 let timer;
 let poll;
 let opening = false;

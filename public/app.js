@@ -77,7 +77,7 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 // la Lobby 3D si prepara (modelli, texture, luci) anche nascosta: parte già durante lo splash, poi si mostra
 async function makeLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=9cf636f0e9');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=66d16e3234');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballScore:(score,kind)=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}))},notices:()=>notices.items(),noticesSeen:()=>notices.seen(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot3d');sendPresence()}})}
@@ -90,10 +90,12 @@ async function openLobby3D(){
  document.documentElement.classList.remove('boot3d');
 }
 // splash: legge quanto manca al caricamento della Lobby 3D (null se non si usa la 3D)
-window.binottolandLobbyLoading=()=>want3D()?(lobby3d?.loading?.()??{progress:lobbyImport,ready:false}):null;
+// pronta = caricata e già aperta (sotto lo splash): così finito lo splash si è subito dentro, senza altre attese
+const pageFree=()=>!$('page-game').hidden&&!$('lobby').hidden&&![...document.querySelectorAll('[id$="-overlay"]')].some(o=>!o.hidden)&&$('game-sheet')?.hidden!==false;
+window.binottolandLobbyLoading=()=>{if(!want3D())return null;const s=lobby3d?.loading?.()??{progress:lobbyImport,ready:false};if(s.ready&&!lobby3d.active&&pageFree())openLobby3D().catch(()=>{});return{progress:s.progress,ready:s.ready&&!!lobby3d?.active}};
 let lobbyImport=0;if(want3D()){const t0=Date.now(),tick=setInterval(()=>{lobbyImport=Math.min(.12,(Date.now()-t0)/25000);if(lobby3d)clearInterval(tick)},200);makeLobby3D().catch(()=>{})}
-// finito lo splash (Lobby pronta) si entra subito nella 3D, senza aspettare il controllo periodico
-document.getElementById('playground-intro')?.addEventListener('close',()=>{if(want3D()&&lobbyIdle())openLobby3D().catch(()=>{})});
+
+
 // caricamento dell'avvio in 3D: sparisce quando la 3D è aperta, scegliendo il 2D, o al massimo dopo 15 secondi
 setTimeout(()=>document.documentElement.classList.remove('boot3d'),15000);
 $('lobby3d-open').onclick=()=>openLobby3D().catch(e=>err('Lobby 3D: '+e.message));

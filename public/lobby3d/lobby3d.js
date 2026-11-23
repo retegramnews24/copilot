@@ -1973,7 +1973,10 @@ export function createLobby3D(app) {
     lightRoom(roomOf(pos.x, pos.z));
     renderer.render(scene, camera);
     $('.l3d-load').hidden = true;
-    startDescent();
+    // la prima volta la Lobby si apre sotto lo splash: la discesa dall'alto parte quando lo splash si chiude
+    const splash = document.getElementById('playground-intro');
+    if (splash?.open && !descent.done) { cam.pitch = 0.05; splash.addEventListener('close', startDescent, { once: true }); }
+    else startDescent();
     raf = requestAnimationFrame(frame);
     // prepara subito le luci di tutte le sale: entrando per la prima volta in una sala non si blocca
     setTimeout(() => { prepareLights(); }, 1200);
