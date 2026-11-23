@@ -45,7 +45,7 @@ const TABLES = {
   },
   gt: {
     physics: GT,
-    model: 'models/binotto-gt.glb',
+    model: 'models/binotto-gt.glb?v=3', // cambiare il numero a ogni nuova esportazione (il browser tiene il vecchio)
     at: GT_AT,
     recordKey: 'binottoland-gt-record',
     title: 'BINOTTO GT',
