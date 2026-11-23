@@ -149,9 +149,11 @@ export function nearPair(f, team, current = 1) {
   return best ?? current;
 }
 // Una figura può arrivare alla palla?
-function reachable(f) {
+// team: solo le aste di quella squadra (da soli al tavolo le aste dell'altra squadra stanno ferme e non contano)
+function reachable(f, team = null) {
   const b = f.ball;
   return rows.some(row => {
+    if (team !== null && row.team !== team) return false;
     if (Math.abs(b.x - row.x) > FOOT * Math.sin(LOW) + R) return false;
     for (let n = 0; n < row.count; n++) {
       const z0 = figureZ(row, n, 0);
@@ -443,6 +445,6 @@ export function simulate(f, dt, random = Math.random) {
     // palla ferma dove nessuno arriva: si rimette dal foro (la rimette chi l'aveva rimessa)
     const still = Math.hypot(f.ball.vx, f.ball.vz) < 0.03;
     f.dead = still ? f.dead + h : 0;
-    if (f.dead > 1.5 && !reachable(f)) startThrow(f, f.lastThrower);
+    if (f.dead > 1.5 && !reachable(f, f.practice ? f.thrower : null)) startThrow(f, f.lastThrower);
   }
 }

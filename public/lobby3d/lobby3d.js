@@ -3,7 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=5ce7ccb69f';
-import {buildBalilla} from './balilla.js?v=1373ac706c';
+import {buildBalilla} from './balilla.js?v=b2ac59b310';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
