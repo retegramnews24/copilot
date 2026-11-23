@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=112a64ec4e';
-import {buildBalilla} from './balilla.js?v=38634e7426';
+import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=53736e542d';
+import {buildBalilla} from './balilla.js?v=1373ac706c';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -56,6 +56,7 @@ const CSS = `
 .l3d-stick{position:absolute;left:calc(var(--ui-safe-left,0px) + 26px);bottom:calc(var(--ui-safe-bottom,0px) + 26px);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:none}
 .l3d-stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6)}
 .l3d-stick[hidden]{display:none}
+.l3d-stick.l3d-look{left:auto;right:calc(var(--ui-safe-right,0px) + 26px)}
 .l3d-load[hidden]{display:none}
 .l3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:#cfc6e6;pointer-events:none}
 `;
@@ -67,10 +68,10 @@ export function createLobby3D(app) {
   el.className = 'l3d'; el.hidden = true;
   el.innerHTML = `<div class="l3d-gl"></div><div class="l3d-load">Carico la Lobby 3D…</div>
 <div class="l3d-top"><button class="l3d-exit" aria-label="Torna alla Lobby classica">✕ Lobby classica</button><span class="l3d-where">Lobby</span></div>
-<div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div>`;
+<div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div><div class="l3d-stick l3d-look" hidden><i></i></div>`;
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
-  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild;
+  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
   const dot = document.createElement('div');
@@ -848,6 +849,7 @@ export function createLobby3D(app) {
     try{audioContext??=new AudioContext();if(audioContext.state==='suspended')audioContext.resume().then(()=>{if(mixEligible&&previewVideo)cinemaMix(previewVideo)}).catch(()=>{});else if(mixEligible&&previewVideo)cinemaMix(previewVideo)}catch{}
   }
   el.addEventListener('pointerdown',unlockCinemaSound);
+  el.addEventListener('pointerup',unlockCinemaSound); // sul telefono l'audio si sblocca solo quando il dito si alza
   window.addEventListener('keydown',unlockCinemaSound);
   audioButton.onclick=()=>{
     soundEnabled=!soundEnabled;updateSoundButton();
@@ -866,7 +868,8 @@ export function createLobby3D(app) {
     sync();return {wrap,input,out,read,sync};
   }
   let cinemaLevel=1,heard=0,lastYT=-1;
-  const mixPanel=document.createElement('div');mixPanel.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
+  // volumi: sul telefono a sinistra della colonna dei pulsanti, sopra il joystick della visuale
+  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 164px);right:calc(var(--ui-safe-right,0px) + 86px);display:grid;gap:4px':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
   const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
   const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
   cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
@@ -1045,6 +1048,14 @@ export function createLobby3D(app) {
   const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
   // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
   const pinball=buildFlipper(scene,el,{audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.()||[],sendScore:score=>app.pinballScore?.(score),me:()=>app.me?.()});
+  // volume del flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarlo
+  const pinballVolume=volumeControl('Flipper','club3d-flipper-volume',.8,v=>{pinball.setVolume(v);pinball.wake()});
+  pinball.setVolume(pinballVolume.read());mixPanel.append(pinballVolume.wrap);
+  const pinballExit=document.createElement('button');
+  pinballExit.textContent='✕';pinballExit.setAttribute('aria-label','Lascia il flipper');
+  pinballExit.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 10px);right:calc(var(--ui-safe-right,0px) + 14px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:20px!important;background:rgba(18,14,28,.6)!important;z-index:5;display:none';
+  pinballExit.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();pinball.close();resetMovement()});
+  el.append(pinballExit);
   const playing=()=>tableFootball.active||pinball.active; // si gioca al tavolo: niente camminata né avvisi
   scene.updateMatrixWorld(true);
   { const st=pinball.stand(); spots.push({x:st.x,z:st.z,hx:.3,hz:.14,pad:.55,label:'Flipper · Gioca',where:'Sala giochi',pinball:true}); }
@@ -1461,6 +1472,7 @@ export function createLobby3D(app) {
     me.root.position.y = 0;
   }
   const joy = { id: null, x: 0, y: 0, cx: 0, cy: 0 };
+  const lookJoy = { id: null, x: 0, y: 0, cx: 0, cy: 0 }; // telefono: joystick a destra per girare la visuale
   const drags = new Map();
   let pinch = 0;
   const onKey = (e) => {
@@ -1509,24 +1521,31 @@ export function createLobby3D(app) {
     }
     const r = stick.getBoundingClientRect();
     const inStick = touch && e.pointerType !== 'mouse' && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.45 && joy.id === null;
+    const lr = lookStick.getBoundingClientRect();
+    const inLook = !inStick && !lookStick.hidden && e.pointerType !== 'mouse' && lookJoy.id === null && Math.hypot(e.clientX - (lr.left + lr.width / 2), e.clientY - (lr.top + lr.height / 2)) < lr.width * 0.75;
     try { host.setPointerCapture(e.pointerId); } catch (err) { /* puntatore finto */ }
-    if (inStick) {
+    if (inLook) {
+      lookJoy.id = e.pointerId; lookJoy.cx = lr.left + lr.width / 2; lookJoy.cy = lr.top + lr.height / 2;
+      moveStick(lookJoy, lookKnob, e);
+    } else if (inStick) {
       joy.id = e.pointerId; joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2;
       moveJoy(e);
     } else drags.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX,startY:e.clientY, moved:false, paddle:e.button===0&&aimAtMonitor(e) });
     if (e.pointerType === 'mouse' && e.button === 2) guarding = true;
   });
-  const moveJoy = (e) => {
-    let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy;
+  const moveStick = (j, k, e) => {
+    let dx = e.clientX - j.cx, dy = e.clientY - j.cy;
     const d = Math.hypot(dx, dy), max = 50;
     if (d > max) { dx *= max / d; dy *= max / d; }
-    joy.x = dx / max; joy.y = dy / max;
-    knob.style.transform = `translate(${dx}px,${dy}px)`;
+    j.x = dx / max; j.y = dy / max;
+    k.style.transform = `translate(${dx}px,${dy}px)`;
   };
+  const moveJoy = (e) => moveStick(joy, knob, e);
   host.addEventListener('pointermove', (e) => {
     if(pinball.active){pinball.pointer(e);return}
     if(tableFootball.active){tableFootball.move(e,host.getBoundingClientRect());return}
     if (e.pointerId === joy.id) return moveJoy(e);
+    if (e.pointerId === lookJoy.id) return moveStick(lookJoy, lookKnob, e);
     // mouse agganciato (dopo un clic): la vista lo segue; libero (Esc): si trascina per guardarsi intorno, come prima
     if (e.pointerType === 'mouse' && locked() && !boardOpen) {
       cam.yaw -= e.movementX * 0.0035;
@@ -1554,6 +1573,7 @@ export function createLobby3D(app) {
   const up = (e) => {
     if (pinball.active) { pinball.pointer(e); return; }
     if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; }
+    if (e.pointerId === lookJoy.id) { lookJoy.id = null; lookJoy.x = lookJoy.y = 0; lookKnob.style.transform = ''; }
     const drag=drags.get(e.pointerId);
     // clic sinistro (senza trascinare): colpo; tasto destro lasciato: fine della parata
     if(e.type==='pointerup' && e.pointerType==='mouse' && drag && !drag.moved && e.button===0 && !drag.paddle)punch();
@@ -1571,7 +1591,7 @@ export function createLobby3D(app) {
   moves.innerHTML = '<button data-m="punch" aria-label="Colpo">👊</button><button data-m="guard" aria-label="Parata (tieni premuto)">🛡️</button><button data-m="crouch" aria-label="Abbassati">⬇️</button>';
   el.append(moves);
   const movesCss = document.createElement('style');
-  movesCss.textContent = '.l3d-moves{position:absolute;right:calc(var(--ui-safe-right,0px) + 16px);bottom:calc(var(--ui-safe-bottom,0px) + 96px);display:flex;flex-direction:column;gap:10px;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{width:58px!important;height:58px;min-height:58px;padding:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
+  movesCss.textContent = '.l3d-moves{position:absolute;right:calc(var(--ui-safe-right,0px) + 16px);bottom:calc(var(--ui-safe-bottom,0px) + 164px);display:flex;flex-direction:column;gap:10px;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{width:58px!important;height:58px;min-height:58px;padding:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
   document.head.append(movesCss);
   moves.addEventListener('pointerdown', (e) => {
     const b = e.target.closest('[data-m]'); if (!b) return; e.stopPropagation(); e.preventDefault();
@@ -1600,6 +1620,12 @@ export function createLobby3D(app) {
   }
   const rectDist = (s, x, z) => Math.hypot(Math.max(0, Math.abs(x - s.x) - s.hx), Math.max(0, Math.abs(z - s.z) - s.hz));
   function step(dt) {
+    // joystick della visuale: destra/sinistra gira, su/giù alza e abbassa lo sguardo (più veloce verso il bordo)
+    if (lookJoy.id !== null) {
+      const lx = lookJoy.x * Math.abs(lookJoy.x), ly = lookJoy.y * Math.abs(lookJoy.y);
+      cam.yaw -= lx * 2.6 * dt;
+      cam.pitch = Math.max(firstPerson?-.95:seating?-.65:.08, Math.min(1.25, cam.pitch + ly * 1.6 * dt));
+    }
     let ix = 0, iz = 0;
     if (keys.has('w') || keys.has('arrowup')) iz -= 1;
     if (keys.has('s') || keys.has('arrowdown')) iz += 1;
@@ -1744,7 +1770,7 @@ export function createLobby3D(app) {
     const ytLevel=Math.round(heard*100);
     if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
     const audible=heard>.001 || target>.001;
-    cinemaVolume.wrap.style.display=inRange&&previewKey?'flex':'none';
+    cinemaVolume.wrap.style.display=depth>0&&Math.abs(pos.x)<7&&previewKey?'flex':'none'; // solo dentro la Sala Cinema
     radioVolume.wrap.style.display=(Math.hypot(pos.x-counterX,pos.z-counterZ)<3)?'flex':'none';
     if(avail.has('blackboard-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
       nextBoard=t+2;app.gallery?.({room:boardRoom,epoch:boardEpoch,since:boardSeq},drawGallery);
@@ -1761,7 +1787,10 @@ export function createLobby3D(app) {
     const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
-    tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // solo vicino al calcio balilla
+    tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&!(touch&&tableFootball.active)&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // vicino al calcio balilla; da telefono non mentre giochi (coprirebbe il tavolo)
+    const pinballSpot=pinball.stand();
+    pinballVolume.wrap.style.display=!tableFootball.active&&!(touch&&pinball.active)&&Math.hypot(pos.x-pinballSpot.x,pos.z-pinballSpot.z)<3?'flex':'none'; // vicino al flipper
+    pinballExit.style.display=touch&&pinball.active?'':'none';
     peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);pinball.update(camera,dt);placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
@@ -1785,6 +1814,8 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
+    topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
+    if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
   }
   function resize() {
@@ -1890,6 +1921,8 @@ export function createLobby3D(app) {
     restoreActivityView();
     parked=null;playProjection(app.projection?.());syncTransport(true);el.hidden = false; active = true; last = 0;
     app.clubVisibility?.();setTag();
+    // trascinare in giù (joystick, pad dei giochi) non deve chiudere o ridurre la mini app di Telegram
+    try { const tg = window.Telegram?.WebApp; if (tg?.isVersionAtLeast?.('7.7')) tg.disableVerticalSwipes(); } catch {}
     // l'aspetto può essere cambiato in Settings
     const look = readAppearance();
     setLook(me, readLook());
@@ -1907,6 +1940,7 @@ export function createLobby3D(app) {
     if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
     carrying=null;requested=null;closeBoard();
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();if(pinball.active)pinball.close();stand();stopMonitor();heard=0;
+    try { const tg = window.Telegram?.WebApp; if (tg?.isVersionAtLeast?.('7.7')) tg.enableVerticalSwipes(); } catch {}
     active = false;clubInRange=false;app.clubStream?.(null);audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;

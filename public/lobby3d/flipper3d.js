@@ -226,20 +226,22 @@ export function buildFlipper(
 
   // ---------- suoni (sintetizzati, come nell'anteprima) ----------
   let noise = null,
-    ownAudio = null;
+    ownAudio = null,
+    volume = 0.8; // cursore "Flipper" del mixer della Lobby
   function wakeAudio() {
     try {
       if (!audio()) ownAudio ??= new AudioContext();
-      const ac = audio() || ownAudio;
-      if (ac.state === 'suspended') ac.resume();
+      for (const ac of [audio(), ownAudio]) if (ac?.state === 'suspended') ac.resume().catch(() => {});
     } catch {}
   }
+  // l'audio della Lobby se è acceso, altrimenti il nostro (sul telefono quello della Lobby può restare sospeso)
+  const ctx = () => [audio(), ownAudio].find(ac => ac?.state === 'running') || audio() || ownAudio;
   function sound(type, power = 0.6) {
-    const ac = audio() || ownAudio;
-    if (!ac || ac.state !== 'running' || !allowed()) return;
+    const ac = ctx();
+    if (!ac || ac.state !== 'running' || !allowed() || volume <= 0) return;
     const now = ac.currentTime,
       out = ac.createGain();
-    out.gain.value = 0.3;
+    out.gain.value = 0.3 * volume;
     out.connect(ac.destination);
     if (!noise) {
       noise = ac.createBuffer(1, ac.sampleRate * 0.4, ac.sampleRate);
@@ -331,19 +333,19 @@ export function buildFlipper(
   function say(text) {
     try {
       const now = performance.now();
-      if (!allowed() || now - lastVoice < 1200 || !window.speechSynthesis) return;
+      if (!allowed() || volume <= 0 || now - lastVoice < 1200 || !window.speechSynthesis) return;
       lastVoice = now;
       const u = new SpeechSynthesisUtterance(text);
       u.lang = 'it-IT';
       u.rate = 1.15;
       u.pitch = 0.9;
-      u.volume = 0.8;
+      u.volume = Math.min(1, volume);
       speechSynthesis.speak(u);
     } catch {}
   }
   let motor = null;
   function engine(g) {
-    const ac = audio() || ownAudio;
+    const ac = ctx();
     if (!g || g.over || !active || !ac || ac.state !== 'running' || !allowed()) {
       if (motor) {
         motor.gain.gain.setTargetAtTime(0, ac?.currentTime || 0, 0.2);
@@ -373,7 +375,7 @@ export function buildFlipper(
     }
     const v = Math.max(0, ...g.balls.map(b => (b.ramp ? b.ramp.v : Math.hypot(b.vx, b.vy))));
     motor.osc.frequency.setTargetAtTime(42 + v * 22, ac.currentTime, 0.15);
-    motor.gain.gain.setTargetAtTime(0.018 + Math.min(0.03, v * 0.008), ac.currentTime, 0.2);
+    motor.gain.gain.setTargetAtTime((0.018 + Math.min(0.03, v * 0.008)) * volume, ac.currentTime, 0.2);
   }
 
   // ---------- partita ----------
@@ -402,6 +404,19 @@ export function buildFlipper(
   tip.textContent =
     'Tocco breve = colpo morbido · Tenuto = colpo pieno · Leva: trascina il pomello (più tiri, più forte) · Spazio scossa';
   el.append(hud, tip);
+  // telefono: le tre scritte in basso diventano tasti veri (la zona del tocco è più grande del tasto)
+  if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
+    tip.textContent =
+      'Tocca a sinistra e a destra i flipper · Leva: tieni premuto o trascina giù, lascia per lanciare';
+    tip.style.whiteSpace = 'normal';
+    tip.style.width = '92%';
+    tip.style.textAlign = 'center';
+    tip.style.bottom = 'calc(var(--ui-safe-bottom,0px) + 70px)';
+    for (const { w } of bars)
+      w.style.cssText +=
+        ';padding:8px 10px 6px;border-radius:14px;background:rgba(18,14,28,.55);border:1px solid #ffffff38;font-size:12px';
+  }
+  const touchSide = new Map(); // dito → flipper che sta tenendo (si lascia lo stesso anche se il dito scivola)
   addEventListener('mouseup', e => {
     if (!active || !game) return;
     if (!((e.buttons ?? 0) & 1) && pressed[0] && !grab) flip(0, false);
@@ -444,6 +459,10 @@ export function buildFlipper(
       const p = root.localToWorld(new THREE.Vector3(0, 0, STAND));
       return { x: p.x, z: p.z, yaw: FLIPPER_AT.ry };
     },
+    setVolume(v) {
+      volume = Math.max(0, Math.min(1, Number(v) || 0));
+    },
+    wake: wakeAudio,
     open() {
       active = true;
       look.yaw = look.pitch = 0;
@@ -458,6 +477,7 @@ export function buildFlipper(
       pressed = [false, false];
       pulling = false;
       grab = null;
+      touchSide.clear();
     },
     // tastiera: Z / M (o Maiusc, frecce) i flipper, S o Freccia giù o Invio tirano la leva, Spazio la scossa, E o Esc escono
     input(e) {
@@ -479,7 +499,8 @@ export function buildFlipper(
     // mouse: tasto sinistro e destro i flipper; trascinando il pomello della leva la si tira (più la tiri, più parte forte)
     pointer(e) {
       if (!game) return false;
-      if (e.type === 'pointerdown') wakeAudio();
+      // sul telefono l'audio si sblocca solo quando il dito si alza (il tocco giù non basta al browser)
+      if (e.type === 'pointerdown' || e.type === 'pointerup') wakeAudio();
       // Mouse: i flipper seguono i tasti davvero premuti (e.buttons). Con un tasto già giù il browser non manda il
       // "giù" e il "su" dell'altro tasto: leggendo lo stato dei tasti a ogni evento i flipper non restano mai bloccati.
       if (e.pointerType === 'mouse' && !game.over) {
@@ -500,23 +521,32 @@ export function buildFlipper(
           return true;
         }
         if (e.pointerType !== 'mouse') {
-          const r = el.getBoundingClientRect();
-          if (
-            e.clientX > r.left + r.width * 0.62 &&
-            e.clientY > r.top + r.height * 0.7 &&
-            game.balls.some(b => b.x > LANE_X && b.y < 0.06)
-          ) {
-            grab = { id: e.pointerId, y: e.clientY };
-            drag(game, 0);
-            pulling = true;
-          } else flip(e.clientX < r.left + r.width / 2 ? 0 : 1, true);
+          // telefono: in basso al centro (sopra la scritta "Leva") si tiene la leva: tenuto carica, trascinato
+          // in giù tira di più, lasciato lancia; a sinistra e a destra di quella zona i due flipper
+          const r = el.getBoundingClientRect(),
+            fx = (e.clientX - r.left) / r.width,
+            fy = (e.clientY - r.top) / r.height;
+          if (fy > 0.75 && fx > 0.34 && fx < 0.66) {
+            if (!grab) {
+              grab = { id: e.pointerId, y: e.clientY, moved: false };
+              setPull(true);
+            }
+          } else {
+            touchSide.set(e.pointerId, fx < 0.5 ? 0 : 1);
+            flip(fx < 0.5 ? 0 : 1, true);
+          }
           return true;
         }
         return true;
       }
       if (e.type === 'pointermove') {
-        if (grab?.id === e.pointerId) drag(game, (e.clientY - grab.y) / 110);
-        else if (e.pointerType === 'mouse') {
+        if (grab?.id === e.pointerId) {
+          // col dito si comincia a trascinare solo dopo qualche pixel: un tocco tenuto fermo carica da solo
+          if (e.pointerType === 'mouse' || grab.moved || Math.abs(e.clientY - grab.y) > 8) {
+            grab.moved = true;
+            drag(game, (e.clientY - grab.y) / 110);
+          }
+        } else if (e.pointerType === 'mouse') {
           // muovendo il mouse si gira la testa (entro un limite naturale), i tasti restano per i flipper
           look.yaw = Math.max(-0.75, Math.min(0.75, look.yaw - (e.movementX || 0) * 0.003));
           look.pitch = Math.max(-0.45, Math.min(0.35, look.pitch - (e.movementY || 0) * 0.003));
@@ -524,12 +554,14 @@ export function buildFlipper(
         return true;
       }
       if (e.type === 'pointerup' || e.type === 'pointercancel') {
-        if (grab?.id === e.pointerId && !((e.buttons ?? 0) & 1)) {
+        if (grab?.id === e.pointerId && (e.pointerType !== 'mouse' || !((e.buttons ?? 0) & 1))) {
           grab = null;
           setPull(false);
-        } else if (e.pointerType !== 'mouse') {
-          const r = el.getBoundingClientRect();
-          flip(e.clientX < r.left + r.width / 2 ? 0 : 1, false);
+        } else if (e.pointerType !== 'mouse' && touchSide.has(e.pointerId)) {
+          const side = touchSide.get(e.pointerId);
+          touchSide.delete(e.pointerId);
+          // l'altro dito può tenere ancora lo stesso flipper
+          if (![...touchSide.values()].includes(side)) flip(side, false);
         }
         return true;
       }
