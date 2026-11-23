@@ -28,15 +28,62 @@ fill.style.cssText =
   'display:block;height:100%;width:0;border-radius:4px;background:linear-gradient(90deg,#ff3a4a,#ffd23f);transition:width .25s';
 (splash.querySelector('.bp-copy') || splash).append(bar);
 
+// Accesso non riuscito (app aperta fuori da Telegram, utente non della community…): lo splash resta aperto e al posto
+// della barra mostra il motivo, con "Riprova" (se si può) e "Apri in Telegram". Lo chiama l'app (app.js).
+let accessError = false;
+window.binottolandAccessError = (message, retry) => {
+  accessError = true;
+  clearTimeout(timer);
+  clearInterval(poll);
+  if (!splash.hasAttribute('open')) {
+    if (typeof splash.showModal === 'function') splash.showModal();
+    else splash.setAttribute('open', '');
+  }
+  bar.hidden = false;
+  track.hidden = true;
+  label.textContent = message;
+  label.style.color = '#ffb4a6';
+  bar.querySelector('.bp-actions')?.remove();
+  const actions = document.createElement('div');
+  actions.className = 'bp-actions';
+  actions.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:4px';
+  const button = (text, onClick, href) => {
+    const b = document.createElement(href ? 'a' : 'button');
+    b.textContent = text;
+    if (href) b.href = href;
+    b.style.cssText =
+      'padding:8px 14px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#fff;font:600 13px system-ui,sans-serif;text-decoration:none;cursor:pointer';
+    if (onClick)
+      b.onclick = () => {
+        accessError = false;
+        track.hidden = false;
+        label.style.color = '';
+        label.textContent = 'Collegamento a Telegram…';
+        actions.remove();
+        onClick();
+        followLobby(Date.now()); // riprova: lo splash torna ad aspettare la Lobby
+      };
+    actions.append(b);
+  };
+  if (retry) button('Riprova', retry);
+  button('Apri in Telegram', null, 'https://t.me/checkmategame_bot?startapp');
+  bar.append(actions);
+};
+
 function closeSplash() {
+  if (accessError) return; // senza accesso lo splash resta, con il messaggio
   clearTimeout(timer);
   clearInterval(poll);
   if (typeof splash.close === 'function') splash.close();
   else splash.removeAttribute('open');
+  document.documentElement.classList.remove('boot'); // finito l'avvio scuro: ora la pagina si vede
 }
+// chiuso in qualunque modo (anche con Esc): l'avvio scuro finisce
+splash.addEventListener('close', () => document.documentElement.classList.remove('boot'));
 
-// verso la Lobby 3D (già aperta sotto): lo splash sfuma in 0,6 secondi
-function fadeIntoLobby() {
+// lo splash sfuma in 0,6 secondi (sulla Lobby 3D già aperta sotto, o sulla Lobby classica)
+function fadeOut() {
+  if (accessError) return; // senza accesso lo splash resta, con il messaggio
   clearInterval(poll);
   splash.style.transition = 'opacity .6s';
   splash.style.opacity = '0';
@@ -59,10 +106,12 @@ function followLobby(started) {
   let readyAt = null;
   clearInterval(poll);
   poll = setInterval(() => {
+    if (accessError) return; // c'è il messaggio d'accesso: la barra non lo copre
     const now = Date.now() - started;
     const s = state();
     if (!s) {
-      if (now >= duration) closeSplash(); // Lobby classica: i soliti 2 secondi
+      // Lobby classica (o accesso non riuscito): i soliti 2 secondi, poi si vede la pagina
+      if (now >= duration) fadeOut();
       return;
     }
     bar.hidden = false;
@@ -71,7 +120,7 @@ function followLobby(started) {
     label.textContent = s.ready ? 'Lobby pronta' : 'Carico la Lobby… ' + Math.round(p * 100) + '%';
     // pronta: barra piena per 2 secondi, poi si entra
     if (s.ready) readyAt ??= now;
-    if (readyAt !== null && now >= readyAt + 2000) fadeIntoLobby();
+    if (readyAt !== null && now >= readyAt + 2000) fadeOut();
     else if (now >= longest) closeSplash();
   }, 100);
 }
@@ -89,10 +138,9 @@ async function showSplash() {
     // all'apertura dell'app: lo splash aspetta la Lobby 3D
     firstShow = false;
     followLobby(Date.now());
-  } else timer = setTimeout(closeSplash, duration); // riaperto dal tasto info: solo i 2 secondi
+  } else timer = setTimeout(fadeOut, duration); // riaperto dal tasto info: solo i 2 secondi
 }
 
-splash.style.setProperty('--bp-duration', duration + 'ms');
 splash.addEventListener('cancel', () => {
   clearTimeout(timer);
   clearInterval(poll);

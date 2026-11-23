@@ -80,24 +80,24 @@ async function makeLobby3D(){
  if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=94c98dcc1c');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballScore:(score,kind)=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}))},notices:()=>notices.items(),noticesSeen:()=>notices.seen(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot3d');sendPresence()}})}
+}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballScore:(score,kind)=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}))},notices:()=>notices.items(),noticesSeen:()=>notices.seen(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
  return lobby3d;
 }
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
  await makeLobby3D();
  lobby3d.show();
- document.documentElement.classList.remove('boot3d');
+ document.documentElement.classList.remove('boot');
 }
 // splash: legge quanto manca al caricamento della Lobby 3D (null se non si usa la 3D)
 // pronta = caricata e già aperta (sotto lo splash): così finito lo splash si è subito dentro, senza altre attese
 const pageFree=()=>!$('page-game').hidden&&!$('lobby').hidden&&![...document.querySelectorAll('[id$="-overlay"]')].some(o=>!o.hidden)&&$('game-sheet')?.hidden!==false;
-window.binottolandLobbyLoading=()=>{if(!want3D())return null;const s=lobby3d?.loading?.()??{progress:lobbyImport,ready:false};if(s.ready&&!lobby3d.active&&pageFree())openLobby3D().catch(()=>{});return{progress:s.progress,ready:s.ready&&!!lobby3d?.active}};
+window.binottolandLobbyLoading=()=>{if(!want3D()||accessFailed)return null;const s=lobby3d?.loading?.()??{progress:lobbyImport,ready:false};if(s.ready&&!lobby3d.active&&pageFree())openLobby3D().catch(()=>{});return{progress:s.progress,ready:s.ready&&!!lobby3d?.active}};
 let lobbyImport=0;if(want3D()){const t0=Date.now(),tick=setInterval(()=>{lobbyImport=Math.min(.12,(Date.now()-t0)/25000);if(lobby3d)clearInterval(tick)},200);makeLobby3D().catch(()=>{})}
 
 
-// caricamento dell'avvio in 3D: sparisce quando la 3D è aperta, scegliendo il 2D, o al massimo dopo 15 secondi
-setTimeout(()=>document.documentElement.classList.remove('boot3d'),15000);
+// avvio scuro (classe boot): finisce quando la 3D è aperta, scegliendo il 2D, o al massimo dopo 26 secondi
+setTimeout(()=>document.documentElement.classList.remove('boot'),26000);
 $('lobby3d-open').onclick=()=>openLobby3D().catch(e=>err('Lobby 3D: '+e.message));
 // In 3D: ogni volta che la Lobby è libera (all'avvio dopo lo splash, uscendo da un gioco, tornando da Settings o
 // da Giochi) dopo due controlli tranquilli la 3D si riapre da sola. Appena aperto un gioco si aspetta un attimo.
@@ -702,9 +702,11 @@ trace('BOOT',APP_NAME+' · registro sessione attivo');
 
 // Full screen, and on PC the Lobby button for window mode (see window-mode.js).
 const {enterFullscreen}=initWindowMode(tg,$('window-mode'));
+// accesso non riuscito: il messaggio (con Riprova / Apri in Telegram) compare dentro lo splash
+let accessFailed=false;
 async function startSession(){
  enterFullscreen();
- $('access-retry').hidden=true;$('access-error').textContent='Collegamento a Telegram…';
+ accessFailed=false;
  try{
   if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
   const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData})});
@@ -712,11 +714,11 @@ async function startSession(){
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
   trace('AUTH','Identità Telegram verificata');
   const payload=await request('/api/lobby');games=payload.games;onlineUsers=payload.users||[];chat.set(payload.messages);notices.set(payload.notices);renderLeaders(payload);setTimeout(()=>loadLeaders(),0);
-  renderLobby();$('access-error').textContent='';$('club-gate').hidden=true;$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
+  renderLobby();$('app-shell').hidden=false;connectLobby();arcade.connectBlackboard();
   alerts.refresh();
   // Launched from a "tocca a te" message: straight to that table.
   const startRoom=alerts.startRoom();if(startRoom){try{await openRoom(startRoom);if(room===startRoom)selectPage('game')}catch(e){err(e.message)}}
- }catch(e){$('club-gate').hidden=false;$('app-shell').hidden=true;$('access-error').textContent=e.message;$('access-retry').hidden=!tg?.initData;$('access-telegram').hidden=false;trace('AUTH','Accesso non completato')}
+ }catch(e){$('app-shell').hidden=true;accessFailed=true;window.binottolandAccessError?.(e.message,tg?.initData?startSession:null);trace('AUTH','Accesso non completato')}
 }
 function sendPresence(away=document.hidden){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',inClub:!!lobby3d?.active,pose:lobby3d?.pose()??null,room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||labyrinth.room()||room,away}));
@@ -780,6 +782,6 @@ tg?.onEvent('backButtonClicked',()=>{
 function renderTutorial(s){const box=$('tutorial-panel'),hint=s.tutorial;box.hidden=!hint;if(!hint)return;$('tutorial-title').textContent=hint.title;$('tutorial-text').textContent=hint.text;$('tutorial-reason').textContent=hint.reason;$('tutorial-move').hidden=!hint.action;$('tutorial-move').disabled=busy;$('tutorial-move').onclick=()=>sendMove({...hint.action,revision:state.revision});}
 const loadLeaders=createLeaderboardLoader({request,onError:err,ready:()=>!!sessionToken});
 
-$('access-retry').onclick=startSession;
+
 
 startSession();
