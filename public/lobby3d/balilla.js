@@ -255,13 +255,72 @@ export function buildBalilla(scene, el, send, playSound) {
   const viewPad = document.createElement('div');
   viewPad.style.cssText = padCss + ';left:13%;width:13%;top:72%;height:14%;font-size:18px';
   viewPad.textContent = '↕';
+  const zoomPad = document.createElement('div');
+  zoomPad.style.cssText = padCss + ';left:72%;width:13%;top:72%;height:14%;font-size:16px';
+  zoomPad.textContent = '🔍';
   const padLabel = document.createElement('span');
   pad.append(padLabel);
-  const touchControls = [swapChip, pad, viewPad];
+  // taratura da telefono (provvisoria): si aprono i cursori con l'ingranaggio, i valori restano sul telefono
+  const tune = { slide: 1, spin: 1, pitch: 60, zoom: 1 };
+  try {
+    Object.assign(tune, JSON.parse(localStorage.getItem('balilla.touchTune') || '{}'));
+  } catch {}
+  const saveTune = () => {
+    try {
+      localStorage.setItem('balilla.touchTune', JSON.stringify(tune));
+    } catch {}
+  };
+  const gear = document.createElement('button');
+  gear.textContent = '⚙';
+  gear.setAttribute('aria-label', 'Taratura');
+  gear.style.cssText =
+    chipCss +
+    ';bottom:auto;top:calc(var(--ui-safe-top,0px) + 64px);left:calc(var(--ui-safe-left,0px) + 14px)';
+  const tunePanel = document.createElement('div');
+  tunePanel.style.cssText =
+    'position:absolute;left:calc(var(--ui-safe-left,0px) + 14px);top:calc(var(--ui-safe-top,0px) + 118px);z-index:5;background:#142026ee;color:#fff;padding:8px 10px;border-radius:12px;font:600 12px system-ui,sans-serif;display:none;gap:6px;flex-direction:column;width:min(260px,80vw)';
+  const sliders = [
+    ['slide', 'Pad: scorrimento', 0.3, 3, 0.05],
+    ['spin', 'Pad: rotazione', 0.3, 3, 0.05],
+    ['pitch', 'Visuale (gradi)', 30, 88, 1],
+    ['zoom', 'Zoom', 0.5, 1.5, 0.01]
+  ].map(([key, label, min, max, step]) => {
+    const row = document.createElement('label');
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 44px;gap:2px 8px;align-items:center';
+    const name = document.createElement('span');
+    name.textContent = label;
+    const out = document.createElement('b');
+    out.style.textAlign = 'right';
+    const input = document.createElement('input');
+    Object.assign(input, { type: 'range', min, max, step });
+    input.style.cssText = 'grid-column:1/3;width:100%';
+    const sync = () => {
+      input.value = String(tune[key]);
+      out.textContent = key === 'pitch' ? Math.round(tune[key]) + '°' : Number(tune[key]).toFixed(2);
+    };
+    input.oninput = () => {
+      tune[key] = Number(input.value);
+      sync();
+      saveTune();
+    };
+    row.append(name, out, input);
+    tunePanel.append(row);
+    return sync;
+  });
+  const syncTune = () => sliders.forEach(s => s());
+  gear.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    syncTune();
+    tunePanel.style.display = tunePanel.style.display === 'flex' ? 'none' : 'flex';
+  });
+  const touchControls = [swapChip, pad, viewPad, zoomPad, gear];
   const showTouch = on => {
     for (const c of touchControls) c.style.visibility = on ? 'visible' : 'hidden';
+    if (!on) tunePanel.style.display = 'none';
   };
   for (const c of touchControls) el.append(c);
+  el.append(tunePanel);
   showTouch(false);
   const sensitivity = ui.querySelector('input');
   sensitivity.value = '1';
@@ -379,49 +438,70 @@ export function buildBalilla(scene, el, send, playSound) {
   serveButton.onclick = serve;
   ui.querySelector('[data-exit]').onclick = close;
   exitChip.onclick = close;
-  swapChip.onclick = () => seated() && selectPair(1 - pair);
-  // pad di gioco: su/giù sposta l'asta, destra/sinistra la ruota (come il mouse sul computer)
+  // cambio coppia: scatta appena il dito tocca il tasto, anche con l'altro dito ancora sul pad
+  swapChip.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (seated()) selectPair(1 - pair);
+  });
+  // pad di gioco: su/giù sposta l'asta (tutta l'altezza del pad = tutta la corsa), destra/sinistra la ruota
+  // (tutta la larghezza del pad = un giro e mezzo); i cursori della taratura cambiano queste misure
   pad.addEventListener('pointerdown', e => {
     e.preventDefault();
-    finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    finger = { id: e.pointerId, x: e.clientX, y: e.clientY, pad: pad.getBoundingClientRect() };
     try {
       pad.setPointerCapture(e.pointerId);
     } catch {}
   });
   pad.addEventListener('pointermove', e => {
-    if (finger?.id === e.pointerId) move(e);
+    if (finger?.id !== e.pointerId || !seated()) return;
+    const dx = e.clientX - finger.x,
+      dy = e.clientY - finger.y;
+    finger.x = e.clientX;
+    finger.y = e.clientY;
+    const t = targets[pair],
+      side = team ? -1 : 1;
+    t.slide = clamp(t.slide + (dy / Math.max(60, finger.pad.height)) * 2 * tune.slide * side, 1);
+    t.angle = clamp(
+      t.angle + (dx / Math.max(60, finger.pad.width)) * 3 * Math.PI * tune.spin * side,
+      MAX_ANGLE
+    );
+    dirty = true;
   });
   for (const ev of ['pointerup', 'pointercancel'])
     pad.addEventListener(ev, e => {
       if (finger?.id === e.pointerId) finger = null;
     });
-  // pad della visuale: in su si guarda più dall'alto, in giù più di lato (si ricorda sul telefono)
-  try {
-    localSettings.cameraPitch = Number(localStorage.getItem('balilla.pitch')) || localSettings.cameraPitch;
-  } catch {}
-  let viewFinger = null;
-  viewPad.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    viewFinger = { id: e.pointerId, y: e.clientY };
-    try {
-      viewPad.setPointerCapture(e.pointerId);
-    } catch {}
-  });
-  viewPad.addEventListener('pointermove', e => {
-    if (viewFinger?.id !== e.pointerId) return;
-    localSettings.cameraPitch = Math.max(
-      30,
-      Math.min(88, localSettings.cameraPitch - (e.clientY - viewFinger.y) * 0.3)
-    );
-    viewFinger.y = e.clientY;
-    try {
-      localStorage.setItem('balilla.pitch', String(Math.round(localSettings.cameraPitch)));
-    } catch {}
-  });
-  for (const ev of ['pointerup', 'pointercancel'])
-    viewPad.addEventListener(ev, e => {
-      if (viewFinger?.id === e.pointerId) viewFinger = null;
+  // pad verticali della visuale (in su più dall'alto) e dello zoom (in su più vicino): si usano solo
+  // col pad di gioco libero, così mentre giochi non cambiano per sbaglio
+  const sidePad = (node, apply) => {
+    let f = null;
+    node.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (finger) return;
+      f = { id: e.pointerId, y: e.clientY };
+      try {
+        node.setPointerCapture(e.pointerId);
+      } catch {}
     });
+    node.addEventListener('pointermove', e => {
+      if (f?.id !== e.pointerId) return;
+      apply(e.clientY - f.y);
+      f.y = e.clientY;
+      if (tunePanel.style.display === 'flex') syncTune();
+      saveTune();
+    });
+    for (const ev of ['pointerup', 'pointercancel'])
+      node.addEventListener(ev, e => {
+        if (f?.id === e.pointerId) f = null;
+      });
+  };
+  sidePad(viewPad, dy => {
+    tune.pitch = Math.max(30, Math.min(88, tune.pitch - dy * 0.3));
+  });
+  sidePad(zoomPad, dy => {
+    tune.zoom = Math.max(0.5, Math.min(1.5, tune.zoom + dy * 0.004));
+  });
   ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
@@ -555,7 +635,8 @@ export function buildBalilla(scene, el, send, playSound) {
     camera.up.set(0, 1, 0);
     const dir = team === 0 ? 1 : -1;
     const pitch = THREE.MathUtils.degToRad(localSettings.cameraPitch);
-    const d = Math.max(1.2, (L + 0.16) / Math.tan(hf / 2));
+    if (touchUI) localSettings.cameraPitch = tune.pitch;
+    const d = Math.max(1.2, (L + 0.16) / Math.tan(hf / 2)) * (touchUI ? tune.zoom : 1);
     const focusZ = dir * 0.05;
     camera.position.set(TX, TOP + d * Math.sin(pitch), focusZ + dir * d * Math.cos(pitch));
     camera.lookAt(TX, TOP, focusZ);

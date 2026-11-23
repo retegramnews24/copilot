@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=112a64ec4e';
-import {buildBalilla} from './balilla.js?v=b435375b2a';
+import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=35e5548aa4';
+import {buildBalilla} from './balilla.js?v=1373ac706c';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -1802,7 +1802,7 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
-    topBar.style.visibility=touch&&tableFootball.active?'hidden':''; // da telefono al calcio balilla la barra in alto sparisce
+    topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
   }
@@ -1909,6 +1909,8 @@ export function createLobby3D(app) {
     restoreActivityView();
     parked=null;playProjection(app.projection?.());syncTransport(true);el.hidden = false; active = true; last = 0;
     app.clubVisibility?.();setTag();
+    // trascinare in giù (joystick, pad dei giochi) non deve chiudere o ridurre la mini app di Telegram
+    try { const tg = window.Telegram?.WebApp; if (tg?.isVersionAtLeast?.('7.7')) tg.disableVerticalSwipes(); } catch {}
     // l'aspetto può essere cambiato in Settings
     const look = readAppearance();
     setLook(me, readLook());
@@ -1926,6 +1928,7 @@ export function createLobby3D(app) {
     if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
     carrying=null;requested=null;closeBoard();
     tableRoomGain=0;if(tableBus)tableBus.gain.value=0;tableFootball.close();if(pinball.active)pinball.close();stand();stopMonitor();heard=0;
+    try { const tg = window.Telegram?.WebApp; if (tg?.isVersionAtLeast?.('7.7')) tg.enableVerticalSwipes(); } catch {}
     active = false;clubInRange=false;app.clubStream?.(null);audibleZone=false;app.clubVisibility?.();quietProjection();cancelAnimationFrame(raf);
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;

@@ -402,6 +402,19 @@ export function buildFlipper(
   tip.textContent =
     'Tocco breve = colpo morbido · Tenuto = colpo pieno · Leva: trascina il pomello (più tiri, più forte) · Spazio scossa';
   el.append(hud, tip);
+  // telefono: le tre scritte in basso diventano tasti veri (la zona del tocco è più grande del tasto)
+  if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
+    tip.textContent =
+      'Tocca a sinistra e a destra i flipper · Leva: tieni premuto o trascina giù, lascia per lanciare';
+    tip.style.whiteSpace = 'normal';
+    tip.style.width = '92%';
+    tip.style.textAlign = 'center';
+    tip.style.bottom = 'calc(var(--ui-safe-bottom,0px) + 70px)';
+    for (const { w } of bars)
+      w.style.cssText +=
+        ';padding:8px 10px 6px;border-radius:14px;background:rgba(18,14,28,.55);border:1px solid #ffffff38;font-size:12px';
+  }
+  const touchSide = new Map(); // dito → flipper che sta tenendo (si lascia lo stesso anche se il dito scivola)
   addEventListener('mouseup', e => {
     if (!active || !game) return;
     if (!((e.buttons ?? 0) & 1) && pressed[0] && !grab) flip(0, false);
@@ -458,6 +471,7 @@ export function buildFlipper(
       pressed = [false, false];
       pulling = false;
       grab = null;
+      touchSide.clear();
     },
     // tastiera: Z / M (o Maiusc, frecce) i flipper, S o Freccia giù o Invio tirano la leva, Spazio la scossa, E o Esc escono
     input(e) {
@@ -500,23 +514,32 @@ export function buildFlipper(
           return true;
         }
         if (e.pointerType !== 'mouse') {
-          const r = el.getBoundingClientRect();
-          if (
-            e.clientX > r.left + r.width * 0.62 &&
-            e.clientY > r.top + r.height * 0.7 &&
-            game.balls.some(b => b.x > LANE_X && b.y < 0.06)
-          ) {
-            grab = { id: e.pointerId, y: e.clientY };
-            drag(game, 0);
-            pulling = true;
-          } else flip(e.clientX < r.left + r.width / 2 ? 0 : 1, true);
+          // telefono: in basso al centro (sopra la scritta "Leva") si tiene la leva: tenuto carica, trascinato
+          // in giù tira di più, lasciato lancia; a sinistra e a destra di quella zona i due flipper
+          const r = el.getBoundingClientRect(),
+            fx = (e.clientX - r.left) / r.width,
+            fy = (e.clientY - r.top) / r.height;
+          if (fy > 0.75 && fx > 0.34 && fx < 0.66) {
+            if (!grab) {
+              grab = { id: e.pointerId, y: e.clientY, moved: false };
+              setPull(true);
+            }
+          } else {
+            touchSide.set(e.pointerId, fx < 0.5 ? 0 : 1);
+            flip(fx < 0.5 ? 0 : 1, true);
+          }
           return true;
         }
         return true;
       }
       if (e.type === 'pointermove') {
-        if (grab?.id === e.pointerId) drag(game, (e.clientY - grab.y) / 110);
-        else if (e.pointerType === 'mouse') {
+        if (grab?.id === e.pointerId) {
+          // col dito si comincia a trascinare solo dopo qualche pixel: un tocco tenuto fermo carica da solo
+          if (e.pointerType === 'mouse' || grab.moved || Math.abs(e.clientY - grab.y) > 8) {
+            grab.moved = true;
+            drag(game, (e.clientY - grab.y) / 110);
+          }
+        } else if (e.pointerType === 'mouse') {
           // muovendo il mouse si gira la testa (entro un limite naturale), i tasti restano per i flipper
           look.yaw = Math.max(-0.75, Math.min(0.75, look.yaw - (e.movementX || 0) * 0.003));
           look.pitch = Math.max(-0.45, Math.min(0.35, look.pitch - (e.movementY || 0) * 0.003));
@@ -524,12 +547,14 @@ export function buildFlipper(
         return true;
       }
       if (e.type === 'pointerup' || e.type === 'pointercancel') {
-        if (grab?.id === e.pointerId && !((e.buttons ?? 0) & 1)) {
+        if (grab?.id === e.pointerId && (e.pointerType !== 'mouse' || !((e.buttons ?? 0) & 1))) {
           grab = null;
           setPull(false);
-        } else if (e.pointerType !== 'mouse') {
-          const r = el.getBoundingClientRect();
-          flip(e.clientX < r.left + r.width / 2 ? 0 : 1, false);
+        } else if (e.pointerType !== 'mouse' && touchSide.has(e.pointerId)) {
+          const side = touchSide.get(e.pointerId);
+          touchSide.delete(e.pointerId);
+          // l'altro dito può tenere ancora lo stesso flipper
+          if (![...touchSide.values()].includes(side)) flip(side, false);
         }
         return true;
       }
