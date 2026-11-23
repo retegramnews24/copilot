@@ -240,6 +240,29 @@ export function buildBalilla(scene, el, send, playSound) {
     'position:absolute;right:calc(var(--ui-safe-right,0px) + 14px);bottom:calc(var(--ui-safe-bottom,0px) + 18px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:20px!important;background:rgba(18,14,28,.6)!important;z-index:4';
   exitChip.hidden = true;
   el.append(exitChip);
+  // telefono: tasto per cambiare coppia (a sinistra, simmetrico alla X), pad di gioco sotto il tavolo
+  // e, alla sua sinistra, un pad verticale stretto per inclinare la visuale sul campo
+  const chipCss =
+    'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 18px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:22px!important;background:rgba(18,14,28,.6)!important;z-index:4';
+  const swapChip = document.createElement('button');
+  swapChip.textContent = '🔄';
+  swapChip.setAttribute('aria-label', 'Cambia coppia (difesa/attacco)');
+  swapChip.style.cssText = chipCss + ';left:calc(var(--ui-safe-left,0px) + 14px)';
+  const padCss =
+    'position:absolute;z-index:4;touch-action:none;border:2px solid rgba(255,255,255,.28);background:rgba(255,255,255,.07);border-radius:16px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.45);font:600 12px system-ui,sans-serif;text-align:center;user-select:none;-webkit-user-select:none';
+  const pad = document.createElement('div');
+  pad.style.cssText = padCss + ';left:30%;width:38%;top:72%;bottom:calc(var(--ui-safe-bottom,0px) + 18px)';
+  const viewPad = document.createElement('div');
+  viewPad.style.cssText = padCss + ';left:13%;width:13%;top:72%;height:14%;font-size:18px';
+  viewPad.textContent = '↕';
+  const padLabel = document.createElement('span');
+  pad.append(padLabel);
+  const touchControls = [swapChip, pad, viewPad];
+  const showTouch = on => {
+    for (const c of touchControls) c.style.visibility = on ? 'visible' : 'hidden';
+  };
+  for (const c of touchControls) el.append(c);
+  showTouch(false);
   const sensitivity = ui.querySelector('input');
   sensitivity.value = '1';
   try {
@@ -261,6 +284,7 @@ export function buildBalilla(scene, el, send, playSound) {
     dirty = false,
     lastInput = 0,
     finger = null,
+    tap = null,
     lastCamera = null;
   // valori fissi del tavolo (tarati a mano): nessuna zona morta, vista inclinata di 60° verso il campo
   const localSettings = { deadSlide: 0, deadSpin: 0, cameraPitch: 60 };
@@ -332,6 +356,7 @@ export function buildBalilla(scene, el, send, playSound) {
       g.material = active && rows[i].team === team && rows[i].attack === pair ? brass : rubber;
     });
     ui.querySelectorAll('[data-pair]').forEach(b => (b.disabled = Number(b.dataset.pair) === pair));
+    padLabel.textContent = pair ? 'ATTACCO' : 'DIFESA';
   }
   function serve() {
     if (!seated()) return;
@@ -345,7 +370,8 @@ export function buildBalilla(scene, el, send, playSound) {
     if (watching) post('leave');
     active = watching = dirty = false;
     ui.hidden = exitChip.hidden = true;
-    net = netBall = finger = null;
+    showTouch(false);
+    net = netBall = finger = tap = null;
     grips.forEach(g => (g.material = rubber));
   }
   ui.querySelectorAll('[data-pair]').forEach(b => (b.onclick = () => selectPair(Number(b.dataset.pair))));
@@ -353,6 +379,49 @@ export function buildBalilla(scene, el, send, playSound) {
   serveButton.onclick = serve;
   ui.querySelector('[data-exit]').onclick = close;
   exitChip.onclick = close;
+  swapChip.onclick = () => seated() && selectPair(1 - pair);
+  // pad di gioco: su/giù sposta l'asta, destra/sinistra la ruota (come il mouse sul computer)
+  pad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    finger = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    try {
+      pad.setPointerCapture(e.pointerId);
+    } catch {}
+  });
+  pad.addEventListener('pointermove', e => {
+    if (finger?.id === e.pointerId) move(e);
+  });
+  for (const ev of ['pointerup', 'pointercancel'])
+    pad.addEventListener(ev, e => {
+      if (finger?.id === e.pointerId) finger = null;
+    });
+  // pad della visuale: in su si guarda più dall'alto, in giù più di lato (si ricorda sul telefono)
+  try {
+    localSettings.cameraPitch = Number(localStorage.getItem('balilla.pitch')) || localSettings.cameraPitch;
+  } catch {}
+  let viewFinger = null;
+  viewPad.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    viewFinger = { id: e.pointerId, y: e.clientY };
+    try {
+      viewPad.setPointerCapture(e.pointerId);
+    } catch {}
+  });
+  viewPad.addEventListener('pointermove', e => {
+    if (viewFinger?.id !== e.pointerId) return;
+    localSettings.cameraPitch = Math.max(
+      30,
+      Math.min(88, localSettings.cameraPitch - (e.clientY - viewFinger.y) * 0.3)
+    );
+    viewFinger.y = e.clientY;
+    try {
+      localStorage.setItem('balilla.pitch', String(Math.round(localSettings.cameraPitch)));
+    } catch {}
+  });
+  for (const ev of ['pointerup', 'pointercancel'])
+    viewPad.addEventListener(ev, e => {
+      if (viewFinger?.id === e.pointerId) viewFinger = null;
+    });
   ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
@@ -378,45 +447,44 @@ export function buildBalilla(scene, el, send, playSound) {
   });
   host.addEventListener('pointerdown', e => {
     if (active && e.pointerType === 'mouse' && !mouseLocked()) lockMouse();
-    if (active && e.pointerType !== 'mouse') {
-      finger = {
-        id: e.pointerId,
-        x: e.clientX,
-        y: e.clientY,
-        x0: e.clientX,
-        y0: e.clientY,
-        at: performance.now()
-      };
-      try {
-        host.setPointerCapture?.(e.pointerId);
-      } catch {}
-      // il dito sceglie la coppia: l'asta della tua squadra più vicina sullo schermo (difesa o attacco)
-      if (seated() && lastCamera) {
-        const r = host.getBoundingClientRect(),
-          p = new THREE.Vector3();
-        let best = -1,
-          bestD = Infinity;
-        rows.forEach((row, i) => {
-          if (row.team !== team) return;
-          p.set(TX + row.x, TOP, 0).project(lastCamera);
-          const d = Math.abs(r.left + ((p.x + 1) / 2) * r.width - e.clientX);
-          if (d < bestD) ((bestD = d), (best = i));
-        });
-        if (best >= 0 && rows[best].attack !== pair) selectPair(rows[best].attack);
-      }
-    }
+    if (active && e.pointerType !== 'mouse')
+      tap = { id: e.pointerId, x: e.clientX, y: e.clientY, at: performance.now() };
   });
+  // telefono: un tocco veloce al centro del tavolo butta (o rimette) la pallina, come Spazio
+  function onField(x, y) {
+    if (!lastCamera) return false;
+    const r = host.getBoundingClientRect(),
+      p = new THREE.Vector3();
+    let x0 = Infinity,
+      x1 = -Infinity,
+      y0 = Infinity,
+      y1 = -Infinity;
+    for (const [cx, cz] of [
+      [-L, -W],
+      [L, -W],
+      [-L, W],
+      [L, W]
+    ]) {
+      p.set(TX + cx, TOP, cz).project(lastCamera);
+      const sx = r.left + ((p.x + 1) / 2) * r.width,
+        sy = r.top + ((1 - p.y) / 2) * r.height;
+      ((x0 = Math.min(x0, sx)), (x1 = Math.max(x1, sx)), (y0 = Math.min(y0, sy)), (y1 = Math.max(y1, sy)));
+    }
+    // la parte centrale del campo (senza le porte)
+    const mx = (x1 - x0) * 0.2;
+    return x > x0 + mx && x < x1 - mx && y > y0 && y < y1;
+  }
   for (const ev of ['pointerup', 'pointercancel'])
     host.addEventListener(ev, e => {
-      if (finger?.id !== e.pointerId) return;
-      // tocco veloce senza trascinare: butta (o rimette) la pallina, come Spazio
+      if (tap?.id !== e.pointerId) return;
       if (
         e.type === 'pointerup' &&
-        performance.now() - finger.at < 300 &&
-        Math.hypot(e.clientX - finger.x0, e.clientY - finger.y0) < 10
+        performance.now() - tap.at < 350 &&
+        Math.hypot(e.clientX - tap.x, e.clientY - tap.y) < 12 &&
+        onField(e.clientX, e.clientY)
       )
         serve();
-      finger = null;
+      tap = null;
     });
   function input(e) {
     if (e.type !== 'keydown' || e.repeat) return false;
@@ -534,6 +602,7 @@ export function buildBalilla(scene, el, send, playSound) {
       selectPair(pairIndex);
       ui.hidden = noPanel;
       exitChip.hidden = !touchUI;
+      showTouch(touchUI);
       ui.querySelector('span').textContent = 'Collegamento al tavolo…';
       serveButton.disabled = true;
       lastWatch = performance.now();

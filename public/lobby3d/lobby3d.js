@@ -3,7 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import {buildFlipper, FLIPPER_AT} from './flipper3d.js?v=112a64ec4e';
-import {buildBalilla} from './balilla.js?v=ccf443a772';
+import {buildBalilla} from './balilla.js?v=b435375b2a';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -71,7 +71,7 @@ export function createLobby3D(app) {
 <div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div><div class="l3d-stick l3d-look" hidden><i></i></div>`;
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
-  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild;
+  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
   const dot = document.createElement('div');
@@ -1802,6 +1802,7 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
+    topBar.style.visibility=touch&&tableFootball.active?'hidden':''; // da telefono al calcio balilla la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
   }
