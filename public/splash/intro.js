@@ -35,6 +35,19 @@ function closeSplash() {
   else splash.removeAttribute('open');
 }
 
+// verso la Lobby 3D: lo splash sfuma in 0,6 secondi e intanto la telecamera comincia già a scendere
+function fadeIntoLobby() {
+  clearInterval(poll);
+  splash.dispatchEvent(new Event('fading'));
+  splash.style.transition = 'opacity .6s';
+  splash.style.opacity = '0';
+  setTimeout(() => {
+    closeSplash();
+    splash.style.opacity = '';
+    splash.style.transition = '';
+  }, 600);
+}
+
 function followLobby(started) {
   // la Lobby 3D si prepara solo per chi la usa: senza, lo splash fa i suoi 2 secondi e basta
   // Chi usa la 3D si legge subito qui (come fa l'app): il codice dell'app sul telefono può arrivare dopo qualche
@@ -59,7 +72,8 @@ function followLobby(started) {
     label.textContent = s.ready ? 'Lobby pronta' : 'Carico la Lobby… ' + Math.round(p * 100) + '%';
     // pronta: barra piena per 2 secondi, poi si entra
     if (s.ready) readyAt ??= now;
-    if ((readyAt !== null && now >= readyAt + 2000) || now >= longest) closeSplash();
+    if (readyAt !== null && now >= readyAt + 2000) fadeIntoLobby();
+    else if (now >= longest) closeSplash();
   }, 100);
 }
 

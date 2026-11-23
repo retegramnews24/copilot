@@ -1845,12 +1845,17 @@ export function createLobby3D(app) {
     if (descent.done) return;
     descent.done = true;
     if (reducedMotion) { setFirst(true); return; }
-    Object.assign(descent, { on: true, t: 0, hold });
+    Object.assign(descent, { on: true, t: 0, hold, from: null });
     cam.pitch = 0.05;
   }
   function descentFrame(dt) {
     resetMovement();
-    if (!descent.hold) descent.t = Math.min(1, descent.t + dt / DESCENT_TIME);
+    // la discesa segue l'orologio, non i fotogrammi: se all'uscita dallo splash il telefono rallenta per un attimo
+    // (video, radio, prima immagine sullo schermo) la telecamera non resta ferma in alto, recupera
+    if (!descent.hold) {
+      descent.from ??= performance.now();
+      descent.t = Math.min(1, (performance.now() - descent.from) / 1000 / DESCENT_TIME);
+    }
     const k = descent.t * descent.t * (3 - 2 * descent.t); // parte e arriva piano
     const yaw = cam.yaw, ground = cinemaFloor(pos.x, pos.z);
     dTop.set(pos.x + 0.35 * Math.sin(yaw), H - 0.3, pos.z + 0.35 * Math.cos(yaw));
@@ -1980,7 +1985,10 @@ export function createLobby3D(app) {
     const splash = document.getElementById('playground-intro');
     if (splash?.open && !descent.done) {
       startDescent(true);
-      splash.addEventListener('close', () => { descent.hold = false; }, { once: true });
+      // la discesa parte mentre lo splash sfuma (e comunque alla chiusura)
+      const go = () => { if (descent.hold) { descent.hold = false; descent.from = performance.now(); } };
+      splash.addEventListener('fading', go, { once: true });
+      splash.addEventListener('close', go, { once: true });
     } else startDescent();
     raf = requestAnimationFrame(frame);
     // prepara subito le luci di tutte le sale: entrando per la prima volta in una sala non si blocca
