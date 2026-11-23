@@ -56,6 +56,7 @@ const CSS = `
 .l3d-stick{position:absolute;left:calc(var(--ui-safe-left,0px) + 26px);bottom:calc(var(--ui-safe-bottom,0px) + 26px);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:none}
 .l3d-stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6)}
 .l3d-stick[hidden]{display:none}
+.l3d-stick.l3d-look{left:auto;right:calc(var(--ui-safe-right,0px) + 26px)}
 .l3d-load[hidden]{display:none}
 .l3d-load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:16px;color:#cfc6e6;pointer-events:none}
 `;
@@ -67,10 +68,10 @@ export function createLobby3D(app) {
   el.className = 'l3d'; el.hidden = true;
   el.innerHTML = `<div class="l3d-gl"></div><div class="l3d-load">Carico la Lobby 3D…</div>
 <div class="l3d-top"><button class="l3d-exit" aria-label="Torna alla Lobby classica">✕ Lobby classica</button><span class="l3d-where">Lobby</span></div>
-<div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div>`;
+<div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div><div class="l3d-stick l3d-look" hidden><i></i></div>`;
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
-  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild;
+  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild;
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   stick.hidden = !touch;
   const dot = document.createElement('div');
@@ -866,7 +867,8 @@ export function createLobby3D(app) {
     sync();return {wrap,input,out,read,sync};
   }
   let cinemaLevel=1,heard=0,lastYT=-1;
-  const mixPanel=document.createElement('div');mixPanel.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
+  // volumi: sul telefono a sinistra della colonna dei pulsanti, sopra il joystick della visuale
+  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 164px);right:calc(var(--ui-safe-right,0px) + 86px);display:grid;gap:4px':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
   const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
   const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
   cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
@@ -1461,6 +1463,7 @@ export function createLobby3D(app) {
     me.root.position.y = 0;
   }
   const joy = { id: null, x: 0, y: 0, cx: 0, cy: 0 };
+  const lookJoy = { id: null, x: 0, y: 0, cx: 0, cy: 0 }; // telefono: joystick a destra per girare la visuale
   const drags = new Map();
   let pinch = 0;
   const onKey = (e) => {
@@ -1509,24 +1512,31 @@ export function createLobby3D(app) {
     }
     const r = stick.getBoundingClientRect();
     const inStick = touch && e.pointerType !== 'mouse' && e.clientX < innerWidth * 0.45 && e.clientY > innerHeight * 0.45 && joy.id === null;
+    const lr = lookStick.getBoundingClientRect();
+    const inLook = !inStick && !lookStick.hidden && e.pointerType !== 'mouse' && lookJoy.id === null && Math.hypot(e.clientX - (lr.left + lr.width / 2), e.clientY - (lr.top + lr.height / 2)) < lr.width * 0.75;
     try { host.setPointerCapture(e.pointerId); } catch (err) { /* puntatore finto */ }
-    if (inStick) {
+    if (inLook) {
+      lookJoy.id = e.pointerId; lookJoy.cx = lr.left + lr.width / 2; lookJoy.cy = lr.top + lr.height / 2;
+      moveStick(lookJoy, lookKnob, e);
+    } else if (inStick) {
       joy.id = e.pointerId; joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2;
       moveJoy(e);
     } else drags.set(e.pointerId, { x: e.clientX, y: e.clientY, startX:e.clientX,startY:e.clientY, moved:false, paddle:e.button===0&&aimAtMonitor(e) });
     if (e.pointerType === 'mouse' && e.button === 2) guarding = true;
   });
-  const moveJoy = (e) => {
-    let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy;
+  const moveStick = (j, k, e) => {
+    let dx = e.clientX - j.cx, dy = e.clientY - j.cy;
     const d = Math.hypot(dx, dy), max = 50;
     if (d > max) { dx *= max / d; dy *= max / d; }
-    joy.x = dx / max; joy.y = dy / max;
-    knob.style.transform = `translate(${dx}px,${dy}px)`;
+    j.x = dx / max; j.y = dy / max;
+    k.style.transform = `translate(${dx}px,${dy}px)`;
   };
+  const moveJoy = (e) => moveStick(joy, knob, e);
   host.addEventListener('pointermove', (e) => {
     if(pinball.active){pinball.pointer(e);return}
     if(tableFootball.active){tableFootball.move(e,host.getBoundingClientRect());return}
     if (e.pointerId === joy.id) return moveJoy(e);
+    if (e.pointerId === lookJoy.id) return moveStick(lookJoy, lookKnob, e);
     // mouse agganciato (dopo un clic): la vista lo segue; libero (Esc): si trascina per guardarsi intorno, come prima
     if (e.pointerType === 'mouse' && locked() && !boardOpen) {
       cam.yaw -= e.movementX * 0.0035;
@@ -1554,6 +1564,7 @@ export function createLobby3D(app) {
   const up = (e) => {
     if (pinball.active) { pinball.pointer(e); return; }
     if (e.pointerId === joy.id) { joy.id = null; joy.x = joy.y = 0; knob.style.transform = ''; }
+    if (e.pointerId === lookJoy.id) { lookJoy.id = null; lookJoy.x = lookJoy.y = 0; lookKnob.style.transform = ''; }
     const drag=drags.get(e.pointerId);
     // clic sinistro (senza trascinare): colpo; tasto destro lasciato: fine della parata
     if(e.type==='pointerup' && e.pointerType==='mouse' && drag && !drag.moved && e.button===0 && !drag.paddle)punch();
@@ -1571,7 +1582,7 @@ export function createLobby3D(app) {
   moves.innerHTML = '<button data-m="punch" aria-label="Colpo">👊</button><button data-m="guard" aria-label="Parata (tieni premuto)">🛡️</button><button data-m="crouch" aria-label="Abbassati">⬇️</button>';
   el.append(moves);
   const movesCss = document.createElement('style');
-  movesCss.textContent = '.l3d-moves{position:absolute;right:calc(var(--ui-safe-right,0px) + 16px);bottom:calc(var(--ui-safe-bottom,0px) + 96px);display:flex;flex-direction:column;gap:10px;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{width:58px!important;height:58px;min-height:58px;padding:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
+  movesCss.textContent = '.l3d-moves{position:absolute;right:calc(var(--ui-safe-right,0px) + 16px);bottom:calc(var(--ui-safe-bottom,0px) + 164px);display:flex;flex-direction:column;gap:10px;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{width:58px!important;height:58px;min-height:58px;padding:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
   document.head.append(movesCss);
   moves.addEventListener('pointerdown', (e) => {
     const b = e.target.closest('[data-m]'); if (!b) return; e.stopPropagation(); e.preventDefault();
@@ -1600,6 +1611,12 @@ export function createLobby3D(app) {
   }
   const rectDist = (s, x, z) => Math.hypot(Math.max(0, Math.abs(x - s.x) - s.hx), Math.max(0, Math.abs(z - s.z) - s.hz));
   function step(dt) {
+    // joystick della visuale: destra/sinistra gira, su/giù alza e abbassa lo sguardo (più veloce verso il bordo)
+    if (lookJoy.id !== null) {
+      const lx = lookJoy.x * Math.abs(lookJoy.x), ly = lookJoy.y * Math.abs(lookJoy.y);
+      cam.yaw -= lx * 2.6 * dt;
+      cam.pitch = Math.max(firstPerson?-.95:seating?-.65:.08, Math.min(1.25, cam.pitch + ly * 1.6 * dt));
+    }
     let ix = 0, iz = 0;
     if (keys.has('w') || keys.has('arrowup')) iz -= 1;
     if (keys.has('s') || keys.has('arrowdown')) iz += 1;
@@ -1744,7 +1761,7 @@ export function createLobby3D(app) {
     const ytLevel=Math.round(heard*100);
     if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
     const audible=heard>.001 || target>.001;
-    cinemaVolume.wrap.style.display=inRange&&previewKey?'flex':'none';
+    cinemaVolume.wrap.style.display=depth>0&&Math.abs(pos.x)<7&&previewKey?'flex':'none'; // solo dentro la Sala Cinema
     radioVolume.wrap.style.display=(Math.hypot(pos.x-counterX,pos.z-counterZ)<3)?'flex':'none';
     if(avail.has('blackboard-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
       nextBoard=t+2;app.gallery?.({room:boardRoom,epoch:boardEpoch,since:boardSeq},drawGallery);
@@ -1785,6 +1802,7 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
+    if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
   }
   function resize() {
