@@ -82,11 +82,23 @@ export class Room extends DurableObject {
   botSeat(s) {
     return tables.botSeat(s);
   }
-  async record(s) {
-    for (const result of resultsFor(s))
-      await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
-        new Request('https://internal/lobby/result', { method: 'POST', body: JSON.stringify(result) })
-      );
+  // Il risultato va alla Lobby senza che il tavolo resti bloccato ad aspettarla. Prima il tavolo, bloccato, aspettava
+  // la Lobby; la Lobby, bloccata (classifica, richiesta di posto), aspettava il tavolo: nessuno dei due rispondeva
+  // all'altro per 30 secondi. I risultati si calcolano subito (lo stato può cambiare dopo); la Lobby li salva una
+  // volta sola per chiave, e se un invio va perso la classifica li recupera dai tavoli finiti.
+  recordSoon(s) {
+    const results = resultsFor(s);
+    if (!results.length) return;
+    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const send = (async () => {
+      for (const result of results)
+        await lobby.fetch(
+          new Request('https://internal/lobby/result', { method: 'POST', body: JSON.stringify(result) })
+        );
+    })().catch(() => {});
+    try {
+      this.ctx.waitUntil?.(send);
+    } catch {}
   }
   async saveState(s) {
     if (concluded(s)) {
@@ -94,7 +106,7 @@ export class Room extends DurableObject {
       delete s.finishedAt;
     }
     await this.ctx.storage.put('state', s);
-    await this.record(s);
+    this.recordSoon(s);
     if (s.archived || concluded(s)) await this.ctx.storage.deleteAlarm();
     else {
       const nextBot = this.botSeat(s) >= 0 ? Date.now() + 650 : Infinity;
@@ -346,7 +358,7 @@ export class Room extends DurableObject {
         if (path === '/tidy-result' && req.method === 'POST') {
           if (concluded(s) && s.expires !== null) {
             if (!this.hasResultViewer(s)) {
-              await this.record(s);
+              this.recordSoon(s);
               return json(await this.removeTable(s, 'dismissed'));
             }
             s.revision++;
@@ -413,7 +425,7 @@ export class Room extends DurableObject {
             await this.saveState(s);
             await this.broadcast(s);
           } else {
-            await this.record(s);
+            this.recordSoon(s);
             if (this.botSeat(s) >= 0 && (await this.ctx.storage.getAlarm()) === null)
               await this.ctx.storage.setAlarm(Math.min(Date.now() + 650, s.expires));
           }
@@ -492,7 +504,7 @@ export class Room extends DurableObject {
           );
           next.matchId = id();
           next.revision = s.revision + 1;
-          await this.record(s);
+          this.recordSoon(s);
           await this.saveState(next);
           await this.broadcast(next);
           return json({ state: this.public(next, viewer), token, player: user.player });
@@ -776,7 +788,8 @@ export class Room extends DurableObject {
             }
           : null;
       ws.serializeAttachment(a);
-      await this.lobbyHub.lobbyBroadcast(false);
+      // movimenti: messaggio piccolo con le sole persone, raccolto (al massimo ogni 200 ms)
+      await this.lobbyHub.presenceBroadcast();
     } catch {}
   }
   async webSocketClose(ws, code) {

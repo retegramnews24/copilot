@@ -80,11 +80,38 @@ export class LobbyHub {
       .sort((a, b) => a.number - b.number);
   }
 
+  // Classifiche (con e senza computer): si calcolano dai risultati salvati solo quando ne arriva uno nuovo, poi
+  // restano in memoria. Prima si rileggevano tutti i risultati di sempre a ogni invio della Lobby.
+  async leaderTops() {
+    if (!this.leaders) {
+      const records = [...(await this.ctx.storage.list({ prefix: 'result:' })).values()];
+      this.leaders = { leaderboard: topFive(records), aiLeaderboard: topFive(records, 'ai') };
+    }
+    return this.leaders;
+  }
   async lobbyPayload(allGames) {
     const tables = allGames ?? (await this.lobbyList());
+    this.tablesCache = tables; // per il messaggio piccolo delle presenze (presenceBroadcast)
     const games = tables.filter(g => g.archived || activeTable(g));
-    const unique = new Map(),
-      tag = await telegramAccessTag(this.env);
+    const tag = await telegramAccessTag(this.env);
+    const users = this.usersFor(tables, games, tag);
+    return {
+      games,
+      clubRadio: (await this.ctx.storage.get('clubRadio')) ?? null,
+      stools: (await this.ctx.storage.get('stools')) ?? {},
+      pinballTop: (await this.ctx.storage.get('pinballTop')) ?? [],
+      pinballTopGT: (await this.ctx.storage.get('pinballTopGT')) ?? [],
+      tableVolume: (await this.ctx.storage.get('tableVolume')) ?? 80,
+      users,
+      // Chat: messages only (notices stored there by 1.0.41 are dropped).
+      messages: ((await this.ctx.storage.get('chat')) || []).filter(m => !m.notice),
+      notices: (await this.ctx.storage.get('notices')) || [],
+      ...(await this.leaderTops())
+    };
+  }
+  // Persone collegate alla Lobby, con dove sono e cosa fanno (posa nella Lobby 3D, sgabello, partita)
+  usersFor(tables, games, tag) {
+    const unique = new Map();
     for (const ws of this.ctx.getWebSockets()) {
       const a = ws.deserializeAttachment();
       if (!tag || !a || a.accessTag !== tag || a.kind !== 'lobby' || a.closed || Date.now() - a.seen > 65000)
@@ -131,21 +158,39 @@ export class LobbyHub {
         };
       })
       .sort((a, b) => a.name.localeCompare(b.name));
-    const records = [...(await this.ctx.storage.list({ prefix: 'result:' })).values()];
-    return {
-      games,
-      clubRadio: (await this.ctx.storage.get('clubRadio')) ?? null,
-      stools: (await this.ctx.storage.get('stools')) ?? {},
-      pinballTop: (await this.ctx.storage.get('pinballTop')) ?? [],
-      pinballTopGT: (await this.ctx.storage.get('pinballTopGT')) ?? [],
-      tableVolume: (await this.ctx.storage.get('tableVolume')) ?? 80,
-      users,
-      // Chat: messages only (notices stored there by 1.0.41 are dropped).
-      messages: ((await this.ctx.storage.get('chat')) || []).filter(m => !m.notice),
-      notices: (await this.ctx.storage.get('notices')) || [],
-      leaderboard: topFive(records),
-      aiLeaderboard: topFive(records, 'ai')
-    };
+    return users;
+  }
+  // Movimenti nella Lobby 3D (presenze): un messaggio piccolo con le sole persone, al massimo ogni 200 ms (i cambi
+  // nel frattempo si raccolgono in un solo invio), e solo se le persone sono cambiate. Il pacchetto completo
+  // (tavoli, chat, classifiche…) parte solo quando cambia qualcos'altro (lobbyBroadcast).
+  async presenceBroadcast() {
+    if (this.presenceTimer) return;
+    const wait = 200 - (Date.now() - (this.presenceAt || 0));
+    if (wait > 0) {
+      this.presenceTimer = setTimeout(() => {
+        this.presenceTimer = null;
+        this.presenceBroadcast().catch(() => {});
+      }, wait);
+      return;
+    }
+    this.presenceAt = Date.now();
+    const tables = this.tablesCache ?? (await this.lobbyList());
+    this.tablesCache = tables;
+    const tag = await telegramAccessTag(this.env);
+    const users = this.usersFor(
+        tables,
+        tables.filter(g => g.archived || activeTable(g)),
+        tag
+      ),
+      signature = JSON.stringify(users);
+    if (signature === this.presenceSignature) return;
+    this.presenceSignature = signature;
+    const message = JSON.stringify({ type: 'users', users });
+    for (const ws of this.ctx.getWebSockets())
+      try {
+        const a = ws.deserializeAttachment();
+        if (a?.kind === 'lobby' && tag && a.accessTag === tag) ws.send(message);
+      } catch {}
   }
   // Game notices: a list of their own (last 30), outside the chat; each person reads them in the Lobby bell.
   async addNotice(notice) {
@@ -212,6 +257,7 @@ export class LobbyHub {
         if (res.ok) {
           for (const row of await res.json()) await this.ctx.storage.put('result:' + row.key, row);
           await this.ctx.storage.put('migrated:' + g.room, g.revision);
+          this.leaders = null; // risultati nuovi: classifiche da ricalcolare
         }
       }
       const records = [...(await this.ctx.storage.list({ prefix: 'result:' })).values()],
@@ -308,6 +354,7 @@ export class LobbyHub {
       const old = await this.ctx.storage.get('result:' + body.key);
       if (!old) {
         await this.ctx.storage.put('result:' + body.key, body);
+        this.leaders = null; // risultato nuovo: classifiche da ricalcolare
         const notice = winNotice(body);
         if (notice) {
           await this.addNotice(notice);
