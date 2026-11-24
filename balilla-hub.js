@@ -17,6 +17,11 @@ import {
 
 const TICK = 33; // ms tra un aggiornamento e l'altro (30 al secondo)
 export const IDLE_STOP = 5 * 60000; // tavolo fermo dopo 5 minuti senza comandi
+// Il telefono di chi è seduto manda "watch" ogni 3 secondi. Se tace da PAUSE la partita si ferma (app nascosta,
+// rete caduta) e nessuno segna contro chi non c'è; se tace da SEAT_GRACE il posto si libera (prima restava
+// occupato da un collegamento morto). Chi si alza e torna entro SEAT_GRACE ritrova il punteggio.
+export const PAUSE = 6000,
+  SEAT_GRACE = 30000;
 // Computer temporaneo sui blu quando al tavolo c'è una sola persona (per vedere come reagisce la pallina in allenamento):
 // mette la figura sulla traiettoria, para con le figure giù e tira quando la palla è lenta davanti al piede.
 export function practiceAI(f, team, dt, mem) {
@@ -126,7 +131,7 @@ export class BalillaHub {
         this.field = newField({ bar: a.balilla.bar, target: a.balilla.target, bestOf: a.balilla.bestOf });
       }
       if (slot > 3 || (this.mode === 2 && slot % 2) || seated.some(v => v.slot === slot)) slot = -1;
-      this.viewers.set(ws, { id, slot, local: false });
+      this.viewers.set(ws, { id, slot, local: false, seenAt: Date.now() });
     }
     if (this.field.bar) this.updateBar();
   }
@@ -155,8 +160,20 @@ export class BalillaHub {
     const now = Date.now();
     return [...this.viewers.values()].some(v => v.local && now - (v.seenAt || 0) < 15000);
   }
+  // Posti tenuti da telefoni che non si fanno sentire da SEAT_GRACE: si liberano.
+  sweep(now = Date.now()) {
+    for (const [ws, v] of [...this.viewers])
+      if (v.slot >= 0 && now - (v.seenAt || 0) > SEAT_GRACE) this.leave(ws);
+  }
+  // qualcuno seduto tace da PAUSE: partita ferma finché torna
+  paused(now = Date.now()) {
+    return this.seated().some(v => now - (v.seenAt || 0) > PAUSE);
+  }
   message(ws, id, b) {
     this.restore();
+    const sender = this.viewers.get(ws);
+    if (sender) sender.seenAt = Date.now();
+    this.sweep();
     if (b.action === 'leave') return this.leave(ws);
     let member = this.viewers.get(ws);
     if (!member) {
@@ -242,6 +259,21 @@ export class BalillaHub {
       this.remember(ws, member);
       if (this.field.bar) this.updateBar();
       else if (occupied.length + 1 === this.mode) this.start();
+      // torna chi si era alzato da poco: riprende il punteggio; se si siede un altro si riparte da zero
+      const held = this.held;
+      this.held = null;
+      if (
+        held &&
+        held.id === id &&
+        held.slot === b.slot &&
+        Date.now() < held.until &&
+        this.field.bar &&
+        !this.field.practice
+      ) {
+        this.field.score = held.score;
+        this.field.games = held.games;
+        this.field.gameNo = held.gameNo;
+      }
       this.broadcast(true);
     } else if (b.action === 'tune' && member.slot >= 0 && this.field.practice) {
       tuneField(this.field, b.values);
@@ -313,6 +345,14 @@ export class BalillaHub {
     this.lastInput = Math.max(this.lastInput || 0, last);
     this.timer = setInterval(() => {
       const now = Date.now();
+      this.sweep(now);
+      if (!this.timer) return;
+      if (this.paused(now)) {
+        last = now;
+        carry = 0;
+        this.broadcast();
+        return;
+      }
       // 5 minuti senza comandi da chi è seduto: il tavolo si ferma (prima girava 30 volte al secondo per sempre e
       // l'oggetto Lobby non andava mai a riposo); riparte al primo comando
       if (now - this.lastInput > IDLE_STOP) {
@@ -348,6 +388,16 @@ export class BalillaHub {
     this.viewers.delete(ws);
     this.remember(ws, null);
     if (member.slot >= 0) {
+      // il punteggio resta da parte per SEAT_GRACE: se torna la stessa persona si continua
+      if (this.field.bar && !this.field.practice && member.id != null)
+        this.held = {
+          id: member.id,
+          slot: member.slot,
+          score: [...this.field.score],
+          games: Array.isArray(this.field.games) ? [...this.field.games] : this.field.games,
+          gameNo: this.field.gameNo,
+          until: Date.now() + SEAT_GRACE
+        };
       // chi resta aspetta un altro giocatore; le aste di chi è uscito si fermano
       this.stop();
       const team = Math.floor(member.slot / 2);
@@ -364,7 +414,7 @@ export class BalillaHub {
     this.broadcast(true);
   }
   payload(slot, field, occupied, local) {
-    return `{"type":"balilla","mode":${this.mode},"slot":${slot},"occupied":${occupied},"playing":${!!this.timer},"busy":${this.busy() && !local},"field":${field}}`;
+    return `{"type":"balilla","mode":${this.mode},"slot":${slot},"occupied":${occupied},"playing":${!!this.timer},"paused":${!!this.timer && this.paused()},"busy":${this.busy() && !local},"field":${field}}`;
   }
   send(ws, m) {
     try {

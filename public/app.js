@@ -87,7 +87,7 @@ function pinballFlush(socket){
 }
 // la Lobby 3D si prepara (modelli, texture, luci) anche nascosta: parte già durante lo splash, poi si mostra
 async function makeLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=9ca4246467');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=084cbcea91');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
@@ -409,13 +409,6 @@ function connect(){
 // Collegamento della Lobby: si riapre solo se è chiuso o non risponde (prima a ogni ritorno nell'app, e il server
 // ti toglieva sgabello, posto al balilla e partita al flipper). «ping» → «pong» entro 5 s, altrimenti si riapre.
 let lobbyHeard=0,lobbyProbe=0;
-// app nascosta: il server ha tolto sgabello e posto al balilla anche col collegamento rimasto aperto; al ritorno
-// il telefono si alza dallo sgabello e si risiede subito al balilla, così telefono e server restano d'accordo
-let lobbyWasAway=false;
-function lobbyBack(){
- if(!lobbyWasAway||lobbyWS?.readyState!==1)return;
- lobbyWasAway=false;lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();
-}
 function lobbyAlive(){
  if(!sessionToken)return;
  if(!lobbyWS||lobbyWS.readyState>1){connectLobby();return}
@@ -431,8 +424,8 @@ function connectLobby(){
  // il server dimentica sgabello e posto al balilla del collegamento vecchio: il telefono si rimette d'accordo
  if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close();lobby3d?.stoolDisconnected()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
- socket.onopen=()=>{lobbyHeard=Date.now();$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';lobbyWasAway=false;sendPresence();pinballFlush(socket);lobby3d?.lobbyReconnected?.();renderSocial()};
- socket.onmessage=e=>{lobbyHeard=Date.now();if(e.data==='pong')return;try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
+ socket.onopen=()=>{lobbyHeard=Date.now();$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();pinballFlush(socket);lobby3d?.lobbyReconnected?.();renderSocial()};
+ socket.onmessage=e=>{lobbyHeard=Date.now();if(e.data==='pong')return;try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
  socket.onclose=()=>{lobby3d?.stoolDisconnected();clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
@@ -534,7 +527,7 @@ action('newtable',async()=>{
  if(room!==selected)return;
  credentials={token:j.token,player:j.player};render(j.state);
 });
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true);lobbyWasAway=true}if(!document.hidden){cinema.connect();lobbyAlive();lobbyBack();if(room&&(!ws||ws.readyState>1))connect()}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopReplay();sendPresence(true)}if(!document.hidden){cinema.connect();lobbyAlive();if(room&&(!ws||ws.readyState>1))connect()}});
 function refreshDebug(){
  const entries=[['Interfaccia',APP_NAME],['Identità',identity?identity.name+' · Telegram verificato':'Non autenticato'],['Online',onlineUsers.length],['Partita',state?.number||'Sala partite'],['Partite elencate',games.length],['Stato',state?.phase||'Ingresso'],['Revisione',state?.revision??'—'],['Ruolo',state?(state.players.some(p=>p.id===credentials.player)?'Giocatore':'Spettatore'):'—'],['Connessione',(ws||lobbyWS)?(['In apertura','Connessa','In chiusura','Chiusa'][(ws||lobbyWS).readyState]):'Non attiva'],['Motore',state?.naval?'Battaglia navale':state?.briscola?'Briscola':state?.scarabeo?'Scarabeo':state?.scopa?'Scopa':state?.uno?'UNO':state?.connect4?'Forza 4':state?.checkers?'Dama italiana':state?.chess?'Scacchi':'Lobby'],['Viewport',innerWidth+' × '+innerHeight]];
  $('debug-info').replaceChildren();

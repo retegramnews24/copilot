@@ -717,7 +717,9 @@ export function buildBalilla(scene, el, send, playSound) {
       if (!wasSeated && seated()) selectPair(pair);
       ui.hidden = noPanel;
       const status = ui.querySelector('span');
-      status.textContent = seated()
+      status.textContent = data.paused
+        ? 'Partita in pausa: aspettiamo chi si è allontanato'
+        : seated()
         ? TEAM[team] + ' · Su/giù sposta · Destra/sinistra ruota · Q cambia coppia · E lascia'
         : net.occupied.includes(team * 2)
           ? 'Lato occupato'

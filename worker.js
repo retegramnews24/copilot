@@ -1,4 +1,4 @@
-import { changeStool } from './club-stools.js';
+import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
 import { recordPinball, startPinball, removePinball } from './club-pinball.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
@@ -787,10 +787,33 @@ export class Room extends DurableObject {
           await this.lobbyHub.lobbyBroadcast(false);
         });
       if (b.type !== 'presence') return;
-      a.inClub = b.inClub === true && !b.away;
-      if (!a.inClub) {
+      // App nascosta (away): sgabello e posto al balilla restano tuoi per un po' (il balilla libera il posto da solo
+      // se il telefono tace, club-stools.js lo sgabello). Uscire dal club invece li libera subito.
+      const away = !!b.away,
+        wasAway = !!a.closed;
+      if (away && !wasAway) a.closedAt = Date.now();
+      a.inClub = b.inClub === true && !away;
+      if (!a.inClub && !away) {
         delete a.stool;
         this.balilla.leave(ws);
+      }
+      if (wasAway && !away) {
+        // di ritorno: lo sgabello vale ancora se non è passato troppo tempo e nessun altro l'ha preso
+        const now = Date.now();
+        if (
+          a.stool &&
+          (!a.inClub ||
+            now - (a.closedAt || 0) >= STOOL_GRACE ||
+            this.ctx.getWebSockets().some(other => {
+              if (other === ws) return false;
+              const o = other.deserializeAttachment();
+              return o?.stool?.id === a.stool.id && holdsStool(o, a.stool.id, now);
+            }))
+        )
+          delete a.stool;
+        try {
+          ws.send(JSON.stringify({ type: 'club-back', stool: a.stool || null }));
+        } catch {}
       }
       a.room = typeof b.room === 'string' && /^[a-f0-9-]{36}$/.test(b.room) ? b.room : null;
       a.seen = Date.now();
