@@ -1795,12 +1795,14 @@ export function createLobby3D(app) {
   // Fotogrammi: al massimo 60 al secondo (30 sui telefoni lenti) anche sugli schermi a 90-120 Hz; da fermi
   // (telecamera immobile da più di un secondo e mezzo, niente partita, niente film) 30. Prima sempre al massimo.
   const slowPhone = (navigator.deviceMemory && navigator.deviceMemory <= 3) || (navigator.hardwareConcurrency || 8) <= 4;
-  let lastDraw = 0, frameGap = 0, stillSince = 0;
+  let lastDraw = 0, frameGap = 0, stillSince = 0, drawnAt = 0;
+  // guardia: con la 3D aperta e visibile, se per più di un secondo e mezzo non si è disegnato niente il ciclo riparte
+  setInterval(() => { if (active && !document.hidden && !asleep && performance.now() - drawnAt > 1500) { cancelAnimationFrame(raf); lastDraw = 0; raf = requestAnimationFrame(frame); } }, 1000);
   const camWas = new THREE.Vector3(), camLook = new THREE.Quaternion();
   function frame(now) {
     if (!active) return;
-    if (lastDraw && now - lastDraw < frameGap - 2) { raf = requestAnimationFrame(frame); return; }
-    lastDraw = now;
+    if (lastDraw && now >= lastDraw && now - lastDraw < frameGap - 2) { raf = requestAnimationFrame(frame); return; }
+    lastDraw = now; drawnAt = performance.now();
     if (!seating && !playing() && !monitor && !boardOpen) restoreActivityView();
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
@@ -2025,6 +2027,9 @@ export function createLobby3D(app) {
   function sleep(){app.clubStream?.(null);quietProjection();playProjection(null);resetMovement();cancelAnimationFrame(raf);last=0}
   function wake(){if(document.hidden||asleep)return;playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}}
   document.addEventListener('visibilitychange', () => { if(document.hidden)sleep();else wake() });
+  // addormentata da Telegram ma qualcuno tocca o preme un tasto: chiaramente la mini app è davanti, si riparte
+  const rouse = () => { if (asleep && !document.hidden) { asleep = false; wake(); app.awake?.(); } };
+  for (const type of ['pointerdown', 'keydown']) addEventListener(type, rouse, true);
   // Misure (Debug → Misure della Lobby 3D): fotogrammi al secondo, comandi di disegno, triangoli, texture
   let statsBox=null,statsFrames=0,statsAt=0;
   try{if(localStorage.getItem('binottoland-3d-stats')==='1')setStats(true)}catch{}
