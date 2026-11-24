@@ -28,8 +28,8 @@ import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
 import {createGolfLink} from './golf-link.js?v=cbf0a82bb6';
 import {createArcadeLink} from './arcade-link.js?v=34fb67f403';
-import {createF1Link} from './f1-link.js?v=d2ce0239e3';
-import {createBiliardoLink} from './biliardo-link.js?v=f7a471011c';
+import {createF1Link} from './f1-link.js?v=972c89b8b2';
+import {createBiliardoLink} from './biliardo-link.js?v=3aa65b473a';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';

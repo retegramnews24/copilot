@@ -42,8 +42,10 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     frame.src = '/gara/index.html?v=2' + (online ? '&online=1' : '');
     tg?.BackButton?.show();
   }
+  let failures = 0;
   function startSync() {
     clearInterval(sync);
+    failures = 0;
     sync = setInterval(poll, 900);
   }
   async function poll() {
@@ -53,12 +55,24 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     try {
       const result = await request('/api/f1/' + selected + '/state?after=' + snapshot.revision);
       clock(result);
+      if (failures >= 3) post('net', { lost: false, message: 'Collegamento ripreso.' });
+      failures = 0;
       if (room === selected && result.state && result.state.revision >= snapshot.revision) {
         snapshot = result.state;
         publish();
       }
     } catch (error) {
-      if (room === selected && error.status === 404) gone(selected);
+      if (room !== selected) return;
+      if (error.status === 404) gone(selected);
+      // dopo tre richieste fallite di fila si dice cosa succede (prima il gioco restava fermo senza dire niente)
+      else if (++failures >= 3)
+        post('net', {
+          lost: true,
+          message:
+            error.status === 401 || error.status === 403
+              ? 'Sessione scaduta: chiudi e riapri Binottoland dal bot.'
+              : 'Collegamento perso, riprovo…'
+        });
     } finally {
       polling = false;
     }

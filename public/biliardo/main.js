@@ -814,6 +814,8 @@ addEventListener('message', (e) => {
   else if (d.type === 'bil:back') { if (!$('menu').hidden || !m || phase === 'menu') toApp('exit'); else toggleMenu(); }
   else if (d.type === 'bil:identity' && typeof d.player === 'string') { me = { player: d.player, name: d.name }; cfg.n1 = cfg.n1 || d.name || ''; }
   else if (d.type === 'bil:state') netState(d);
+  // rete persa o sessione scaduta: l'app lo ripete a ogni tentativo fallito, poi dice quando è tornata
+  else if (d.type === 'bil:net') toast(d.message || '', !!d.lost);
   else if (d.type === 'bil:error') {
     toast(d.message || 'Errore', true);
     // il colpo non è stato accettato: si torna al tavolo del server

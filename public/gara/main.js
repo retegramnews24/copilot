@@ -915,6 +915,8 @@ if (embedded) {
       me = { player: d.player, name: String(d.name || '') };
       $('who').textContent = 'Pilota: ' + me.name; $('who').hidden = !me.name;
     } else if (d.type === 'f1:state') netState(d);
+    // rete persa o sessione scaduta: l'app lo ripete a ogni tentativo fallito, poi dice quando è tornata
+    else if (d.type === 'f1:net') say(String(d.message || ''));
     else if (d.type === 'f1:error') {
       busy = false; $('go').disabled = false;
       say(String(d.message || 'Errore'));
