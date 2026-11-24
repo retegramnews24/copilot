@@ -874,8 +874,8 @@ export function createLobby3D(app) {
     sync();return {wrap,input,out,read,sync};
   }
   let cinemaLevel=1,heard=0,lastYT=-1;
-  // volumi: sul telefono a sinistra della colonna dei pulsanti, sopra il joystick della visuale
-  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 164px);right:calc(var(--ui-safe-right,0px) + 86px);display:grid;gap:4px':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
+  // volumi: sul telefono a destra, sopra l'arco dei tasti attorno al joystick della visuale
+  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 230px);right:calc(var(--ui-safe-right,0px) + 12px);display:grid;gap:4px':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
   const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
   const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
   cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
@@ -1601,22 +1601,35 @@ export function createLobby3D(app) {
   host.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.max(1.8, Math.min(9, cam.dist * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
   host.addEventListener('contextmenu', (e) => e.preventDefault());
   actB.onclick = () => near && launch(near);
-  // sul telefono: tasti per colpo, parata (tenere premuto) e abbassarsi (acceso/spento)
+  // sul telefono: salto, colpo, parata e abbassarsi, su un arco attorno al joystick della visuale (in basso a
+  // destra), dall'alto verso sinistra. Parata e abbassarsi valgono finché tieni premuto: lasciando ci si rialza.
   const moves = document.createElement('div');
   moves.className = 'l3d-moves'; moves.hidden = true;
-  moves.innerHTML = '<button data-m="punch" aria-label="Colpo">👊</button><button data-m="guard" aria-label="Parata (tieni premuto)">🛡️</button><button data-m="crouch" aria-label="Abbassati">⬇️</button>';
+  const ARC = [['jump', '⤒', 'Salta', 90], ['punch', '👊', 'Colpo', 122], ['guard', '🛡️', 'Parata (tieni premuto)', 154], ['crouch', '⬇️', 'Abbassati (tieni premuto)', 186]];
+  // centro del joystick della visuale: 26 px dal bordo + metà dei suoi 120 px; tasti a 105 px dal centro
+  moves.innerHTML = ARC.map(([m, icon, label, deg]) => {
+    const a = (deg * Math.PI) / 180, right = 86 - Math.cos(a) * 105 - 29, bottom = 86 + Math.sin(a) * 105 - 29;
+    return `<button data-m="${m}" aria-label="${label}" style="right:calc(var(--ui-safe-right,0px) + ${right.toFixed(0)}px);bottom:calc(var(--ui-safe-bottom,0px) + ${bottom.toFixed(0)}px)">${icon}</button>`;
+  }).join('');
   el.append(moves);
   const movesCss = document.createElement('style');
-  movesCss.textContent = '.l3d-moves{position:absolute;right:calc(var(--ui-safe-right,0px) + 16px);bottom:calc(var(--ui-safe-bottom,0px) + 164px);display:flex;flex-direction:column;gap:10px;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{width:58px!important;height:58px;min-height:58px;padding:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
+  movesCss.textContent = '.l3d-moves{position:absolute;inset:0;pointer-events:none;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{position:absolute;pointer-events:auto;width:58px!important;height:58px;min-height:58px;padding:0!important;margin:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
   document.head.append(movesCss);
+  const holdMove = (m, on) => {
+    if (m === 'guard') guarding = on;
+    if (m === 'crouch') crouching = on;
+    moves.querySelector(`[data-m="${m}"]`)?.classList.toggle('on', on);
+  };
   moves.addEventListener('pointerdown', (e) => {
     const b = e.target.closest('[data-m]'); if (!b) return; e.stopPropagation(); e.preventDefault();
-    if (b.dataset.m === 'punch') punch();
-    if (b.dataset.m === 'guard') { guarding = true; b.classList.add('on'); }
-    if (b.dataset.m === 'crouch') { crouching = !crouching; b.classList.toggle('on', crouching); }
+    try { b.setPointerCapture(e.pointerId); } catch {}
+    const m = b.dataset.m;
+    if (m === 'punch') punch();
+    if (m === 'jump' && !seating && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
+    if (m === 'guard' || m === 'crouch') holdMove(m, true);
   });
-  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) moves.addEventListener(ev, (e) => {
-    const b = e.target.closest('[data-m="guard"]'); if (b) { guarding = false; b.classList.remove('on'); }
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) moves.addEventListener(ev, (e) => {
+    const b = e.target.closest?.('[data-m]'); if (b && (b.dataset.m === 'guard' || b.dataset.m === 'crouch')) holdMove(b.dataset.m, false);
   });
   $('.l3d-exit').onclick = () => { hide(); app.exit && app.exit(); };
 
