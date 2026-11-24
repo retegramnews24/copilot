@@ -92,6 +92,9 @@ export function buildFlipper(
   paintBackglass(art.bgCanvas, 0, true);
   art.bgTexture = new THREE.CanvasTexture(art.bgCanvas);
   art.bgTexture.colorSpace = THREE.SRGBColorSpace;
+  // si ridisegna di continuo: senza versioni rimpicciolite (mipmap), che andrebbero rifatte a ogni invio
+  art.bgTexture.generateMipmaps = false;
+  art.bgTexture.minFilter = THREE.LinearFilter;
   let record = 0;
   try {
     record = Number(localStorage.getItem(T.recordKey)) || 0;
@@ -112,6 +115,8 @@ export function buildFlipper(
   const dmd = dmdCanvas.getContext('2d');
   const dmdTexture = new THREE.CanvasTexture(dmdCanvas);
   dmdTexture.colorSpace = THREE.SRGBColorSpace;
+  dmdTexture.generateMipmaps = false;
+  dmdTexture.minFilter = THREE.LinearFilter;
   let dmdText = '';
   function drawDmd(top, bottom) {
     const key = top + '|' + bottom;
@@ -469,6 +474,7 @@ export function buildFlipper(
     pressed = [false, false],
     pulling = false,
     lastDmd = 0,
+    idle = false,
     grab = null;
   const ray = new THREE.Raycaster(),
     ndc = new THREE.Vector2();
@@ -630,7 +636,9 @@ export function buildFlipper(
       return [left, right];
     },
     plunger: () => game?.plunger ?? 0,
-    update(cam, dt) {
+    // live: chi guarda è in sala giochi lì vicino (o sta giocando). Da lontano, senza partita, il flipper resta com'è:
+    // prima tabellone, lampadine e display si ridisegnavano 30 volte al secondo anche dall'altra parte della Lobby.
+    update(cam, dt, live = true) {
       camera = cam;
       const g = game;
       if (g) {
@@ -638,6 +646,17 @@ export function buildFlipper(
         for (const ev of g.events.splice(0)) sound(ev.type, ev.power);
       }
       if (!piano) return;
+      if (!live && !g) {
+        // l'ultima cosa da sistemare dopo una partita: palline via, barre nascoste, motore spento
+        if (!idle) {
+          idle = true;
+          for (const b of balls) b.visible = false;
+          hud.style.display = tip.style.display = 'none';
+          engine(null);
+        }
+        return;
+      }
+      idle = false;
       // pallina sul piano
       balls.forEach((b, i) => {
         const p = g?.balls[i];
@@ -747,7 +766,8 @@ export function buildFlipper(
         }
       }
       // vetro del tabellone: punteggio grande che sale in diretta, con un lampo quando arrivano punti
-      if (tt - art.lastBg > 1 / 30) {
+      // (in partita 30 volte al secondo, in attesa 12: il giro di lampadine si vede lo stesso)
+      if (tt - art.lastBg > (g ? 1 / 30 : 1 / 12)) {
         const dt = tt - art.lastBg;
         art.lastBg = tt;
         let info;

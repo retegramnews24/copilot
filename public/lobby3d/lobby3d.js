@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=91ef5b090a';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=0fa36a6bc5';
 import {buildBalilla} from './balilla.js?v=1b2013f8fa';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
