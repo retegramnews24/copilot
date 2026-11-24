@@ -1,5 +1,5 @@
 import { changeStool } from './club-stools.js';
-import { recordPinball } from './club-pinball.js';
+import { recordPinball, startPinball, removePinball } from './club-pinball.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -39,6 +39,7 @@ import { concluded } from './table-rules.js';
 import { LobbyHub } from './lobby-hub.js';
 import { handleRequest } from './api.js';
 import { BackupHub, exportStorage, importStorage, encode, decode } from './backup.js';
+import { makeRoomFor } from './socket-limits.js';
 
 export default {
   fetch: handleRequest,
@@ -213,6 +214,16 @@ export class Room extends DurableObject {
       } catch {}
     }
   }
+  // Controllo dei collegamenti in diretta (sessione scaduta, uscito dal gruppo). Sulle richieste normali (poche) si fa
+  // subito e si aspetta (guardSockets). Sui messaggi in diretta (passi, aste: tantissimi) al massimo ogni 5 secondi
+  // e senza farli aspettare (guardSocketsSoon). In tutti e due i casi chiude solo chi Telegram dice davvero fuori
+  // dal gruppo: se Telegram non risponde ("non so") il collegamento resta; a Telegram una domanda alla volta.
+  guardSocketsSoon() {
+    const now = Date.now();
+    if (now - (this.guardAt || 0) < 5000) return;
+    this.guardAt = now;
+    this.guardSockets().catch(() => {});
+  }
   async guardSockets() {
     const sockets = this.ctx.getWebSockets();
     if (!sockets.length) return;
@@ -229,7 +240,7 @@ export class Room extends DurableObject {
         let reason = null;
         if (!tag || a?.accessTag !== tag || !Number.isFinite(a?.expires) || a.expires <= Date.now())
           reason = 'Sessione scaduta: riapri la Mini App';
-        else if (!memberId || (await memberAccess({ id: memberId }, this.env)) !== true)
+        else if (!memberId || (await memberAccess({ id: memberId }, this.env)) === false)
           reason = 'Accesso al gruppo richiesto';
         if (reason) {
           try {
@@ -285,6 +296,13 @@ export class Room extends DurableObject {
     if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
     if (new URL(req.url).pathname.startsWith('/moto-trial/')) return this.moto.fetch(req);
     if (new URL(req.url).pathname.startsWith('/labyrinth/')) return this.lab.fetch(req);
+    // amministrazione (solo da /api/admin/pinball, con ADMIN_TOKEN): toglie un punteggio falso dalla classifica
+    if (path === '/pinball/remove' && req.method === 'POST') {
+      const { table, id } = await req.json().catch(() => ({}));
+      const removed = await this.ctx.blockConcurrencyWhile(() => removePinball(this.ctx, table, id));
+      if (removed) await this.lobbyHub.lobbyBroadcast();
+      return json({ removed });
+    }
     if (
       Number(req.headers.get('Content-Length') || 0) >
       (path === '/lobby/number-connect-score' || path === '/lobby/create' ? 420000 : 4096)
@@ -339,7 +357,10 @@ export class Room extends DurableObject {
         if (path.endsWith('/ws')) {
           if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
             return json({ error: 'WebSocket richiesto.' }, 426);
-          if (this.ctx.getWebSockets().length >= 60)
+          // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
+          makeRoomFor(this.ctx, JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id);
+          const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
+          if (!isPlayer && this.ctx.getWebSockets().length >= 60)
             return json({ error: 'Stanza piena (60 connessioni).' }, 429);
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
@@ -618,7 +639,7 @@ export class Room extends DurableObject {
   }
 
   async webSocketMessage(ws, message) {
-    await this.guardSockets();
+    this.guardSocketsSoon();
     if (ws.deserializeAttachment()?.authDenied) return;
     const a = ws.deserializeAttachment();
     const memberId =
@@ -626,7 +647,8 @@ export class Room extends DurableObject {
       a?.user?.id ||
       (a?.player?.startsWith('tg:') ? a.player.slice(3) : null) ||
       (typeof a?.id === 'string' ? a.id.replace(/^tg:/, '') : null);
-    if (!memberId || (await memberAccess({ id: memberId }, this.env)) !== true) {
+    // il gruppo lo controlla guardSocketsSoon (una volta al minuto): qui non si aspetta Telegram a ogni messaggio
+    if (!memberId) {
       ws.close(4003, 'Accesso al gruppo richiesto');
       return;
     }
@@ -669,7 +691,12 @@ export class Room extends DurableObject {
         await this.lobbyHub.lobbyBroadcast();
         return;
       }
-      // flipper della Lobby 3D: il punteggio di fine partita entra nella classifica (top 10 con il nome)
+      // flipper della Lobby 3D: la partita si annuncia all'inizio, poi il punteggio di fine partita entra nella
+      // classifica (top 10 con il nome) se è possibile per il tempo giocato
+      if (b.type === 'pinball-start' && a.inClub && !a.closed) {
+        if (startPinball(a, b.table === 'gt' ? 'gt' : 'gp')) ws.serializeAttachment(a);
+        return;
+      }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
         const table = b.table === 'gt' ? 'gt' : 'gp';
         const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score, table));
@@ -753,7 +780,7 @@ export class Room extends DurableObject {
     } catch {}
   }
   async webSocketClose(ws, code) {
-    await this.guardSockets();
+    this.guardSocketsSoon();
     const attachment = ws.deserializeAttachment();
     if (attachment?.kind === 'blackboard') return this.blackboard.close(ws);
     if (attachment?.kind === 'cinema') return this.cinema.close(ws);
@@ -797,7 +824,7 @@ export class Room extends DurableObject {
     ws.close(1011, 'Riconnettersi.');
   }
   async alarm() {
-    await this.guardSockets();
+    this.guardSocketsSoon();
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())
       return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).alarm();
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('cinema-streamer-v1').toString())

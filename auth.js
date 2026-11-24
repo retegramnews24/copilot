@@ -13,31 +13,47 @@ export function secureEqual(a, b) {
 }
 
 // Membri ammessi: creator, administrator, member, oppure restricted ancora nel gruppo. Cache di 60 secondi per isolate.
+// - Una sola domanda a Telegram alla volta per persona: chi chiede mentre è già in corso aspetta la stessa risposta.
+// - Se Telegram non risponde (rete, errore, "rallenta") vale l'ultima risposta avuta negli ultimi 10 minuti;
+//   null ("non so") solo se non ce n'è nessuna. Chi era dentro un minuto fa non viene buttato fuori per un intoppo.
+// (la prova tests/access-runtime.test.js esporta membershipCache cercando proprio questa riga)
 const membershipCache = new Map();
+const membershipPending = new Map();
+const MEMBERSHIP_FRESH = 60000,
+  MEMBERSHIP_STALE = 10 * 60000;
 export async function memberAccess(user, env) {
   const group = String(env.TELEGRAM_ALLOWED_GROUP_ID || '-1001803941686'),
     key = group + ':' + user.id;
   const cached = membershipCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.allowed;
-  try {
-    const response = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/getChatMember', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: group, user_id: Number(user.id) }),
-      signal: AbortSignal.timeout(5000)
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) return null;
-    const member = data.result;
-    const allowed =
-      ['creator', 'administrator', 'member'].includes(member.status) ||
-      (member.status === 'restricted' && member.is_member === true);
-    if (membershipCache.size > 1000) membershipCache.clear();
-    membershipCache.set(key, { allowed, expires: Date.now() + 60000 });
-    return allowed;
-  } catch {
-    return null;
-  }
+  const stale = () =>
+    cached && cached.expires + MEMBERSHIP_STALE - MEMBERSHIP_FRESH > Date.now() ? cached.allowed : null;
+  if (membershipPending.has(key)) return membershipPending.get(key);
+  const ask = (async () => {
+    try {
+      const response = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/getChatMember', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: group, user_id: Number(user.id) }),
+        signal: AbortSignal.timeout(5000)
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) return stale();
+      const member = data.result;
+      const allowed =
+        ['creator', 'administrator', 'member'].includes(member.status) ||
+        (member.status === 'restricted' && member.is_member === true);
+      if (membershipCache.size > 1000) membershipCache.clear();
+      membershipCache.set(key, { allowed, expires: Date.now() + MEMBERSHIP_FRESH });
+      return allowed;
+    } catch {
+      return stale();
+    } finally {
+      membershipPending.delete(key);
+    }
+  })();
+  membershipPending.set(key, ask);
+  return ask;
 }
 export async function requireMember(user, env) {
   const allowed = await memberAccess(user, env);

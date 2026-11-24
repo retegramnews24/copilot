@@ -1,4 +1,5 @@
 import {normalizeAppearance} from './public/appearance.js';
+import {makeRoomFor} from './socket-limits.js';
 import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
@@ -201,6 +202,7 @@ export class Cinema {
       if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
       if(!user)return response('Accesso richiesto.',401);
+      makeRoomFor(this.ctx,user.id,'cinema'); // al massimo 3 collegamenti al Cinema per persona
       if(this.ctx.getWebSockets().length>=120)return response('Cinema pieno.',429);
       const [client,socket]=Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(socket);

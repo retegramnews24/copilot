@@ -7,6 +7,7 @@ import { hasMove, replayNumberGame } from './public/arcade/number-connect-rules.
 import { json, id, name } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
 import { gameTitle } from './public/game-info.js';
+import { makeRoomFor } from './socket-limits.js';
 
 const BILIARDO_NAMES = {
   otto: 'Palla 8',
@@ -240,9 +241,11 @@ export class LobbyHub {
     if (path === '/lobby/ws') {
       if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
         return json({ error: 'WebSocket richiesto.' }, 426);
-      if (this.ctx.getWebSockets().length >= 120) return json({ error: 'Troppe connessioni.' }, 429);
       const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
       if (!user) return json({ error: 'Accesso richiesto.' }, 401);
+      // al massimo 3 collegamenti alla Lobby per persona (si chiude il suo più vecchio), poi il tetto totale
+      makeRoomFor(this.ctx, user.id, 'lobby');
+      if (this.ctx.getWebSockets().length >= 120) return json({ error: 'Troppe connessioni.' }, 429);
       const pair = new WebSocketPair();
       this.ctx.acceptWebSocket(pair[1]);
       pair[1].serializeAttachment({

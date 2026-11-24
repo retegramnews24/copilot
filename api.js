@@ -8,8 +8,40 @@ import { cinemaHub, groupCinema } from './cinema-routes.js';
 import { seatLimit, longLimitText } from './table-rules.js';
 
 // Unexpected server errors are logged (Workers Logs) instead of disappearing; the player gets a short message.
+// Grandezza delle richieste: il contenuto si legge a pezzi e la lettura si ferma appena supera il limite, anche se
+// la richiesta non dichiara quanto è grande (prima bastava non mandare Content-Length per far leggere tutto in
+// memoria). Il limite è quello della richiesta più grande ammessa (pista di F1 da 400 kB, partita di Number
+// Connect); i controlli più stretti dei singoli percorsi restano.
+export const BODY_LIMIT = 420000;
+export async function readLimited(req, limit = BODY_LIMIT) {
+  if (!req.body) return null;
+  const reader = req.body.getReader(),
+    parts = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => {});
+      return false;
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) (out.set(p, at), (at += p.byteLength));
+  return out;
+}
 export async function handleRequest(req, env) {
   try {
+    if (req.body && !['GET', 'HEAD'].includes(req.method)) {
+      if (Number(req.headers.get('Content-Length') || 0) > BODY_LIMIT)
+        return json({ error: 'Richiesta troppo grande.' }, 413);
+      const body = await readLimited(req);
+      if (body === false) return json({ error: 'Richiesta troppo grande.' }, 413);
+      req = new Request(req, { body });
+    }
     return await route(req, env);
   } catch (error) {
     console.error(
@@ -68,6 +100,18 @@ async function admin(req, env, u) {
       method: req.method
     });
   if (one && !one[2] && req.method === 'GET') return hub.fetch('https://internal/backups/' + one[1]);
+  // togliere un punteggio dalla classifica di un flipper: POST {"table":"gp"|"gt","id":"<numero Telegram>"}
+  if (u.pathname === '/api/admin/pinball' && req.method === 'POST') {
+    const body = await req.text();
+    if (body.length > 256) return json({ error: 'Richiesta troppo grande.' }, 413);
+    return env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+      'https://internal/pinball/remove',
+      {
+        method: 'POST',
+        body
+      }
+    );
+  }
   if (one && one[2] && req.method === 'POST') {
     const body = await req.text();
     if (body.length > 65536) return json({ error: 'Richiesta troppo grande.' }, 413);

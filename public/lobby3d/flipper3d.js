@@ -72,7 +72,7 @@ const TABLES = {
 export function buildFlipper(
   scene,
   el,
-  { audio, allowed, top = () => [], sendScore = () => {}, me = () => null, kind = 'gp' }
+  { audio, allowed, top = () => [], sendScore = () => {}, sendStart = () => {}, me = () => null, kind = 'gp' }
 ) {
   const T = TABLES[kind];
   const { newGame, makeTable, simulate, setFlipper, pull, drag, nudge, R, LANE_X, BALLS } = T.physics;
@@ -506,6 +506,7 @@ export function buildFlipper(
       active = true;
       look.yaw = look.pitch = 0;
       game = newGame();
+      sendStart(); // il server segna l'inizio: a fine partita accetta solo un punteggio possibile in quel tempo
       pressed = [false, false];
       pulling = false;
     },

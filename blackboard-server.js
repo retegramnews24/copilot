@@ -1,5 +1,6 @@
 import {DEFAULT_SIZE, ERASER, validStroke} from './public/blackboard/chalk.js';
 import {normalizeAppearance} from './public/appearance.js';
+import {makeRoomFor} from './socket-limits.js';
 
 const TAG = 'blackboard';
 const DEFAULT_ROOM = '1';
@@ -120,6 +121,8 @@ export class Blackboard {
     }
     const query = new URL(request.url).searchParams;
     const legacy = query.get('directory') !== '1';
+    makeRoomFor(this.ctx, user.player, TAG); // al massimo 3 collegamenti alla lavagna per persona
+    if (this.ctx.getWebSockets(TAG).length >= 120) return new Response('Lavagna piena', {status:429});
     const {0:client, 1:socket} = new WebSocketPair();
     this.ctx.acceptWebSocket(socket, [TAG]);
     socket.serializeAttachment({

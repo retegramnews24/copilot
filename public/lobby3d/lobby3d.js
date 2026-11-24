@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=5ce7ccb69f';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=91ef5b090a';
 import {buildBalilla} from './balilla.js?v=b2ac59b310';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
@@ -1063,7 +1063,7 @@ export function createLobby3D(app) {
   // due flipper uno accanto all'altro: Grand Prix (F1) e Binotto GT (endurance), ognuno con la sua classifica.
   // "pinball" è quello a cui stai giocando (o il Grand Prix se non giochi): il resto della Lobby parla con lui
   const tables={gp:null,gt:null};
-  for(const kind of ['gp','gt'])tables[kind]=buildFlipper(scene,el,{kind,audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.(kind)||[],sendScore:score=>app.pinballScore?.(score,kind),me:()=>app.me?.()});
+  for(const kind of ['gp','gt'])tables[kind]=buildFlipper(scene,el,{kind,audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.(kind)||[],sendScore:score=>app.pinballScore?.(score,kind),sendStart:()=>app.pinballStart?.(kind),me:()=>app.me?.()});
   let pinballKind='gp';
   const pinball=new Proxy({},{get:(_,k)=>{const t=tables[pinballKind];const v=t[k];return typeof v==='function'?v.bind(t):v}});
   // volume dei flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarli
