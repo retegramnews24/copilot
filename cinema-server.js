@@ -1,4 +1,14 @@
 import {normalizeAppearance} from './public/appearance.js';
+import {makeRoomFor} from './socket-limits.js';
+
+// al massimo 4 comandi al secondo per collegamento e tipo (2 al minuto per aprire una sala)
+const cinemaRates=new WeakMap();
+export function cinemaTooFast(socket,type,now=Date.now()){
+  const rates=cinemaRates.get(socket)??{};cinemaRates.set(socket,rates);
+  const windowMs=type==='create'?60000:1000,max=type==='create'?2:4;
+  const slot=rates[type]&&now-rates[type].at<windowMs?rates[type]:(rates[type]={at:now,n:0});
+  return ++slot.n>max;
+}
 import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
@@ -201,6 +211,7 @@ export class Cinema {
       if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
       const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
       if(!user)return response('Accesso richiesto.',401);
+      makeRoomFor(this.ctx,user.id,'cinema'); // al massimo 3 collegamenti al Cinema per persona
       if(this.ctx.getWebSockets().length>=120)return response('Cinema pieno.',429);
       const [client,socket]=Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(socket);
@@ -307,11 +318,16 @@ export class Cinema {
           socket.serializeAttachment({...info,room:null,screen:null,mosaic:false});
           await this.syncQueueAudience(data,info.room);this.publish(data);return;
         }
+        // freno per collegamento sui comandi (sale, video): niente raffiche da un telefono impazzito o modificato
+        if(['create','playback','queue-next','channel','favorite-add','favorite-remove','favorite-move'].includes(input.type)&&cinemaTooFast(socket,input.type))
+          throw Error('Piano: un comando alla volta.');
         if(input.type==='create'){
           if(room)throw Error('Esci dalla sala prima di aprirne un’altra.');
           const occupied=new Set(this.connections().map(c=>c.info.room));
 
           const rooms=liveRooms(data.rooms,occupied,Date.now());
+          // al massimo 2 sale aperte per persona: una persona non occupa tutte le sale del Cinema
+          if(rooms.filter(r=>r.owner===info.user.player).length>=2)throw Error('Hai già 2 sale aperte.');
           if(rooms.length>=MAX_ROOMS)throw Error('Tutte le sale sono occupate.');
           let number=1;while(rooms.some(r=>r.number===number))number++;
           const next={id:crypto.randomUUID(),number,owner:info.user.player,channel:null,updated:Date.now()};
@@ -378,7 +394,7 @@ export class Cinema {
           if(!channel)throw Error('Canale non valido.');
           if(favorites.some(item=>item.url===channel.url))return;
           if(favorites.length>=MAX_FAVORITES)throw Error('La lista condivisa è piena.');
-          favorites.push({...channel,id:crypto.randomUUID()});
+          favorites.push({...channel,id:crypto.randomUUID(),by:info.user.player});
           await this.scheduleMetadata(channel.catalogUntil);
         }else if(input.type==='favorite-remove'||input.type==='favorite-move'){
           const index=favorites.findIndex(item=>item.id===input.id);

@@ -17,7 +17,7 @@ import {
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=7491db9621';
+} from './balilla-rules.js?v=763b693d50';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
@@ -693,6 +693,14 @@ export function buildBalilla(scene, el, send, playSound) {
     close,
     input,
     move,
+    // collegamento della Lobby riaperto: il server non ci conosce più, ci si risiede subito (senza aspettare i 3 s)
+    reconnected() {
+      if (!watching) return;
+      net = null;
+      lastWatch = performance.now();
+      post('watch');
+      if (active) join();
+    },
     receive(data) {
       if (!watching) return;
       if (data.sound) {
@@ -709,7 +717,9 @@ export function buildBalilla(scene, el, send, playSound) {
       if (!wasSeated && seated()) selectPair(pair);
       ui.hidden = noPanel;
       const status = ui.querySelector('span');
-      status.textContent = seated()
+      status.textContent = data.paused
+        ? 'Partita in pausa: aspettiamo chi si è allontanato'
+        : seated()
         ? TEAM[team] + ' · Su/giù sposta · Destra/sinistra ruota · Q cambia coppia · E lascia'
         : net.occupied.includes(team * 2)
           ? 'Lato occupato'

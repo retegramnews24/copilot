@@ -2,14 +2,52 @@
 // then authenticated /api/ routes, forwarded to the right Durable Object.
 import { secureEqual, requireMember, telegramAccessTag, login, issueSession, sessionUser } from './auth.js';
 import { radioNowPlaying } from './radio-metadata.js';
-import { json, noticeHub } from './worker-shared.js';
+import { json, noticeHub, internalHeaders, INTERNAL_HEADER } from './worker-shared.js';
 import { setupTelegram, telegramWebhook } from './telegram-bot.js';
 import { cinemaHub, groupCinema } from './cinema-routes.js';
 import { seatLimit, longLimitText } from './table-rules.js';
 
 // Unexpected server errors are logged (Workers Logs) instead of disappearing; the player gets a short message.
+// Grandezza delle richieste: il contenuto si legge a pezzi e la lettura si ferma appena supera il limite, anche se
+// la richiesta non dichiara quanto è grande (prima bastava non mandare Content-Length per far leggere tutto in
+// memoria). Il limite è quello della richiesta più grande ammessa (pista di F1 da 400 kB, partita di Number
+// Connect); i controlli più stretti dei singoli percorsi restano.
+export const BODY_LIMIT = 420000;
+export async function readLimited(req, limit = BODY_LIMIT) {
+  if (!req.body) return null;
+  const reader = req.body.getReader(),
+    parts = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel().catch(() => {});
+      return false;
+    }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size);
+  let at = 0;
+  for (const p of parts) (out.set(p, at), (at += p.byteLength));
+  return out;
+}
 export async function handleRequest(req, env) {
   try {
+    if (req.body && !['GET', 'HEAD'].includes(req.method)) {
+      if (Number(req.headers.get('Content-Length') || 0) > BODY_LIMIT)
+        return json({ error: 'Richiesta troppo grande.' }, 413);
+      const body = await readLimited(req);
+      if (body === false) return json({ error: 'Richiesta troppo grande.' }, 413);
+      req = new Request(req, { body });
+    }
+    // la chiave interna non arriva mai dai telefoni (vedi worker-shared.js)
+    if (req.headers.has(INTERNAL_HEADER)) {
+      const headers = new Headers(req.headers);
+      headers.delete(INTERNAL_HEADER);
+      req = new Request(req, { headers });
+    }
     return await route(req, env);
   } catch (error) {
     console.error(
@@ -68,6 +106,19 @@ async function admin(req, env, u) {
       method: req.method
     });
   if (one && !one[2] && req.method === 'GET') return hub.fetch('https://internal/backups/' + one[1]);
+  // togliere un punteggio dalla classifica di un flipper: POST {"table":"gp"|"gt","id":"<numero Telegram>"}
+  if (u.pathname === '/api/admin/pinball' && req.method === 'POST') {
+    const body = await req.text();
+    if (body.length > 256) return json({ error: 'Richiesta troppo grande.' }, 413);
+    return env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+      'https://internal/pinball/remove',
+      {
+        method: 'POST',
+        headers: await internalHeaders(env),
+        body
+      }
+    );
+  }
   if (one && one[2] && req.method === 'POST') {
     const body = await req.text();
     if (body.length > 65536) return json({ error: 'Richiesta troppo grande.' }, 413);
@@ -92,7 +143,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.57', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.58', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);

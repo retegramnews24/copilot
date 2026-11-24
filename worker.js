@@ -1,5 +1,5 @@
-import { changeStool } from './club-stools.js';
-import { recordPinball } from './club-pinball.js';
+import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
+import { recordPinball, startPinball, removePinball } from './club-pinball.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -33,12 +33,22 @@ import {
   LONG_IDLE,
   TURN_LIMIT
 } from './turn-notices.js';
-import { json, id, bad, name, noticeHub } from './worker-shared.js';
+import {
+  json,
+  id,
+  bad,
+  name,
+  noticeHub,
+  internalHeaders,
+  isInternal,
+  INTERNAL_PATHS
+} from './worker-shared.js';
 import * as tables from './table-rules.js';
 import { concluded } from './table-rules.js';
 import { LobbyHub } from './lobby-hub.js';
 import { handleRequest } from './api.js';
 import { BackupHub, exportStorage, importStorage, encode, decode } from './backup.js';
+import { makeRoomFor } from './socket-limits.js';
 
 export default {
   fetch: handleRequest,
@@ -81,11 +91,50 @@ export class Room extends DurableObject {
   botSeat(s) {
     return tables.botSeat(s);
   }
-  async record(s) {
-    for (const result of resultsFor(s))
-      await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
-        new Request('https://internal/lobby/result', { method: 'POST', body: JSON.stringify(result) })
-      );
+  // Abbandono: una partita a due tra persone (scacchi, dama, Forza 4) già cominciata, chiusa o archiviata da uno dei
+  // due, la vince l'altro. Prima chi stava perdendo poteva chiudere o eliminare il tavolo e la vittoria spariva.
+  forfeitable(s) {
+    return (
+      s.phase === 'playing' &&
+      s.players.length === 2 &&
+      s.players.every(p => p.id?.startsWith('tg:')) &&
+      !!(s.chess || s.checkers || s.connect4) &&
+      (s.moves?.length || 0) >= 2
+    );
+  }
+  forfeit(s, who) {
+    if (!this.forfeitable(s) || !Number.isInteger(who) || who < 0 || who > 1) return false;
+    const key = s.chess ? 'chess' : s.checkers ? 'checkers' : 'connect4';
+    s[key] = {
+      ...s[key],
+      legalMoves: [],
+      result: who === 0 ? '0-1' : '1-0',
+      reason: 'Abbandono: vince ' + s.players[1 - who].name
+    };
+    return true;
+  }
+  // Il risultato va alla Lobby senza che il tavolo resti bloccato ad aspettarla. Prima il tavolo, bloccato, aspettava
+  // la Lobby; la Lobby, bloccata (classifica, richiesta di posto), aspettava il tavolo: nessuno dei due rispondeva
+  // all'altro per 30 secondi. I risultati si calcolano subito (lo stato può cambiare dopo); la Lobby li salva una
+  // volta sola per chiave, e se un invio va perso la classifica li recupera dai tavoli finiti.
+  recordSoon(s) {
+    const results = resultsFor(s);
+    if (!results.length) return;
+    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const send = (async () => {
+      const headers = await internalHeaders(this.env);
+      for (const result of results)
+        await lobby.fetch(
+          new Request('https://internal/lobby/result', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(result)
+          })
+        );
+    })().catch(() => {});
+    try {
+      this.ctx.waitUntil?.(send);
+    } catch {}
   }
   async saveState(s) {
     if (concluded(s)) {
@@ -93,7 +142,7 @@ export class Room extends DurableObject {
       delete s.finishedAt;
     }
     await this.ctx.storage.put('state', s);
-    await this.record(s);
+    this.recordSoon(s);
     if (s.archived || concluded(s)) await this.ctx.storage.deleteAlarm();
     else {
       const nextBot = this.botSeat(s) >= 0 ? Date.now() + 650 : Infinity;
@@ -178,9 +227,15 @@ export class Room extends DurableObject {
   sendNotice(request) {
     if (request && this.env.TURN_NOTIFY !== 'false')
       this.ctx.waitUntil(
-        noticeHub(this.env)
-          .fetch(
-            new Request('https://internal/notices/queue', { method: 'POST', body: JSON.stringify(request) })
+        internalHeaders(this.env)
+          .then(headers =>
+            noticeHub(this.env).fetch(
+              new Request('https://internal/notices/queue', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(request)
+              })
+            )
           )
           .catch(() => {})
       );
@@ -213,6 +268,16 @@ export class Room extends DurableObject {
       } catch {}
     }
   }
+  // Controllo dei collegamenti in diretta (sessione scaduta, uscito dal gruppo). Sulle richieste normali (poche) si fa
+  // subito e si aspetta (guardSockets). Sui messaggi in diretta (passi, aste: tantissimi) al massimo ogni 5 secondi
+  // e senza farli aspettare (guardSocketsSoon). In tutti e due i casi chiude solo chi Telegram dice davvero fuori
+  // dal gruppo: se Telegram non risponde ("non so") il collegamento resta; a Telegram una domanda alla volta.
+  guardSocketsSoon() {
+    const now = Date.now();
+    if (now - (this.guardAt || 0) < 5000) return;
+    this.guardAt = now;
+    this.guardSockets().catch(() => {});
+  }
   async guardSockets() {
     const sockets = this.ctx.getWebSockets();
     if (!sockets.length) return;
@@ -229,7 +294,7 @@ export class Room extends DurableObject {
         let reason = null;
         if (!tag || a?.accessTag !== tag || !Number.isFinite(a?.expires) || a.expires <= Date.now())
           reason = 'Sessione scaduta: riapri la Mini App';
-        else if (!memberId || (await memberAccess({ id: memberId }, this.env)) !== true)
+        else if (!memberId || (await memberAccess({ id: memberId }, this.env)) === false)
           reason = 'Accesso al gruppo richiesto';
         if (reason) {
           try {
@@ -244,6 +309,9 @@ export class Room extends DurableObject {
     await this.guardSockets();
     const viewer = JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.player || null;
     const path = new URL(req.url).pathname;
+    // percorsi interni: solo con la chiave interna (vedi worker-shared.js)
+    if (INTERNAL_PATHS.has(path) && !(await isInternal(req, this.env)))
+      return json({ error: 'Percorso non trovato.' }, 404);
     if (path.startsWith('/simulator/'))
       return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).fetch(req);
     if (path.startsWith('/notices/'))
@@ -285,6 +353,13 @@ export class Room extends DurableObject {
     if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
     if (new URL(req.url).pathname.startsWith('/moto-trial/')) return this.moto.fetch(req);
     if (new URL(req.url).pathname.startsWith('/labyrinth/')) return this.lab.fetch(req);
+    // amministrazione (solo da /api/admin/pinball, con ADMIN_TOKEN): toglie un punteggio falso dalla classifica
+    if (path === '/pinball/remove' && req.method === 'POST') {
+      const { table, id } = await req.json().catch(() => ({}));
+      const removed = await this.ctx.blockConcurrencyWhile(() => removePinball(this.ctx, table, id));
+      if (removed) await this.lobbyHub.lobbyBroadcast();
+      return json({ removed });
+    }
     if (
       Number(req.headers.get('Content-Length') || 0) >
       (path === '/lobby/number-connect-score' || path === '/lobby/create' ? 420000 : 4096)
@@ -328,7 +403,7 @@ export class Room extends DurableObject {
         if (path === '/tidy-result' && req.method === 'POST') {
           if (concluded(s) && s.expires !== null) {
             if (!this.hasResultViewer(s)) {
-              await this.record(s);
+              this.recordSoon(s);
               return json(await this.removeTable(s, 'dismissed'));
             }
             s.revision++;
@@ -339,7 +414,10 @@ export class Room extends DurableObject {
         if (path.endsWith('/ws')) {
           if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
             return json({ error: 'WebSocket richiesto.' }, 426);
-          if (this.ctx.getWebSockets().length >= 60)
+          // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
+          makeRoomFor(this.ctx, JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id);
+          const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
+          if (!isPlayer && this.ctx.getWebSockets().length >= 60)
             return json({ error: 'Stanza piena (60 connessioni).' }, 429);
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
@@ -392,7 +470,7 @@ export class Room extends DurableObject {
             await this.saveState(s);
             await this.broadcast(s);
           } else {
-            await this.record(s);
+            this.recordSoon(s);
             if (this.botSeat(s) >= 0 && (await this.ctx.storage.getAlarm()) === null)
               await this.ctx.storage.setAlarm(Math.min(Date.now() + 650, s.expires));
           }
@@ -471,7 +549,7 @@ export class Room extends DurableObject {
           );
           next.matchId = id();
           next.revision = s.revision + 1;
-          await this.record(s);
+          this.recordSoon(s);
           await this.saveState(next);
           await this.broadcast(next);
           return json({ state: this.public(next, viewer), token, player: user.player });
@@ -479,10 +557,18 @@ export class Room extends DurableObject {
         if (path.endsWith('/archive') || path.endsWith('/delete')) {
           if (b.revision !== s.revision)
             return json({ error: 'La partita è cambiata. Aggiorna e riprova.' }, 409);
+          // una partita a due già cominciata non si elimina (si perderebbe la vittoria dell'altro): si chiude
+          if (path.endsWith('/delete') && this.forfeitable(s))
+            return json({ error: 'Partita in corso: chiudila, vale come abbandono.' }, 409);
           if (path.endsWith('/delete')) return json(await this.removeTable(s, 'manual'));
+          // archiviare una partita a due in corso vale come abbandono
+          const lost = this.forfeit(
+            s,
+            s.players.findIndex(p => p.id === viewer)
+          );
           if (s.series) {
             s.series.done = true;
-            s.series.cancelled = true;
+            s.series.cancelled = !lost;
           }
           s.archived = true;
           s.phase = 'finished';
@@ -581,6 +667,10 @@ export class Room extends DurableObject {
           s.moves.push({ by: s.players[who].name, at: Date.now(), number: s.moves.length + 1 });
           s.turn = 1 - s.turn;
           if (s.moves.length >= 500) s.phase = 'finished';
+        } else if (path.endsWith('/finish') && this.forfeit(s, who)) {
+          // partita a due in corso: chi la chiude la perde (la vittoria va all'altro, non sparisce)
+          if (s.series) s.series.done = true;
+          s.phase = 'finished';
         } else if (path.endsWith('/finish')) {
           if (s.series) {
             s.series.done = true;
@@ -618,7 +708,14 @@ export class Room extends DurableObject {
   }
 
   async webSocketMessage(ws, message) {
-    await this.guardSockets();
+    // controllo del collegamento dal telefono: risposta subito, senza leggere niente
+    if (message === 'ping') {
+      try {
+        ws.send('pong');
+      } catch {}
+      return;
+    }
+    this.guardSocketsSoon();
     if (ws.deserializeAttachment()?.authDenied) return;
     const a = ws.deserializeAttachment();
     const memberId =
@@ -626,7 +723,8 @@ export class Room extends DurableObject {
       a?.user?.id ||
       (a?.player?.startsWith('tg:') ? a.player.slice(3) : null) ||
       (typeof a?.id === 'string' ? a.id.replace(/^tg:/, '') : null);
-    if (!memberId || (await memberAccess({ id: memberId }, this.env)) !== true) {
+    // il gruppo lo controlla guardSocketsSoon (una volta al minuto): qui non si aspetta Telegram a ogni messaggio
+    if (!memberId) {
       ws.close(4003, 'Accesso al gruppo richiesto');
       return;
     }
@@ -669,7 +767,13 @@ export class Room extends DurableObject {
         await this.lobbyHub.lobbyBroadcast();
         return;
       }
-      // flipper della Lobby 3D: il punteggio di fine partita entra nella classifica (top 10 con il nome)
+      // flipper della Lobby 3D: la partita si annuncia all'inizio, poi il punteggio di fine partita entra nella
+      // classifica (top 10 con il nome) se è possibile per il tempo giocato
+      // (l'inizio si salva per persona, non nel collegamento: vedi club-pinball.js)
+      if (b.type === 'pinball-start' && a.inClub && !a.closed) {
+        await this.ctx.blockConcurrencyWhile(() => startPinball(this.ctx, a, b.table === 'gt' ? 'gt' : 'gp'));
+        return;
+      }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
         const table = b.table === 'gt' ? 'gt' : 'gp';
         const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score, table));
@@ -683,10 +787,33 @@ export class Room extends DurableObject {
           await this.lobbyHub.lobbyBroadcast(false);
         });
       if (b.type !== 'presence') return;
-      a.inClub = b.inClub === true && !b.away;
-      if (!a.inClub) {
+      // App nascosta (away): sgabello e posto al balilla restano tuoi per un po' (il balilla libera il posto da solo
+      // se il telefono tace, club-stools.js lo sgabello). Uscire dal club invece li libera subito.
+      const away = !!b.away,
+        wasAway = !!a.closed;
+      if (away && !wasAway) a.closedAt = Date.now();
+      a.inClub = b.inClub === true && !away;
+      if (!a.inClub && !away) {
         delete a.stool;
         this.balilla.leave(ws);
+      }
+      if (wasAway && !away) {
+        // di ritorno: lo sgabello vale ancora se non è passato troppo tempo e nessun altro l'ha preso
+        const now = Date.now();
+        if (
+          a.stool &&
+          (!a.inClub ||
+            now - (a.closedAt || 0) >= STOOL_GRACE ||
+            this.ctx.getWebSockets().some(other => {
+              if (other === ws) return false;
+              const o = other.deserializeAttachment();
+              return o?.stool?.id === a.stool.id && holdsStool(o, a.stool.id, now);
+            }))
+        )
+          delete a.stool;
+        try {
+          ws.send(JSON.stringify({ type: 'club-back', stool: a.stool || null }));
+        } catch {}
       }
       a.room = typeof b.room === 'string' && /^[a-f0-9-]{36}$/.test(b.room) ? b.room : null;
       a.seen = Date.now();
@@ -749,11 +876,12 @@ export class Room extends DurableObject {
             }
           : null;
       ws.serializeAttachment(a);
-      await this.lobbyHub.lobbyBroadcast(false);
+      // movimenti: messaggio piccolo con le sole persone, raccolto (al massimo ogni 200 ms)
+      await this.lobbyHub.presenceBroadcast();
     } catch {}
   }
   async webSocketClose(ws, code) {
-    await this.guardSockets();
+    this.guardSocketsSoon();
     const attachment = ws.deserializeAttachment();
     if (attachment?.kind === 'blackboard') return this.blackboard.close(ws);
     if (attachment?.kind === 'cinema') return this.cinema.close(ws);
@@ -797,7 +925,7 @@ export class Room extends DurableObject {
     ws.close(1011, 'Riconnettersi.');
   }
   async alarm() {
-    await this.guardSockets();
+    this.guardSocketsSoon();
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('binotto-simulator-league-v1').toString())
       return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).alarm();
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('cinema-streamer-v1').toString())

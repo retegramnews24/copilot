@@ -1,5 +1,6 @@
 import { coursesFor } from './public/golf/courses.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, CAPACITY } from './public/golf/match.js';
+import { internalHeaders } from './worker-shared.js';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const WAIT=900000, KEEP=300000;
 
@@ -10,9 +11,10 @@ export class GolfRoom {
     return {room,number,game,phase,created,revision,capacity:CAPACITY,hole:match.hole,campaign:match.campaign,collisions:match.collisions===true,holes:coursesFor(match.courseVersion,match.campaign).length,
       players:match.players.map(({id,name})=>({id,name})),expires:null};
   }
+  // con la chiave interna: la Lobby accetta i risultati solo da un altro oggetto del server (worker-shared.js)
   async lobby(path,body){
     return this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch('https://internal/lobby/'+path,
-      {method:'POST',body:JSON.stringify(body)});
+      {method:'POST',headers:await internalHeaders(this.env),body:JSON.stringify(body)});
   }
   async save(match){
     await this.ctx.storage.put('golf',match);
@@ -24,7 +26,8 @@ export class GolfRoom {
   }
   async update(match){
     if(match.phase==='finished'){
-      await this.lobby('result',{key:match.room+':golf',game:'golf',mode:'people',winners:match.winners});
+      const saved=await this.lobby('result',{key:match.room+':golf',game:'golf',mode:'people',winners:match.winners});
+      if(!saved.ok)console.error('Golf: risultato non registrato dalla Lobby',match.room,saved.status);
     }
     await this.lobby('update',this.summary(match));
   }

@@ -340,6 +340,15 @@ export class TurnNotices {
       }
       await this.ctx.storage.delete(key);
       await this.ctx.storage.put('done:' + item.key + ':' + item.player, now);
+      // Telegram occupato o rete giù: l'avviso torna in coda e si riprova (al massimo 3 volte), prima andava perso
+      const retry = async () => {
+        if ((item.tries || 0) < 3)
+          await this.ctx.storage.put(key, {
+            ...item,
+            tries: (item.tries || 0) + 1,
+            due: now + 60000 * ((item.tries || 0) + 1)
+          });
+      };
       try {
         const u = await this.user(item.userId);
         if (u && !u.enabled) continue;
@@ -357,7 +366,10 @@ export class TurnNotices {
         if (sent.ok) {
           if (!u?.enabled) await this.setUser(item.userId, true, u?.reason || 'start');
         } else if (sent.status === 403) await this.setUser(item.userId, false, 'blocked');
-      } catch {}
+        else if (sent.status === 429 || sent.status >= 500) await retry();
+      } catch {
+        await retry();
+      }
     }
     // Forget handled turns after two weeks.
     for (const [key, at] of await this.ctx.storage.list({ prefix: 'done:' }))

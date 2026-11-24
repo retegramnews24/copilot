@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=725086e1a6';
-import { plan } from './ai.js?v=f1e7559cc5';
+import * as E from './engine.js?v=b130e0cb1b';
+import { plan } from './ai.js?v=59b1b0919b';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);
@@ -571,9 +571,10 @@ function syncMenu() {
   // ripartire e cambiare modalità valgono solo per le partite su questo telefono: una partita online è di tutti
   $('restart').hidden = !!net;
   $('toStart').hidden = !!net;
-  const owner = !!(net && me && net.owner === me.player);
-  $('closeAll').hidden = !(owner && net.phase === 'playing');
-  $('closeAll').textContent = 'Chiudi la partita per tutti';
+  // chi l'ha creata la chiude per tutti; gli altri giocatori possono abbandonarla (tira il pilota automatico)
+  const kind = closeKind();
+  $('closeAll').hidden = !kind;
+  $('closeAll').textContent = kind === 'abandon' ? 'Abbandona la partita' : 'Chiudi la partita per tutti';
   $('closeAll').dataset.sure = '';
   $('exitB').textContent = exitLabel();
 }
@@ -602,12 +603,19 @@ $('exitB').onclick = leaveGame;
 $('overExit').onclick = leaveGame;
 $('startExit').hidden = !(embedded || (tg && tg.initData));
 $('startExit').onclick = leaveGame;
-// chi ha creato la partita online può chiuderla per tutti (secondo tocco per confermare)
+function closeKind() {
+  if (!net || !me || net.phase !== 'playing' || !(net.seats || []).includes(me.player)) return null;
+  const gone = net.gone || [];
+  if (net.owner === me.player || gone.includes(net.owner)) return 'close';
+  return gone.includes(me.player) ? null : 'abandon';
+}
+// chi ha creato la partita online può chiuderla per tutti, gli altri abbandonarla (secondo tocco per confermare)
 $('closeAll').onclick = () => {
-  const b = $('closeAll');
-  if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sicuro? Tocca di nuovo per chiuderla'; return; }
+  const b = $('closeAll'), kind = closeKind();
+  if (!kind) return;
+  if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = kind === 'abandon' ? 'Sicuro? Tocca di nuovo per abbandonare' : 'Sicuro? Tocca di nuovo per chiuderla'; return; }
   $('menu').hidden = true;
-  toApp('action', { kind: 'close' });
+  toApp('action', { kind });
 };
 let rulesBack = 'start';
 const openRules = (from) => {
@@ -784,11 +792,19 @@ function showWait(st) {
   $('waitStart').hidden = !owner || st.players.length < 2;
   $('waitStart').textContent = missing > 0 ? `Parti ora (${st.players.length})` : 'Parti';
   $('waitLeave').textContent = owner ? 'Chiudi la partita' : 'Esci';
+  // aperta dalla Lobby senza esserci dentro: si guarda, e si entra solo toccando «Entra»
+  if (!mine) {
+    $('waitS').textContent = missing > 0 ? 'Stai guardando. Tocca «Entra» per giocare.' : 'Stai guardando: la partita è al completo.';
+    $('waitStart').hidden = missing <= 0;
+    $('waitStart').textContent = 'Entra';
+    $('waitLeave').textContent = 'Torna indietro';
+  }
   if (!m || m.variant !== st.variant) { m = E.newGame(st.variant, [{ name: 'A' }, { name: 'B' }], {}); stage(m); }
 }
-$('waitStart').onclick = () => toApp('action', { kind: 'start' });
+const waitMine = () => !!(net && net.players.some((p) => p.id === (me && me.player)));
+$('waitStart').onclick = () => toApp('action', { kind: waitMine() ? 'start' : 'join' });
 $('waitTeam').onclick = () => { const mine = net && net.players.find((p) => p.id === (me && me.player)); if (mine) toApp('action', { kind: 'team', payload: { team: 1 - (mine.team ?? 0) } }); };
-$('waitLeave').onclick = () => toApp('action', { kind: net && net.owner === (me && me.player) ? 'close' : 'leave' });
+$('waitLeave').onclick = () => { if (!waitMine()) toApp('exit'); else toApp('action', { kind: net && net.owner === (me && me.player) ? 'close' : 'leave' }); };
 
 addEventListener('message', (e) => {
   if (e.origin !== location.origin || e.source !== window.parent) return;
@@ -798,6 +814,8 @@ addEventListener('message', (e) => {
   else if (d.type === 'bil:back') { if (!$('menu').hidden || !m || phase === 'menu') toApp('exit'); else toggleMenu(); }
   else if (d.type === 'bil:identity' && typeof d.player === 'string') { me = { player: d.player, name: d.name }; cfg.n1 = cfg.n1 || d.name || ''; }
   else if (d.type === 'bil:state') netState(d);
+  // rete persa o sessione scaduta: l'app lo ripete a ogni tentativo fallito, poi dice quando è tornata
+  else if (d.type === 'bil:net') toast(d.message || '', !!d.lost);
   else if (d.type === 'bil:error') {
     toast(d.message || 'Errore', true);
     // il colpo non è stato accettato: si torna al tavolo del server

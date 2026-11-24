@@ -1,4 +1,5 @@
 import {createExpedition,joinExpedition,connectPlayer,disconnectPlayer,sweep,pose,act,snapshot,expeditionSummary,participants,ensureKeycards,STALE,GRACE} from './expedition-model.js';
+import {internalHeaders} from './worker-shared.js';
 const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export class ExpeditionRoom{
  constructor(ctx,env,tag){this.ctx=ctx;this.env=env;this.tag=tag;this.state=null;this.lastSave=0;this.lastBroadcast=0;this.arenaRecorded=false}
@@ -10,7 +11,7 @@ export class ExpeditionRoom{
  const winner=s.arenaMatch?.result?.winner;
  if(winner&&!this.arenaRecorded){
   const record={key:s.room+':arena',game:'labyrinth',mode:'people',winners:[{id:'tg:'+winner.id,name:winner.name}]};
-  try{const response=await lobby.fetch(new Request('https://internal/lobby/result',{method:'POST',body:JSON.stringify(record)}));this.arenaRecorded=response.ok}catch{}
+  try{const response=await lobby.fetch(new Request('https://internal/lobby/result',{method:'POST',headers:await internalHeaders(this.env),body:JSON.stringify(record)}));this.arenaRecorded=response.ok}catch{}
  }
  const path=s.deleted?'/lobby/remove':'/lobby/update';
  await lobby.fetch(new Request('https://internal'+path,{method:'POST',body:JSON.stringify(expeditionSummary(s))}));
@@ -24,7 +25,9 @@ export class ExpeditionRoom{
  if(path.endsWith('/state'))return json({state:snapshot(s)});
  if(path.endsWith('/join')&&req.method==='POST'){if(!user)return json({error:'Accesso richiesto.'},401);joinExpedition(s,user,now);await this.save();await this.index();await this.schedule();await this.broadcast();return json({state:snapshot(s)})}
  if(path.endsWith('/archive')||path.endsWith('/delete')){
- if(req.method!=='POST'||!s.players[user?.id])return json({error:'Solo i partecipanti possono gestire la spedizione.'},403);if(path.endsWith('/delete')){s.deleted=true;await this.ctx.storage.deleteAll()}else{s.archived=true;for(const p of Object.values(s.players)){p.online=false;p.offlineAt=now}}s.revision++;await this.save();await this.index();await this.schedule();await this.broadcast();if(s.deleted)for(const ws of this.ctx.getWebSockets())try{ws.close(1000,'Spedizione eliminata')}catch{}return json({ok:true});}
+ if(req.method!=='POST'||!s.players[user?.id])return json({error:'Solo i partecipanti possono gestire la spedizione.'},403);
+ // eliminare: si avvisano Lobby e collegati, poi lo spazio si svuota davvero (prima si riscriveva lo stato dopo averlo cancellato e restava salvato per sempre)
+ if(path.endsWith('/delete')){s.deleted=true;s.revision++;await this.index();await this.broadcast();for(const ws of this.ctx.getWebSockets())try{ws.close(1000,'Spedizione eliminata')}catch{}await this.ctx.storage.deleteAlarm();await this.ctx.storage.deleteAll();this.state=null;return json({ok:true})}else{s.archived=true;for(const p of Object.values(s.players)){p.online=false;p.offlineAt=now}}s.revision++;await this.save();await this.index();await this.schedule();await this.broadcast();if(s.deleted)for(const ws of this.ctx.getWebSockets())try{ws.close(1000,'Spedizione eliminata')}catch{}return json({ok:true});}
  if(path.endsWith('/ws')){
  if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return json({error:'WebSocket richiesto.'},426);if(this.ctx.getWebSockets().length>=40)return json({error:'Troppe connessioni.'},429);const watch=new URL(req.url).searchParams.get('watch')==='1'||s.archived,p=s.players[user?.id];if(!user||!watch&&(!p||s.arenaMatch&&!s.arenaMatch.roster.includes(p.id)))return json({error:'Entra nella spedizione prima di collegarti.'},403);
  const pair=new WebSocketPair(),connection=crypto.randomUUID();this.ctx.acceptWebSocket(pair[1]);pair[1].serializeAttachment({kind:'lab',id:user.id,connection,watch,memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,expires:Number(req.headers.get('X-Session-Expires')),accessTag:req.headers.get('X-Access-Tag')});if(!watch){for(const other of this.ctx.getWebSockets()){const a=other.deserializeAttachment();if(other!==pair[1]&&a?.id===user.id&&!a.watch)try{other.close(4000,'Gioco aperto in un’altra finestra')}catch{}}connectPlayer(s,user.id,connection,now);await this.save();await this.index();await this.schedule()}await this.broadcast();return new Response(null,{status:101,webSocket:pair[0],headers:{'Sec-WebSocket-Protocol':'checkmate'}});

@@ -25,6 +25,24 @@
     bins = null,
     bands = [],
     fxFailed = new Set();
+  // iPhone: il volume di un elemento audio non si cambia da programma (resta sempre al massimo). Il lettore con CORS
+  // (fx) passa da Web Audio: lì il volume è un regolatore (volumeNode) e funziona ovunque. Il lettore semplice non si può
+  // far passare da Web Audio (resterebbe muto): quando il suo volume è quasi zero lo si mette in muto, che su iPhone vale.
+  let volumeNode = null,
+    fxLevel = 1,
+    plainLevel = 1;
+  function setFx(v) {
+    fxLevel = v;
+    if (volumeNode) {
+      fx.volume = 1;
+      volumeNode.gain.value = v;
+    } else fx.volume = v;
+  }
+  function setPlain(v) {
+    plainLevel = v;
+    plain.volume = v;
+    plain.muted = v < 0.02;
+  }
   // HLS (.m3u8): the browser's own HLS player hands Web Audio only silence (desktop Chrome). Played through
   // hls.js (Media Source) the analyser receives the real sound. Loaded on demand; plain player if it fails.
   const isHls = url => /\.m3u8?($|[?#])/i.test(url);
@@ -136,7 +154,8 @@
     directoryMessage = '';
   const saved = Number(readLocal('binottoland-radio-volume', 0.7)),
     startVolume = Number.isFinite(saved) ? Math.min(1, Math.max(0, saved)) : 0.7;
-  plain.volume = fx.volume = startVolume;
+  setPlain(startVolume);
+  setFx(startVolume);
   volume.value = String(startVolume);
   let track = '',
     metadataEpoch = 0,
@@ -365,7 +384,7 @@
         const gain = ctx.createGain(),
           pan = ctx.createStereoPanner();
         gain.gain.value = 0;
-        analyser.connect(gain).connect(pan).connect(ctx.destination);
+        volumeNode.connect(gain).connect(pan).connect(ctx.destination);
         channels[i] = { gain, pan };
       }
       channels[i].gain.gain.setTargetAtTime(level * 0.47, ctx.currentTime, 0.04);
@@ -376,7 +395,7 @@
       );
     }
     fallbackLevel = Math.min(1, Math.sqrt(energy));
-    plain.volume = clubVolume * clubGain * fallbackLevel;
+    setPlain(clubVolume * clubGain * fallbackLevel);
   }
   function ensureGraph() {
     if (ctx) return true;
@@ -390,7 +409,10 @@
       analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
       directBus = ctx.createGain();
-      analyser.connect(directBus).connect(ctx.destination);
+      volumeNode = ctx.createGain();
+      analyser.connect(volumeNode);
+      volumeNode.connect(directBus).connect(ctx.destination);
+      setFx(fxLevel);
       routeClub(sharedMode);
       bins = new Uint8Array(analyser.frequencyBinCount);
       const hz = ctx.sampleRate / analyser.fftSize;
@@ -841,11 +863,15 @@
     const value = Number(volume.value);
     if (!Number.isFinite(value)) return;
     if (sharedMode) setClubVolume(value);
-    else plain.volume = fx.volume = Math.min(1, Math.max(0, value));
+    else {
+      const v = Math.min(1, Math.max(0, value));
+      setPlain(v);
+      setFx(v);
+    }
     if (sharedMode) {
       saveLocal('club3d-radio-volume', clubVolume);
       window.dispatchEvent(new Event('club-volume-change'));
-    } else saveLocal('binottoland-radio-volume', plain.volume);
+    } else saveLocal('binottoland-radio-volume', plainLevel);
   };
   // Events from the player that is not in use are ignored.
   for (const el of [plain, fx]) {
@@ -913,8 +939,8 @@
   function setClubVolume(value) {
     clubVolume = Math.max(0, Math.min(1, value));
     volume.value = String(clubVolume);
-    fx.volume = clubVolume * clubGain;
-    plain.volume = fx.volume * fallbackLevel;
+    setFx(clubVolume * clubGain);
+    setPlain(fxLevel * fallbackLevel);
   }
   let selector = null,
     sharedMode = false,
@@ -946,8 +972,8 @@
       if (value === clubGain) return;
       clubGain = value;
       if (sharedMode) {
-        fx.volume = clubVolume * clubGain;
-        plain.volume = fx.volume * fallbackLevel;
+        setFx(clubVolume * clubGain);
+        setPlain(fxLevel * fallbackLevel);
       }
     },
     choose(send) {
@@ -965,7 +991,7 @@
       if (active === sharedMode && (!active || id === sharedId)) return;
       const serial = ++generation;
       if (active && !sharedMode) {
-        savedPersonal = { current, playing: wantsPlay, volume: plain.volume };
+        savedPersonal = { current, playing: wantsPlay, volume: plainLevel };
         stop();
         setClubVolume(Number(readLocal('club3d-radio-volume', 0.7)));
       }
@@ -975,8 +1001,10 @@
       if (!active) {
         if (selector) closeScreen();
         stop();
-        plain.volume = fx.volume = savedPersonal?.volume ?? startVolume;
-        volume.value = String(plain.volume);
+        const back = savedPersonal?.volume ?? startVolume;
+        setPlain(back);
+        setFx(back);
+        volume.value = String(back);
         current = savedPersonal?.current ?? null;
         if (savedPersonal?.playing) resume();
         savedPersonal = null;

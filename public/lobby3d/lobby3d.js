@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=5ce7ccb69f';
-import {buildBalilla} from './balilla.js?v=1373ac706c';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4f7d6c73d7';
+import {buildBalilla} from './balilla.js?v=ffe9165fd1';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -12,7 +12,7 @@ import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
-import * as E from '../biliardo/engine.js?v=725086e1a6';
+import * as E from '../biliardo/engine.js?v=b130e0cb1b';
 import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
@@ -50,6 +50,8 @@ const CSS = `
 .l3d-top>*{pointer-events:auto;flex:none;width:auto;margin:0}
 @media (max-width:520px){.l3d-top{gap:5px}.l3d-top>*{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(10.5px,3.3vw,14px)!important;padding:7px 9px!important}.l3d-where{padding:6px 8px!important}}
 .l3d button{font:inherit;color:#fff;background:rgba(18,14,28,.72);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer}
+/* telefono: niente sfocatura dietro ai tasti (con la scena che cambia andrebbe rifatta a ogni fotogramma per ogni tasto) */
+.l3d-touch button{backdrop-filter:none;-webkit-backdrop-filter:none}
 .l3d-where{margin-left:auto;padding:7px 12px;border-radius:999px;background:rgba(18,14,28,.6);font-weight:600;font-size:14px}
 .l3d-hint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + 58px);padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.45);font-size:13px;color:#e7e1f3;text-align:center;max-width:86vw;transition:opacity .6s;pointer-events:none}
 .l3d-act{position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 34px);transform:translateX(-50%);width:auto!important;max-width:90vw;margin:0;font-weight:700!important;font-size:17px!important;padding:13px 24px!important;background:linear-gradient(180deg,#ffcf4a,#f29d1c)!important;color:#2a1600!important;border:0!important;box-shadow:0 6px 24px rgba(255,180,40,.45);white-space:nowrap}
@@ -91,7 +93,11 @@ export function createLobby3D(app) {
   hint.hidden = true; // i comandi sono spiegati in Settings → Personaggio e pallina
   hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
-  const renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true, powerPreference: 'high-performance' });
+  // la grafica 3D può non partire (telefono vecchio, scheda grafica esclusa, memoria finita): si toglie quello che
+  // è già stato aggiunto alla pagina e l'app passa alla Lobby classica (prima restava un pezzo di pagina a ogni tentativo)
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true, powerPreference: 'high-performance' }); }
+  catch (e) { el.remove(); style.remove(); throw Error('grafica 3D non disponibile su questo telefono'); }
   const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -474,9 +480,10 @@ export function createLobby3D(app) {
     const lampW = hx * 1.6;
     box(lampW, 0.065, 0.095, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
     for (const sx of [-1, 1]) box(0.01, H - 2.25, 0.01, std('#b08d57', 0.3, 1), x + sx * lampW * 0.4, (H + 2.25) / 2, z);
-    for (const lx of [-0.55, 0.55]) {
-      const sp = new THREE.SpotLight('#fff2df', 9, 4, Math.PI / 3.6, 0.7, 1.3);
-      sp.position.set(x + lx * hx, 2.15, z); sp.target.position.set(x + lx * hx, 0.78, z); scene.add(sp, sp.target);
+    // un faretto per tavolo, più aperto (prima due: ogni luce in più pesa su tutto quello che si disegna)
+    {
+      const sp = new THREE.SpotLight('#fff2df', 14, 4.4, Math.PI / 2.9, 0.75, 1.3);
+      sp.position.set(x, 2.15, z); sp.target.position.set(x, 0.78, z); scene.add(sp, sp.target);
     }
     const enamel=new THREE.MeshStandardMaterial({color:'#1b5647',metalness:.35,roughness:.32,side:THREE.DoubleSide});
     const shadeGeometry=new THREE.CylinderGeometry(.13,.35,.23,24,1,true);
@@ -848,7 +855,7 @@ export function createLobby3D(app) {
   projection.style.cssText='position:absolute;left:0;top:0;width:960px;height:540px;background:black;overflow:hidden;transform-origin:0 0;pointer-events:none';
   projection.hidden=true;host.prepend(projection);
   let previewKey='',hls=null,previewVideo=null,yt=null,disposeYT=null;
-  let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false;
+  let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false, cinemaGain=null;
   const audioButton=document.createElement('button');
   audioButton.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 10px);right:8px;font-size:12px;padding:7px';
   audioButton.hidden=true; // non va nella pagina: il volume del cinema compare già entrando (Cinema nel mixer)
@@ -891,10 +898,12 @@ export function createLobby3D(app) {
     if(!audioContext||mediaNodes.length)return;
     const ctx=audioContext;
     const source=ctx.createMediaElementSource(video),bass=ctx.createBiquadFilter(),limiter=ctx.createDynamicsCompressor();
+    // volume del film come regolatore di Web Audio: su iPhone il volume dell'elemento video resta sempre al massimo
+    cinemaGain=ctx.createGain();cinemaGain.gain.value=THREE.MathUtils.clamp(heard,0,1);video.volume=1;
     bass.type='lowshelf';bass.frequency.value=145;bass.gain.value=3;
     limiter.threshold.value=-9;limiter.ratio.value=5;
-    source.connect(bass);bass.connect(limiter);limiter.connect(ctx.destination);
-    mediaNodes.push(source,bass,limiter);
+    source.connect(cinemaGain);cinemaGain.connect(bass);bass.connect(limiter);limiter.connect(ctx.destination);
+    mediaNodes.push(source,cinemaGain,bass,limiter);
     for(const [seconds,pan,level] of [[.023,-.83,.18],[.037,.84,.15],[.067,-.4,.07]]){
       const delay=ctx.createDelay(.1),gain=ctx.createGain(),speaker=ctx.createStereoPanner();
       delay.delayTime.value=seconds;gain.gain.value=level;speaker.pan.value=pan;
@@ -934,8 +943,19 @@ export function createLobby3D(app) {
     if(yt){yt.setVolume(0);yt.mute();lastYT=0}
   }
   let clubInRange=false;
-  let projectionReady='';
+  let projectionReady='',filmAwayAt=0,asleep=false;
+  // Il film si scarica e si decodifica solo in sala cinema o davanti alla porta (clubInRange), con la 3D aperta e
+  // l'app in primo piano; uscendo resta 3 secondi (per non ripartire da capo sulla soglia) e poi si ferma e si libera.
+  // Prima girava ovunque nella Lobby, già durante lo splash, e con l'app nascosta era solo azzittito.
+  function filmWanted(){
+    if(!active||document.hidden||asleep){filmAwayAt=0;return false}
+    if(clubInRange){filmAwayAt=0;return true}
+    if(!previewKey)return false;
+    const now=performance.now();if(!filmAwayAt)filmAwayAt=now;
+    return now-filmAwayAt<3000;
+  }
   function playProjection(data){
+    if(!filmWanted())data=null;
     const share=data?.screenId;
     const stream=app.clubStream?.(share&&active&&clubInRange&&!document.hidden?data:null);
     const p=share?(stream?{live:true,share,stream}:null):data?.projection;
@@ -1063,7 +1083,7 @@ export function createLobby3D(app) {
   // due flipper uno accanto all'altro: Grand Prix (F1) e Binotto GT (endurance), ognuno con la sua classifica.
   // "pinball" è quello a cui stai giocando (o il Grand Prix se non giochi): il resto della Lobby parla con lui
   const tables={gp:null,gt:null};
-  for(const kind of ['gp','gt'])tables[kind]=buildFlipper(scene,el,{kind,audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.(kind)||[],sendScore:score=>app.pinballScore?.(score,kind),me:()=>app.me?.()});
+  for(const kind of ['gp','gt'])tables[kind]=buildFlipper(scene,el,{kind,audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.(kind)||[],sendScore:score=>app.pinballScore?.(score,kind),sendStart:()=>app.pinballStart?.(kind),me:()=>app.me?.()});
   let pinballKind='gp';
   const pinball=new Proxy({},{get:(_,k)=>{const t=tables[pinballKind];const v=t[k];return typeof v==='function'?v.bind(t):v}});
   // volume dei flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarli
@@ -1772,8 +1792,17 @@ export function createLobby3D(app) {
 
   }
 
+  // Fotogrammi: al massimo 60 al secondo (30 sui telefoni lenti) anche sugli schermi a 90-120 Hz; da fermi
+  // (telecamera immobile da più di un secondo e mezzo, niente partita, niente film) 30. Prima sempre al massimo.
+  const slowPhone = (navigator.deviceMemory && navigator.deviceMemory <= 3) || (navigator.hardwareConcurrency || 8) <= 4;
+  let lastDraw = 0, frameGap = 0, stillSince = 0, drawnAt = 0;
+  // guardia: con la 3D aperta e visibile, se per più di un secondo e mezzo non si è disegnato niente il ciclo riparte
+  setInterval(() => { if (active && !document.hidden && !asleep && performance.now() - drawnAt > 1500) { cancelAnimationFrame(raf); lastDraw = 0; raf = requestAnimationFrame(frame); } }, 1000);
+  const camWas = new THREE.Vector3(), camLook = new THREE.Quaternion();
   function frame(now) {
     if (!active) return;
+    if (lastDraw && now >= lastDraw && now - lastDraw < frameGap - 2) { raf = requestAnimationFrame(frame); return; }
+    lastDraw = now; drawnAt = performance.now();
     if (!seating && !playing() && !monitor && !boardOpen) restoreActivityView();
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
@@ -1809,7 +1838,7 @@ export function createLobby3D(app) {
     const target=cinemaLevel*Math.sin(blend*Math.PI/2);
     heard=target;
     window.binottolandClubRadio?.setClubGain?.(blend===1?0:Math.cos(blend*Math.PI/2));
-    if(previewVideo)previewVideo.volume=THREE.MathUtils.clamp(heard,0,1);
+    if(previewVideo){const v=THREE.MathUtils.clamp(heard,0,1);if(mediaNodes.length&&cinemaGain){cinemaGain.gain.value=v;previewVideo.volume=1}else previewVideo.volume=v}
     const ytLevel=Math.round(heard*100);
     if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
     const audible=heard>.001 || target>.001;
@@ -1834,7 +1863,8 @@ export function createLobby3D(app) {
     const nearPinball=Object.values(tables).some(t=>{const s=t.stand();return Math.hypot(pos.x-s.x,pos.z-s.z)<3});
     pinballVolume.wrap.style.display=!tableFootball.active&&!(touch&&pinball.active)&&nearPinball?'flex':'none'; // vicino ai flipper
     pinballExit.style.display=touch&&pinball.active?'':'none';
-    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);for(const t of Object.values(tables))t.update(camera,dt);placePeers();
+    // flipper: tabellone, lampadine e display solo se sei in sala giochi lì vicino (o ci stai giocando)
+    peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);for(const t of Object.values(tables)){const s=t.stand();t.update(camera,dt,pinball.active||(tableRoomGain>0&&Math.hypot(pos.x-s.x,pos.z-s.z)<9))}placePeers();
     localPose=currentPose();const poseKey=JSON.stringify(localPose);
     // la posa va al server quando cambia, al massimo 5 volte al secondo (l'ultima arriva sempre)
     const nowMs=performance.now();
@@ -1860,6 +1890,10 @@ export function createLobby3D(app) {
     topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
+    if(camWas.distanceToSquared(camera.position)>1e-8||1-Math.abs(camLook.dot(camera.quaternion))>1e-8){camWas.copy(camera.position);camLook.copy(camera.quaternion);stillSince=now}
+    const busy=playing()||pinball.active||tableFootball.active||!!monitor||boardOpen||!projection.hidden||joy.id!==null||keys.size>0;
+    frameGap=slowPhone||(!busy&&now-stillSince>1500)?1000/30:1000/60;
+    countStats(now);
   }
   function resize() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -1989,8 +2023,26 @@ export function createLobby3D(app) {
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
-  document.addEventListener('visibilitychange', () => { if(document.hidden){app.clubStream?.(null);quietProjection();resetMovement();cancelAnimationFrame(raf);last=0}
-    else {playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}} });
+  // app nascosta, o mini app ridotta a icona in Telegram (sleep/wake chiamati da app.js): niente disegno, niente film
+  function sleep(){app.clubStream?.(null);quietProjection();playProjection(null);resetMovement();cancelAnimationFrame(raf);last=0}
+  function wake(){if(document.hidden||asleep)return;playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange', () => { if(document.hidden)sleep();else wake() });
+  // addormentata da Telegram ma qualcuno tocca o preme un tasto: chiaramente la mini app è davanti, si riparte
+  const rouse = () => { if (asleep && !document.hidden) { asleep = false; wake(); app.awake?.(); } };
+  for (const type of ['pointerdown', 'keydown']) addEventListener(type, rouse, true);
+  // Misure (Debug → Misure della Lobby 3D): fotogrammi al secondo, comandi di disegno, triangoli, texture
+  let statsBox=null,statsFrames=0,statsAt=0;
+  try{if(localStorage.getItem('binottoland-3d-stats')==='1')setStats(true)}catch{}
+  function setStats(on){
+    if(on&&!statsBox){statsBox=document.createElement('div');statsBox.style.cssText='position:absolute;left:calc(var(--ui-safe-left,0px) + 8px);bottom:calc(var(--ui-safe-bottom,0px) + 160px);z-index:5;padding:5px 8px;border-radius:8px;background:rgba(0,0,0,.6);font:11px/1.35 ui-monospace,monospace;color:#bff5c8;white-space:pre;pointer-events:none';el.append(statsBox);statsFrames=0;statsAt=performance.now()}
+    else if(!on&&statsBox){statsBox.remove();statsBox=null}
+  }
+  function countStats(now){
+    if(!statsBox)return;statsFrames++;
+    if(now-statsAt<1000)return;
+    const i=renderer.info,fps=Math.round(statsFrames*1000/(now-statsAt));statsFrames=0;statsAt=now;
+    statsBox.textContent=`${fps} fps · max ${Math.round(1000/(frameGap||16.7))}${slowPhone?' (telefono lento)':''}\ndisegni ${i.render.calls} · triangoli ${Math.round(i.render.triangles/1000)}k\ntexture ${i.memory.textures} · geometrie ${i.memory.geometries} · programmi ${i.programs?.length??'?'}\nluci accese ${roomLights.filter(r=>r.light.visible).length} · ${litRoom||'-'}`;
+  }
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
   // Luci per stanza: ogni luce in più pesa su ogni oggetto disegnato (sui telefoni si sente). Si accendono solo
@@ -1998,10 +2050,17 @@ export function createLobby3D(app) {
   // Le combinazioni si preparano subito dopo l'apertura, così cambiare stanza non dà scatti.
   const roomOf = (x, z) => (z > 6.15 ? 'Sala cinema' : z < -6.15 ? 'Sala tavoli' : x > 7 ? 'Sala biliardo' : x < -7 ? 'Sala giochi' : 'Lobby');
   const roomLights = [];
-  scene.traverse((o) => { if (o.isLight && !o.isHemisphereLight) roomLights.push({ light: o, room: roomOf(o.getWorldPosition(new THREE.Vector3()).x, o.getWorldPosition(new THREE.Vector3()).z) }); });
   const mainLight = new Map();
-  for (const r of roomLights) if (r.room !== 'Lobby' && !r.light.isSpotLight && (!mainLight.has(r.room) || r.light.intensity > mainLight.get(r.room).intensity)) mainLight.set(r.room, r.light);
   let litRoom = '';
+  // l'elenco si rifà quando arrivano i modelli: le luci dei flipper nascono dopo e prima restavano accese ovunque
+  function collectLights() {
+    roomLights.length = 0; mainLight.clear();
+    const at = new THREE.Vector3();
+    scene.traverse((o) => { if (o.isLight && !o.isHemisphereLight) { o.getWorldPosition(at); roomLights.push({ light: o, room: roomOf(at.x, at.z) }); } });
+    for (const r of roomLights) if (r.room !== 'Lobby' && !r.light.isSpotLight && r.light.intensity > 0 && (!mainLight.has(r.room) || r.light.intensity > mainLight.get(r.room).intensity)) mainLight.set(r.room, r.light);
+    const keep = litRoom; litRoom = ''; if (keep) lightRoom(keep);
+  }
+  collectLights();
   function lightRoom(where) {
     if (where === litRoom) return;
     litRoom = where;
@@ -2009,6 +2068,7 @@ export function createLobby3D(app) {
   }
   let lightsReady = false;
   async function prepareLights() {
+    collectLights();
     if (lightsReady || !renderer.compileAsync) return;
     lightsReady = true;
     const keep = litRoom;
@@ -2024,14 +2084,14 @@ export function createLobby3D(app) {
   // per lo splash: quanto è caricato, da 0 a 1. Modelli e texture, poi le luci di tutte le sale preparate, poi il
   // film del cinema se ce n'è uno in proiezione (la radio no: il browser la fa suonare solo dopo il primo tocco)
   function loadingState() {
-    if (!active) playProjection(app.projection?.());
+    // il film non si prepara più durante lo splash: parte quando entri in sala cinema
     const models = loading.total ? loading.done / loading.total : 0;
     const lights = loading.warm || (loading.idle && !renderer.compileAsync);
     const film = !previewKey || projectionReady === previewKey;
     const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
     return { progress, ready: loading.idle && lights && film };
   }
-  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

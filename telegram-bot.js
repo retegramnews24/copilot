@@ -98,8 +98,8 @@ export async function telegramWebhook(req, env) {
         inline_keyboard: [[{ text: 'Apri Binottoland', url: 'https://t.me/' + BOT_USERNAME + '?startapp' }]]
       }
     });
-    if (!sent.ok) return json({ error: 'Invio del pulsante non riuscito.' }, 502);
-    return json({ ok: true });
+    // a Telegram si risponde sempre ok: con un errore ripeterebbe lo stesso /start per ore
+    return json({ ok: true, sent: !!sent.ok });
   } catch {
     return json({ ok: true });
   }

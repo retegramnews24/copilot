@@ -13,31 +13,47 @@ export function secureEqual(a, b) {
 }
 
 // Membri ammessi: creator, administrator, member, oppure restricted ancora nel gruppo. Cache di 60 secondi per isolate.
+// - Una sola domanda a Telegram alla volta per persona: chi chiede mentre è già in corso aspetta la stessa risposta.
+// - Se Telegram non risponde (rete, errore, "rallenta") vale l'ultima risposta avuta negli ultimi 10 minuti;
+//   null ("non so") solo se non ce n'è nessuna. Chi era dentro un minuto fa non viene buttato fuori per un intoppo.
+// (la prova tests/access-runtime.test.js esporta membershipCache cercando proprio questa riga)
 const membershipCache = new Map();
+const membershipPending = new Map();
+const MEMBERSHIP_FRESH = 60000,
+  MEMBERSHIP_STALE = 10 * 60000;
 export async function memberAccess(user, env) {
   const group = String(env.TELEGRAM_ALLOWED_GROUP_ID || '-1001803941686'),
     key = group + ':' + user.id;
   const cached = membershipCache.get(key);
   if (cached && cached.expires > Date.now()) return cached.allowed;
-  try {
-    const response = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/getChatMember', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: group, user_id: Number(user.id) }),
-      signal: AbortSignal.timeout(5000)
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) return null;
-    const member = data.result;
-    const allowed =
-      ['creator', 'administrator', 'member'].includes(member.status) ||
-      (member.status === 'restricted' && member.is_member === true);
-    if (membershipCache.size > 1000) membershipCache.clear();
-    membershipCache.set(key, { allowed, expires: Date.now() + 60000 });
-    return allowed;
-  } catch {
-    return null;
-  }
+  const stale = () =>
+    cached && cached.expires + MEMBERSHIP_STALE - MEMBERSHIP_FRESH > Date.now() ? cached.allowed : null;
+  if (membershipPending.has(key)) return membershipPending.get(key);
+  const ask = (async () => {
+    try {
+      const response = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/getChatMember', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: group, user_id: Number(user.id) }),
+        signal: AbortSignal.timeout(5000)
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) return stale();
+      const member = data.result;
+      const allowed =
+        ['creator', 'administrator', 'member'].includes(member.status) ||
+        (member.status === 'restricted' && member.is_member === true);
+      if (membershipCache.size > 1000) membershipCache.clear();
+      membershipCache.set(key, { allowed, expires: Date.now() + MEMBERSHIP_FRESH });
+      return allowed;
+    } catch {
+      return stale();
+    } finally {
+      membershipPending.delete(key);
+    }
+  })();
+  membershipPending.set(key, ask);
+  return ask;
 }
 export async function requireMember(user, env) {
   const allowed = await memberAccess(user, env);
@@ -107,13 +123,26 @@ export async function login(req, env) {
     );
   }
 }
+// Sessione: 12 ore, rinnovabile, ma al massimo 7 giorni dall'ultimo accesso vero da Telegram (since): poi si
+// riapre la Mini App. Nel gettone c'è anche l'ambiente (produzione / prova): un gettone di staging non vale in
+// produzione anche se il bot è lo stesso.
+export const SESSION_MAX = 7 * 24 * 3600000;
+const appEnv = env => env.APP_ENV || 'production';
 export async function issueSession(user, env) {
   const denied = await requireMember(user, env);
   if (denied) return denied;
+  const now = Date.now(),
+    since = Number.isFinite(user.since) && user.since <= now ? user.since : now;
+  if (now - since > SESSION_MAX)
+    return json({ error: 'Sessione scaduta: chiudi e riapri la Mini App dal bot.' }, 401);
+  const { id, player, name, username, photo } = user;
+  user = { id, player, name, username, photo };
   const accessTag = await telegramAccessTag(env);
   const payload = btoa(
     String.fromCharCode(
-      ...encoder.encode(JSON.stringify({ user, accessTag, expires: Date.now() + 12 * 3600000 }))
+      ...encoder.encode(
+        JSON.stringify({ user, accessTag, expires: now + 12 * 3600000, since, env: appEnv(env) })
+      )
     )
   )
     .replaceAll('+', '-')
@@ -148,10 +177,17 @@ export async function sessionUser(req, env) {
       !Number.isFinite(payload.expires) ||
       payload.expires <= Date.now() ||
       !/^\d{1,20}$/.test(payload.user?.id) ||
-      payload.user?.player !== 'tg:' + payload.user.id
+      payload.user?.player !== 'tg:' + payload.user.id ||
+      // ambiente sbagliato (gettone di staging in produzione o viceversa); i gettoni di prima non lo hanno
+      (payload.env !== undefined && payload.env !== appEnv(env)) ||
+      (Number.isFinite(payload.since) && Date.now() - payload.since > SESSION_MAX)
     )
       return null;
-    return { ...payload.user, sessionExpires: payload.expires };
+    return {
+      ...payload.user,
+      sessionExpires: payload.expires,
+      ...(Number.isFinite(payload.since) ? { since: payload.since } : {})
+    };
   } catch {
     return null;
   }

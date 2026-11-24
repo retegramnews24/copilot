@@ -42,8 +42,10 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     frame.src = '/gara/index.html?v=2' + (online ? '&online=1' : '');
     tg?.BackButton?.show();
   }
+  let failures = 0;
   function startSync() {
     clearInterval(sync);
+    failures = 0;
     sync = setInterval(poll, 900);
   }
   async function poll() {
@@ -53,12 +55,24 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     try {
       const result = await request('/api/f1/' + selected + '/state?after=' + snapshot.revision);
       clock(result);
+      if (failures >= 3) post('net', { lost: false, message: 'Collegamento ripreso.' });
+      failures = 0;
       if (room === selected && result.state && result.state.revision >= snapshot.revision) {
         snapshot = result.state;
         publish();
       }
     } catch (error) {
-      if (room === selected && error.status === 404) gone(selected);
+      if (room !== selected) return;
+      if (error.status === 404) gone(selected);
+      // dopo tre richieste fallite di fila si dice cosa succede (prima il gioco restava fermo senza dire niente)
+      else if (++failures >= 3)
+        post('net', {
+          lost: true,
+          message:
+            error.status === 401 || error.status === 403
+              ? 'Sessione scaduta: chiudi e riapri Binottoland dal bot.'
+              : 'Collegamento perso, riprovo…'
+        });
     } finally {
       polling = false;
     }
@@ -69,17 +83,9 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     if (!who || pending || (!overlay.hidden && room === selected)) return;
     pending = true;
     try {
-      const path = '/api/f1/' + selected,
-        game = games().find(g => g.room === selected);
-      const seated = game?.players.some(p => p.id === who.player);
-      const canJoin = !seated && game?.phase === 'waiting' && game.players.length < game.capacity;
-      let result;
-      try {
-        result = canJoin ? await request(path + '/join', {}) : await request(path + '/state');
-      } catch (error) {
-        if (error.status !== 409) throw error;
-        result = await request(path + '/state'); // full or already started: watch it
-      }
+      const path = '/api/f1/' + selected;
+      // chi non è già dentro guarda la sala d'attesa e sceglie lui se entrare (tasto «Entra» nel gioco)
+      const result = await request(path + '/state');
       if (!overlay.hidden) close();
       clock(result);
       room = selected;
@@ -167,7 +173,7 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
       } finally {
         pending = false;
       }
-    } else if (data?.type === 'f1:action' && ['start', 'play', 'close', 'leave'].includes(data.kind)) {
+    } else if (data?.type === 'f1:action' && ['start', 'play', 'close', 'leave', 'join', 'abandon'].includes(data.kind)) {
       const selected = room;
       if (!selected) return;
       try {
@@ -177,6 +183,11 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
         if (data.kind === 'close' || data.kind === 'leave') {
           close();
           roomClosed(selected);
+          return;
+        }
+        // abbandono: la partita continua col pilota automatico, chi esce torna a Binottoland
+        if (data.kind === 'abandon') {
+          close();
           return;
         }
         if (result.state.revision >= snapshot.revision) snapshot = result.state;

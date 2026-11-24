@@ -1,7 +1,7 @@
 // Calcio balilla: il computer (sempre i blu se giochi tu con i rossi). Muove tutte e quattro le sue aste:
 // mette la figura giusta sulla traiettoria della palla, alza le aste davanti ai tiri dei compagni,
 // ferma la palla e tira. Il livello si adatta: sale quando vinci un punto, scende quando lo perdi.
-import { rows, figureZ, W } from './balilla-rules.js?v=7491db9621';
+import { rows, figureZ, W } from './balilla-rules.js?v=763b693d50';
 
 const KEY = 'binottoland-balilla-ai';
 export function loadSkill() {
