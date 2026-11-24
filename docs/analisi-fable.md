@@ -5,6 +5,8 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 1: sicurezza e server**, letta sul commit `33ef835`.
 - **Area 2: multigiocatore**, letta sul commit `005b97d`, cioè dopo i tre commit «Sicurezza (analisi Fable, gruppo 1, 2 e 3)».
 
+- **Area 3: Lobby 3D su telefono**, letta sul commit `dcbc5e6` (dopo i quattro commit «Multigiocatore (analisi Fable, area 2)»).
+
 Le altre aree verranno aggiunte allo stesso modo.
 
 **Area 1 e produzione.** Quando ho scritto l'Area 1 il codice del server su `main` (`d2c9a02`, versione 1.0.57) era uguale a quello di `staging`, tranne quattro differenze piccole. Ora `staging` ha in più i tre commit di sicurezza, che su `main` non ci sono ancora: quindi i problemi dell'Area 1 valgono ancora per la produzione. Su `staging` risultano affrontati; rileggendo per l'Area 2 ho visto le correzioni dei punti 1, 2, 3, 4, 5, 8, 9 e 10, gli altri non li ho ricontrollati.
@@ -24,6 +26,29 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 3 (Lobby 3D su telefono)
+
+**Come leggere quest'area.** Ho letto il codice, non ho misurato niente su un telefono. Quindi **[V]** qui vuol dire «il codice fa davvero questo», mentre quanto pesa (fotogrammi al secondo, batteria, megabyte) è una stima segnata **[S]**. Il primo passo consigliato è misurare (proposta 3.1).
+
+| # | Problema | Gravità | Stato |
+|---|---|---|---|
+| L1 | I due flipper ridipingono il vetro del tabellone 30 volte al secondo e lo rimandano alla scheda grafica, sempre, anche se sei in un'altra sala | alta | [V] il codice, [S] quanto pesa |
+| L2 | Nessun limite ai fotogrammi e nessuna pausa da fermi: tutta la scena si ridisegna 60, 90 o 120 volte al secondo | alta | [V] |
+| L3 | Troppi oggetti separati, disegnati anche dietro i muri; un personaggio intero per ogni persona collegata, senza tetto | alta | [V] il codice, [S] i numeri |
+| L4 | Troppe luci per fotogramma (fino a 12 in sala biliardo); le luci dei flipper sfuggono allo spegnimento per sala | media-alta | [V] |
+| L5 | Il film del cinema si scarica e si decodifica ovunque nella Lobby 3D, e già durante lo splash | media | [V] |
+| L6 | Su iPhone i volumi "a distanza" non funzionano: radio a tutto volume ovunque, anche in sala cinema sopra il film | media | [V] il codice, [S] da provare su iPhone |
+| L7 | Se la grafica 3D non parte: splash di 26 secondi, poi un errore ogni secondo e mezzo, senza modo di passare alla Lobby classica | media | [V] la logica, [S] quanto è frequente |
+| L8 | Mini app ridotta a icona in Telegram: la 3D, la radio e il collegamento possono restare accesi | media | [V] manca il codice, [S] il comportamento di Telegram |
+| L9 | Nessuna qualità ridotta per i telefoni lenti; sfocatura dietro ogni tasto sopra la scena | media-bassa | [V] il codice, [S] quanto pesa |
+| L10 | Memoria: circa 65-70 MB di disegni tenuti in RAM più altrettanti sulla scheda grafica, e restano caricati mentre giochi a un altro gioco 3D | media-bassa | [V] le misure delle tele, [S] il totale |
+
+Il dettaglio è nella sezione «Area 3: Lobby 3D su telefono», più sotto.
+
+**Cosa ho letto per intero:** `public/lobby3d/lobby3d.js`, `textures.js`, `balilla.js`, `balilla-sounds.js`, `public/window-mode.js`, `public/safe-area.js`. **Solo in parte:** `flipper3d.js` (costruzione, comandi, suoni, aggiornamento), `character.js` (come si costruisce un personaggio), `public/radio.js` (parte del club), `public/app.js` (avvio, Telegram, splash), `public/splash/intro.js`, `public/app.css` (margini sicuri). **Non letti:** `flipper-art.js` e `gt-art.js` (i disegni), la fisica dei flipper, `public/biliardo/scene3d.js`, i modelli `.glb` (quanti pezzi e quali texture contengono).
 
 ---
 
@@ -409,6 +434,137 @@ Molti problemi qui sotto hanno la stessa radice: **posto al balilla, sgabello e 
 
 ---
 
+## Area 3: Lobby 3D su telefono
+
+### 3.1 Prestazioni: cosa si disegna a ogni fotogramma
+
+**L1. I flipper ridipingono il tabellone sempre** — alta, [V] il codice, [S] quanto pesa
+
+- **Dove:** `public/lobby3d/lobby3d.js:1837` (a ogni fotogramma si aggiornano tutti e due i flipper), `public/lobby3d/flipper3d.js:633` (`update`, senza nessun controllo di distanza o di sala), `flipper3d.js:750-782` (ogni trentesimo di secondo `paintBackglass` ridisegna la tela 768×579 e la segna da ricaricare), `flipper3d.js:93` (la texture ha le mipmap, quindi a ogni ricarica si rifanno anche quelle).
+- **Cosa succede:** per ognuno dei due flipper, 30 volte al secondo: un disegno 2D di una tela da 768×579 e il suo invio alla scheda grafica (1,8 MB l'uno, più le versioni rimpicciolite). Succede anche in attesa (il giro di lampadine) e anche se sei al cinema o al biliardo.
+- **Quando:** sempre, finché la Lobby 3D è aperta. È lavoro continuo di processore e scheda grafica per una cosa che quasi mai si vede.
+- **In più:** a ogni fotogramma si aggiornano anche le lampadine del piano (`flipper3d.js:707-748`) e le barre di potenza (`:696-704`) di tutti e due.
+
+**L2. Nessun limite ai fotogrammi, nessuna pausa** — alta, [V]
+
+- **Dove:** `lobby3d.js:1775-1863` (`frame`), `:1778` (`requestAnimationFrame` senza freno), `:1862` (`renderer.render` sempre).
+- **Cosa succede:** la scena intera viene ricalcolata e ridisegnata a ogni fotogramma che lo schermo concede. Sui telefoni a 90 o 120 Hz vuol dire 90 o 120 volte al secondo. Succede anche da fermi, da seduti, con la bacheca aperta a leggere la chat.
+- **Quando:** sempre con la 3D aperta. È la prima causa del consumo di batteria e del telefono che scalda.
+- **Cose fatte bene:** con l'app nascosta il ciclo si ferma (`:1992`), e quando apri un gioco la 3D si ferma (`hide`, `:1988`).
+
+**L3. Troppi oggetti separati, e si disegnano anche dietro i muri** — alta, [V] il codice, [S] i numeri
+
+- **Dove:** `lobby3d.js:112-118` (`std`, `glow`, `box`, `rbox`, `plane`: ogni chiamata crea una geometria, spesso un materiale, e un oggetto a sé), `:1134-1212` (un cabinato: da 25 a 45 oggetti, per 11 cabinati), `:1093-1104` (16 casse, 4 oggetti l'una), `:782-804` (cinema), `public/lobby3d/balilla.js:65-205` (calcio balilla: oltre 100 oggetti più 22 omini), `flipper3d.js:196-211` (ogni lampadina del flipper è un oggetto trasparente con il suo materiale).
+- **Cosa succede:** ogni oggetto è un comando separato alla scheda grafica. La scena ne ha, a stima, tra 1.200 e 1.500. three.js scarta quelli fuori dall'inquadratura, ma non quelli nascosti da un muro: guardando dall'atrio verso la sala giochi si disegnano tutti i cabinati, il balilla e i flipper anche se li copre la parete.
+- **Quando:** sempre. Sui telefoni economici qualche centinaio di comandi con materiali "fisici" è già il limite per restare fluidi.
+- **Personaggi:** un personaggio completo per ogni persona collegata, anche chi è nella Lobby classica (`lobby3d.js:1454-1486`, in piedi attorno al tappeto). Ogni personaggio è fatto di pezzi copiati con i loro materiali (`public/lobby3d/character.js:81-131`) più due scritte con il nome (due tele 512×96, `lobby3d.js:1250-1253` e `:1450-1453`). Non c'è un tetto: la Lobby accetta fino a 120 collegamenti.
+- **Cose fatte bene:** le pedine di scacchi e dama sono disegnate tutte insieme (`:646-649`), le ombre vere sono spente e sostituite da macchie a terra (`:189-191`, `:1247`).
+
+**L4. Troppe luci** — media-alta, [V]
+
+- **Dove:** `lobby3d.js:176` (atrio, 3), `:478-480` e `:495` (biliardo: 4 faretti e 3 luci), `:617` (tavoli, 1), `:811` (cinema, 2), `:1241` (sala giochi, 4), `flipper3d.js:221-222` (una per flipper), `lobby3d.js:1999-2009` (`lightRoom`: accende la sala dove sei più l'atrio).
+- **Cosa succede:** ogni luce accesa viene calcolata per ogni punto di ogni oggetto illuminato. In sala biliardo sono 4 faretti + 3 luci + 3 dell'atrio; in sala giochi 4 + 3; nell'atrio 3 + la principale di ogni altra sala (7).
+- **Le luci dei flipper sfuggono:** l'elenco delle luci per sala si fa una volta, all'avvio (`lobby3d.js:2001`), ma le luci dei flipper nascono dopo, quando arriva il modello (`flipper3d.js:154`, `:221`). Non entrano nell'elenco, quindi restano accese in tutte le sale: due luci in più ovunque, quasi sempre a intensità zero ma calcolate lo stesso. In sala biliardo si arriva a 12.
+- **Cose fatte bene:** l'idea di accendere solo la sala dove sei, e di preparare le combinazioni prima (`prepareLights`, `:2011`), è giusta.
+- **[S]** Preparare le cinque combinazioni vuol dire compilare ogni materiale cinque volte durante lo splash: su un telefono lento può allungare l'avvio di parecchi secondi.
+
+**L9. Nessuna qualità ridotta per i telefoni lenti** — media-bassa, [V] il codice, [S] quanto pesa
+
+- **Dove:** `lobby3d.js:94-99` (antialias sempre, fino a 1,5 punti per pixel sul telefono, resa dei colori "da film"), `:105-107` (riflessi d'ambiente su tutti i materiali), `:405` e `:1138` (materiali con vernice trasparente su tavolino e cabinati), `:52` (`backdrop-filter: blur` su ogni tasto della 3D).
+- **Cosa succede:** la qualità è una sola per tutti. Non si guarda mai quanto dura un fotogramma per abbassare la risoluzione o togliere qualcosa. Il gioco F1 una scelta di qualità ce l'ha, la Lobby no.
+- **La sfocatura dietro ai tasti:** ogni tasto sopra la scena (Lobby classica, Vista, i quattro tasti attorno al joystick, il tasto d'azione, quelli del balilla) sfoca quello che ha dietro. Con la scena che cambia a ogni fotogramma, il telefono rifà la sfocatura a ogni fotogramma per ogni tasto. Su Android è noto per essere costoso.
+- **La tela trasparente:** la scena è disegnata su una tela trasparente (`alpha: true`, `:94`) per far vedere il film che sta sotto (`:846-849`). Una tela trasparente a tutto schermo costa di più da comporre, anche quando non c'è nessun film.
+
+**Altro, gravità bassa** [V]
+
+- A ogni fotogramma si creano oggetti da buttare: la posa trasformata in testo (`lobby3d.js:1838`), una copia dei dati per ognuno dei 12 sgabelli (`:586`), elenchi di appoggio (`:1589`, `:1834`), un vettore nuovo in vista dagli occhi (`:1854`). Poco ognuno, ma fanno lavorare il pulitore di memoria.
+- A ogni fotogramma si riscrivono una decina di stili della pagina anche se non cambiano (`:601-607`, `:1816-1817`, `:1833-1836`, `:1858-1861`).
+- Radio del club: per ognuna delle 16 casse si programmano due cambi di volume e posizione a ogni fotogramma (`public/radio.js:354-377`), quasi 2.000 al secondo. **[S]** Da verificare se pesa.
+- Quando arriva un messaggio in chat la bacheca (1024×948) viene ridisegnata e ricaricata sulla scheda grafica (`lobby3d.js:264-299`, `:1746`): un piccolo scatto.
+
+### 3.2 Memoria e avvio
+
+**L10. Quanta memoria occupa** — media-bassa, [V] le misure, [S] il totale
+
+- **Dove:** `public/lobby3d/textures.js:4-12` (ogni disegno è una tela che resta in memoria, più la copia sulla scheda grafica con le versioni rimpicciolite).
+- **Le tele più grandi:** tre pareti da 2048×512 (`textures.js:41`), due piani dei flipper da 1024×2088 (`flipper3d.js:224-230`), bacheca e sughero da 1024×948 (`lobby3d.js:249-260`), otto cartelli delle porte da 1024×164 (`:438`), le insegne dei cabinati da 768×208 (`:1190`), nove piani dei tavoli da 512×384 (`:623`), schermo del cinema da 1024×576 (`:844`).
+- **Stima:** 65-70 MB di tele in RAM e circa altrettanto, o un po' di più, sulla scheda grafica, senza contare i modelli (5,5 MB di file `.glb`) e i due suoni del balilla.
+- **Quando pesa:** quando dalla 3D apri un altro gioco 3D (Biliardo, F1). La Lobby 3D si ferma ma tiene tutto caricato, e il gioco apre una seconda scena 3D sua. Su un telefono con poca memoria Telegram può ricaricare la mini app. **[S]**
+- **Suoni del balilla:** `sounds/balilla-partita.mp3` (539 KB) viene decodificato tutto in memoria (`public/lobby3d/balilla-sounds.js:14-25`) per usarne sei pezzetti da un decimo di secondo. **[S]** A stima sono una decina di MB di audio decodificato.
+
+**L7. Se la grafica 3D non parte** — media, [V] la logica, [S] quanto è frequente
+
+- **Dove:** `lobby3d.js:71-77` (pagina e stile della 3D aggiunti al documento) e `:94` (creazione della grafica, che può fallire), `public/app.js:106` (primo tentativo, errore ignorato), `:105` e `:110` (lo splash aspetta la 3D, al massimo 26 secondi), `:114` (ogni 0,7 secondi, se la Lobby è libera, si riprova ad aprire la 3D e si mostra l'errore).
+- **Cosa succede:** su un telefono dove WebGL non parte (vecchio, scheda grafica esclusa dal browser, memoria finita) lo splash resta 26 secondi. Poi compare la Lobby classica, ma ogni secondo e mezzo l'app riprova, fallisce di nuovo e mostra «Lobby 3D: …». A ogni tentativo resta nel documento un pezzo di pagina in più (`:77` viene prima di `:94`).
+- **Senza uscita:** la scelta "Lobby classica" si salva solo dal tasto ✕ dentro la 3D (`lobby3d.js:1647`), che su quel telefono non si vede mai.
+- **Contesto perso:** non c'è niente per il caso in cui la scheda grafica "perde" la scena a 3D aperta (succede su Android dopo un po' in secondo piano). three.js ricarica da solo texture e modelli, ma i riflessi d'ambiente creati all'avvio (`lobby3d.js:105-108`) non vengono rifatti. **[S]** Da provare.
+
+**Altro** [V]
+
+- La 3D si prepara a ogni avvio per chiunque non abbia scelto la Lobby classica (`public/app.js:106`): three.js, 5,5 MB di modelli e tutte le tele, anche con la rete del telefono e anche se si è aperta l'app da un avviso per andare dritti a un tavolo.
+
+### 3.3 Cinema e radio nella Lobby 3D
+
+**L5. Il film gira ovunque** — media, [V]
+
+- **Dove:** `lobby3d.js:1826` (a ogni fotogramma `playProjection`), `:938-972` (se c'è una proiezione crea il video o il riquadro di YouTube, dovunque tu sia), `:2027` (lo fa partire già durante lo splash), `:931-935` e `:1992` (con l'app nascosta il film viene azzittito, non fermato).
+- **Cosa succede:** se in sala cinema c'è un film, ogni telefono nella Lobby 3D lo scarica e lo decodifica, anche da dietro tre muri, con il volume a zero. Solo lo schermo condiviso si collega quando sei vicino (`:940`).
+- **Quando:** qualcuno proietta un film e gli altri giocano a balilla: tutti consumano dati e batteria per un video che non vedono.
+- **In più:** il riquadro del video viene riposizionato a ogni fotogramma con una trasformazione 3D (`:974-990`).
+
+**L6. iPhone: i volumi a distanza non funzionano** — media, [V] il codice, [S] da provare su iPhone
+
+- **Dove:** `public/radio.js:379` e `:945-951` (il volume della radio del club si regola con `plain.volume` e `fx.volume`), `radio.js:371` (i volumi delle casse non tengono conto né del cursore né della sala), `lobby3d.js:1812` e `:960` (il volume del film si regola con `previewVideo.volume`).
+- **Cosa succede:** su iPhone il volume di un elemento audio o video non si può cambiare da programma: resta sempre al massimo. Quindi la radio non si abbassa allontanandosi dal bancone, il cursore «Radio» non fa niente, ed entrando in sala cinema la radio non si spegne (`setClubGain(0)` mette il volume a zero, che su iPhone non ha effetto) e suona sopra il film. Anche il cursore «Cinema» e la dissolvenza entrando non funzionano; il film passa solo da muto a pieno volume (`:1823`, questo funziona).
+- **Rimedio:** far passare il suono da un regolatore di volume di Web Audio, oppure mettere in pausa o in muto invece di abbassare.
+
+### 3.4 Audio su Android e iPhone
+
+Gravità bassa o media-bassa.
+
+- **[V] Tre motori audio insieme:** la radio (`public/radio.js:383-387`), la Lobby 3D (`lobby3d.js:861`) e, con Pong acceso sul cabinato, la pagina nascosta di Pong (`:1891`). Funziona, ma consuma di più.
+- **[V] il codice, [S] l'effetto. Dopo una telefonata su iPhone:** l'audio viene risvegliato solo se è nello stato «sospeso» (`lobby3d.js:861`). iPhone dopo una chiamata o Siri lo mette in uno stato diverso («interrotto»), che il codice non considera: balilla, flipper e passi possono restare muti finché non si riapre la 3D. Basta risvegliarlo ogni volta che non è «in funzione».
+- **[S] Tasto del silenzioso su iPhone:** i suoni fatti con Web Audio (flipper, balilla, passi, colpi) seguono il tasto laterale del silenzioso, mentre radio e film no. Chi ha il silenzioso sente la radio ma non il flipper.
+- **[V] Voce del flipper:** usa la sintesi vocale del browser (`flipper3d.js:372-379`). Dentro Telegram su Android di solito non c'è: lì il flipper non parla, senza errori.
+- **Cose fatte bene:** lo sblocco dell'audio anche quando il dito si alza (`lobby3d.js:863-864`, serve su iPhone); i suoni sintetizzati si scollegano da soli quando finiscono (`:1041`, `:1048`); il mixer del cinema solo per i video dello stesso sito (`:965`), così gli altri non diventano muti.
+
+### 3.5 Comandi touch
+
+Nel complesso sono fatti con cura: più dita insieme, cattura del dito, tasti che non si sovrappongono anche a 360 punti di larghezza, niente zoom o selezione per sbaglio (`lobby3d.js:46`). Restano questi punti, tutti di gravità bassa.
+
+- **[V] Joystick con centro fisso e zona grande:** qualunque tocco nel quarto in basso a sinistra dello schermo diventa joystick (`lobby3d.js:1551`), ma il centro resta quello del cerchio disegnato (`:1559`). Toccando lontano dal cerchio il personaggio parte subito al massimo in quella direzione. Un joystick che nasce dove appoggi il dito è più naturale.
+- **[V] Flipper senza scossa da telefono:** la scossa è solo sulla barra spaziatrice (`flipper3d.js:534-535`); dal telefono non c'è modo di darla (`:563-579`).
+- **[V] Telefoni e computer con schermo tattile:** basta che il dispositivo abbia il tocco per avere la disposizione da telefono (`lobby3d.js:80`, `flipper3d.js:447`, `balilla.js:235`). Su un portatile con schermo tattile, usando il mouse, compaiono joystick e tasti da telefono e spariscono le scritte dei tasti.
+- **[V] Balilla in verticale:** la distanza della telecamera dipende da quanto è largo lo schermo (`balilla.js:629-643`). Con il telefono in verticale il tavolo viene piccolo; in orizzontale va bene. Non c'è un invito a girare il telefono.
+- **[S] Bacheca e tastiera su iPhone:** la chat della bacheca è una pagina vera appoggiata in prospettiva sul sughero (`lobby3d.js:356-368`). Quando si apre la tastiera di iPhone la pagina non si ridimensiona: il campo dove si scrive può finire sotto la tastiera.
+- **[V] Niente vibrazione:** nella Lobby 3D non si usa mai la vibrazione di Telegram (colpo preso, gol, flipper), che i giochi invece usano.
+
+### 3.6 Telegram
+
+**L8. Mini app ridotta a icona** — media, [V] manca il codice, [S] il comportamento di Telegram
+
+- **Dove:** `public/app.js:576` (gli eventi di Telegram ascoltati: misure, margini, schermo intero) e `:795` (tasto Indietro); `lobby3d.js:1992` (la 3D si ferma solo con `visibilitychange`).
+- **Cosa succede:** Telegram dalla versione 8.0 avvisa con `deactivated` e `activated` quando la mini app viene ridotta a icona o coperta. L'app non li ascolta. Se in quel caso il telefono non segnala la pagina come nascosta, la 3D continua a disegnare, la radio a suonare e il collegamento resta «presente».
+- **Quando:** trascini giù la mini app per rispondere a un messaggio e la lasci lì.
+
+**Altro** [V]
+
+- Con Telegram più vecchio della 7.7 non si può bloccare lo scorrimento verso il basso (`lobby3d.js:1969`): tirando giù il joystick la mini app si riduce o si chiude. Non c'è nemmeno la conferma di chiusura nella Lobby 3D.
+- **Cose fatte bene:** margini sicuri calcolati bene e aggiornati a ogni cambio (`public/safe-area.js`, `public/app.css:1680-1687`, `public/app.js:576`); tutti i comandi della 3D li rispettano (`lobby3d.js:49`, `:61`, `:1625`); lo scorrimento verticale viene bloccato entrando e sbloccato uscendo (`:1969`, `:1987`).
+
+### 3.7 Batteria: il conto
+
+In ordine di peso stimato **[S]**:
+
+1. Scena ridisegnata senza limite (L2), con tanti oggetti (L3) e tante luci (L4).
+2. Tabelloni dei flipper ridipinti 60 volte al secondo in tutto (L1).
+3. Film decodificato anche lontano dal cinema (L5).
+4. Sfocatura dietro ai tasti e tela trasparente (L9).
+5. Radio in rete con 16 casse ricalcolate a ogni fotogramma.
+6. Mini app ridotta a icona ma ancora accesa (L8).
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -454,3 +610,27 @@ Molti problemi qui sotto hanno la stessa radice: **posto al balilla, sgabello e 
 | 2.16 | Prove automatiche: collegamento sostituito a metà partita (flipper, balilla, sgabello), giocatore assente in F1 e Biliardo, posto di Pong durante il ricollegamento | tutti | medio |
 
 **Ordine consigliato per l'Area 2:** 2.1 e 2.2 prima di portare le correzioni di sicurezza su `main` (sono nati da lì). Poi 2.3, che è piccola e migliora tre problemi insieme. Poi 2.8 e 2.9, che sono il problema più sentito da chi gioca. Il resto dopo.
+
+### Proposte per l'Area 3
+
+| # | Proposta | Risolve | Sforzo |
+|---|---|---|---|
+| 3.1 | Misurare prima di tutto: un riquadro di prova (acceso da Debug) con fotogrammi al secondo, comandi di disegno, triangoli e texture (`renderer.info`), da guardare su un telefono economico e su uno buono | tutti | piccolo |
+| 3.2 | Flipper: ridipingere il tabellone e aggiornare le lampadine solo se sei in sala giochi e vicino; da lontano una volta ogni tanto o mai. Togliere le mipmap dalla texture del tabellone | L1 | piccolo |
+| 3.3 | Limite ai fotogrammi: 60 al massimo (30 sui telefoni lenti), e da fermi senza nessuno che si muove scendere a 20-30 o disegnare solo quando cambia qualcosa | L2 | piccolo |
+| 3.4 | Un gruppo per sala, e nascondere le sale che non si possono vedere da dove sei (come già si fa per le luci). Dall'atrio restano visibili solo le sale che hanno la porta nell'inquadratura | L3 | medio |
+| 3.5 | Unire gli oggetti fermi che hanno lo stesso materiale (muri, cornici, casse, pezzi dei cabinati, cinema) e riusare materiali e geometrie uguali invece di crearne uno a chiamata | L3 | medio |
+| 3.6 | Personaggi: tetto a quelli disegnati per intero (per esempio i 12 più vicini), gli altri semplificati o solo con il nome; chi è nella Lobby classica non va disegnato o va disegnato semplice | L3 | medio |
+| 3.7 | Luci: mettere le luci dei flipper nell'elenco per sala (rifare l'elenco quando arriva il modello). Biliardo: due faretti invece di quattro, o luce dipinta sul panno. Tetto di 4-5 luci accese | L4 | piccolo |
+| 3.8 | Qualità automatica: se i fotogrammi durano troppo, abbassare la risoluzione, togliere l'antialias e i materiali con la vernice. Una scelta a mano in Settings (Alta, Media, Bassa) | L9 | medio |
+| 3.9 | Togliere la sfocatura dietro ai tasti sul telefono (basta lo sfondo scuro semitrasparente). Tela trasparente solo quando c'è davvero un film da far vedere sotto | L9 | piccolo |
+| 3.10 | Film: farlo partire solo in sala cinema o con lo schermo in vista; fuori, fermarlo e liberarlo. Non prepararlo durante lo splash. Con l'app nascosta metterlo in pausa | L5 | piccolo |
+| 3.11 | Volumi di radio e film attraverso Web Audio, o pausa e muto al posto del volume a zero, così funzionano anche su iPhone. Radio spenta davvero in sala cinema | L6 | medio |
+| 3.12 | Se la 3D non parte: passare subito alla Lobby classica, ricordarlo per quella sessione, non riprovare da soli e pulire la pagina. Un interruttore «Lobby 3D» anche in Settings | L7 | piccolo |
+| 3.13 | Ascoltare `deactivated` e `activated` di Telegram e trattarli come app nascosta e tornata: fermare la 3D, la radio del club e segnare «assente» | L8 | piccolo |
+| 3.14 | Memoria: liberare le tele dei disegni che non cambiano più dopo il primo invio alla scheda grafica; pareti a 1024 sui telefoni; tagliare i suoni del balilla in pezzetti corti | L10 | medio |
+| 3.15 | Audio: risvegliarlo ogni volta che non è «in funzione» (non solo se «sospeso»); un motore audio solo per radio e Lobby | 3.4 | piccolo, medio per unirli |
+| 3.16 | Comandi: joystick che nasce dove appoggi il dito; tasto «Scossa» per il flipper; disposizione da telefono solo se il primo comando è davvero un tocco; vibrazione su gol, colpi e flipper | 3.5 | piccolo ognuno |
+| 3.17 | Pulizia del ciclo: non creare oggetti a ogni fotogramma, scrivere gli stili solo quando cambiano, casse della radio aggiornate 10 volte al secondo | 3.1 | piccolo |
+
+**Ordine consigliato per l'Area 3:** 3.1 (misurare), poi 3.2, 3.3, 3.7, 3.9 e 3.10: sono tutti piccoli e insieme tolgono gran parte del consumo. Poi 3.12 e 3.13. Poi i medi: 3.4 e 3.5 (oggetti), 3.8 (qualità), 3.11 (iPhone).
