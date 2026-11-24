@@ -855,7 +855,7 @@ export function createLobby3D(app) {
   projection.style.cssText='position:absolute;left:0;top:0;width:960px;height:540px;background:black;overflow:hidden;transform-origin:0 0;pointer-events:none';
   projection.hidden=true;host.prepend(projection);
   let previewKey='',hls=null,previewVideo=null,yt=null,disposeYT=null;
-  let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false;
+  let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false, cinemaGain=null;
   const audioButton=document.createElement('button');
   audioButton.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 10px);right:8px;font-size:12px;padding:7px';
   audioButton.hidden=true; // non va nella pagina: il volume del cinema compare già entrando (Cinema nel mixer)
@@ -898,10 +898,12 @@ export function createLobby3D(app) {
     if(!audioContext||mediaNodes.length)return;
     const ctx=audioContext;
     const source=ctx.createMediaElementSource(video),bass=ctx.createBiquadFilter(),limiter=ctx.createDynamicsCompressor();
+    // volume del film come regolatore di Web Audio: su iPhone il volume dell'elemento video resta sempre al massimo
+    cinemaGain=ctx.createGain();cinemaGain.gain.value=THREE.MathUtils.clamp(heard,0,1);video.volume=1;
     bass.type='lowshelf';bass.frequency.value=145;bass.gain.value=3;
     limiter.threshold.value=-9;limiter.ratio.value=5;
-    source.connect(bass);bass.connect(limiter);limiter.connect(ctx.destination);
-    mediaNodes.push(source,bass,limiter);
+    source.connect(cinemaGain);cinemaGain.connect(bass);bass.connect(limiter);limiter.connect(ctx.destination);
+    mediaNodes.push(source,cinemaGain,bass,limiter);
     for(const [seconds,pan,level] of [[.023,-.83,.18],[.037,.84,.15],[.067,-.4,.07]]){
       const delay=ctx.createDelay(.1),gain=ctx.createGain(),speaker=ctx.createStereoPanner();
       delay.delayTime.value=seconds;gain.gain.value=level;speaker.pan.value=pan;
@@ -1834,7 +1836,7 @@ export function createLobby3D(app) {
     const target=cinemaLevel*Math.sin(blend*Math.PI/2);
     heard=target;
     window.binottolandClubRadio?.setClubGain?.(blend===1?0:Math.cos(blend*Math.PI/2));
-    if(previewVideo)previewVideo.volume=THREE.MathUtils.clamp(heard,0,1);
+    if(previewVideo){const v=THREE.MathUtils.clamp(heard,0,1);if(mediaNodes.length&&cinemaGain){cinemaGain.gain.value=v;previewVideo.volume=1}else previewVideo.volume=v}
     const ytLevel=Math.round(heard*100);
     if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
     const audible=heard>.001 || target>.001;

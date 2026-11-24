@@ -399,9 +399,6 @@ export class Cinema {
         }else if(input.type==='favorite-remove'||input.type==='favorite-move'){
           const index=favorites.findIndex(item=>item.id===input.id);
           if(index<0||input.before===input.id)return;
-          // togliere dalla lista condivisa: solo chi ha aggiunto il canale (quelli di prima, senza nome, chiunque)
-          if(input.type==='favorite-remove'&&favorites[index].by&&favorites[index].by!==info.user.player)
-            throw Error('Può toglierlo solo chi l’ha aggiunto.');
           if(input.type==='favorite-move'&&input.before!==null&&!favorites.some(item=>item.id===input.before))return;
           const [item]=favorites.splice(index,1);
           if(input.type==='favorite-move'){
