@@ -2,7 +2,7 @@
 // then authenticated /api/ routes, forwarded to the right Durable Object.
 import { secureEqual, requireMember, telegramAccessTag, login, issueSession, sessionUser } from './auth.js';
 import { radioNowPlaying } from './radio-metadata.js';
-import { json, noticeHub } from './worker-shared.js';
+import { json, noticeHub, internalHeaders, INTERNAL_HEADER } from './worker-shared.js';
 import { setupTelegram, telegramWebhook } from './telegram-bot.js';
 import { cinemaHub, groupCinema } from './cinema-routes.js';
 import { seatLimit, longLimitText } from './table-rules.js';
@@ -41,6 +41,12 @@ export async function handleRequest(req, env) {
       const body = await readLimited(req);
       if (body === false) return json({ error: 'Richiesta troppo grande.' }, 413);
       req = new Request(req, { body });
+    }
+    // la chiave interna non arriva mai dai telefoni (vedi worker-shared.js)
+    if (req.headers.has(INTERNAL_HEADER)) {
+      const headers = new Headers(req.headers);
+      headers.delete(INTERNAL_HEADER);
+      req = new Request(req, { headers });
     }
     return await route(req, env);
   } catch (error) {
@@ -108,6 +114,7 @@ async function admin(req, env, u) {
       'https://internal/pinball/remove',
       {
         method: 'POST',
+        headers: await internalHeaders(env),
         body
       }
     );

@@ -68,6 +68,15 @@ export function winNotice(result) {
   };
 }
 
+export const CREATE_LIMIT = { count: 20, windowMs: 10 * 60000 };
+export function createTooFast(hub, player, now = Date.now()) {
+  const made = (hub.created ??= new Map());
+  const recent = (made.get(player) || []).filter(at => now - at < CREATE_LIMIT.windowMs);
+  if (recent.length >= CREATE_LIMIT.count) return true;
+  if (made.size > 500) made.clear();
+  made.set(player, [...recent, now]);
+  return false;
+}
 export class LobbyHub {
   constructor(ctx, env) {
     this.ctx = ctx;
@@ -132,8 +141,14 @@ export class LobbyHub {
           g => !isArcade(g.game) && activeTable(g) && g.players.some(p => p.id === a.user.player)
         );
         const watching = tables.find(g => g.room === a.room);
+        // agli altri solo quello che serve per disegnarli: niente nome utente Telegram né scadenza della sessione
+        const { id, player, name, photo, avatar } = a.user;
         return {
-          ...a.user,
+          id,
+          player,
+          name,
+          ...(photo !== undefined ? { photo } : {}),
+          ...(avatar !== undefined ? { avatar } : {}),
           clubPose: a.clubPose ?? null,
           stool: a.stool ?? null,
           status: own
@@ -260,6 +275,12 @@ export class LobbyHub {
           this.leaders = null; // risultati nuovi: classifiche da ricalcolare
         }
       }
+      // pulizia: i segni "già letto" dei tavoli che non ci sono più (prima restavano per sempre)
+      const rooms = new Set(games.map(g => g.room));
+      const stale = [...(await this.ctx.storage.list({ prefix: 'migrated:' })).keys()].filter(
+        k => !rooms.has(k.slice('migrated:'.length))
+      );
+      if (stale.length) await this.ctx.storage.delete(stale.slice(0, 128));
       const records = [...(await this.ctx.storage.list({ prefix: 'result:' })).values()],
         u = new URL(req.url);
       if (u.searchParams.get('mode') === 'both')
@@ -399,9 +420,12 @@ export class LobbyHub {
         return json({ error: 'Collegati alla Lobby prima di scrivere.' }, 409);
       const text = typeof body.text === 'string' ? body.text.trim() : '';
       if (!text || text.length > 500) return json({ error: 'Scrivi da 1 a 500 caratteri.' }, 400);
-      const last = (await this.ctx.storage.get('chatlimit:' + user.id)) || 0;
-      if (Date.now() - last < 1500)
+      // freno della chat in memoria (prima una chiave per persona nello spazio, mai cancellata)
+      const chatAt = (this.chatAt ??= new Map());
+      if (Date.now() - (chatAt.get(user.id) || 0) < 1500)
         return json({ error: 'Attendi un momento prima del prossimo messaggio.' }, 429);
+      if (chatAt.size > 500) chatAt.clear();
+      chatAt.set(user.id, Date.now());
       const messages = (await this.ctx.storage.get('chat')) || [],
         message = {
           id: id(),
@@ -413,7 +437,7 @@ export class LobbyHub {
         };
       messages.push(message);
       await this.ctx.storage.put('chat', messages.slice(-100));
-      await this.ctx.storage.put('chatlimit:' + user.id, Date.now());
+      await this.ctx.storage.delete('chatlimit:' + user.id); // via la vecchia chiave
       await this.lobbyBroadcast();
       return json({ ok: true, message });
     }
@@ -421,6 +445,10 @@ export class LobbyHub {
       const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
       if (!user) return json({ error: 'Accesso richiesto.' }, 401);
       const playerName = name(user.name);
+      // freno: al massimo 5 tavoli o sale nuovi ogni 10 minuti per persona (le sale arcade non hanno la regola
+      // "un tavolo per gioco", e ognuna aggiunge un avviso alla campanella)
+      if (createTooFast(this, user.player))
+        return json({ error: 'Hai aperto troppi tavoli di fila: riprova tra qualche minuto.' }, 429);
       if (
         body.game !== undefined &&
         ![

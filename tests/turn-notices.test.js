@@ -400,6 +400,27 @@ assert.match(
   );
 }
 
+{
+  // Telegram occupato (429/500): l'avviso torna in coda e parte al tentativo dopo; al massimo 3 riprove.
+  const h = harness();
+  h.telegramStatus = 429;
+  await h.queue(chess());
+  await h.run(SEND_DELAY + 1000);
+  assert.equal(h.sent.length, 1);
+  assert.equal([...h.data.keys()].filter(k => k.startsWith('queue:')).length, 1, 'back in the queue');
+  h.telegramStatus = 200;
+  await h.run(61000);
+  assert.equal(h.sent.length, 2, 'sent on retry');
+  assert.equal([...h.data.keys()].filter(k => k.startsWith('queue:')).length, 0);
+  const g = harness();
+  g.telegramStatus = 500;
+  await g.queue(chess());
+  await g.run(SEND_DELAY + 1000);
+  for (let i = 1; i <= 4; i++) await g.run(60000 * i + 1000);
+  assert.equal(g.sent.length, 4, 'first try plus 3 retries, then it gives up');
+  assert.equal([...g.data.keys()].filter(k => k.startsWith('queue:')).length, 0);
+}
+
 console.log('PASS Turn notices (time to move: loss, Scarabeo skip and votes, reminder and result messages):');
 console.log(
   'PASS Turn notices: who must act (chess, checkers, Forza 4, Scarabeo votes), quiet hours winter/summer, one message per turn, presence, replaced turns, Settings switch, blocked bot and /start.'

@@ -16,6 +16,7 @@ import {
 } from './public/lobby3d/balilla-rules.js';
 
 const TICK = 33; // ms tra un aggiornamento e l'altro (30 al secondo)
+export const IDLE_STOP = 5 * 60000; // tavolo fermo dopo 5 minuti senza comandi
 // Computer temporaneo sui blu quando al tavolo c'è una sola persona (per vedere come reagisce la pallina in allenamento):
 // mette la figura sulla traiettoria, para con le figure giù e tira quando la palla è lenta davanti al piede.
 export function practiceAI(f, team, dt, mem) {
@@ -148,8 +149,11 @@ export class BalillaHub {
     return [...this.viewers.values()].filter(v => v.slot >= 0);
   }
   // Qualcuno gioca al tavolo contro il computer o sullo stesso telefono: online non ci si siede.
+  // occupato da una partita sul telefono: vale finché chi l'ha dichiarato si fa sentire (il telefono manda "watch"
+  // ogni 3 secondi); prima restava occupato per sempre, finché la persona restava collegata
   busy() {
-    return [...this.viewers.values()].some(v => v.local);
+    const now = Date.now();
+    return [...this.viewers.values()].some(v => v.local && now - (v.seenAt || 0) < 15000);
   }
   message(ws, id, b) {
     this.restore();
@@ -157,10 +161,16 @@ export class BalillaHub {
     let member = this.viewers.get(ws);
     if (!member) {
       if (b.action !== 'watch') return;
-      member = { id, slot: -1, local: false };
+      member = { id, slot: -1, local: false, seenAt: Date.now() };
       this.viewers.set(ws, member);
       this.remember(ws, member);
       return this.send(ws, member);
+    }
+    member.seenAt = Date.now();
+    // chi è seduto e muove o rimette la pallina: il tavolo riparte se si era fermato per inattività
+    if (member.slot >= 0 && (b.action === 'input' || b.action === 'ready')) {
+      this.lastInput = Date.now();
+      if (!this.timer && !this.field.finished) this.start();
     }
     if (b.action === 'practice-sound') {
       // suoni di una partita sul telefono (computer, stesso telefono): li sentono anche gli altri vicini al tavolo
@@ -300,8 +310,15 @@ export class BalillaHub {
     if (this.timer || (this.field.bar ? !this.seated().length : this.seated().length !== this.mode)) return;
     let last = Date.now(),
       carry = 0;
+    this.lastInput = Math.max(this.lastInput || 0, last);
     this.timer = setInterval(() => {
       const now = Date.now();
+      // 5 minuti senza comandi da chi è seduto: il tavolo si ferma (prima girava 30 volte al secondo per sempre e
+      // l'oggetto Lobby non andava mai a riposo); riparte al primo comando
+      if (now - this.lastInput > IDLE_STOP) {
+        this.stop();
+        return;
+      }
       carry += Math.min(0.12, (now - last) / 1000);
       last = now;
       while (carry >= 1 / 120) {

@@ -4,6 +4,8 @@
 // keeps the last KEEP snapshots (in chunks), and if BACKUP_CHAT_ID is set the bot also sends the file privately.
 // Started by the weekly cron (worker.js `scheduled`) or by the admin API (api.js, needs ADMIN_TOKEN).
 
+import { internalHeaders } from './worker-shared.js';
+
 export const SINGLETONS = [
   'checkmate-lobby-v1',
   'binotto-simulator-league-v1',
@@ -155,7 +157,11 @@ export class BackupHub {
     for (const [name, data] of Object.entries(snapshot.objects)) {
       if (Array.isArray(only) && only.length && !only.includes(name)) continue;
       const r = await this.object(name).fetch(
-        new Request('https://internal/backup/import', { method: 'POST', body: encode(data) })
+        new Request('https://internal/backup/import', {
+          method: 'POST',
+          headers: await internalHeaders(this.env),
+          body: encode(data)
+        })
       );
       if (r.ok) restored.push(name);
     }

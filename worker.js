@@ -33,7 +33,16 @@ import {
   LONG_IDLE,
   TURN_LIMIT
 } from './turn-notices.js';
-import { json, id, bad, name, noticeHub } from './worker-shared.js';
+import {
+  json,
+  id,
+  bad,
+  name,
+  noticeHub,
+  internalHeaders,
+  isInternal,
+  INTERNAL_PATHS
+} from './worker-shared.js';
 import * as tables from './table-rules.js';
 import { concluded } from './table-rules.js';
 import { LobbyHub } from './lobby-hub.js';
@@ -82,6 +91,28 @@ export class Room extends DurableObject {
   botSeat(s) {
     return tables.botSeat(s);
   }
+  // Abbandono: una partita a due tra persone (scacchi, dama, Forza 4) già cominciata, chiusa o archiviata da uno dei
+  // due, la vince l'altro. Prima chi stava perdendo poteva chiudere o eliminare il tavolo e la vittoria spariva.
+  forfeitable(s) {
+    return (
+      s.phase === 'playing' &&
+      s.players.length === 2 &&
+      s.players.every(p => p.id?.startsWith('tg:')) &&
+      !!(s.chess || s.checkers || s.connect4) &&
+      (s.moves?.length || 0) >= 2
+    );
+  }
+  forfeit(s, who) {
+    if (!this.forfeitable(s) || !Number.isInteger(who) || who < 0 || who > 1) return false;
+    const key = s.chess ? 'chess' : s.checkers ? 'checkers' : 'connect4';
+    s[key] = {
+      ...s[key],
+      legalMoves: [],
+      result: who === 0 ? '0-1' : '1-0',
+      reason: 'Abbandono: vince ' + s.players[1 - who].name
+    };
+    return true;
+  }
   // Il risultato va alla Lobby senza che il tavolo resti bloccato ad aspettarla. Prima il tavolo, bloccato, aspettava
   // la Lobby; la Lobby, bloccata (classifica, richiesta di posto), aspettava il tavolo: nessuno dei due rispondeva
   // all'altro per 30 secondi. I risultati si calcolano subito (lo stato può cambiare dopo); la Lobby li salva una
@@ -91,9 +122,14 @@ export class Room extends DurableObject {
     if (!results.length) return;
     const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
     const send = (async () => {
+      const headers = await internalHeaders(this.env);
       for (const result of results)
         await lobby.fetch(
-          new Request('https://internal/lobby/result', { method: 'POST', body: JSON.stringify(result) })
+          new Request('https://internal/lobby/result', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(result)
+          })
         );
     })().catch(() => {});
     try {
@@ -191,9 +227,15 @@ export class Room extends DurableObject {
   sendNotice(request) {
     if (request && this.env.TURN_NOTIFY !== 'false')
       this.ctx.waitUntil(
-        noticeHub(this.env)
-          .fetch(
-            new Request('https://internal/notices/queue', { method: 'POST', body: JSON.stringify(request) })
+        internalHeaders(this.env)
+          .then(headers =>
+            noticeHub(this.env).fetch(
+              new Request('https://internal/notices/queue', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(request)
+              })
+            )
           )
           .catch(() => {})
       );
@@ -267,6 +309,9 @@ export class Room extends DurableObject {
     await this.guardSockets();
     const viewer = JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.player || null;
     const path = new URL(req.url).pathname;
+    // percorsi interni: solo con la chiave interna (vedi worker-shared.js)
+    if (INTERNAL_PATHS.has(path) && !(await isInternal(req, this.env)))
+      return json({ error: 'Percorso non trovato.' }, 404);
     if (path.startsWith('/simulator/'))
       return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).fetch(req);
     if (path.startsWith('/notices/'))
@@ -512,10 +557,18 @@ export class Room extends DurableObject {
         if (path.endsWith('/archive') || path.endsWith('/delete')) {
           if (b.revision !== s.revision)
             return json({ error: 'La partita è cambiata. Aggiorna e riprova.' }, 409);
+          // una partita a due già cominciata non si elimina (si perderebbe la vittoria dell'altro): si chiude
+          if (path.endsWith('/delete') && this.forfeitable(s))
+            return json({ error: 'Partita in corso: chiudila, vale come abbandono.' }, 409);
           if (path.endsWith('/delete')) return json(await this.removeTable(s, 'manual'));
+          // archiviare una partita a due in corso vale come abbandono
+          const lost = this.forfeit(
+            s,
+            s.players.findIndex(p => p.id === viewer)
+          );
           if (s.series) {
             s.series.done = true;
-            s.series.cancelled = true;
+            s.series.cancelled = !lost;
           }
           s.archived = true;
           s.phase = 'finished';
@@ -614,6 +667,10 @@ export class Room extends DurableObject {
           s.moves.push({ by: s.players[who].name, at: Date.now(), number: s.moves.length + 1 });
           s.turn = 1 - s.turn;
           if (s.moves.length >= 500) s.phase = 'finished';
+        } else if (path.endsWith('/finish') && this.forfeit(s, who)) {
+          // partita a due in corso: chi la chiude la perde (la vittoria va all'altro, non sparisce)
+          if (s.series) s.series.done = true;
+          s.phase = 'finished';
         } else if (path.endsWith('/finish')) {
           if (s.series) {
             s.series.done = true;

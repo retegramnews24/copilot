@@ -123,13 +123,26 @@ export async function login(req, env) {
     );
   }
 }
+// Sessione: 12 ore, rinnovabile, ma al massimo 7 giorni dall'ultimo accesso vero da Telegram (since): poi si
+// riapre la Mini App. Nel gettone c'è anche l'ambiente (produzione / prova): un gettone di staging non vale in
+// produzione anche se il bot è lo stesso.
+export const SESSION_MAX = 7 * 24 * 3600000;
+const appEnv = env => env.APP_ENV || 'production';
 export async function issueSession(user, env) {
   const denied = await requireMember(user, env);
   if (denied) return denied;
+  const now = Date.now(),
+    since = Number.isFinite(user.since) && user.since <= now ? user.since : now;
+  if (now - since > SESSION_MAX)
+    return json({ error: 'Sessione scaduta: chiudi e riapri la Mini App dal bot.' }, 401);
+  const { id, player, name, username, photo } = user;
+  user = { id, player, name, username, photo };
   const accessTag = await telegramAccessTag(env);
   const payload = btoa(
     String.fromCharCode(
-      ...encoder.encode(JSON.stringify({ user, accessTag, expires: Date.now() + 12 * 3600000 }))
+      ...encoder.encode(
+        JSON.stringify({ user, accessTag, expires: now + 12 * 3600000, since, env: appEnv(env) })
+      )
     )
   )
     .replaceAll('+', '-')
@@ -164,10 +177,17 @@ export async function sessionUser(req, env) {
       !Number.isFinite(payload.expires) ||
       payload.expires <= Date.now() ||
       !/^\d{1,20}$/.test(payload.user?.id) ||
-      payload.user?.player !== 'tg:' + payload.user.id
+      payload.user?.player !== 'tg:' + payload.user.id ||
+      // ambiente sbagliato (gettone di staging in produzione o viceversa); i gettoni di prima non lo hanno
+      (payload.env !== undefined && payload.env !== appEnv(env)) ||
+      (Number.isFinite(payload.since) && Date.now() - payload.since > SESSION_MAX)
     )
       return null;
-    return { ...payload.user, sessionExpires: payload.expires };
+    return {
+      ...payload.user,
+      sessionExpires: payload.expires,
+      ...(Number.isFinite(payload.since) ? { since: payload.since } : {})
+    };
   } catch {
     return null;
   }

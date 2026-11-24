@@ -22,6 +22,22 @@ function send(socket, packet) {
   try { socket.send(JSON.stringify(packet)); } catch {}
 }
 
+// Limiti contro vandalismo e telefoni impazziti: lavagne aperte a testa e in tutto, tratti per lavagna (chi entra
+// deve ricevere tutta la storia), tratti al secondo e tentativi di Pictionary al secondo per collegamento.
+export const BOARD_LIMITS = { perPerson: 3, total: 30, strokes: 4000, strokesPerSecond: 20, guessesPerSecond: 1 };
+const rates = new WeakMap();
+function tooFast(socket, kind, perSecond) {
+  const now = Date.now(), r = rates.get(socket) ?? {};
+  const slot = r[kind] && now - r[kind].at < 1000 ? r[kind] : (r[kind] = {at:now, n:0});
+  rates.set(socket, r);
+  return ++slot.n > perSecond;
+}
+// chi può eliminare una lavagna: chi l'ha aperta; le lavagne di prima (senza proprietario) chiunque, la 1 nessuno
+export function canDeleteBoard(entry, player) {
+  if (!entry || entry.number === 1) return false;
+  return entry.owner == null || entry.owner === player;
+}
+
 export class Blackboard {
   constructor(ctx) {
     this.ctx = ctx;
@@ -98,6 +114,11 @@ export class Blackboard {
     const user = JSON.parse(request.headers.get('X-Checkmate-User') || 'null');
     if (!user?.player) return new Response(null, {status:401});
     if (request.method === 'POST' && new URL(request.url).pathname === '/blackboard/create') {
+      const mine = this.sql.exec('SELECT COUNT(*) AS n FROM boards WHERE deleted = 0 AND owner = ?', user.player).one().n;
+      const all = this.sql.exec('SELECT COUNT(*) AS n FROM boards WHERE deleted = 0').one().n;
+      if (mine >= BOARD_LIMITS.perPerson)
+        return Response.json({error:'Hai già ' + BOARD_LIMITS.perPerson + ' lavagne aperte: eliminane una.'}, {status:429});
+      if (all >= BOARD_LIMITS.total) return Response.json({error:'Troppe lavagne aperte. Riprova più tardi.'}, {status:429});
       const entry = this.ctx.storage.transactionSync(() => {
         let number = 1;
         const active = this.sql.exec(
@@ -159,7 +180,7 @@ export class Blackboard {
     const epoch = game?.epoch ?? entry.epoch;
     const surface = game ? 'pictionary:' + peer.room : peer.room;
     if (!peer.legacy) send(socket, {type:'sync', room:peer.room, number:entry.display_number ?? entry.number, epoch, mode,
-      reset:reset || !!game, canDelete:true});
+      reset:reset || !!game, canDelete:canDeleteBoard(entry, peer.player)});
     if (peer.canPlay) {
       const players = game && this.gamePlayers(this.gamePeers(peer.accessTag, peer.room));
       this.sendGame(socket, game, players);
@@ -297,6 +318,10 @@ export class Blackboard {
     }
     if (command.type !== 'pictionary-guess' || player === game.drawer ||
         typeof command.guess !== 'string' || !command.guess.trim() || command.guess.length > 60) return;
+    // un tentativo al secondo: niente programmi che provano tutte le parole
+    if (tooFast(socket, 'guess', BOARD_LIMITS.guessesPerSecond)) {
+      return send(socket, {type:'pictionary-note', message:'Piano: un tentativo alla volta.', round:game.round});
+    }
     if (normalizeGuess(command.guess) !== game.word) {
       return send(socket, {type:'pictionary-note', message:'Riprova!', round:game.round});
     }
@@ -358,6 +383,9 @@ export class Blackboard {
     const room = this.getRoom(peer.room);
     if (!room) return;
     if (peer.canPlay && command?.type === 'room-delete' && command.room === peer.room) {
+      if (!canDeleteBoard(room, peer.player)) {
+        return send(socket, {type:'room-delete-error', message:'Può eliminarla solo chi l’ha aperta.'});
+      }
       try { this.deleteRoom(peer, room); }
       catch { send(socket, {type:'room-delete-error', message:'Eliminazione non riuscita. Riprova.'}); }
       return;
@@ -398,6 +426,11 @@ export class Blackboard {
     if (command?.type !== 'stroke' || !validStroke(command)) return;
     const {id, color, points, size = DEFAULT_SIZE} = command;
     if (!canEdit) return send(socket, {type:'rejected', id});
+    // freno sui tratti e tetto per lavagna (dall'ultima pulizia): oltre, la lavagna va pulita
+    if (tooFast(socket, 'stroke', BOARD_LIMITS.strokesPerSecond)) return send(socket, {type:'rejected', id});
+    const used = this.sql.exec('SELECT COUNT(*) AS n FROM chalk WHERE room = ? AND seq > ? AND color >= 0',
+      surface, boardEpoch).one().n;
+    if (used >= BOARD_LIMITS.strokes) return send(socket, {type:'rejected', id, full:true});
     try {
       const rows = this.sql.exec(
         'INSERT INTO chalk (player, id, color, points, room, size) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(player,id) DO NOTHING RETURNING seq',
