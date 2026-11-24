@@ -1484,7 +1484,13 @@ export function createLobby3D(app) {
     }
     for(const c of peers.values())c.root.visible=!!modelPose(c,c.pose);
   }
-  let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0;
+  let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0, jumpPrep = 0;
+  // salto: prima le ginocchia si piegano un poco (0,12 s, la spinta) e poi si stacca da terra
+  function startJump() {
+    if (seating || jumpHeight !== 0 || verticalSpeed !== 0 || jumpPrep > 0) return;
+    jumpPrep = 0.12;
+    me.landBend = 0.28;
+  }
   function resetMovement() {
     tableFootball.blur();
     crouching = false; guarding = false; // finestra persa (Alt+Tab): nessun tasto resta premuto
@@ -1517,7 +1523,7 @@ export function createLobby3D(app) {
     }
     if (e.code === 'Space') {
       e.preventDefault();
-      if (!seating && e.type === 'keydown' && !e.repeat && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
+      if (e.type === 'keydown' && !e.repeat) startJump();
       return;
     }
     if (e.code === 'ControlLeft') { crouching = e.type === 'keydown'; e.preventDefault(); return; }
@@ -1632,7 +1638,7 @@ export function createLobby3D(app) {
     try { b.setPointerCapture(e.pointerId); } catch {}
     const m = b.dataset.m;
     if (m === 'punch') punch();
-    if (m === 'jump' && !seating && jumpHeight === 0 && verticalSpeed === 0) verticalSpeed = 4.1;
+    if (m === 'jump') startJump();
     if (m === 'guard' || m === 'crouch') holdMove(m, true);
   });
   for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) moves.addEventListener(ev, (e) => {
@@ -1692,6 +1698,7 @@ export function createLobby3D(app) {
     // un passo a ogni appoggio del piede (più piano abbassati, più forte correndo)
     { const foot = Math.floor(me.phase / Math.PI); if (foot !== lastFoot) { lastFoot = foot; if (moving > 0.4 && !seating && jumpHeight === 0) fxSound('step', Math.min(1.2, moving / SPEED) * (crouching ? 0.45 : 1)); } }
     actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating }, dt, t);
+    if (jumpPrep > 0 && (jumpPrep -= dt) <= 0) { jumpPrep = 0; if (!seating) verticalSpeed = 4.1; } // finita la spinta: si salta
     if (verticalSpeed !== 0 || jumpHeight > 0) {
       const gravity = 13, inAir = jumpHeight > 0;
       jumpHeight = Math.max(0, jumpHeight + verticalSpeed * dt - .5 * gravity * dt * dt);
