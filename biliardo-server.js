@@ -159,6 +159,8 @@ export function playMatch(m, player, body, now, auto = false) {
     }
     if (input.qx !== undefined && !(g.acchito && E.canPlacePallino(g, input.qx, input.qz))) throw Error('Il pallino va messo oltre la linea di mezzeria.');
     if (input.call !== undefined && !E.onEight(g)) delete input.call;
+    // palla 8: sulla nera la buca va chiamata (il gioco la fa toccare prima di tirare)
+    if (E.onEight(g) && input.call === undefined) throw Error('Prima chiama la buca della nera.');
   }
   const seat = g.cur,
     by = shooter(m);

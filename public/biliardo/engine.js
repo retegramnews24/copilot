@@ -300,6 +300,20 @@ function freeSpot(m, x, z, dir, skip) {
   return { x, z: z + 3 * T.R };
 }
 
+// Snooker: bianca in mano nella D su un punto libero. Prima andava sempre allo stesso punto, anche dentro un'altra
+// bilia (e la fisica le separava di colpo al primo istante del tiro). Si provano punti fissi, uguali su ogni telefono.
+export function placeInD(m) {
+  const T = tableOf(m), bx = baulkX(T), b = m.balls[0];
+  m.inHand = 'D';
+  Object.assign(b, { on: true, potted: false });
+  for (const dx of [0.12, 0.06, 0.18, 0.24, 0.03])
+    for (let k = 0; k < 19; k++) {
+      const z = (k % 2 ? -1 : 1) * Math.ceil(k / 2) * 0.03;
+      if (canPlace(m, bx - dx, z)) { b.x = bx - dx; b.z = z; return; }
+    }
+  b.x = bx - 0.12; b.z = 0;
+}
+
 // ---------- il colpo ----------
 const num = (v) => typeof v === 'number' && Number.isFinite(v);
 // Prepara il colpo (bilia in mano, pallino, buca chiamata) e lo dà alla bilia. Ritorna la bilia colpita.
@@ -316,7 +330,11 @@ export function beginShot(m, s) {
   };
   const sp = Math.max(0.05, Math.min(maxSpeed(m), +s.speed || 0));
   const cl = (v) => Math.max(-1, Math.min(1, +v || 0));
-  P.strike(b, +s.dx || 1, +s.dz || 0, sp, cl(s.sy), cl(s.sx));
+  // direzione: lo zero è una direzione vera (colpo di traverso), non un valore mancante
+  let dx = num(s.dx) ? s.dx : 1;
+  const dz = num(s.dz) ? s.dz : 0;
+  if (dx === 0 && dz === 0) dx = 1;
+  P.strike(b, dx, dz, sp, cl(s.sy), cl(s.sx));
   return b;
 }
 
@@ -385,7 +403,7 @@ function judgeOtto(m, events) {
   if (eight) {
     const pocket = events.find((e) => e.t === 'pot' && e.a === 8).p;
     if (wasBreak) { const s = freeSpot(m, T.L / 2, 0, 1, 8); Object.assign(m.balls[8], { x: s.x, z: s.z, on: true, potted: false }); }
-    else if (wasOnEight && !foul && (m.pre.call < 0 || m.pre.call === pocket)) return endGame(m, pi, `${me.name} imbuca la nera nella buca chiamata e vince!`);
+    else if (wasOnEight && !foul && m.pre.call === pocket) return endGame(m, pi, `${me.name} imbuca la nera nella buca chiamata e vince!`);
     else {
       const why = !wasOnEight ? 'Nera imbucata prima del tempo' : foul ? 'Nera imbucata con un fallo' : 'Nera nella buca sbagliata (non era quella chiamata)';
       return endGame(m, other(m), `${why}: vince ${op.name}`);
@@ -539,7 +557,7 @@ function judgeSnooker(m, events) {
   else if (pre.on === 'color') {
     if (colors.length) { m.scores[pi] += snkValue(first); keep = true; msg = `+${snkValue(first)} (${SNK_NAMES[snkValue(first)]})`; respot(m, first); }
   } else if (colors.length) { m.scores[pi] += valueOn; keep = true; msg = `+${valueOn}`; }
-  if (cuePot) { const bx = baulkX(T); Object.assign(m.balls[0], { x: bx - 0.12, z: 0, on: true, potted: false }); m.inHand = 'D'; }
+  if (cuePot) placeInD(m);
   else m.inHand = null;
   // fine del frame: l'ultima nera (imbucata o con un fallo)
   if (blackDown || (pre.on === 'clear' && pre.target === 21 && foul && potted.includes(21))) {
@@ -547,8 +565,8 @@ function judgeSnooker(m, events) {
     if (a !== b) return endGame(m, a > b ? 0 : 1, `Frame finito ${a} a ${b}: vince ${m.players[a > b ? 0 : 1].name}`);
     // parità: nera di nuovo sul suo punto, si gioca dalla D
     respot(m, 21);
-    const bx = baulkX(T); Object.assign(m.balls[0], { x: bx - 0.12, z: 0, on: true, potted: false });
-    m.inHand = 'D'; msg = 'Parità: la nera torna sul tavolo, bianca in mano nella D';
+    placeInD(m);
+    msg = 'Parità: la nera torna sul tavolo, bianca in mano nella D';
     keep = false;
   }
   if (!keep) m.cur = op;
@@ -758,6 +776,13 @@ export function autoShot(m) {
     let best = null, bd = Infinity;
     for (const k of ids) { const b = m.balls[k]; const d = (b.x - c.x) ** 2 + (b.z - c.z) ** 2; if (b.on && d < bd) { bd = d; best = b; } }
     if (best) { tx = best.x; tz = best.z; } else { tx = c.x + 1; tz = c.z; }
+    // palla 8: sulla nera il pilota automatico chiama la buca più vicina alla nera (la nera senza chiamata non vale)
+    if (onEight(m)) {
+      const T = tableOf(m), e = m.balls[8];
+      let bp = 0, bq = Infinity;
+      T.pockets.forEach((q, i) => { const d = (q.x - e.x) ** 2 + (q.z - e.z) ** 2; if (d < bq) { bq = d; bp = i; } });
+      s.call = bp;
+    }
   }
   const dx = tx - c.x, dz = tz - c.z, l = Math.sqrt(dx * dx + dz * dz) || 1;
   return { ...s, dx: dx / l, dz: dz / l, speed: m.variant === 'boccette' ? Math.min(3, 0.6 + l * 0.9) : 2.2, sy: 0, sx: 0 };

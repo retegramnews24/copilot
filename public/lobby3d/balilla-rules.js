@@ -43,6 +43,7 @@ export function cornerHeight(x, z) {
   return CORNER_RISE * Math.max(0, 1 - (L - Math.abs(x) + W - Math.abs(z)) / CORNER_RUN);
 }
 const STEP = 1 / 600;
+export const HOLD_MAX = 10; // secondi di possesso con la palla quasi ferma (regola ITSF)
 
 export const rows = [
   [0, 0, 1],
@@ -329,7 +330,10 @@ function moveBall(f, dt) {
   if (Math.abs(b.x) > L - R) {
     const s = Math.sign(b.x);
     if (Math.abs(b.z) < GOAL - R * 0.4) {
-      if (Math.abs(b.x) > L + R) return s > 0 ? 0 : 1; // gol: squadra che segna
+      // gol quando il centro supera la riga di un terzo del raggio; oltre la riga il fondo della porta scende un poco
+      // e tira dentro la palla lenta (prima una palla ferma appena oltre la riga non era gol e veniva rimessa)
+      if (Math.abs(b.x) > L + R / 3) return s > 0 ? 0 : 1; // gol: squadra che segna
+      if (Math.abs(b.x) > L) b.vx += s * 0.8 * dt;
     } else if (Math.abs(b.x) < L + R * 0.5) {
       // pali: la palla rimbalza sullo spigolo della porta
       const post = Math.sign(b.z) * GOAL;
@@ -365,7 +369,7 @@ function moveBall(f, dt) {
     } else if (Math.abs(b.z) >= GOAL - R * 0.4) {
       // già dentro la bocca della porta: rimbalza sui lati interni
       b.z = Math.sign(b.z) * (GOAL - R * 0.4);
-      b.vz = -b.vz * 0.6;
+      if (b.vz * Math.sign(b.z) > 0) b.vz = -b.vz * 0.6; // rimbalza solo se va verso il lato
     }
   }
   return -1;
@@ -404,6 +408,8 @@ function startThrow(f, team) {
   f.phase = 'throw';
   f.wait = 4;
   f.dead = 0;
+  f.hold = 0;
+  f.holdTeam = -1;
   holdInHole(f);
 }
 // Cambio campo (2 contro 2): le squadre si scambiano i lati, punteggi e turno seguono le persone.
@@ -443,8 +449,25 @@ export function simulate(f, dt, random = Math.random) {
       continue;
     }
     // palla ferma dove nessuno arriva: si rimette dal foro (la rimette chi l'aveva rimessa)
-    const still = Math.hypot(f.ball.vx, f.ball.vz) < 0.03;
+    const speed = Math.hypot(f.ball.vx, f.ball.vz),
+      still = speed < 0.03;
     f.dead = still ? f.dead + h : 0;
-    if (f.dead > 1.5 && !reachable(f, f.practice ? f.thrower : null)) startThrow(f, f.lastThrower);
+    if (f.dead > 1.5 && !reachable(f, f.practice ? f.thrower : null)) {
+      startThrow(f, f.lastThrower);
+      continue;
+    }
+    // possesso: palla quasi ferma che arriva a una sola squadra per più di HOLD_MAX secondi → rimette l'altra
+    // (regola ITSF; prima una squadra poteva tenerla sotto il piede per sempre). Da soli al tavolo non vale.
+    if (!f.practice && speed < 0.15) {
+      const a = reachable(f, 0),
+        z = reachable(f, 1),
+        team = a && !z ? 0 : z && !a ? 1 : -1;
+      if (team >= 0 && team === f.holdTeam) f.hold = (f.hold || 0) + h;
+      else {
+        f.holdTeam = team;
+        f.hold = 0;
+      }
+      if (team >= 0 && f.hold > HOLD_MAX) startThrow(f, 1 - team);
+    } else f.hold = 0;
   }
 }

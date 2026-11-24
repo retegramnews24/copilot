@@ -6,6 +6,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 2: multigiocatore**, letta sul commit `005b97d`, cioè dopo i tre commit «Sicurezza (analisi Fable, gruppo 1, 2 e 3)».
 
 - **Area 3: Lobby 3D su telefono**, letta sul commit `dcbc5e6` (dopo i quattro commit «Multigiocatore (analisi Fable, area 2)»).
+- **Area 4: fisica e regole dei giochi**, letta sul commit `dbb8d06` (dopo i commit «Lobby 3D (analisi Fable, area 3…)»).
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -26,6 +27,31 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 4 (fisica e regole)
+
+**Come leggere quest'area.** Oltre a leggere il codice l'ho fatto girare: flipper, calcio balilla e biliardo sono codice "puro", quindi li ho simulati con dei piccoli programmi di prova (fuori dal repo, niente è stato modificato). Per questo c'è un segno in più: **[P]** = provato in simulazione. I numeri delle prove sono in fondo alla sezione dell'area.
+
+**In breve:** la fisica regge bene. In circa 5 ore di flipper e balilla simulati e 110.000 colpi di biliardo non è mai uscito un numero non valido, una pallina fuori dal tavolo o una partita che non finisce. I problemi trovati sono casi limite precisi.
+
+| # | Problema | Gravità | Stato |
+|---|---|---|---|
+| G1 | Snooker: dopo «bianca in buca» la bianca viene rimessa nella D anche se lì c'è già una bilia: restano una dentro l'altra | media | [V] [P] |
+| G2 | Flipper Grand Prix: con la leva lasciata a forza zero la pallina resta ferma per sempre sul cancelletto in cima alla corsia | media | [V] [P] |
+| G3 | Calcio balilla: una palla ferma che una sola squadra può raggiungere resta lì per sempre se quella squadra non la tocca (nessun limite di possesso) | media-bassa | [V] [P] |
+| G4 | Calcio balilla: il 14,5% del campo è irraggiungibile (soprattutto le quattro zone ai lati delle porte): palla rimessa dal foro molto spesso | media-bassa | [V] [P] |
+| G5 | Calcio balilla: una palla lenta che supera la riga di porta ma si ferma subito dopo non è gol e viene rimessa | bassa | [V] [P] |
+| G6 | Biliardo: un colpo con direzione esattamente «di traverso» (dx = 0) parte in diagonale | bassa | [V] [P], oggi non raggiungibile dal gioco |
+| G7 | Flipper, multiball: la pallina che passa sulla rampa urta le palline sul piano sotto di lei | bassa | [V] [P] |
+| G8 | Flipper: la fisica crea 8-10 mila oggetti da buttare al secondo | bassa | [V] il codice, [S] quanto pesa |
+| G9 | Palla 8: se il colpo arriva senza buca chiamata, la nera vale in qualunque buca | bassa | [V] |
+| G10 | 5 birilli: due regole da confrontare con il regolamento | bassa | [S] |
+
+Il dettaglio è nella sezione «Area 4: fisica e regole dei giochi», più sotto.
+
+**Cosa ho letto per intero:** `public/flipper/physics.js`, `public/lobby3d/balilla-rules.js`, `public/biliardo/physics.js`, `public/biliardo/engine.js`. **Solo in parte:** `public/flipper/physics-gt.js` (tavolo e rampe; il resto è la stessa fisica e l'ho provato in simulazione), `public/biliardo/main.js` (solo il ciclo del colpo). **Non letti:** `public/biliardo/ai.js`, `public/lobby3d/balilla-ai.js` (il computer), Golf, Moto Trial, Pong e F1 (non erano nell'elenco).
 
 ---
 
@@ -565,6 +591,115 @@ In ordine di peso stimato **[S]**:
 
 ---
 
+## Area 4: fisica e regole dei giochi
+
+### 4.1 Flipper (Grand Prix e Binotto GT)
+
+**G2. Pallina ferma per sempre sul cancelletto (solo Grand Prix)** — media, [V] [P]
+
+- **Dove:** `public/flipper/physics.js:57` (il cancelletto in cima alla corsia di lancio è orizzontale), `:248` (anche a forza zero la pallina parte a 1,4 m/s), `public/lobby3d/flipper3d.js:556` (col mouse: cliccando il pomello la leva è «tirata di zero») e `:593` (col dito: trascinando verso l'alto la forza resta zero).
+- **Cosa succede:** a 1,4 m/s la pallina supera di poco il cancelletto (arriva a 84 cm, il cancelletto è a 81), non tocca l'arco in alto, ricade dritta e si appoggia sul cancelletto. Lì è in equilibrio perfetto: nessuna spinta di lato, nessun tempo massimo.
+- **Prova:** forza 0 → ferma a x = 0,501, y = 0,8245, ancora ferma dopo altri 120 secondi. Già con forza 0,001 entra in gioco; da tastiera o tenendo premuto non succede mai (5-200 ms provati).
+- **Quando:** col mouse, un clic sul pomello della leva senza trascinare. Col dito, toccando la zona della leva e scivolando in su. Una scossa la libera, ma dal telefono la scossa non c'è (vedi Area 3): lì bisogna uscire e si perde la partita.
+- **Nota:** il Binotto GT non ha il problema, perché il suo cancelletto è inclinato apposta (`public/flipper/physics-gt.js:60-61`, «se ci ricade sopra scivola nel campo»). Basta fare lo stesso nel Grand Prix.
+
+**G7. Multiball: la pallina sulla rampa urta quelle sotto** — bassa, [V] [P]
+
+- **Dove:** `physics.js:606-625` e `:673-674`, `physics-gt.js:689` (`ballsCollide` vale per tutte le coppie, senza guardare se una è sulla rampa).
+- **Cosa succede:** la rampa passa 3-10 cm sopra il piano, ma per gli urti tra palline conta solo la posizione vista dall'alto. Una pallina sul piano viene spinta via da una che le passa sopra, e riceve la velocità che quella aveva prima di salire.
+- **Prova:** pallina sulla rampa a 7,5 cm di quota sopra una pallina sul piano: quella sotto spostata di 11 mm in un solo passo.
+- **Vale anche** per la pallina ferma ai box, che viene spostata dalla buca.
+
+**G8. Tanti oggetti temporanei** — bassa, [V] il codice, [S] quanto pesa
+
+- **Dove:** `physics.js:505-506` e `physics-gt.js:590-591` (per ogni bersaglio in piedi, a ogni passo: una copia del bersaglio e una della velocità), `physics.js:669` e `physics-gt.js:752` (una copia dell'elenco delle palline a ogni passo), `physics.js:681-687` (funzioni create a ogni passo).
+- **Cosa succede:** la fisica fa 1.200 passi al secondo; con tre bersagli sono 8-10 mila oggetti al secondo da buttare. Sul telefono il pulitore di memoria può dare piccoli scatti.
+
+**Altro, gravità bassa** [V]
+
+- Il «kickback» non si accende mai: `g.kickback` nasce falso e nessuno lo mette vero (`physics.js:178`, `:586-598`). È codice rimasto da quando c'erano le uscite laterali.
+- Con un flipper tenuto alzato la pallina si ferma nella conca vicino al perno (60 partite su 60 nella prova). È il comportamento di un flipper vero («presa»), non un difetto.
+- **Cose che reggono [P]:** 156 minuti di partite a caso sui due tavoli (flipper premuti e lasciati a caso, scosse): nessun numero non valido, nessuna pallina fuori dal piano, nessuna pallina bloccata, velocità mai sopra i 7 m/s, punteggi sempre interi. Il passo fisso di 1/1200 di secondo fa il suo lavoro, anche a 20 fotogrammi al secondo.
+
+### 4.2 Calcio balilla
+
+**G3. Palla ferma davanti a chi non gioca** — media-bassa, [V] [P]
+
+- **Dove:** `public/lobby3d/balilla-rules.js:445-448` (la palla si rimette solo se è ferma da 1,5 secondi **e** nessuna figura può arrivarci), `:153-165` (`reachable`).
+- **Cosa succede:** se la palla si ferma dove arriva una sola squadra, tocca a quella squadra muoverla. Non c'è un tempo massimo di possesso.
+- **Prova:** palla ferma a 5 cm dal portiere, aste ferme: dopo 600 secondi è ancora lì.
+- **Quando:** un giocatore tiene la palla ferma sotto il piede per far passare il tempo, oppure l'avversario si è distratto. Con il commit «balilla in pausa se uno tace» il caso dell'assente è coperto sul server; resta chi è presente e non tira. Il regolamento ITSF dà 10 secondi (15 a centrocampo).
+
+**G4. Un settimo del campo è irraggiungibile** — media-bassa, [V] [P]
+
+- **Dove:** `balilla-rules.js:64-67` (corsa delle aste: il portiere copre la porta «e poco più»), `:157` (ogni asta arriva a 7,2 cm davanti e dietro), `:40-44` (i rialzi negli angoli sono lunghi solo 12 cm).
+- **Cosa succede:** ai lati di ogni porta c'è una zona di circa 15 × 21 cm dove non arriva né il portiere (troppo di lato) né la difesa (troppo indietro). Sono quattro zone, circa il 12% del campo; il resto sono strisce di mezzo centimetro tra un'asta e l'altra. Una palla che si ferma lì viene rimessa dal foro di centrocampo.
+- **Prova:** 14,5% del campo. In 180 minuti di partite a caso: 337 rimesse per palla irraggiungibile contro 161 gol (le partite a caso esagerano, ma dà l'idea).
+- **Sul tavolo vero** quelle zone hanno un rialzo che riporta la palla verso la difesa. Qui il rialzo copre solo l'angolo.
+
+**G5. Palla lenta oltre la riga: non è gol** — bassa, [V] [P]
+
+- **Dove:** `balilla-rules.js:331-332` (è gol solo quando la palla ha superato la riga di tutto il suo raggio, cioè 1,7 cm oltre).
+- **Cosa succede:** tra la riga e quel punto non c'è niente che tiri dentro la palla. Se si ferma lì, il portiere non ci arriva più e viene rimessa dal foro, senza gol.
+- **Prova:** con la palla che arriva a 14,5-17 cm/s (misurati a 4 cm dalla riga) il centro supera la riga, la palla si ferma e viene rimessa: 18 casi su 351. Sopra i 17,5 cm/s è sempre gol.
+
+**Altro, gravità bassa** [V]
+
+- Dentro la bocca della porta il rimbalzo sui lati inverte la velocità senza guardare da che parte sta andando la palla (`balilla-rules.js:365-368`). In pratica la palla perde la velocità di lato invece di rimbalzare; nelle prove non ha mai bloccato niente.
+- La rimessa per palla irraggiungibile la fa sempre chi aveva rimesso per ultimo (`:448`), non chi ha subito o chi è più lontano: può favorire sempre lo stesso.
+- **Cose che reggono [P]:** 180 minuti di partite a caso senza numeri non validi né palla fuori dal campo; velocità massima 5,1 m/s (il limite è 9). Un tiro dritto contro una figura ferma non la attraversa mai, nemmeno con passi di simulazione da un decimo di secondo (85 casi per passo), perché la simulazione si divide sempre in passi da 1/600 di secondo (`:420-421`).
+
+### 4.3 Biliardo
+
+**G1. Snooker: bianca rimessa sopra un'altra bilia** — media, [V] [P]
+
+- **Dove:** `public/biliardo/engine.js:542` (bianca in buca: va a un punto fisso della D, senza controllare se è libero) e `:550` (lo stesso dopo la parità sulla nera). Palla 8 e palla 9 invece cercano un punto libero (`:384`, `:439`, `freeSpot`).
+- **Cosa succede:** se vicino a quel punto c'è una bilia, la bianca viene messa dentro di lei. Chi entra ha la bianca in mano e può spostarla; ma se tira da lì, o se tira il pilota automatico (che non sposta mai la bianca, `:750-764`), al primo istante la fisica separa le due bilie di colpo (`public/biliardo/physics.js:136-146`) spostando anche l'altra bilia, senza che risulti un contatto.
+- **Prova:** 34 volte in 32.500 colpi a caso (120 partite), con sovrapposizioni fino a 35 mm su bilie da 52,5. Con marrone, gialla, nera e rosse. In palla 8 e palla 9: zero su 21.000 colpi.
+
+**G6. Colpo esattamente di traverso** — bassa, [V] [P], oggi non raggiungibile dal gioco
+
+- **Dove:** `engine.js:319` (`+s.dx || 1`: lo zero viene preso per «mancante» e diventa 1).
+- **Prova:** direzione (0, 1) → la bilia parte a (1,414, 1,414), cioè a 45 gradi. Con (0,000000000001, 1) parte giusta.
+- **Perché oggi non succede:** il gioco calcola la direzione dall'angolo e non esce mai uno zero esatto; il pilota automatico non l'ha mai prodotto in 10.694 tiri. Resta un errore pronto a scattare se un giorno la mira si calcolasse in un altro modo.
+
+**G9. Nera senza buca chiamata** — bassa, [V]
+
+- **Dove:** `engine.js:388` (la nera è vincente se la buca è quella chiamata **oppure se non è stata chiamata nessuna buca**), `biliardo-server.js` (`cleanShot`: la buca è facoltativa).
+- **Cosa succede:** il gioco fa toccare la buca prima di tirare, ma un colpo mandato senza la buca vale in qualunque buca. Anche il pilota automatico tira senza chiamare.
+
+**G10. 5 birilli: da confrontare con il regolamento** — bassa, [S]
+
+- `engine.js:608`: se la propria bilia abbatte i birilli prima di toccare l'avversaria la penalità è fissa a 2 punti, senza il valore dei birilli abbattuti.
+- `engine.js:623`: i birilli abbattuti dal pallino contano solo se il pallino l'ha mosso la bilia avversaria; se l'ha mosso la propria bilia (dopo aver colpito l'avversaria) non contano per nessuno.
+- `docs/biliardo.md` non entra in questi due casi: non so dire se sono scelte o sviste.
+
+**Altro, gravità bassa** [V]
+
+- La mescolata del triangolo fa un conto che supera la precisione dei numeri (`engine.js:159`, `:180`: il prodotto passa 2^53). Dà lo stesso risultato su ogni telefono e sul server, quindi non crea differenze; la mescolata è solo un po' meno casuale.
+- Il colpo è fermato a 30 secondi sul server (`physics.js:216`) e a 40 nell'animazione (`public/biliardo/main.js:877`). Nelle prove il colpo più lungo è durato 12 secondi, quindi oggi non conta.
+- `freeSpot` ha un'ultima uscita che non controlla niente (`engine.js:300`). Non l'ho mai vista scattare.
+- **Cose che reggono [P]:** circa 110.000 colpi a caso in tutte le specialità (palla 8, palla 9, snooker con 6 e 15 rosse, 5 birilli, boccette, carambola libera e a tre sponde). Nessun numero non valido, nessuna bilia ferma fuori dal tavolo, nessuna bilia uscita dal tavolo durante il colpo, nessun colpo fermato dal limite di tempo, tutte le partite finite. Tolto G1, nessuna sovrapposizione a fine colpo. La scelta di usare solo le quattro operazioni e la radice quadrata nella fisica (`physics.js:6-7`) è rispettata in tutto il file: è quello che garantisce lo stesso tavolo su ogni telefono.
+
+### 4.4 Le prove fatte
+
+| Gioco | Prova | Quanto | Esito |
+|---|---|---|---|
+| Flipper GP e GT | partite a caso | 156 minuti di gioco | nessun problema |
+| Flipper GP | lancio con ogni forza da 0 a 0,3 | 301 lanci | ferma solo a forza 0 (G2) |
+| Flipper GT | lancio con ogni forza da 0 a 1 | 101 lanci | nessun problema |
+| Flipper GP | pallina sulla rampa sopra un'altra | 1 caso costruito | urto che non dovrebbe esserci (G7) |
+| Calcio balilla | partite a caso, due squadre | 180 minuti | nessun numero non valido, palla mai fuori |
+| Calcio balilla | palla lenta verso la porta | 351 tiri | 18 oltre la riga senza gol (G5) |
+| Calcio balilla | palla ferma in ogni punto del campo | griglia da 1 cm | 14,5% irraggiungibile (G4) |
+| Calcio balilla | palla ferma davanti a un'asta ferma | 600 secondi | resta lì (G3) |
+| Biliardo | partite a caso, tutte le specialità | circa 110.000 colpi | solo G1 |
+| Biliardo | direzione (0, 1) | 1 caso | parte in diagonale (G6) |
+
+I programmi di prova sono rimasti fuori dal repo. Sono piccoli e ripetibili (stesso seme, stesso risultato): si possono trasformare in prove automatiche (proposta 4.9).
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -634,3 +769,22 @@ In ordine di peso stimato **[S]**:
 | 3.17 | Pulizia del ciclo: non creare oggetti a ogni fotogramma, scrivere gli stili solo quando cambiano, casse della radio aggiornate 10 volte al secondo | 3.1 | piccolo |
 
 **Ordine consigliato per l'Area 3:** 3.1 (misurare), poi 3.2, 3.3, 3.7, 3.9 e 3.10: sono tutti piccoli e insieme tolgono gran parte del consumo. Poi 3.12 e 3.13. Poi i medi: 3.4 e 3.5 (oggetti), 3.8 (qualità), 3.11 (iPhone).
+
+### Proposte per l'Area 4
+
+| # | Proposta | Risolve | Sforzo |
+|---|---|---|---|
+| 4.1 | Snooker: rimettere la bianca nella D cercando un punto libero, come fanno già palla 8 e palla 9 (`freeSpot`), anche dopo la parità sulla nera | G1 | piccolo |
+| 4.2 | Flipper Grand Prix: cancelletto inclinato come nel Binotto GT. In più, per sicurezza su tutti e due: se una pallina resta ferma più di qualche secondo fuori dal pistone e dai box, una piccola spinta automatica | G2 | piccolo |
+| 4.3 | Calcio balilla: tempo massimo di possesso (per esempio 10-15 secondi con la palla ferma o quasi vicino alle proprie aste), poi rimessa all'avversario | G3 | piccolo |
+| 4.4 | Calcio balilla: rialzi più grandi ai lati delle porte, che riportino la palla verso l'asta della difesa, così non serve rimetterla dal foro | G4 | medio (va riprovato il gioco) |
+| 4.5 | Calcio balilla: contare il gol quando il centro della palla supera la riga di poco (per esempio un terzo del raggio), oppure una leggera discesa dentro la porta. Nel rimbalzo dentro la porta, invertire la velocità solo se la palla va verso il lato | G5 | piccolo |
+| 4.6 | Biliardo: leggere la direzione del colpo senza scambiare lo zero per «mancante» | G6 | piccolo |
+| 4.7 | Flipper: negli urti tra palline saltare quelle sulla rampa (e non spostare quella ferma ai box) | G7 | piccolo |
+| 4.8 | Flipper: nella fisica non creare oggetti a ogni passo (bersagli con raggio ed elasticità già pronti, niente copie dell'elenco) | G8 | piccolo |
+| 4.9 | Portare nel repo le prove di simulazione come prove automatiche: partite a caso con seme fisso per i tre giochi, più i casi limite trovati (lancio a forza zero, bianca nella D, palla lenta in porta, direzione di traverso) | tutti | medio |
+| 4.10 | Palla 8: il server rifiuta il colpo sulla nera senza buca chiamata; il pilota automatico chiama la buca più vicina alla nera | G9 | piccolo |
+| 4.11 | 5 birilli: decidere i due casi (birilli prima dell'avversaria, birilli dal pallino mosso dalla propria bilia) e scriverli in `docs/biliardo.md` | G10 | piccolo |
+| 4.12 | Togliere il codice del kickback che non si usa più; un solo limite di durata del colpo per server e animazione | 4.1, 4.3 | piccolo |
+
+**Ordine consigliato per l'Area 4:** 4.1 e 4.2 (sono i due casi in cui una partita si rovina o si blocca), poi 4.6, 4.7 e 4.5 che sono righe singole. Poi 4.3. La 4.9 conviene farla insieme alle correzioni, così ogni caso resta controllato. La 4.4 cambia il gioco e va provata con calma.

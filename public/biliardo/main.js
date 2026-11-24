@@ -1,8 +1,8 @@
 // Biliardo: collega sala 3D, fisica, regole delle quattro specialità, computer, comandi e partite online.
 import { Table3D, CLOTHS } from './scene3d.js?v=47e47e2969';
 import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=725086e1a6';
-import { plan } from './ai.js?v=f1e7559cc5';
+import * as E from './engine.js?v=b130e0cb1b';
+import { plan } from './ai.js?v=59b1b0919b';
 import { Sfx } from './sound.js?v=597b443a9b';
 
 const $ = (id) => document.getElementById(id);

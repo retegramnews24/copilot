@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=0fa36a6bc5';
-import {buildBalilla} from './balilla.js?v=1b2013f8fa';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4f7d6c73d7';
+import {buildBalilla} from './balilla.js?v=819da8f618';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -12,7 +12,7 @@ import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
-import * as E from '../biliardo/engine.js?v=725086e1a6';
+import * as E from '../biliardo/engine.js?v=b130e0cb1b';
 import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';

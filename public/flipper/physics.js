@@ -54,7 +54,9 @@ export function makeTable() {
     ...arc(W / 2, 0.8, W / 2, 0, Math.PI, 48), // arco in alto
     seg(LANE_X, 0, LANE_X, 0.79, { r: 0.004 }), // parete della corsia di lancio
     seg(LANE_X, PLUNGER_Y - R, W, PLUNGER_Y - R, { plunger: true, e: 0.1 }), // punta del pistone
-    seg(LANE_X, 0.81, W, 0.81, { oneWay: -1, r: 0.001 }), // cancelletto: la palla sale, non riscende nella corsia
+    // cancelletto inclinato come nel Binotto GT: la palla sale, non riscende nella corsia; se ci ricade sopra scivola nel
+    // campo (prima era piano e con la leva lasciata a forza zero la pallina restava ferma lì sopra per sempre)
+    seg(LANE_X, 0.79, W, 0.83, { oneWay: -1, r: 0.001 }),
     // corridoi di rientro (inlane) verso i flipper e uscite laterali (outlane)
     // corridoi verso i flipper: la guida parte dal muro (niente uscite laterali, la pallina si perde solo in mezzo)
     // e finisce appena sopra il perno del flipper; il corridoio sotto il respingente è largo 4,4 cm
@@ -604,23 +606,30 @@ function stepBall(g, b, h) {
   }
 }
 function ballsCollide(a, b) {
+  // una pallina sulla rampa passa sopra quelle del piano: niente urto (prima le spingeva via dall'alto)
+  if (a.ramp || b.ramp) return;
   const dx = b.x - a.x,
     dy = b.y - a.y,
     d = Math.hypot(dx, dy);
   if (d >= 2 * R || d < 1e-9) return;
+  // la pallina trattenuta ai box non si sposta: l'altra rimbalza su di lei
+  const wa = a.held > 0 ? 0 : 1,
+    wb = b.held > 0 ? 0 : 1;
+  if (!wa && !wb) return;
   const nx = dx / d,
     ny = dy / d,
-    push = (2 * R - d) / 2;
-  a.x -= nx * push;
-  a.y -= ny * push;
-  b.x += nx * push;
-  b.y += ny * push;
+    push = (2 * R - d) / (wa + wb);
+  a.x -= nx * push * wa;
+  a.y -= ny * push * wa;
+  b.x += nx * push * wb;
+  b.y += ny * push * wb;
   const vn = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
   if (vn < 0) {
-    a.vx += vn * nx * 0.95;
-    a.vy += vn * ny * 0.95;
-    b.vx -= vn * nx * 0.95;
-    b.vy -= vn * ny * 0.95;
+    const k = wa && wb ? 0.95 : 1.9;
+    a.vx += vn * nx * k * wa;
+    a.vy += vn * ny * k * wa;
+    b.vx -= vn * nx * k * wb;
+    b.vy -= vn * ny * k * wb;
   }
 }
 function drain(g, b) {

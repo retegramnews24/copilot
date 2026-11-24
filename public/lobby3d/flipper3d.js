@@ -8,8 +8,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { paintPlayfield, paintBackglass } from './flipper-art.js?v=bfd8725542';
 import { paintPlayfieldGT, paintBackglassGT } from './gt-art.js?v=0105a1455e';
-import * as GP from '../flipper/physics.js?v=2c64ad27f0';
-import * as GT from '../flipper/physics-gt.js?v=0126ababe0';
+import * as GP from '../flipper/physics.js?v=37b6d6d7de';
+import * as GT from '../flipper/physics-gt.js?v=ac65d70f6e';
 
 // contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro);
 // il Binotto GT accanto, verso l'angolo
