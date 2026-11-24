@@ -93,7 +93,11 @@ export function createLobby3D(app) {
   hint.hidden = true; // i comandi sono spiegati in Settings → Personaggio e pallina
   hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
-  const renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true, powerPreference: 'high-performance' });
+  // la grafica 3D può non partire (telefono vecchio, scheda grafica esclusa, memoria finita): si toglie quello che
+  // è già stato aggiunto alla pagina e l'app passa alla Lobby classica (prima restava un pezzo di pagina a ogni tentativo)
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ alpha:true, antialias: true, powerPreference: 'high-performance' }); }
+  catch (e) { el.remove(); style.remove(); throw Error('grafica 3D non disponibile su questo telefono'); }
   const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 2));
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -937,12 +941,12 @@ export function createLobby3D(app) {
     if(yt){yt.setVolume(0);yt.mute();lastYT=0}
   }
   let clubInRange=false;
-  let projectionReady='',filmAwayAt=0;
+  let projectionReady='',filmAwayAt=0,asleep=false;
   // Il film si scarica e si decodifica solo in sala cinema o davanti alla porta (clubInRange), con la 3D aperta e
   // l'app in primo piano; uscendo resta 3 secondi (per non ripartire da capo sulla soglia) e poi si ferma e si libera.
   // Prima girava ovunque nella Lobby, già durante lo splash, e con l'app nascosta era solo azzittito.
   function filmWanted(){
-    if(!active||document.hidden){filmAwayAt=0;return false}
+    if(!active||document.hidden||asleep){filmAwayAt=0;return false}
     if(clubInRange){filmAwayAt=0;return true}
     if(!previewKey)return false;
     const now=performance.now();if(!filmAwayAt)filmAwayAt=now;
@@ -1885,6 +1889,7 @@ export function createLobby3D(app) {
     if(camWas.distanceToSquared(camera.position)>1e-8||1-Math.abs(camLook.dot(camera.quaternion))>1e-8){camWas.copy(camera.position);camLook.copy(camera.quaternion);stillSince=now}
     const busy=playing()||pinball.active||tableFootball.active||!!monitor||boardOpen||!projection.hidden||joy.id!==null||keys.size>0;
     frameGap=slowPhone||(!busy&&now-stillSince>1500)?1000/30:1000/60;
+    countStats(now);
   }
   function resize() {
     const w = host.clientWidth, h = host.clientHeight;
@@ -2014,8 +2019,23 @@ export function createLobby3D(app) {
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
-  document.addEventListener('visibilitychange', () => { if(document.hidden){app.clubStream?.(null);quietProjection();playProjection(null);resetMovement();cancelAnimationFrame(raf);last=0}
-    else {playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}} });
+  // app nascosta, o mini app ridotta a icona in Telegram (sleep/wake chiamati da app.js): niente disegno, niente film
+  function sleep(){app.clubStream?.(null);quietProjection();playProjection(null);resetMovement();cancelAnimationFrame(raf);last=0}
+  function wake(){if(document.hidden||asleep)return;playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}}
+  document.addEventListener('visibilitychange', () => { if(document.hidden)sleep();else wake() });
+  // Misure (Debug → Misure della Lobby 3D): fotogrammi al secondo, comandi di disegno, triangoli, texture
+  let statsBox=null,statsFrames=0,statsAt=0;
+  try{if(localStorage.getItem('binottoland-3d-stats')==='1')setStats(true)}catch{}
+  function setStats(on){
+    if(on&&!statsBox){statsBox=document.createElement('div');statsBox.style.cssText='position:absolute;left:calc(var(--ui-safe-left,0px) + 8px);bottom:calc(var(--ui-safe-bottom,0px) + 160px);z-index:5;padding:5px 8px;border-radius:8px;background:rgba(0,0,0,.6);font:11px/1.35 ui-monospace,monospace;color:#bff5c8;white-space:pre;pointer-events:none';el.append(statsBox);statsFrames=0;statsAt=performance.now()}
+    else if(!on&&statsBox){statsBox.remove();statsBox=null}
+  }
+  function countStats(now){
+    if(!statsBox)return;statsFrames++;
+    if(now-statsAt<1000)return;
+    const i=renderer.info,fps=Math.round(statsFrames*1000/(now-statsAt));statsFrames=0;statsAt=now;
+    statsBox.textContent=`${fps} fps · max ${Math.round(1000/(frameGap||16.7))}${slowPhone?' (telefono lento)':''}\ndisegni ${i.render.calls} · triangoli ${Math.round(i.render.triangles/1000)}k\ntexture ${i.memory.textures} · geometrie ${i.memory.geometries} · programmi ${i.programs?.length??'?'}\nluci accese ${roomLights.filter(r=>r.light.visible).length} · ${litRoom||'-'}`;
+  }
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
   // Luci per stanza: ogni luce in più pesa su ogni oggetto disegnato (sui telefoni si sente). Si accendono solo
@@ -2064,7 +2084,7 @@ export function createLobby3D(app) {
     const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
     return { progress, ready: loading.idle && lights && film };
   }
-  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

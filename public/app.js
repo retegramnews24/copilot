@@ -67,11 +67,16 @@ initCatalog();
 // Il tasto "Lobby classica" passa al 2D: la scelta (2D o 3D) resta ricordata su questo telefono in ogni caso,
 // anche entrando e uscendo dai giochi. Chiave: '0' = 2D; assente o '1' = 3D.
 const LOBBY3D_KEY='binottoland-lobby3d';let sharedTableVolume=80,lobby3d=null,lobby3dBack=0,lobby3dIdle=0,lastLobby=null;
-const want3D=()=>{try{return localStorage.getItem(LOBBY3D_KEY)!=='0'}catch{return true}};
+// la 3D non è partita su questo telefono (WebGL assente o rotto): per questa sessione si resta nella Lobby classica,
+// senza riprovare da soli ogni secondo (si riprova solo dal tasto «Lobby 3D»)
+let lobby3dFailed=false;try{lobby3dFailed=sessionStorage.getItem('binottoland-3d-failed')==='1'}catch{}
+const want3D=()=>{if(lobby3dFailed)return false;try{return localStorage.getItem(LOBBY3D_KEY)!=='0'}catch{return true}};
+// mini app ridotta a icona in Telegram (deactivated): come app nascosta, anche se il telefono non nasconde la pagina
+let tgAway=false;
 const lobbyIdle=()=>!$('page-game').hidden&&!$('lobby').hidden&&![...document.querySelectorAll('[id$="-overlay"]')].some(o=>!o.hidden)&&$('game-sheet')?.hidden!==false&&!document.querySelector('dialog[open]');
 let clubStation=null;
 function clubAudio(){
- window.binottolandClubRadio?.sync(!!lobby3d?.active && !document.hidden,clubStation);
+ window.binottolandClubRadio?.sync(!!lobby3d?.active && !document.hidden && !tgAway,clubStation);
 }
 function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
@@ -87,7 +92,13 @@ function pinballFlush(socket){
 }
 // la Lobby 3D si prepara (modelli, texture, luci) anche nascosta: parte già durante lo splash, poi si mostra
 async function makeLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=de060c3f53');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ try{return await buildLobby3D()}catch(e){
+  lobby3dFailed=true;try{sessionStorage.setItem('binottoland-3d-failed','1')}catch{}
+  document.documentElement.classList.remove('boot');trace('3D','Lobby 3D non disponibile: '+e.message);throw e
+ }
+}
+async function buildLobby3D(){
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=11e8c9ebbd');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
@@ -108,7 +119,7 @@ let lobbyImport=0;if(want3D()){const t0=Date.now(),tick=setInterval(()=>{lobbyIm
 
 // avvio scuro (classe boot): finisce quando la 3D è aperta, scegliendo il 2D, o al massimo dopo 26 secondi
 setTimeout(()=>document.documentElement.classList.remove('boot'),26000);
-$('lobby3d-open').onclick=()=>openLobby3D().catch(e=>err('Lobby 3D: '+e.message));
+$('lobby3d-open').onclick=()=>{lobby3dFailed=false;try{sessionStorage.removeItem('binottoland-3d-failed')}catch{}openLobby3D().catch(e=>err('Lobby 3D: '+e.message))};
 // In 3D: ogni volta che la Lobby è libera (all'avvio dopo lo splash, uscendo da un gioco, tornando da Settings o
 // da Giochi) dopo due controlli tranquilli la 3D si riapre da sola. Appena aperto un gioco si aspetta un attimo.
 setInterval(()=>{if(!want3D()||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
@@ -430,7 +441,10 @@ function connectLobby(){
  socket.onclose=()=>{lobby3d?.stoolDisconnected();clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
-$('open-debug').onclick=()=>selectPage('debug');
+$('open-debug').onclick=()=>{show3DStats();selectPage('debug')};
+// Debug → misure della Lobby 3D (fotogrammi, disegni, texture): restano accese su questo telefono finché le spegni
+function show3DStats(){let on=false;try{on=localStorage.getItem('binottoland-3d-stats')==='1'}catch{}$('debug-3d-stats').textContent='Misure della Lobby 3D: '+(on?'accese':'spente');$('debug-3d-stats').setAttribute('aria-pressed',String(on));return on}
+$('debug-3d-stats').onclick=()=>{const on=!show3DStats();try{localStorage.setItem('binottoland-3d-stats',on?'1':'0')}catch{}lobby3d?.stats?.(on);show3DStats()};
 $('back-settings').onclick=()=>selectPage('settings');
 // Settings: secondary pages, preferences, live preview, problem report, developer mode.
 document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selectPage('settings'));
@@ -573,7 +587,10 @@ function fitViewport(){
  cinema.post('insets',{insets});
  document.documentElement.style.setProperty('--app-height',height+'px');requestAnimationFrame(fitBoard);
 }
-for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
+for(const event of ['viewportChanged','safeAreaChanged','contentSafeAreaChanged','fullscreenChanged'])tg?.onEvent(event,fitViewport);
+// Telegram 8.0+: mini app ridotta a icona o coperta. La 3D si ferma, la radio del club tace, il server ti segna assente.
+tg?.onEvent('deactivated',()=>{tgAway=true;stopReplay();sendPresence(true);clubAudio();lobby3d?.sleep?.()});
+tg?.onEvent('activated',()=>{tgAway=false;lobby3d?.wake?.();sendPresence();clubAudio();lobbyAlive()});window.addEventListener('resize',fitViewport);document.addEventListener('fullscreenchange',fitViewport);document.addEventListener('webkitfullscreenchange',fitViewport);window.visualViewport?.addEventListener('resize',fitViewport);
 fitViewport();refreshDebug();
 
 
@@ -743,7 +760,7 @@ async function startSession(){
   const startRoom=alerts.startRoom();if(startRoom){try{await openRoom(startRoom);if(room===startRoom)selectPage('game')}catch(e){err(e.message)}}
  }catch(e){$('app-shell').hidden=true;accessFailed=true;window.binottolandAccessError?.(e.message,tg?.initData?startSession:null);trace('AUTH','Accesso non completato')}
 }
-function sendPresence(away=document.hidden){
+function sendPresence(away=document.hidden||tgAway){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',inClub:!!lobby3d?.active,pose:lobby3d?.pose()??null,room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||labyrinth.room()||room,away}));
 }
 
