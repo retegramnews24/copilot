@@ -26,16 +26,16 @@
     bands = [],
     fxFailed = new Set();
   // iPhone: il volume di un elemento audio non si cambia da programma (resta sempre al massimo). Il lettore con CORS
-  // (fx) passa da Web Audio: lì il volume è un regolatore (level) e funziona ovunque. Il lettore semplice non si può
+  // (fx) passa da Web Audio: lì il volume è un regolatore (volumeNode) e funziona ovunque. Il lettore semplice non si può
   // far passare da Web Audio (resterebbe muto): quando il suo volume è quasi zero lo si mette in muto, che su iPhone vale.
-  let level = null,
+  let volumeNode = null,
     fxLevel = 1,
     plainLevel = 1;
   function setFx(v) {
     fxLevel = v;
-    if (level) {
+    if (volumeNode) {
       fx.volume = 1;
-      level.gain.value = v;
+      volumeNode.gain.value = v;
     } else fx.volume = v;
   }
   function setPlain(v) {
@@ -384,7 +384,7 @@
         const gain = ctx.createGain(),
           pan = ctx.createStereoPanner();
         gain.gain.value = 0;
-        level.connect(gain).connect(pan).connect(ctx.destination);
+        volumeNode.connect(gain).connect(pan).connect(ctx.destination);
         channels[i] = { gain, pan };
       }
       channels[i].gain.gain.setTargetAtTime(level * 0.47, ctx.currentTime, 0.04);
@@ -409,9 +409,9 @@
       analyser.smoothingTimeConstant = 0.78;
       source.connect(analyser);
       directBus = ctx.createGain();
-      level = ctx.createGain();
-      analyser.connect(level);
-      level.connect(directBus).connect(ctx.destination);
+      volumeNode = ctx.createGain();
+      analyser.connect(volumeNode);
+      volumeNode.connect(directBus).connect(ctx.destination);
       setFx(fxLevel);
       routeClub(sharedMode);
       bins = new Uint8Array(analyser.frequencyBinCount);
