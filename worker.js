@@ -762,8 +762,9 @@ export class Room extends DurableObject {
       }
       // flipper della Lobby 3D: la partita si annuncia all'inizio, poi il punteggio di fine partita entra nella
       // classifica (top 10 con il nome) se è possibile per il tempo giocato
+      // (l'inizio si salva per persona, non nel collegamento: vedi club-pinball.js)
       if (b.type === 'pinball-start' && a.inClub && !a.closed) {
-        if (startPinball(a, b.table === 'gt' ? 'gt' : 'gp')) ws.serializeAttachment(a);
+        await this.ctx.blockConcurrencyWhile(() => startPinball(this.ctx, a, b.table === 'gt' ? 'gt' : 'gp'));
         return;
       }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {

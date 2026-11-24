@@ -1,9 +1,15 @@
 # Analisi di Binottoland Playground
 
-Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging` (commit `33ef835`).
-Per ora copre solo l'**Area 1: sicurezza e server**. Le altre aree verranno aggiunte in fondo.
+Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 
-**Vale anche per la produzione.** Il codice del server su `main` (`d2c9a02`, versione 1.0.57) è uguale a quello di `staging`, tranne quattro differenze piccole: il numero di versione in `api.js`, 17 righe in `balilla-hub.js`, un commento in `wrangler.jsonc` e il file `staging-worker.js`.
+- **Area 1: sicurezza e server**, letta sul commit `33ef835`.
+- **Area 2: multigiocatore**, letta sul commit `005b97d`, cioè dopo i tre commit «Sicurezza (analisi Fable, gruppo 1, 2 e 3)».
+
+Le altre aree verranno aggiunte allo stesso modo.
+
+**Area 1 e produzione.** Quando ho scritto l'Area 1 il codice del server su `main` (`d2c9a02`, versione 1.0.57) era uguale a quello di `staging`, tranne quattro differenze piccole. Ora `staging` ha in più i tre commit di sicurezza, che su `main` non ci sono ancora: quindi i problemi dell'Area 1 valgono ancora per la produzione. Su `staging` risultano affrontati; rileggendo per l'Area 2 ho visto le correzioni dei punti 1, 2, 3, 4, 5, 8, 9 e 10, gli altri non li ho ricontrollati.
+
+**Area 2 e produzione.** Per ogni problema dell'Area 2 è scritto se c'è solo su `staging` o anche su `main`. Due problemi sono nati proprio dalle correzioni di sicurezza e vanno sistemati prima di portarle su `main`.
 
 **Legenda**
 
@@ -17,9 +23,36 @@ Per ora copre solo l'**Area 1: sicurezza e server**. Le altre aree verranno aggi
 
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
+**Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
 ---
 
-## I 10 problemi più importanti
+## I problemi più importanti dell'Area 2 (multigiocatore)
+
+| # | Problema | Gravità | Dove c'è | Stato |
+|---|---|---|---|---|
+| A | Le vittorie di Biliardo, F1 e Golf online non arrivano più alla classifica né agli avvisi | alta | solo `staging` | [V] |
+| B | F1 e Biliardo: se un giocatore esce a metà, gli altri aspettano un minuto a ogni suo turno fino alla fine, e solo chi ha creato la partita può chiuderla | alta | `staging` e `main` | [V] |
+| C | Flipper: il punteggio si perde se il collegamento della Lobby cambia durante la partita (basta guardare una notifica) | media | solo `staging` | [V] |
+| D | Calcio balilla: se uno dei due guarda un'altra app per un attimo, perde il posto e il punteggio torna 0-0 per tutti e due | media | `staging` e `main` | [V] |
+| E | Sgabelli: dopo essere tornati da un'altra app il telefono ti crede ancora seduto (o con lo sgabello in mano) ma il server no | media | `staging` e `main` | [V] |
+| F | Posti del balilla e sgabelli restano occupati da collegamenti "fantasma" | media-bassa | `staging` e `main` | [V] il codice, [S] per quanto tempo |
+| G | Calcio balilla: la partita vive solo in memoria, a ogni pubblicazione il punteggio riparte da zero | media-bassa | `staging` e `main` | [V] |
+| H | Pong: mentre ti ricolleghi un altro può prenderti il posto e la partita si azzera | bassa | `staging` e `main` | [V] |
+| I | Nessun controllo che il collegamento sia davvero vivo: "In diretta" anche quando non lo è, comandi persi in silenzio | bassa | `staging` e `main` | [V] il codice, [S] quanto dura |
+| J | F1 e Biliardo: se la rete cade o la sessione scade il gioco resta fermo senza dire niente | bassa | `staging` e `main` | [V] |
+
+Il dettaglio di ognuno è nella sezione «Area 2: multigiocatore», più sotto.
+
+**Aggiornamento del 24 novembre 2026: A e C corretti su `staging`** (modifiche non ancora in un commit).
+
+- **A:** Biliardo, F1 e Golf mandano la chiave interna e segnalano nei log se la Lobby non registra il risultato. Prova nuova: `tests/arcade-result.test.mjs`.
+- **C:** l'inizio della partita al flipper è salvato per persona nello spazio della Lobby (chiave `pinballStart:<id>`), non più nel collegamento; un inizio più vecchio di 3 ore non vale. Il telefono tiene in attesa inizio e punteggio se la Lobby è scollegata e li manda appena si ricollega. Prova aggiornata: `tests/pinball-top.test.mjs`.
+- Non provato dal vivo su un telefono dentro Telegram.
+
+---
+
+## I 10 problemi più importanti dell'Area 1 (sicurezza e server)
 
 | # | Problema | Gravità | Stato |
 |---|---|---|---|
@@ -256,6 +289,126 @@ Controlli corretti [V]: un solo messaggio per turno, ore di silenzio, verifica c
 
 ---
 
+## Area 2: multigiocatore
+
+Come sono fatti i giochi online, in breve:
+
+| Gioco | Dove gira la partita | Come arriva al telefono |
+|---|---|---|
+| Calcio balilla | dentro l'oggetto della Lobby, solo in memoria, 30 aggiornamenti al secondo | collegamento in diretta della Lobby |
+| Pong | un oggetto per sala, salvato a ogni punto | collegamento in diretta suo |
+| F1 on paper!, Biliardo | un oggetto per partita, salvato a ogni mossa | il telefono chiede lo stato ogni 0,9 secondi |
+| Sgabelli, flipper, pose nella Lobby 3D | dentro il collegamento della Lobby (dati legati al singolo collegamento) | collegamento in diretta della Lobby |
+
+Molti problemi qui sotto hanno la stessa radice: **posto al balilla, sgabello e inizio della partita al flipper sono legati al singolo collegamento, e il telefono apre un collegamento nuovo ogni volta che torna in primo piano** (`public/app.js:507` chiama `connectLobby()`, che in `public/app.js:402-403` chiude il vecchio e ne apre uno nuovo).
+
+### 2.1 Risultati verso la Lobby
+
+**A. Le vittorie di Biliardo, F1 e Golf non arrivano più alla Lobby** — alta, [V], solo `staging`
+
+- **Dove:** `worker-shared.js:26-31` (`/lobby/result` è tra i percorsi interni), `worker.js:313-314` (senza chiave interna risponde 404), `biliardo-server.js:211-216` e `:223-224`, `f1-server.js:289-297` e `:309-310`, `golf-server.js:27` (chiamano `/lobby/result` senza la chiave e non guardano la risposta).
+- **Cosa succede:** il commit del gruppo 3 ha protetto `/lobby/result` con la chiave interna. I tavoli (`worker.js:126-133`) e Labyrinth (`labyrinth-server.js:14`) la mandano; Biliardo, F1 e Golf no. La Lobby risponde "non trovato" e il risultato si perde: niente riga in classifica, niente avviso «🏆 … vince».
+- **Quando:** a ogni partita online di Biliardo, F1 o Golf che finisce con un vincitore, su `staging`.
+- **Perché non si recupera:** il recupero dei risultati persi (`lobby-hub.js:261-267`) guarda solo i tavoli, non le sale arcade.
+- **Nota:** `tests/abuse-limits.test.mjs` controlla che il percorso sia protetto, ma nessuna prova controlla che una vittoria di Biliardo o F1 arrivi davvero in classifica.
+
+### 2.2 F1 on paper! e Biliardo
+
+**B. Un giocatore che esce a metà blocca il ritmo per tutti** — alta, [V], `staging` e `main`
+
+- **Dove, F1:** `f1-server.js:15` (un minuto per mossa), `:232` (a ogni giro riparte un minuto intero), `:172` (il conto dei giri "senza nessuno" si azzera se anche uno solo ha scelto), `:224` (la gara si chiude da sola solo se per 3 giri non sceglie nessuno), `:132-133` (dopo la partenza non si può uscire), `:355-356` (in gara la chiude solo chi l'ha creata).
+- **Dove, Biliardo:** `biliardo-server.js:14` (un minuto a colpo), `:166-167` (il conto dei colpi automatici si azzera a ogni colpo di una persona), `:176`, `:80-81`, `:260-261`.
+- **Cosa succede:** chi esce viene guidato dal pilota automatico, ma solo allo scadere del minuto, ogni volta. Finché almeno una persona gioca, la partita non viene mai considerata abbandonata.
+- **Quando, F1:** 4 piloti, uno chiude Telegram al terzo giro. Gli altri tre scelgono in pochi secondi, poi aspettano il resto del minuto. Una gara da 40 giri di mosse dura 40 minuti. Se chi è uscito è il creatore, nessuno può chiuderla.
+- **Quando, Biliardo:** uno contro uno, l'avversario esce. Dopo ogni tuo colpo aspetti un minuto per il suo; se il pilota automatico imbuca e resta al tavolo, un altro minuto per ogni colpo. Il pilota automatico può anche vincere, e la vittoria va a chi se n'è andato.
+- **Aggrava:** aprire dalla Lobby una partita in attesa ti fa entrare come giocatore (`public/f1-link.js:74-78`, `public/biliardo-link.js:67-71`) e a posti pieni si parte da soli (`f1-server.js:364`, `biliardo-server.js:269`). Chi voleva solo dare un'occhiata diventa un pilota che poi se ne va.
+
+**J. Rete caduta o sessione scaduta: il gioco resta fermo senza dire niente** — bassa, [V], `staging` e `main`
+
+- **Dove:** `public/f1-link.js:60-61`, `public/biliardo-link.js:53-54`.
+- **Cosa succede:** quando la richiesta di stato fallisce, il telefono reagisce solo a "partita chiusa" (404). Tutti gli altri errori vengono ignorati: il tavolo resta com'era, il conto alla rovescia continua con l'orologio del telefono, nessun messaggio.
+- **Quando:** in galleria, o dopo essere stati tolti dal gruppo.
+
+**Altro, gravità bassa** [V]
+
+- In sala d'attesa qualunque ospite può chiudere (cancellare) la partita di un altro, non solo uscirne: `f1-server.js:353-357`, `biliardo-server.js:259-262`. Il gioco agli ospiti mostra solo «Esci» (`public/gara/main.js:868`), quindi serve una richiesta fatta a mano.
+- Se la Lobby non conferma la rimozione, la sveglia della partita finita va in errore (`biliardo-server.js:227-231`, `f1-server.js:313-318`). **[S]** Dopo i tentativi di Cloudflare la partita potrebbe restare per sempre nell'elenco.
+- F1: se rifare una mossa sul telefono dà errore, l'errore viene solo scritto nella console (`public/gara/main.js:862`) e la gara su quel telefono resta indietro, senza ripartire dall'inizio. **[S]** Non ho trovato un caso che lo provochi.
+- Cose che funzionano bene: il telefono che ha perso più mosse salta allo stato del server senza animarle tutte (`public/gara/main.js:789`, `public/biliardo/main.js:756`); il server rifà ogni colpo e ogni mossa, quindi i telefoni non possono divergere a lungo.
+
+### 2.3 Flipper
+
+**C. Punteggio perso se il collegamento cambia durante la partita** — media, [V], solo `staging`
+
+- **Dove:** `club-pinball.js:16-20` e `:29-30` (l'inizio della partita è scritto nel collegamento, e senza inizio il punteggio è rifiutato), `lobby-hub.js:316-327` (un collegamento nuovo nasce vuoto), `public/app.js:507` e `:402-403` (collegamento nuovo a ogni ritorno in primo piano), `public/lobby3d/flipper3d.js:505-509` (l'inizio si annuncia una volta sola, quando ti metti al flipper), `public/app.js:83` (inizio e punteggio partono solo se in quel momento il collegamento è aperto, senza riprovare).
+- **Cosa succede:** il controllo contro i punteggi inventati (gruppo 1) si fida dell'ora d'inizio salvata nel collegamento. Se il collegamento viene sostituito a metà partita, quello nuovo non ha nessun inizio e il punteggio finale viene scartato in silenzio. Il display del flipper ti dice comunque la posizione in classifica, perché la calcola da solo (`flipper3d.js:786-792`).
+- **Quando:** partita da 8 minuti; a metà abbassi la tendina delle notifiche per due secondi. Oppure il collegamento cade e si riapre dopo 4 secondi. Oppure ti metti al flipper proprio mentre si sta ricollegando.
+
+### 2.4 Calcio balilla
+
+**D. Un attimo in un'altra app: posto perso e punteggio a zero** — media, [V], `staging` e `main`
+
+- **Dove:** `public/app.js:507` (app nascosta: `sendPresence(true)`), `worker.js:782-786` (il server ti toglie dal club e chiama `balilla.leave`), `balilla-hub.js:344-364` (`leave`), `balilla-hub.js:300-306` (`updateBar`: con una sola persona seduta il tavolo passa in allenamento e il punteggio diventa 0-0), `public/lobby3d/balilla.js:407` (online si gioca sempre in modalità "bar").
+- **Cosa succede:** basta che uno dei due nasconda l'app per un momento. Il server lo fa alzare, l'altro resta da solo, il tavolo passa in allenamento e il punteggio si azzera. Al ritorno il telefono apre un collegamento nuovo e si risiede da solo, ma solo dopo 3-6 secondi (`balilla.js:736-741`: chiede lo stato ogni 3 secondi e si risiede al giro dopo).
+- **Quando:** siete 7 a 6, l'avversario riceve una chiamata o guarda una notifica. Tornate 0-0.
+- **In più:** in quei secondi il telefono si crede ancora seduto (usa l'ultimo stato ricevuto, `balilla.js:406`), muove le aste sullo schermo (`balilla.js:611-616`) e manda comandi che il server ignora (`balilla-hub.js:161-163`).
+- **Costo:** ogni ritorno in primo piano di chiunque fa due invii completi della Lobby a tutti, uno per il collegamento chiuso (`worker.js:867`) e uno per quello nuovo (`lobby-hub.js:328`).
+
+**G. La partita vive solo in memoria** — media-bassa, [V], `staging` e `main`
+
+- **Dove:** `balilla-hub.js:98-108` (campo e punteggio sono variabili dell'oggetto), `:110-132` (`restore` rimette le persone ai loro posti, ma con un campo nuovo, `:124-127`).
+- **Quando:** a ogni pubblicazione su Cloudflare (su `staging` a ogni push) o riavvio dell'oggetto Lobby: punteggio e partite vinte ripartono da zero.
+
+**F. Posto occupato da un collegamento fantasma** — media-bassa, [V] il codice, [S] per quanto tempo, `staging` e `main`
+
+- **Dove:** `balilla-hub.js:148-150` (chi è seduto: nessun controllo su quando si è fatto sentire l'ultima volta), `:154-157` (il controllo dei 15 secondi c'è solo per "gioco sul telefono").
+- **Cosa succede:** se un telefono sparisce senza chiudere il collegamento (galleria, batteria), il suo lato resta «Lato occupato» finché Cloudflare non si accorge che il collegamento è morto. La stessa persona, tornando, si riprende il posto (`:205-219`); gli altri no. Il telefono manda già un segnale ogni 3 secondi (`member.seenAt`, `:169`), ma per i posti non viene usato.
+- **Anche:** chi resta seduto senza giocare tiene il posto per sempre; dopo 5 minuti il tavolo si ferma (`:318-321`) ma il posto no.
+
+**Altro, gravità bassa** [V]
+
+- Se la stessa persona si siede da un secondo dispositivo su un lato diverso, il primo dispositivo viene tolto dal tavolo senza passare da `leave` (`balilla-hub.js:205-219`): il timer non si ferma e le aste non vengono bloccate.
+- Il calcio balilla gira dentro l'oggetto della Lobby: quando la Lobby ha molto da fare (invii completi, molte persone che camminano) gli aggiornamenti del tavolo possono arrivare a scatti. **[S]** Da misurare con più persone collegate.
+
+### 2.5 Sgabelli e Lobby 3D
+
+**E. Dopo un attimo in un'altra app, telefono e server non sono più d'accordo sullo sgabello** — media, [V], `staging` e `main`
+
+- **Dove:** `worker.js:783-784` (app nascosta: il server cancella la tua prenotazione dello sgabello), `public/app.js:402` (il vecchio collegamento viene chiuso con `onclose=null`, quindi `stoolDisconnected` di `public/app.js:407` e `public/lobby3d/lobby3d.js:2034` non parte), `club-stools.js:19` (chi non ha la prenotazione riceve "no"), `lobby3d.js:549-552` (al "no" il telefono non cambia niente).
+- **Quando, seduto:** sei sullo sgabello 3, guardi una notifica, torni. Sul tuo schermo sei ancora seduto, per il server lo sgabello è libero: un altro può sedersi sullo stesso sgabello. Quando ti alzi, l'altezza che avevi regolato non viene salvata.
+- **Quando, con lo sgabello in mano:** al ritorno il telefono crede di portarlo ancora, ma ogni tentativo di posarlo viene rifiutato. Resti con lo sgabello in mano finché non esci dalla Lobby 3D (`lobby3d.js:1984-1985`).
+
+**F (sgabelli). Sgabello bloccato da un collegamento fantasma** — media-bassa, [V] il codice, [S] per quanto tempo
+
+- **Dove:** `club-stools.js:12-15` (occupato se un collegamento qualsiasi ha la prenotazione: non guarda `seen`), `lobby-hub.js:126` (invece l'elenco delle persone nasconde chi tace da 65 secondi), `socket-limits.js:25` (i collegamenti vecchi della stessa persona si chiudono solo dal terzo in poi).
+- **Quando:** il telefono perde la rete mentre sei seduto. Tu sparisci dalla sala dopo 65 secondi, ma lo sgabello resta inutilizzabile per tutti, e anche per te quando torni con un collegamento nuovo.
+
+**I. Nessun controllo che il collegamento sia vivo** — bassa, [V] il codice, [S] quanto dura
+
+- **Dove:** `public/app.js:759` (un segnale ogni 25 secondi, ma senza aspettare risposta), `public/app.js:81-83` e `:724` (si scrive se il collegamento "risulta" aperto).
+- **Cosa succede:** quando la rete cambia (Wi-Fi → dati) il collegamento può restare "aperto" per il browser anche se è morto. La Lobby dice «● In diretta», comandi e posizioni vanno persi, e il ricollegamento parte solo quando il browser se ne accorge.
+
+**Altro, gravità bassa** [V]
+
+- Cabinati: chi guarda una partita senza giocarla viene disegnato sul posto del primo giocatore (`lobby3d.js:1397`, `Math.max(0, …)`). F1 ha fino a 8 piloti ma il cabinato ha 5 posti (`lobby3d.js:1130`, `:1399`): dal sesto in poi si sovrappongono ai primi.
+- Il posto libero al cabinato e sul divano lo sceglie il telefono (`lobby3d.js:1882`, `:1951`, `:1958`), il server non arbitra. **[S]** Due persone che si siedono nello stesso istante possono finire sovrapposte.
+- Cose che funzionano bene: le posizioni degli altri arrivano con il messaggio piccolo ogni 200 ms e vengono ammorbidite sul telefono (`lobby3d.js:1322-1328`); chi tace da 65 secondi sparisce; con più collegamenti della stessa persona conta il più recente (`lobby-hub.js:128-136`).
+
+### 2.6 Pong
+
+**H. Posto preso durante il ricollegamento** — bassa, [V], `staging` e `main`
+
+- **Dove:** `pong-server.js:145-159` (alla caduta la sala torna "in attesa" con un posto libero, visibile nella Lobby), `:62-72` (chi entra in un posto che era di un altro azzera la partita), `public/arcade-link.js:198-211` (chi era caduto riprova dopo 0,85 secondi e trova «sala al completo»).
+- **Quando:** siete 9 a 8, la rete del tuo avversario cade tre secondi. Un terzo vede la sala con un posto libero, entra: partita azzerata, il tuo avversario resta fuori.
+
+**Altro, gravità bassa** [V]
+
+- Nessuna pausa se uno dei due ha l'app in secondo piano o il collegamento mezzo morto: la sua racchetta resta ferma (`pong-server.js:98`) e l'altro segna fino alla fine. La sala passa "in attesa" solo quando il collegamento si chiude davvero.
+- La partita avanza solo quando arriva un comando (`pong-server.js:115-123`). Finché almeno uno dei due telefoni scrive va bene; è un limite da tenere presente se un giorno ci saranno spettatori.
+- **[S]** Se dopo un riavvio del server l'evento di chiusura non arriva, la sala vuota resta nell'elenco: la sveglia che la toglie parte solo dalla chiusura (`pong-server.js:157`, `:161-168`).
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -278,3 +431,26 @@ Controlli corretti [V]: un solo messaggio per turno, ore di silenzio, verifica c
 | 16 | Prove automatiche per i punti 1-4: molti collegati che camminano, classifica e mossa insieme, Telegram che non risponde, collegamenti in eccesso | tutti | medio |
 
 **Ordine consigliato:** 3, 4 e 5 subito (piccoli e chiudono tre problemi alti o medi), poi 1 e 2, poi il resto.
+
+### Proposte per l'Area 2
+
+| # | Proposta | Risolve | Sforzo |
+|---|---|---|---|
+| 2.1 | Biliardo, F1 e Golf mandano la chiave interna quando scrivono il risultato (come fa già Labyrinth) e controllano la risposta. Una prova automatica: partita finita → riga in classifica | A | piccolo |
+| 2.2 | Flipper: tenere l'inizio della partita per persona (in memoria nell'oggetto Lobby, o nello spazio) invece che nel collegamento; il telefono rimanda inizio e punteggio se in quel momento è scollegato | C | piccolo |
+| 2.3 | Non aprire un collegamento nuovo a ogni ritorno in primo piano: riaprirlo solo se è chiuso o non risponde. Da solo toglie gran parte di C, D ed E e dimezza gli invii completi della Lobby | C, D, E | piccolo |
+| 2.4 | App nascosta: non far alzare subito dal balilla e dallo sgabello. Tenere il posto per un tempo di grazia (per esempio 20-30 secondi) e liberarlo solo se la persona non torna | D, E | medio |
+| 2.5 | Calcio balilla: non azzerare il punteggio quando l'avversario si alza; azzerarlo quando si siede una persona diversa, o dopo il tempo di grazia | D | piccolo |
+| 2.6 | Posti e sgabelli: liberarli quando il collegamento tace da troppo (il balilla ha già il segnale ogni 3 secondi, gli sgabelli hanno `seen`). Sgabelli: la stessa persona che torna si riprende la sua prenotazione | F | piccolo |
+| 2.7 | Quando il collegamento della Lobby si riapre, il telefono rimette a posto il suo stato: si alza dallo sgabello o richiede la prenotazione, e si risiede subito al balilla senza aspettare il giro dei 3 secondi | D, E | piccolo |
+| 2.8 | F1 e Biliardo: segnare quando ogni giocatore ha chiesto lo stato l'ultima volta. Chi non si fa sentire da 15-20 secondi viene guidato subito dal pilota automatico (pochi secondi invece di un minuto). Contare l'assenza per giocatore e non per partita | B | medio |
+| 2.9 | F1 e Biliardo: tasto «Abbandona» per chi vuole uscire (da lì in poi pilota automatico immediato). Se il creatore è assente, anche gli altri possono chiudere. Biliardo a due: l'assenza prolungata dell'avversario vale come vittoria per chi resta | B | medio |
+| 2.10 | Aprire dalla Lobby una partita in attesa mostra prima la sala d'attesa con un tasto «Entra», invece di farti entrare subito | B | piccolo |
+| 2.11 | Calcio balilla: salvare punteggio e partite vinte a ogni gol, e riprenderli dopo un riavvio | G | piccolo |
+| 2.12 | Pong: tenere il posto di chi è caduto per 15-20 secondi prima di offrirlo ad altri; mettere in pausa se uno dei due non manda comandi da qualche secondo | H | piccolo |
+| 2.13 | Controllo del collegamento sul telefono: se dopo il segnale periodico non arriva niente entro pochi secondi, chiudere e riaprire. Su Cloudflare si può rispondere al segnale senza svegliare l'oggetto (`setWebSocketAutoResponse`) | I | piccolo |
+| 2.14 | F1 e Biliardo: dopo alcune richieste di stato fallite mostrare «Collegamento perso, riprovo…»; se la sessione è scaduta dirlo | J | piccolo |
+| 2.15 | Cabinati: chi guarda sta in piedi dietro, non sul primo posto; F1 con più di 5 piloti: gli altri in piedi accanto | 2.5 | piccolo |
+| 2.16 | Prove automatiche: collegamento sostituito a metà partita (flipper, balilla, sgabello), giocatore assente in F1 e Biliardo, posto di Pong durante il ricollegamento | tutti | medio |
+
+**Ordine consigliato per l'Area 2:** 2.1 e 2.2 prima di portare le correzioni di sicurezza su `main` (sono nati da lì). Poi 2.3, che è piccola e migliora tre problemi insieme. Poi 2.8 e 2.9, che sono il problema più sentito da chi gioca. Il resto dopo.

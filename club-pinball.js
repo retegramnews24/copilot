@@ -4,18 +4,27 @@
 // Contro i punteggi inventati: la partita va annunciata all'inizio (messaggio "pinball-start") e il punteggio di fine
 // partita non può superare quello che si fa in quel tempo (PINBALL_RATE punti al secondo, molto più di una partita
 // vera). Un punteggio falso già in classifica si toglie con il comando di amministrazione (removePinball).
+// L'inizio si salva per persona nello spazio della Lobby (chiave "pinballStart:<id>"), non nel collegamento: il
+// telefono apre un collegamento nuovo ogni volta che torna in primo piano o che la rete cade un attimo, e con
+// l'inizio scritto nel collegamento vecchio il punteggio di fine partita veniva scartato.
 export const PINBALL_TOP = 10;
 export const PINBALL_MAX = 50_000_000;
 export const PINBALL_RATE = 20000; // punti al secondo al massimo, più PINBALL_GRACE
 export const PINBALL_GRACE = 5000;
+export const PINBALL_GAME_MAX = 3 * 3600000; // un inizio più vecchio di 3 ore non vale più
+export const PINBALL_START_GAP = 2000; // al massimo un annuncio ogni 2 secondi per tavolo (ogni annuncio è una scrittura)
 // tavolo → chiave nello storage (il Grand Prix tiene la chiave di prima)
 export const PINBALL_KEYS = { gp: 'pinballTop', gt: 'pinballTopGT' };
-const startKey = table => (table === 'gp' ? 'pinballStart' : 'pinballStart_' + table);
+export const pinballStartKey = id => 'pinballStart:' + id;
 
-// inizio partita (dal telefono): si segna l'ora nel collegamento
-export function startPinball(attachment, table = 'gp') {
-  if (!PINBALL_KEYS[table]) return false;
-  attachment[startKey(table)] = Date.now();
+// inizio partita (dal telefono): si segna l'ora, per persona e per tavolo
+export async function startPinball(ctx, attachment, table = 'gp') {
+  const id = attachment?.user?.id;
+  if (!PINBALL_KEYS[table] || id == null) return false;
+  const now = Date.now(),
+    starts = (await ctx.storage.get(pinballStartKey(id))) ?? {};
+  if (now - (starts[table] || 0) < PINBALL_START_GAP) return false;
+  await ctx.storage.put(pinballStartKey(id), { ...starts, [table]: now });
   return true;
 }
 
@@ -25,13 +34,16 @@ export async function recordPinball(ctx, attachment, score, table = 'gp') {
   if (!key || !user?.id || !Number.isInteger(score) || score <= 0 || score > PINBALL_MAX) return false;
   const now = Date.now(),
     stamp = table === 'gp' ? 'pinballAt' : 'pinballAt_' + table;
-  // partita annunciata e punteggio possibile per la sua durata
-  const started = attachment[startKey(table)];
-  if (!Number.isFinite(started) || started > now) return false;
+  // partita annunciata (da questo collegamento o da uno precedente della stessa persona) e punteggio possibile
+  // per la sua durata
+  const { [table]: started, ...others } = (await ctx.storage.get(pinballStartKey(user.id))) ?? {};
+  if (!Number.isFinite(started) || started > now || now - started > PINBALL_GAME_MAX) return false;
   if (score > PINBALL_GRACE + (PINBALL_RATE * (now - started)) / 1000) return false;
   if (now - (attachment[stamp] || 0) < 20000) return false;
   attachment[stamp] = now;
-  delete attachment[startKey(table)]; // un punteggio per partita annunciata
+  // un punteggio per partita annunciata
+  if (Object.keys(others).length) await ctx.storage.put(pinballStartKey(user.id), others);
+  else await ctx.storage.delete(pinballStartKey(user.id));
   const list = (await ctx.storage.get(key)) ?? [];
   const id = String(user.id),
     name = String(user.name || 'Giocatore').slice(0, 24);

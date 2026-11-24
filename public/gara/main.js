@@ -737,8 +737,17 @@ function netMenu() {
   const on = !!net, owner = on && me && net.state.owner === me.player;
   for (const id of ['again', 'newT', 'tutAgain2']) $(id).hidden = on;
   const seated = on && me && net.state.players.some((p) => p.id === me.player);
-  $('netClose').hidden = !(on && seated && (owner || net.state.phase === 'waiting' || net.state.phase === 'finished'));
-  $('netClose').textContent = net && net.state.phase === 'waiting' && !owner ? 'Esci da questa gara' : 'Chiudi la gara online';
+  // in gara chi non l'ha creata può abbandonare (la sua auto la guida il pilota automatico)
+  $('netClose').hidden = !(on && seated && netCloseKind()); $('netClose').dataset.sure = '';
+  $('netClose').textContent = { leave: 'Esci da questa gara', abandon: 'Abbandona la gara', close: 'Chiudi la gara online' }[netCloseKind()] || '';
+}
+function netCloseKind() {
+  const s = net && net.state;
+  if (!s || !me) return null;
+  const owner = s.owner === me.player, gone = (s.gone || []).includes(me.player);
+  if (owner || s.phase === 'finished' || (s.gone || []).includes(s.owner)) return 'close';
+  if (s.phase === 'waiting') return 'leave';
+  return gone ? null : 'abandon';
 }
 // sala d'attesa: chi c'è, quanti mancano; chi ha creato la gara può partire prima (con almeno 2 piloti)
 function netWaiting(s) {
@@ -753,9 +762,19 @@ function netWaiting(s) {
   }
   setTopH();
   const owner = !!(me && s.owner === me.player), missing = s.capacity - s.players.length;
+  const seated = !!(me && s.players.some((p) => p.id === me.player));
+  // chi l'ha aperta dalla Lobby guarda: entra solo se tocca «Entra in gara»
+  if (!seated) {
+    $('rcHelp').textContent = missing > 0 ? `Stai guardando: ${missing === 1 ? 'manca un pilota' : `mancano ${missing} piloti`}. Tocca «Entra in gara» per correre.` : 'Stai guardando: la gara è al completo.';
+    $('netGo').hidden = missing <= 0;
+    $('netGo').textContent = 'Entra in gara';
+    $('netGo').dataset.kind = 'join';
+    return;
+  }
   $('rcHelp').textContent = `Aspettiamo ${missing} ${missing === 1 ? 'pilota' : 'piloti'}: gli altri entrano dalla campanella o dalla Lobby di Binottoland.` + (owner && s.players.length >= 2 ? ' Puoi anche partire ora.' : '');
   $('netGo').hidden = !owner || s.players.length < 2;
   $('netGo').textContent = `Parti ora (${s.players.length})`;
+  $('netGo').dataset.kind = 'start';
 }
 async function netOpen(s, track) {
   tut.hide();
@@ -861,11 +880,15 @@ function netState(d) {
     await netSync();
   }).catch((err) => { console.error(err); busy = false; });
 }
-$('netGo').onclick = () => { $('netGo').hidden = true; toApp('action', { kind: 'start' }); };
+$('netGo').onclick = () => { $('netGo').hidden = true; toApp('action', { kind: $('netGo').dataset.kind === 'join' ? 'join' : 'start' }); };
 $('netClose').onclick = () => {
+  const kind = netCloseKind(), b = $('netClose');
+  if (!kind) return;
+  // abbandonare chiede conferma: la gara continua senza di te
+  if (kind === 'abandon' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sicuro? Tocca di nuovo per abbandonare'; return; }
+  b.dataset.sure = '';
   $('menu').hidden = true;
-  const owner = !!(me && net && net.state.owner === me.player);
-  toApp('action', { kind: !owner && net && net.state.phase === 'waiting' ? 'leave' : 'close' });
+  toApp('action', { kind });
 };
 // avvisi: nel disegno in basso, in gara in alto
 const say = (m) => ($('rc').classList.contains('on') ? banner(esc(m), 2400) : toast(m));

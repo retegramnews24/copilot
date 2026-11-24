@@ -6,6 +6,7 @@
 // race never stops. The clients replay the move list, so every phone shows the same race.
 import * as R from './public/gara/rules.js';
 import { distField } from './public/gara/ai.js';
+import { internalHeaders } from './worker-shared.js';
 
 const json = (body, status = 200) =>
   Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -15,6 +16,10 @@ const WAIT = 1800000, // a race nobody joins closes after 30 minutes
   TURN = 60000, // time for one move (or placing the car), then the autopilot plays it
   MAX_MOVES = 3000,
   MAX_POINTS = 12000;
+// Chi non chiede lo stato da AWAY (o ha abbandonato) è assente: per lui guida subito il pilota automatico,
+// lasciando GAP ai telefoni per animare il giro prima, invece di far aspettare un minuto a ogni giro.
+export const AWAY = 20000,
+  GAP = 3000;
 const TIMES = ['day', 'sunset', 'night'];
 
 const num = v => typeof v === 'number' && Number.isFinite(v) && Math.abs(v) < 1e5;
@@ -228,10 +233,29 @@ export function playRace(m, player, action, now, track, auto = false) {
     m.turnAt = null;
     m.abandoned = race.phase !== 'over';
     const id = race.phase === 'over' && race.winner != null ? m.seats[race.winner] : null;
-    m.winners = id ? m.players.filter(p => p.id === id) : [];
+    // chi ha abbandonato non vince, anche se il pilota automatico arriva primo con la sua auto
+    m.winners = id && !m.gone?.includes(id) ? m.players.filter(p => p.id === id) : [];
   } else if (m.moves.length > before) m.turnAt = now + TURN; // a new car on the line or a new round: one more minute
+  if (m.moves.length > before) m.movedAt = now;
   m.revision++;
   return entry;
+}
+// Abbandono a gara partita: da qui in poi la sua auto la guida il pilota automatico, senza aspettarlo
+export function abandonRace(m, player) {
+  if (m.phase !== 'place' && m.phase !== 'race') throw Error('La gara non è in corso.');
+  if (!m.seats.includes(player)) throw Error('Non sei in questa gara.');
+  if (m.gone?.includes(player)) return false;
+  m.gone = [...(m.gone || []), player];
+  m.revision++;
+  return true;
+}
+// The autopilot can play now: every car still owed belongs to someone away (and the phones had GAP to animate)
+function owedByAway(m, now, away) {
+  if (now < (m.movedAt || 0) + GAP) return false;
+  if (m.phase === 'place') return away(m.seats[m.race.turn]);
+  if (m.phase !== 'race' || !m.pending) return false;
+  const owed = active(m.race).filter(i => !m.pending[i]);
+  return owed.length > 0 && owed.every(i => away(m.seats[i]));
 }
 // What the phones see: who has already chosen in this round, never which move (nobody can copy the others).
 export function publicRace(m) {
@@ -248,8 +272,9 @@ export const raceTurn = m =>
     : m.race
       ? m.race.turn
       : 0;
-// Moves the autopilot owes (turns run out). Returns true when something changed.
-export function advanceRace(m, now, track) {
+// Moves the autopilot owes (turns run out, or only absent drivers left to choose). Returns true when something changed.
+// away(id): that driver is not there (no state request for AWAY, or abandoned).
+export function advanceRace(m, now, track, away = () => false) {
   let changed = false;
   for (
     let guard = 0;
@@ -257,6 +282,10 @@ export function advanceRace(m, now, track) {
     guard++
   ) {
     playRace(m, null, null, m.turnAt, track, true);
+    changed = true;
+  }
+  if ((m.phase === 'place' || m.phase === 'race') && owedByAway(m, now, away)) {
+    playRace(m, null, null, now, track, true);
     changed = true;
   }
   return changed;
@@ -267,6 +296,12 @@ export class F1Room {
     this.ctx = ctx;
     this.env = env;
     this.track = null;
+    // when each driver last asked for the state (in memory: after a restart everybody counts from now)
+    this.seen = new Map();
+    this.boot = Date.now();
+  }
+  away(m, now) {
+    return id => !!m.gone?.includes(id) || now - (this.seen.get(id) ?? this.boot) >= AWAY;
   }
   summary(m) {
     const { room, number, game, phase, created, revision, capacity, laps } = m;
@@ -286,11 +321,13 @@ export class F1Room {
       expires: null
     };
   }
+  // with the internal key: the Lobby takes results only from another object of the server (worker-shared.js)
   async lobby(path, body) {
     return this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
       'https://internal/lobby/' + path,
       {
         method: 'POST',
+        headers: await internalHeaders(this.env),
         body: JSON.stringify(body)
       }
     );
@@ -306,8 +343,15 @@ export class F1Room {
     await this.ctx.storage.setAlarm(next);
   }
   async update(m) {
-    if (m.phase === 'finished' && m.winners.length)
-      await this.lobby('result', { key: m.room + ':f1', game: 'f1', mode: 'people', winners: m.winners });
+    if (m.phase === 'finished' && m.winners.length) {
+      const saved = await this.lobby('result', {
+        key: m.room + ':f1',
+        game: 'f1',
+        mode: 'people',
+        winners: m.winners
+      });
+      if (!saved.ok) console.error('F1: result not recorded by the Lobby', m.room, saved.status);
+    }
     await this.lobby('update', this.summary(m));
   }
   async remove(m) {
@@ -336,7 +380,9 @@ export class F1Room {
         }
         if (!m) return json({ error: 'Gara chiusa.' }, 404);
         const track = await this.loadTrack();
-        if (advanceRace(m, now, track)) {
+        if (m.players.some(p => p.id === user.player)) this.seen.set(user.player, now);
+        const away = this.away(m, now);
+        if (advanceRace(m, now, track, away)) {
           await this.save(m);
           await this.update(m);
         }
@@ -352,8 +398,17 @@ export class F1Room {
         if (action === 'close') {
           if (!m.players.some(p => p.id === user.player))
             return json({ error: 'Solo i piloti possono chiudere la gara.' }, 403);
-          if (m.phase !== 'finished' && m.phase !== 'waiting' && user.player !== m.owner)
-            return json({ error: 'La gara è in corso: la chiude solo chi l’ha creata.' }, 403);
+          // in attesa e in gara la chiude chi l'ha creata; se lui non c'è più, anche gli altri piloti
+          if (m.phase !== 'finished' && user.player !== m.owner && !away(m.owner))
+            return json(
+              {
+                error:
+                  m.phase === 'waiting'
+                    ? 'La chiude chi l’ha creata: tu puoi uscire.'
+                    : 'La gara è in corso: la chiude solo chi l’ha creata.'
+              },
+              403
+            );
           await this.remove(m);
           return json({ ok: true });
         }
@@ -365,6 +420,7 @@ export class F1Room {
         } else if (action === 'leave') changed = leaveRace(m, user.player);
         else if (action === 'start') startRace(m, user.player, now, track);
         else if (action === 'play') playRace(m, user.player, body, now, track);
+        else if (action === 'abandon') changed = abandonRace(m, user.player);
         else return json({ error: 'Operazione non disponibile.' }, 404);
         if (changed) {
           await this.save(m);
@@ -389,7 +445,7 @@ export class F1Room {
         return;
       }
       const track = await this.loadTrack();
-      if (advanceRace(m, now, track)) {
+      if (advanceRace(m, now, track, this.away(m, now))) {
         await this.save(m);
         await this.update(m);
       } else await this.save(m);

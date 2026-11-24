@@ -7,12 +7,19 @@
 // i telefoni rifanno il colpo per animarlo e poi prendono il tavolo del server.
 // Chi non tira in tempo fa tirare il pilota automatico, così la partita non si ferma mai.
 import * as E from './public/biliardo/engine.js';
+import { internalHeaders } from './worker-shared.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const WAIT = 1800000, // una partita in cui non entra nessuno si chiude dopo 30 minuti
   KEEP = 300000, // una partita finita resta 5 minuti
   TURN = 60000, // tempo per un colpo, poi tira il pilota automatico
   MAX_SHOTS = 800;
+// Chi non chiede lo stato da AWAY è assente: per lui tira subito il pilota automatico (lasciando GAP ai telefoni
+// per animare il colpo prima), invece di far aspettare un minuto a ogni turno. Una squadra assente da FORFEIT,
+// o che ha abbandonato, perde la partita se dall'altra parte c'è qualcuno.
+export const AWAY = 20000,
+  GAP = 6000,
+  FORFEIT = 120000;
 export const BIL_VARIANTS = Object.keys(E.VARIANTS);
 const { TARGETS, DEFAULT_TARGET, REDS } = E;
 
@@ -159,6 +166,7 @@ export function playMatch(m, player, body, now, auto = false) {
   E.playShot(g, input);
   m.last = { seat, by, input, ...(auto ? { auto: true } : {}) };
   m.n++;
+  m.shotAt = now;
   // turni obbligati tra compagni: palla 8, palla 9 e boccette a ogni colpo; le altre specialità quando la
   // squadra lascia il tavolo. Il prossimo a tirare per quella squadra è sempre il compagno successivo.
   if (E.EVERY_SHOT.includes(m.variant) || g.cur !== seat) m.ptr[seat] = (m.ptr[seat] || 0) + 1;
@@ -172,24 +180,68 @@ export function playMatch(m, player, body, now, auto = false) {
     m.abandoned = !g.over;
     // vince tutta la squadra
     const ids = g.over && g.winner >= 0 ? E.teamOf(m, g.winner) : [];
-    m.winners = m.players.filter((p) => ids.includes(p.id));
+    m.winners = m.players.filter((p) => ids.includes(p.id) && !m.gone?.includes(p.id));
   } else m.turnAt = now + TURN;
   m.revision++;
   return m.last;
 }
-export function advanceMatch(m, now) {
+// La squadra side ha perso a tavolino (abbandono o assenza lunga): vince l'altra, chi è rimasto
+function forfeit(m, side, now) {
+  const g = m.match,
+    names = E.teamOf(m, side).map((id) => m.players.find((p) => p.id === id)?.name || '?');
+  g.over = true;
+  g.winner = 1 - side;
+  g.msg = (names.length > 1 ? 'Hanno lasciato la partita: ' : 'Ha lasciato la partita: ') + names.join(', ');
+  m.phase = 'finished';
+  m.finished = now;
+  m.turnAt = null;
+  m.forfeit = true;
+  m.winners = m.players.filter((p) => E.teamOf(m, 1 - side).includes(p.id) && !m.gone?.includes(p.id));
+  m.revision++;
+}
+// absence(id): da quanti ms quel giocatore non si fa sentire (Infinity se ha abbandonato)
+export function advanceMatch(m, now, absence = () => 0) {
   let changed = false;
+  if (m.phase === 'playing') {
+    const gone = (side) => E.teamOf(m, side).every((id) => absence(id) >= FORFEIT);
+    const here = (side) => E.teamOf(m, side).some((id) => absence(id) < AWAY);
+    for (const side of [0, 1])
+      if (m.phase === 'playing' && gone(side) && here(1 - side)) {
+        forfeit(m, side, now);
+        return true;
+      }
+  }
   for (let guard = 0; guard < 10 && m.phase === 'playing' && m.turnAt && now >= m.turnAt; guard++) {
     playMatch(m, null, null, m.turnAt, true);
     changed = true;
   }
+  // chi deve tirare è assente: tira subito il pilota automatico, un colpo alla volta
+  if (m.phase === 'playing' && absence(shooter(m)) >= AWAY && now >= (m.shotAt || 0) + GAP) {
+    playMatch(m, null, null, now, true);
+    changed = true;
+  }
   return changed;
+}
+// Abbandono durante la partita: da qui in poi tira il pilota automatico; se tutta la squadra ha lasciato, vince l'altra
+export function abandonMatch(m, player, now) {
+  if (m.phase !== 'playing') throw Error('La partita non è in corso.');
+  if (!m.seats.includes(player)) throw Error('Non sei in questa partita.');
+  m.gone = [...new Set([...(m.gone || []), player])];
+  m.revision++;
+  const side = [0, 1].find((s) => E.teamOf(m, s).includes(player));
+  if (E.teamOf(m, side).every((id) => m.gone.includes(id))) forfeit(m, side, now);
 }
 
 export class BiliardoRoom {
   constructor(ctx, env) {
     this.ctx = ctx;
     this.env = env;
+    // quando ogni giocatore ha chiesto lo stato l'ultima volta (in memoria: dopo un riavvio si riparte da adesso)
+    this.seen = new Map();
+    this.boot = Date.now();
+  }
+  absence(m, now) {
+    return (id) => (m.gone?.includes(id) ? Infinity : now - (this.seen.get(id) ?? this.boot));
   }
   summary(m) {
     const { room, number, game, phase, created, revision, capacity, variant } = m;
@@ -208,9 +260,11 @@ export class BiliardoRoom {
       expires: null
     };
   }
+  // con la chiave interna: la Lobby accetta i risultati solo da un altro oggetto del server (worker-shared.js)
   async lobby(path, body) {
     return this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch('https://internal/lobby/' + path, {
       method: 'POST',
+      headers: await internalHeaders(this.env),
       body: JSON.stringify(body)
     });
   }
@@ -220,8 +274,10 @@ export class BiliardoRoom {
     await this.ctx.storage.setAlarm(next);
   }
   async update(m) {
-    if (m.phase === 'finished' && m.winners.length)
-      await this.lobby('result', { key: m.room + ':biliardo', game: 'biliardo', mode: 'people', winners: m.winners });
+    if (m.phase === 'finished' && m.winners.length) {
+      const saved = await this.lobby('result', { key: m.room + ':biliardo', game: 'biliardo', mode: 'people', winners: m.winners });
+      if (!saved.ok) console.error('Biliardo: risultato non registrato dalla Lobby', m.room, saved.status);
+    }
     await this.lobby('update', this.summary(m));
   }
   async remove(m) {
@@ -245,7 +301,9 @@ export class BiliardoRoom {
           return json({ state: m, summary: this.summary(m), now });
         }
         if (!m) return json({ error: 'Partita chiusa.' }, 404);
-        if (advanceMatch(m, now)) {
+        if (m.players.some((p) => p.id === user.player)) this.seen.set(user.player, now);
+        const absence = this.absence(m, now);
+        if (advanceMatch(m, now, absence)) {
           await this.save(m);
           await this.update(m);
         }
@@ -257,8 +315,12 @@ export class BiliardoRoom {
         const body = raw ? JSON.parse(raw) : {};
         if (action === 'close') {
           if (!m.players.some((p) => p.id === user.player)) return json({ error: 'Solo i giocatori possono chiudere la partita.' }, 403);
-          if (m.phase === 'playing' && user.player !== m.owner)
-            return json({ error: 'La partita è in corso: la chiude solo chi l’ha creata.' }, 403);
+          // in attesa e in corso la chiude chi l'ha creata; se lui non c'è più, anche gli altri
+          if (m.phase !== 'finished' && user.player !== m.owner && absence(m.owner) < AWAY)
+            return json(
+              { error: m.phase === 'waiting' ? 'La chiude chi l’ha creata: tu puoi uscire.' : 'La partita è in corso: la chiude solo chi l’ha creata.' },
+              403
+            );
           await this.remove(m);
           return json({ ok: true });
         }
@@ -271,6 +333,7 @@ export class BiliardoRoom {
         else if (action === 'team') changed = teamMatch(m, user.player, body.team);
         else if (action === 'start') startMatch(m, user.player, now);
         else if (action === 'play') playMatch(m, user.player, body, now);
+        else if (action === 'abandon') abandonMatch(m, user.player, now);
         else return json({ error: 'Operazione non disponibile.' }, 404);
         if (changed) {
           await this.save(m);
@@ -291,7 +354,7 @@ export class BiliardoRoom {
         await this.remove(m);
         return;
       }
-      if (advanceMatch(m, now)) {
+      if (advanceMatch(m, now, this.absence(m, now))) {
         await this.save(m);
         await this.update(m);
       } else await this.save(m);
