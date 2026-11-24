@@ -1792,17 +1792,9 @@ export function createLobby3D(app) {
 
   }
 
-  // Fotogrammi: al massimo 60 al secondo (30 sui telefoni lenti) anche sugli schermi a 90-120 Hz; da fermi
-  // (telecamera immobile da più di un secondo e mezzo, niente partita, niente film) 30. Prima sempre al massimo.
-  const slowPhone = (navigator.deviceMemory && navigator.deviceMemory <= 3) || (navigator.hardwareConcurrency || 8) <= 4;
-  let lastDraw = 0, frameGap = 0, stillSince = 0, drawnAt = 0;
-  // guardia: con la 3D aperta e visibile, se per più di un secondo e mezzo non si è disegnato niente il ciclo riparte
-  setInterval(() => { if (active && !document.hidden && !asleep && performance.now() - drawnAt > 1500) { cancelAnimationFrame(raf); lastDraw = 0; raf = requestAnimationFrame(frame); } }, 1000);
-  const camWas = new THREE.Vector3(), camLook = new THREE.Quaternion();
+  // (il limite ai fotogrammi della proposta 3.3 è stato tolto: su Telegram per PC la Lobby restava ferma)
   function frame(now) {
     if (!active) return;
-    if (lastDraw && now >= lastDraw && now - lastDraw < frameGap - 2) { raf = requestAnimationFrame(frame); return; }
-    lastDraw = now; drawnAt = performance.now();
     if (!seating && !playing() && !monitor && !boardOpen) restoreActivityView();
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, last ? (now - last) / 1000 : 0.016);
@@ -1890,9 +1882,6 @@ export function createLobby3D(app) {
     topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
-    if(camWas.distanceToSquared(camera.position)>1e-8||1-Math.abs(camLook.dot(camera.quaternion))>1e-8){camWas.copy(camera.position);camLook.copy(camera.quaternion);stillSince=now}
-    const busy=playing()||pinball.active||tableFootball.active||!!monitor||boardOpen||!projection.hidden||joy.id!==null||keys.size>0;
-    frameGap=slowPhone||(!busy&&now-stillSince>1500)?1000/30:1000/60;
     countStats(now);
   }
   function resize() {
@@ -2027,9 +2016,6 @@ export function createLobby3D(app) {
   function sleep(){app.clubStream?.(null);quietProjection();playProjection(null);resetMovement();cancelAnimationFrame(raf);last=0}
   function wake(){if(document.hidden||asleep)return;playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}}
   document.addEventListener('visibilitychange', () => { if(document.hidden)sleep();else wake() });
-  // addormentata da Telegram ma qualcuno tocca o preme un tasto: chiaramente la mini app è davanti, si riparte
-  const rouse = () => { if (asleep && !document.hidden) { asleep = false; wake(); app.awake?.(); } };
-  for (const type of ['pointerdown', 'keydown']) addEventListener(type, rouse, true);
   // Misure (Debug → Misure della Lobby 3D): fotogrammi al secondo, comandi di disegno, triangoli, texture
   let statsBox=null,statsFrames=0,statsAt=0;
   try{if(localStorage.getItem('binottoland-3d-stats')==='1')setStats(true)}catch{}
@@ -2041,7 +2027,7 @@ export function createLobby3D(app) {
     if(!statsBox)return;statsFrames++;
     if(now-statsAt<1000)return;
     const i=renderer.info,fps=Math.round(statsFrames*1000/(now-statsAt));statsFrames=0;statsAt=now;
-    statsBox.textContent=`${fps} fps · max ${Math.round(1000/(frameGap||16.7))}${slowPhone?' (telefono lento)':''}\ndisegni ${i.render.calls} · triangoli ${Math.round(i.render.triangles/1000)}k\ntexture ${i.memory.textures} · geometrie ${i.memory.geometries} · programmi ${i.programs?.length??'?'}\nluci accese ${roomLights.filter(r=>r.light.visible).length} · ${litRoom||'-'}`;
+    statsBox.textContent=`${fps} fps\ndisegni ${i.render.calls} · triangoli ${Math.round(i.render.triangles/1000)}k\ntexture ${i.memory.textures} · geometrie ${i.memory.geometries} · programmi ${i.programs?.length??'?'}\nluci accese ${roomLights.filter(r=>r.light.visible).length} · ${litRoom||'-'}`;
   }
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
   const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
