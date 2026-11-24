@@ -53,6 +53,10 @@ const CSS = `
 .l3d-where{margin-left:auto;padding:7px 12px;border-radius:999px;background:rgba(18,14,28,.6);font-weight:600;font-size:14px}
 .l3d-hint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + 58px);padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.45);font-size:13px;color:#e7e1f3;text-align:center;max-width:86vw;transition:opacity .6s;pointer-events:none}
 .l3d-act{position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 34px);transform:translateX(-50%);width:auto!important;max-width:90vw;margin:0;font-weight:700!important;font-size:17px!important;padding:13px 24px!important;background:linear-gradient(180deg,#ffcf4a,#f29d1c)!important;color:#2a1600!important;border:0!important;box-shadow:0 6px 24px rgba(255,180,40,.45);white-space:nowrap}
+/* telefono: in basso ci sono joystick e tasti, quindi il tasto d'azione va in alto a sinistra (sotto "Lobby classica")
+   e l'avviso un po' più giù; i volumi vanno in alto a destra */
+.l3d-touch .l3d-act{left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 60px);bottom:auto;transform:none;max-width:48vw;font-size:14px!important;padding:10px 14px!important;white-space:normal;text-align:left}
+.l3d-touch .l3d-hint{top:calc(var(--ui-safe-top,0px) + 120px)}
 .l3d-act[hidden]{display:none}
 .l3d-stick{position:absolute;left:calc(var(--ui-safe-left,0px) + 26px);bottom:calc(var(--ui-safe-bottom,0px) + 26px);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:none}
 .l3d-stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6)}
@@ -74,6 +78,7 @@ export function createLobby3D(app) {
   const $ = (s) => el.querySelector(s);
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (touch) el.classList.add('l3d-touch');
   stick.hidden = !touch;
   // caricamento: modelli e texture passano tutti dal gestore predefinito di three.js. Lo splash ne mostra
   // l'avanzamento; finito tutto si preparano subito le luci di ogni sala, così aprendo la Lobby non scatta
@@ -528,7 +533,8 @@ export function createLobby3D(app) {
   for(const side of [-1,1])for(const end of [-1,1])addStool(-13+side*1.7,end*1.9,end>0?0:Math.PI,'Sala giochi');
   let carrying=null,requested=null;
   const stoolBar=document.createElement('div');
-  stoolBar.style.cssText='position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 112px);display:flex;gap:4px;white-space:nowrap';
+  // tasti dello sgabello: sul telefono in alto a sinistra, sotto il tasto d'azione (in basso ci sono joystick e tasti)
+  stoolBar.style.cssText=touch?'position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 112px);display:flex;flex-wrap:wrap;gap:4px;max-width:60vw':'position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 112px);display:flex;gap:4px;white-space:nowrap';
   el.append(stoolBar);
   function stoolButton(label,fn){
     const b=document.createElement('button');b.textContent=label;b.onclick=fn;stoolBar.append(b);return b;
@@ -874,8 +880,8 @@ export function createLobby3D(app) {
     sync();return {wrap,input,out,read,sync};
   }
   let cinemaLevel=1,heard=0,lastYT=-1;
-  // volumi: sul telefono a destra, sopra l'arco dei tasti attorno al joystick della visuale
-  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 230px);right:calc(var(--ui-safe-right,0px) + 12px);display:grid;gap:4px':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
+  // volumi: sul telefono in alto a destra, sotto "Vista dagli occhi" (in basso ci sono joystick e tasti)
+  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;top:calc(var(--ui-safe-top,0px) + 60px);right:calc(var(--ui-safe-right,0px) + 10px);max-width:48vw;display:grid;gap:4px;justify-items:end':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
   const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
   const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
   cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
@@ -1894,7 +1900,8 @@ export function createLobby3D(app) {
     monitor.frame.contentWindow.cabinetMonitor.aim(1-hit.uv.y);return true;
   }
   const seatActions=document.createElement('div');
-  seatActions.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  // seduti: "Entra nel cinema" / "Alzati"; sul telefono in alto a sinistra, al posto del tasto d'azione
+  seatActions.style.cssText=touch?'position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 60px);display:flex;gap:6px;flex-wrap:wrap;max-width:60vw':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap';
   const enterButton=document.createElement('button'),standButton=document.createElement('button');
   enterButton.textContent='Entra nel cinema';standButton.textContent='Alzati';seatActions.append(enterButton,standButton);el.append(seatActions);seatActions.hidden=true;
   function stand(){
