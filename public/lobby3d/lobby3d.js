@@ -1605,10 +1605,11 @@ export function createLobby3D(app) {
   // destra), dall'alto verso sinistra. Parata e abbassarsi valgono finché tieni premuto: lasciando ci si rialza.
   const moves = document.createElement('div');
   moves.className = 'l3d-moves'; moves.hidden = true;
-  const ARC = [['jump', '⤒', 'Salta', 90], ['punch', '👊', 'Colpo', 122], ['guard', '🛡️', 'Parata (tieni premuto)', 154], ['crouch', '⬇️', 'Abbassati (tieni premuto)', 186]];
-  // centro del joystick della visuale: 26 px dal bordo + metà dei suoi 120 px; tasti a 105 px dal centro
+  const ARC = [['jump', '⤒', 'Salta', 90], ['punch', '👊', 'Colpo', 128], ['guard', '🛡️', 'Parata (tieni premuto)', 166], ['crouch', '⬇️', 'Abbassati (tieni premuto)', 204]];
+  // centro del joystick della visuale: 26 px dal bordo + metà dei suoi 120 px; tasti a 92 px dal centro, attaccati
+  // al cerchio del joystick (38 gradi tra un tasto e l'altro: da 58 px non si toccano)
   moves.innerHTML = ARC.map(([m, icon, label, deg]) => {
-    const a = (deg * Math.PI) / 180, right = 86 - Math.cos(a) * 105 - 29, bottom = 86 + Math.sin(a) * 105 - 29;
+    const a = (deg * Math.PI) / 180, right = 86 - Math.cos(a) * 92 - 29, bottom = 86 + Math.sin(a) * 92 - 29;
     return `<button data-m="${m}" aria-label="${label}" style="right:calc(var(--ui-safe-right,0px) + ${right.toFixed(0)}px);bottom:calc(var(--ui-safe-bottom,0px) + ${bottom.toFixed(0)}px)">${icon}</button>`;
   }).join('');
   el.append(moves);
