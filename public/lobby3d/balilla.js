@@ -693,6 +693,14 @@ export function buildBalilla(scene, el, send, playSound) {
     close,
     input,
     move,
+    // collegamento della Lobby riaperto: il server non ci conosce più, ci si risiede subito (senza aspettare i 3 s)
+    reconnected() {
+      if (!watching) return;
+      net = null;
+      lastWatch = performance.now();
+      post('watch');
+      if (active) join();
+    },
     receive(data) {
       if (!watching) return;
       if (data.sound) {

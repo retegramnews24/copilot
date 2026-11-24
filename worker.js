@@ -708,6 +708,13 @@ export class Room extends DurableObject {
   }
 
   async webSocketMessage(ws, message) {
+    // controllo del collegamento dal telefono: risposta subito, senza leggere niente
+    if (message === 'ping') {
+      try {
+        ws.send('pong');
+      } catch {}
+      return;
+    }
     this.guardSocketsSoon();
     if (ws.deserializeAttachment()?.authDenied) return;
     const a = ws.deserializeAttachment();
