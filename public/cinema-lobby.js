@@ -161,7 +161,7 @@ export function createCinemaLobby({
         cinemaRooms = { rooms: [], active: null };
         projectionChanged?.();
       }
-      if (expired) cinemaLobbyMessage = 'Riapri Binottoland da Telegram.';
+      if (expired) cinemaLobbyMessage = 'Chiudi e riapri Binottoland dal bot.';
       renderCinemaLobby();
       cinemaPost('connection', { connected: false, message: expired ? cinemaLobbyMessage : undefined });
       if (!expired) retryCinema();
@@ -282,7 +282,7 @@ export function createCinemaLobby({
         signal: controller.signal
       });
       result = await response.json().catch(() => null);
-      if (response.status === 401) error = 'La sessione è scaduta. Riapri Binottoland da Telegram.';
+      if (response.status === 401) error = 'La sessione è scaduta. Chiudi e riapri Binottoland dal bot.';
       else if (!response.ok)
         error = result?.error || 'Ricerca YouTube non disponibile (HTTP ' + response.status + ').';
       else if (!Array.isArray(result?.items))

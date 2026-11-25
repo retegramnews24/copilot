@@ -52,7 +52,7 @@ export function createArcadeLink({
     status.textContent = online
       ? 'Nessuna sala aperta.'
       : state === 'expired'
-        ? 'Riapri Binottoland da Telegram.'
+        ? 'Chiudi e riapri Binottoland dal bot.'
         : 'Collegamento alle lavagne…';
     list.replaceChildren(
       ...rooms.map(entry => {
@@ -81,7 +81,7 @@ export function createArcadeLink({
   function openBlackboard(button, id) {
     if (!arcadeOverlay.hidden) return;
     blackboard.open(id);
-    openArcade(button, 'blackboard', 'Blackboard spazio libero');
+    openArcade(button, 'blackboard', 'Lavagna spazio libero');
   }
   $('open-blackboard').onclick = async () => {
     if (blackboardOpening || !arcadeOverlay.hidden) return;
@@ -192,7 +192,8 @@ export function createArcadeLink({
         stopPong();
         pongPost('status', {
           online: false,
-          error: event.code === 4000 ? 'Pong aperto in un’altra finestra.' : 'Riapri Binottoland da Telegram.'
+          error:
+            event.code === 4000 ? 'Pong aperto in un’altra finestra.' : 'Chiudi e riapri Binottoland dal bot.'
         });
         return;
       }
@@ -270,7 +271,7 @@ export function createArcadeLink({
           if (source === arcadeFrame.contentWindow && !arcadeOverlay.hidden)
             source.postMessage({ type: 'simulator:session', token: token() }, location.origin);
         } catch (e) {
-          onError(e.message || 'Riapri Binottoland da Telegram.');
+          onError(e.message || 'Chiudi e riapri Binottoland dal bot.');
         }
       })();
     } else if (event.data?.type === 'arcade:ready') {
@@ -280,7 +281,7 @@ export function createArcadeLink({
     else if (event.data?.type === 'arcade:haptic') {
       // games in the arcade frame (Acquedotto!) ask the app for Telegram's vibration
       telegramHaptic(tg, event.data.kind, event.data.style);
-    } else if (arcadeFrame.title === 'Blackboard spazio libero') blackboard.receive(event.data);
+    } else if (arcadeFrame.title === 'Lavagna spazio libero') blackboard.receive(event.data);
     else if (arcadeFrame.title === 'Number Connect') {
       const source = event.source,
         data = event.data;

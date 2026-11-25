@@ -235,7 +235,7 @@ export function applyMove(s, who, b) {
     });
     if (next.result) s.phase = 'finished';
   } else if (s.connect4) {
-    if (who !== s.turn) throw Error('Non è il tuo turno.');
+    if (who !== s.turn) throw Error('Non tocca a te.');
     const next = playConnect4(s.connect4, b.column);
     s.connect4 = next;
     s.turn = next.turn;
@@ -249,7 +249,7 @@ export function applyMove(s, who, b) {
     });
     if (next.result) s.phase = 'finished';
   } else if (s.checkers) {
-    if (who !== s.turn) throw Error('Non è il tuo turno.');
+    if (who !== s.turn) throw Error('Non tocca a te.');
     const played = playCheckers(s.checkers, b.path),
       key = checkersKey(played.game);
     s.positions = s.positions || {};
@@ -262,7 +262,7 @@ export function applyMove(s, who, b) {
   } else {
     if (!s.chess)
       throw Error('Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.');
-    if (who !== s.turn) throw Error('Non è il tuo turno.');
+    if (who !== s.turn) throw Error('Non tocca a te.');
     const game = new Chess();
     for (const move of s.moves) game.move(move.san);
     if (b.kind === 'claim-draw') {

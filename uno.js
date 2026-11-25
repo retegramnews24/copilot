@@ -68,7 +68,7 @@ export function playUno(state,seat,action,rng=random){
   if(action.kind==='catch-uno')take(g,called,2,rng);
   g.callout=null;g.lastEvent=action.kind==='uno'?'UNO!':'UNO dimenticato · +2 carte';return g;
  }
- if(seat!==g.turn)throw Error('Non è il tuo turno.');
+ if(seat!==g.turn)throw Error('Non tocca a te.');
  g.callout=null;g.reveal=null;
  if(g.openingWild){
   if(action.kind!=='color'||!UNO_COLORS.includes(action.color))throw Error('Scegli il colore iniziale.');

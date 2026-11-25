@@ -114,7 +114,7 @@ export async function login(req, env) {
     return issueSession(user, env);
   } catch {
     return json(
-      { error: 'Accesso Telegram non valido o scaduto. Chiudi e riapri la Mini App dal bot.' },
+      { error: 'Accesso Telegram non valido o scaduto. Chiudi e riapri Binottoland dal bot.' },
       401
     );
   }
@@ -130,7 +130,7 @@ export async function issueSession(user, env) {
   const now = Date.now(),
     since = Number.isFinite(user.since) && user.since <= now ? user.since : now;
   if (now - since > SESSION_MAX)
-    return json({ error: 'Sessione scaduta: chiudi e riapri la Mini App dal bot.' }, 401);
+    return json({ error: 'Sessione scaduta: chiudi e riapri Binottoland dal bot.' }, 401);
   const { id, player, name, username, photo } = user;
   user = { id, player, name, username, photo };
   const accessTag = await telegramAccessTag(env);

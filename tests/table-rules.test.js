@@ -38,7 +38,7 @@ assert.equal(botSeat({ ...solo, mode: 'people' }), -1);
 const chess = newTable(ROOM, { game: 'chess', name: 'Ada', playerId: 'tg:1' }, 'tok');
 chess.players.push({ id: 'tg:2', name: 'Bruno' });
 chess.phase = 'playing';
-assert.throws(() => applyMove(chess, 1, { from: 'e7', to: 'e5' }), /Non è il tuo turno/);
+assert.throws(() => applyMove(chess, 1, { from: 'e7', to: 'e5' }), /Non tocca a te/);
 assert.throws(() => applyMove(chess, 0, { from: 'e2', to: 'e5' }), /Mossa non consentita/);
 applyMove(chess, 0, { from: 'e2', to: 'e4' });
 assert.equal(chess.turn, 1);

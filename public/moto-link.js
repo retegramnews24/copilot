@@ -102,7 +102,7 @@ export function createMotoLink({
       if (event.code === 4000 || event.code === 4001) {
         closeMotoTrial();
         onError(
-          event.code === 4000 ? 'Corsa aperta in un’altra finestra.' : 'Riapri Binottoland da Telegram.'
+          event.code === 4000 ? 'Corsa aperta in un’altra finestra.' : 'Chiudi e riapri Binottoland dal bot.'
         );
         return;
       }

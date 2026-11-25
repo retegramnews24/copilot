@@ -5,6 +5,7 @@
 import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=ebc82174e3';
 import {buildBalilla} from './balilla.js?v=33b02edaf6';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
+import {helpFor, helpList} from './help.js?v=bf4fce1f30';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -14,7 +15,7 @@ import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
-import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
+import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=743855ba47';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
@@ -1540,6 +1541,7 @@ export function createLobby3D(app) {
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
+    if(e.code==='KeyH'){if(e.type==='keydown'&&!e.repeat)toggleHelp();e.preventDefault();return} // i comandi
     if(pinball.active){const r=pinball.input(e);if(r==='exit'){pinball.close();resetMovement()}else if(r)e.preventDefault();return}
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
@@ -1896,6 +1898,7 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
+    if(!helpPanel.hidden)renderHelp(); // l'elenco segue quello che stai facendo
     topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
@@ -1960,6 +1963,31 @@ export function createLobby3D(app) {
     camera.up.set(0,1,0);seating=null;seatActions.hidden=true;Object.assign(pos,returnPoint);collide(pos);me.root.visible=true;
     stick.hidden=!touch;near=null;resetMovement();
   }
+  // tasto «?»: i comandi di quello che stai facendo (camminare, sgabello, flipper, balilla, Pong), diversi per
+  // telefono e computer; l'elenco completo è in Impostazioni. Stesse righe in help.js
+  const helpButton=document.createElement('button');helpButton.textContent='?';
+  helpButton.setAttribute('aria-label','Comandi');helpButton.setAttribute('aria-expanded','false');if(!touch)helpButton.title='Comandi (H)';
+  helpButton.style.cssText='position:absolute;right:calc(var(--ui-safe-right,0px) + 12px);top:calc(var(--ui-safe-top,0px) + 64px);z-index:6;width:38px;min-width:38px;height:38px;min-height:38px;padding:0;margin:0;border-radius:50%;font-weight:700;font-size:17px';
+  const helpPanel=document.createElement('div');helpPanel.setAttribute('role','dialog');helpPanel.setAttribute('aria-label','Comandi');helpPanel.hidden=true;
+  helpPanel.style.cssText='position:absolute;right:calc(var(--ui-safe-right,0px) + 12px);top:calc(var(--ui-safe-top,0px) + 110px);z-index:6;width:min(340px,calc(100vw - 24px));max-height:60vh;overflow:auto;padding:10px 14px;border-radius:12px;background:rgba(10,8,16,.9);color:#fff;font:13px/1.45 system-ui,sans-serif;touch-action:pan-y;user-select:text';
+  el.append(helpButton,helpPanel);
+  let helpKey='';
+  function helpContext(){return tableFootball.active?'balilla':pinball.active?'pinball':monitor?'pong':(seating?.stool!=null||carrying!==null||near?.stool!=null)?'stool':'walk'}
+  function renderHelp(){
+    const key=helpContext();if(key===helpKey)return;helpKey=key;
+    const {title,rows}=helpFor(key,touch),head=document.createElement('b'),list=helpList(rows),more=document.createElement('p');
+    head.style.cssText='display:block;font-size:15px;margin-bottom:4px';head.textContent=title;
+    list.style.cssText='margin:0;padding-left:18px';
+    more.style.cssText='margin:6px 0 0;color:#cfc6e6;font-size:12px';more.textContent='Tutti i comandi: Impostazioni → Personaggio e pallina';
+    helpPanel.replaceChildren(head,list,more);
+  }
+  function toggleHelp(open=helpPanel.hidden){
+    helpPanel.hidden=!open;helpButton.setAttribute('aria-expanded',String(open));helpButton.classList.toggle('on',open);
+    if(open){helpKey='';renderHelp()}
+  }
+  helpButton.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();toggleHelp()});
+  helpButton.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();toggleHelp()}});
+  helpPanel.addEventListener('pointerdown',e=>e.stopPropagation());
   enterButton.onclick=()=>{if(seating){const seat=seating;parked=currentPose();hide();seat.act();app.launched?.(seat)}};
   standButton.onclick=stand;
   // primo posto libero al cabinato (gli altri giocatori del club lo occupano con la loro posa)
@@ -2029,7 +2057,7 @@ export function createLobby3D(app) {
     for(const node of document.querySelectorAll('#app-shell>nav.tabs,#app-shell>section.page'))node.inert=off;
   }
   function hide() {
-    classicPage(false);
+    classicPage(false);toggleHelp(false);
     if (document.pointerLockElement) document.exitPointerLock?.();
     if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
     carrying=null;requested=null;closeBoard();

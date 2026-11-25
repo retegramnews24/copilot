@@ -2,6 +2,7 @@
 // Aspetto (theme preview, swatches, text size) and the character; developer mode, problem report.
 import { pref, setPref } from './prefs.js?v=bd123656a4';
 import { pieceSvg } from './pieces.js?v=fa35e21be7';
+import { HELP, helpList } from './lobby3d/help.js?v=bf4fce1f30';
 const $ = id => document.getElementById(id);
 
 export function initSettings({ appName, tg, trace, events }) {
@@ -35,6 +36,36 @@ export function initSettings({ appName, tg, trace, events }) {
     };
   });
   applyPreferences();
+
+  // Comandi della Lobby 3D: le stesse righe del tasto «?» nella 3D (help.js), tutte le attività, per questo
+  // dispositivo; un tasto mostra quelle dell'altro (telefono o computer)
+  const helpBox = document.querySelector('.lobby3d-help');
+  if (helpBox) {
+    let onTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+    const renderHelp = () => {
+      const other = document.createElement('button');
+      other.type = 'button';
+      other.className = 'alt';
+      other.textContent = onTouch ? 'Mostra i comandi del computer' : 'Mostra i comandi del telefono';
+      other.onclick = () => {
+        onTouch = !onTouch;
+        renderHelp();
+      };
+      const parts = [];
+      for (const h of HELP) {
+        const title = document.createElement('h4');
+        title.textContent = h.title;
+        parts.push(title, helpList(onTouch ? h.touch : h.pc));
+      }
+      const note = document.createElement('p');
+      note.className = 'hint';
+      note.textContent =
+        (onTouch ? 'Comandi del telefono.' : 'Comandi del computer.') +
+        ' Nella Lobby 3D il tasto ? mostra quelli di quello che stai facendo.';
+      helpBox.replaceChildren(note, ...parts, other);
+    };
+    renderHelp();
+  }
 
   // Settings as a grouped list (like Telegram's): rows open sub-pages, each with "‹ Settings" to go back.
   const subPages = ['settings-look', 'settings-character'];
