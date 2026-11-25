@@ -15,6 +15,7 @@ import {renderMyGames,myTables,timeLeft} from './my-games.js?v=d184c87cf4';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=1635e1bcff';
+import {createLobbyLink} from './lobby-link.js?v=6048d01790';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e0418faadc';
 import {createCinemaLobby} from './cinema-lobby.js?v=2ff4a1cf51';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
@@ -78,16 +79,9 @@ function clubAudio(){
 }
 function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
-// flipper: inizio e punteggio della partita. Se in quel momento la Lobby è scollegata restano in attesa e partono
-// appena si ricollega, poco dopo la presenza (che dice al server che sei nel club); prima andavano persi.
-let pinballWaiting=[];
-function pinballSend(msg){
- if(lobbyWS?.readyState===1){lobbyWS.send(JSON.stringify(msg));return}
- pinballWaiting=[...pinballWaiting.filter(m=>m.type!==msg.type||m.table!==msg.table),msg].slice(-4);
-}
-function pinballFlush(socket){
- if(pinballWaiting.length)setTimeout(()=>{if(lobbyWS===socket&&socket.readyState===1)for(const m of pinballWaiting.splice(0))socket.send(JSON.stringify(m))},800);
-}
+// flipper: inizio e punteggio della partita. Se in quel momento la Lobby è scollegata restano in coda (lobby-link.js)
+// e partono appena si ricollega, poco dopo la presenza; prima andavano persi.
+function pinballSend(msg){lobbyLink.send(msg,m=>m.type===msg.type&&m.table===msg.table)}
 // la Lobby 3D si prepara (modelli, texture, luci) anche nascosta: parte già durante lo splash, poi si mostra
 async function makeLobby3D(){
  try{return await buildLobby3D()}catch(e){
@@ -138,7 +132,7 @@ setInterval(()=>refreshSession().catch(e=>err(e.message)),60000);
 let sessionToken='',identity=null,onlineUsers=[];
 function seat(id){const old=read('binotto-'+id,{});return identity?{...old,player:identity.player}:old}
 let replayFrames=[],replayPly=null,replayTimer=null,replayRevision=null,replayLoading=false;
-let room=null,state=null,ws=null,retry=null,busy=false,credentials={},games=[],lobbyWS=null,lobbyRetry=null,roomEpoch=0;
+let room=null,state=null,ws=null,retry=null,busy=false,credentials={},games=[],lobbyWS=null,roomEpoch=0;
 $('name').textContent='Accesso Telegram…';
 history.replaceState(null,'',location.pathname);
 // gli errori si vedono anche dentro la Lobby 3D (prima finivano nella pagina sotto, coperta dalla 3D)
@@ -413,28 +407,26 @@ function connect(){
  socket.onmessage=e=>{if(room!==selected)return;try{const s=JSON.parse(e.data);if(s.deleted){games=games.filter(game=>game.room!==s.room);showLobby();if(s.reason!=='dismissed')err(s.reason==='expired'?'Il tavolo inattivo è stato eliminato.':'La partita è stata eliminata da un partecipante.');return}render(s)}catch{err('Aggiornamento non valido.')}};
  socket.onclose=()=>{if(room!==selected)return;trace('WS','Partita disconnessa · nuovo tentativo tra 4 s');$('connection').textContent='○ Riconnessione…';retry=setTimeout(connect,4000)};
 }
-// Collegamento della Lobby: si riapre solo se è chiuso o non risponde (prima a ogni ritorno nell'app, e il server
-// ti toglieva sgabello, posto al balilla e partita al flipper). «ping» → «pong» entro 5 s, altrimenti si riapre.
-let lobbyHeard=0,lobbyProbe=0;
-function lobbyAlive(){
- if(!sessionToken)return;
- if(!lobbyWS||lobbyWS.readyState>1){connectLobby();return}
- if(lobbyWS.readyState===0)return;
- const socket=lobbyWS,asked=Date.now();clearTimeout(lobbyProbe);
- try{socket.send('ping')}catch{}
- lobbyProbe=setTimeout(()=>{if(lobbyWS===socket&&lobbyHeard<asked){trace('WS','Sala muta: la riapro');connectLobby()}},5000);
-}
-function connectLobby(){
- if(!sessionToken)return;
- cinema.connect();
- clearTimeout(lobbyRetry);clearTimeout(lobbyProbe);
- // il server dimentica sgabello e posto al balilla del collegamento vecchio: il telefono si rimette d'accordo
- if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close();lobby3d?.stoolDisconnected()}
- const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
- socket.onopen=()=>{lobbyHeard=Date.now();$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();pinballFlush(socket);lobby3d?.lobbyReconnected?.();lobby3d?.connection?.(true);renderSocial()};
- socket.onmessage=e=>{lobbyHeard=Date.now();if(e.data==='pong')return;try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
- socket.onerror=()=>trace('ERROR','Connessione sala partite');
- socket.onclose=()=>{lobby3d?.stoolDisconnected();lobby3d?.connection?.(false);clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
+// Collegamento della Lobby: apertura, «ping», riapertura solo se chiuso o muto e coda dei messaggi stanno in
+// lobby-link.js (provato in tests/lobby-link.test.mjs); qui solo cosa fa l'app quando succede.
+const lobbyLink=createLobbyLink({
+ open:()=>new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]),
+ enabled:()=>!!sessionToken,
+ hooks:{
+  before:()=>cinema.connect(),
+  created:socket=>{lobbyWS=socket},
+  // il server dimentica sgabello e posto al balilla del collegamento vecchio: il telefono si rimette d'accordo
+  dropped:()=>lobby3d?.stoolDisconnected(),
+  opened:()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();lobby3d?.lobbyReconnected?.();lobby3d?.connection?.(true);renderSocial()},
+  message:lobbyMessage,
+  error:()=>trace('ERROR','Connessione sala partite'),
+  closed:()=>{lobby3d?.stoolDisconnected();lobby3d?.connection?.(false);clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial()},
+  trace:text=>trace('WS',text)
+ }
+});
+const lobbyAlive=()=>lobbyLink.alive(),connectLobby=()=>lobbyLink.connect();
+function lobbyMessage(raw){
+ const e={data:raw};try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>{show3DStats();selectPage('debug')};
