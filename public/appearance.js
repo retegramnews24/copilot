@@ -17,7 +17,7 @@ export function readLook(){
   const raw=read(OUTFIT_KEY);
   return {...normalizeAppearance(raw),...normalizeStyle(raw)};
 }
-export function normalizeStyle(raw){
+function normalizeStyle(raw){
   return {accent:listed(ACCENTS,raw?.accent,ACCENTS[0][1]),hair:listed(HAIRS,raw?.hair,HAIRS[0][1]),skin:listed(SKINS,raw?.skin,SKINS[2][1])};
 }
 

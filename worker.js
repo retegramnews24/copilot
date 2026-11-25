@@ -17,7 +17,6 @@ import { F1Room } from './f1-server.js';
 import { BiliardoRoom } from './biliardo-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
-import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
 import { initialCheckers, playCheckers } from './checkers.js';
@@ -68,7 +67,6 @@ export class Room extends DurableObject {
     this.balilla = new BalillaHub(ctx);
     this.ctx = ctx;
     this.env = env;
-    this.lab = new ExpeditionRoom(ctx, env, () => telegramAccessTag(env));
     this.moto = new MotoTrialRoom(ctx, env);
     this.pong = new PongRoom(ctx, env);
     this.golf = new GolfRoom(ctx, env);
@@ -352,7 +350,6 @@ export class Room extends DurableObject {
     if (new URL(req.url).pathname.startsWith('/f1/')) return this.f1.fetch(req);
     if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
     if (new URL(req.url).pathname.startsWith('/moto-trial/')) return this.moto.fetch(req);
-    if (new URL(req.url).pathname.startsWith('/labyrinth/')) return this.lab.fetch(req);
     // amministrazione (solo da /api/admin/pinball, con ADMIN_TOKEN): toglie un punteggio falso dalla classifica
     if (path === '/pinball/remove' && req.method === 'POST') {
       const { table, id } = await req.json().catch(() => ({}));
@@ -382,8 +379,6 @@ export class Room extends DurableObject {
               turnTargets(s).includes(q.get('player'))
           });
         }
-        if (s?.game === 'cluedo')
-          return json({ error: 'Cluedo è stato rimosso. Crea un nuovo tavolo di Scopa.' }, 410);
         if (path === '/init') {
           if (s) return json({ error: 'Stanza già esistente.' }, 409);
           const raw = await req.text();
@@ -734,7 +729,7 @@ export class Room extends DurableObject {
     }
     if (a?.kind === 'blackboard') return this.blackboard.message(ws, message);
     if (a?.kind === 'cinema') return this.cinema.message(ws, message);
-    if (a?.kind === 'lab') return this.lab.message(ws, message);
+    if (a?.kind === 'lab') return; // Labyrinth tolto: collegamenti rimasti da prima, si chiudono da soli
     if (a?.kind === 'moto-trial') return this.moto.message(ws, message);
     if (a?.kind === 'pong') return this.pong.message(ws, message);
     if (a?.kind !== 'lobby') {
@@ -885,9 +880,7 @@ export class Room extends DurableObject {
     const attachment = ws.deserializeAttachment();
     if (attachment?.kind === 'blackboard') return this.blackboard.close(ws);
     if (attachment?.kind === 'cinema') return this.cinema.close(ws);
-    if (attachment?.kind === 'lab') {
-      await this.lab.close(ws);
-    } else if (attachment?.kind === 'moto-trial') {
+    if (attachment?.kind === 'moto-trial') {
       await this.moto.close(ws);
     } else if (attachment?.kind === 'pong') {
       await this.pong.close(ws);
@@ -919,7 +912,6 @@ export class Room extends DurableObject {
     const kind = ws.deserializeAttachment()?.kind;
     if (kind === 'blackboard') return this.blackboard.close(ws);
     if (kind === 'cinema') return this.cinema.close(ws);
-    if (kind === 'lab') return this.lab.close(ws);
     if (kind === 'moto-trial') return this.moto.close(ws);
     if (kind === 'pong') return this.pong.close(ws);
     ws.close(1011, 'Riconnettersi.');
@@ -933,7 +925,8 @@ export class Room extends DurableObject {
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('turn-notices-v1').toString())
       return (this.notices ??= new TurnNotices(this.ctx, this.env)).alarm();
     if (await this.ctx.storage.get('cinema-upload')) return this.ctx.storage.deleteAll();
-    if (await this.ctx.storage.get('expedition')) return this.lab.alarm();
+    // vecchie spedizioni di Labyrinth (gioco tolto): alla loro sveglia si svuota lo spazio
+    if (await this.ctx.storage.get('expedition')) return this.ctx.storage.deleteAll();
     if (await this.ctx.storage.get('golf')) return this.golf.alarm();
     if (await this.ctx.storage.get('f1')) return this.f1.alarm();
     if (await this.ctx.storage.get('biliardo')) return this.biliardo.alarm();

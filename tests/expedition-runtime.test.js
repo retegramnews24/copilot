@@ -15,9 +15,9 @@ const runtimeConfig={rootPath:dirname(resolve(process.argv[2]||'/tmp/labyrinth-m
 const options=convertV4MiniflareOptions(runtimeConfig);let mf=new Miniflare(options);const sockets=[];
 async function call(id,path,body){const res=await mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{Authorization:'Bearer '+token(id),'Content-Type':'application/json'},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:res.status,data:await res.json()}}
 function until(client,predicate){const site=new Error().stack;const existing=client.packets.find(predicate);if(existing)return Promise.resolve(existing);return new Promise((resolve,reject)=>{const timer=setTimeout(()=>{client.waiters=client.waiters.filter(w=>w!==check);reject(Error('Timed out waiting for server packet: '+JSON.stringify(client.packets.at(-1))+'\n'+site))},10000);function check(p){if(predicate(p)){clearTimeout(timer);client.waiters=client.waiters.filter(w=>w!==check);resolve(p)}}client.waiters.push(check)})}
-async function connect(id,room,watch=false,game='labyrinth'){const res=await mf.dispatchFetch('https://unit.test/api/'+game+'/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
+async function connect(id,room,watch=false,game='moto-trial'){const res=await mf.dispatchFetch('https://unit.test/api/'+game+'/'+room+'/ws'+(watch?'?watch=1':''),{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const ws=res.webSocket,c={ws,packets:[],waiters:[]};ws.addEventListener('message',event=>{const p=JSON.parse(event.data);c.packets.push(p);for(const fn of [...c.waiters])fn(p)});ws.accept();sockets.push(ws);await until(c,p=>p.type==='state');return c}
 try{
- const unauth=await mf.dispatchFetch('https://unit.test/api/labyrinth/00000000-0000-4000-8000-000000000000/state',{headers:{'X-Checkmate-User':JSON.stringify({id:'1'})}});assert.equal(unauth.status,401);
+ const unauth=await mf.dispatchFetch('https://unit.test/api/golf/00000000-0000-4000-8000-000000000000/state',{headers:{'X-Checkmate-User':JSON.stringify({id:'1'})}});assert.equal(unauth.status,401);
  const telegramData=new URLSearchParams({
   auth_date:String(Math.floor(Date.now()/1000)),
   user:JSON.stringify({id:1,first_name:'Test 1'})
@@ -32,33 +32,6 @@ try{
  assert.equal(lobby.status,200);
  telegramData.set('user',JSON.stringify({id:2,first_name:'Test 2'}));
  assert.equal((await call(1,'/api/session',{initData:telegramData.toString()})).status,401);
- const made=await call(1,'/api/create',{game:'labyrinth'});assert.equal(made.status,200);const room=made.data.state.room;assert.equal(made.data.state.players.length,1);for(let i=2;i<=4;i++)assert.equal((await call(i,'/api/labyrinth/'+room+'/join',{})).status,200);
- const clients=[];for(let i=1;i<=4;i++)clients.push(await connect(i,room));await until(clients[0],p=>p.type==='state'&&p.state.players.filter(p=>p.online).length===4);
- const watcher=await connect(5,room,true);const latest=(await call(1,'/api/labyrinth/'+room+'/state')).data.state;assert.equal(latest.players.length,4);assert.equal(latest.cases.length,4);
- watcher.ws.send(JSON.stringify({type:'action',request:1,kind:'pickup',item:'key:1'}));const denied=await until(watcher,p=>p.type==='ack'&&p.request===1);assert.equal(denied.ok,false);
- const origin=latest.players.find(p=>p.id==='1').player;clients[0].ws.send(JSON.stringify({type:'pose',seq:1,x:origin.x+.08,z:origin.z,yaw:0,pitch:0,height:0}));clients[0].ws.send(JSON.stringify({type:'action',request:3,kind:'appearance',appearance:{shirt:'#cf514d',shorts:'#529766'}}));await until(clients[0],p=>p.type==='ack'&&p.request===3&&p.ok);assert.equal((await call(1,'/api/labyrinth/'+room+'/state')).data.state.players[0].appearance.shirt,'#cf514d');
- clients[0].ws.send(JSON.stringify({type:'pose',seq:2,x:999,z:999,yaw:0,pitch:0}));await until(clients[0],p=>p.correct===true);clients[0].ws.send(JSON.stringify({type:'action',request:4,kind:'pickup',item:'key:1'}));assert.equal((await until(clients[0],p=>p.type==='ack'&&p.request===4)).ok,false);
- const defender=latest.players.find(p=>p.id==='2').player;
- clients[0].ws.send(JSON.stringify({type:'pose',seq:3,x:origin.x+.08,z:origin.z,yaw:-Math.PI/2,pitch:0,height:0,guard:true}));
- clients[0].ws.send(JSON.stringify({type:'action',request:5,kind:'strike',weapon:'sword'}));
- const hitWhileGuarding=await until(watcher,p=>p.type==='state'&&p.state.players.find(p=>p.id==='2').health===98);
- assert.equal(hitWhileGuarding.state.players.find(p=>p.id==='1').guard,true);
- await new Promise(resolve=>setTimeout(resolve,580));
- clients[1].ws.send(JSON.stringify({type:'pose',seq:1,x:defender.x,z:defender.z,yaw:Math.PI/2,pitch:0,height:0,guard:true}));
- await until(clients[1],p=>p.type==='state'&&p.state.players.find(p=>p.id==='2').guard);
- clients[0].ws.send(JSON.stringify({type:'action',request:6,kind:'strike'}));
- const blocked=await until(clients[1],p=>p.type==='state'&&p.state.players.find(p=>p.id==='2').impact?.damage===0);
- assert.equal(blocked.state.players.find(p=>p.id==='2').health,98);
- assert.equal((await call(5,'/api/labyrinth/'+room+'/archive',{})).status,403);assert.equal((await call(1,'/api/labyrinth/'+room+'/archive',{})).status,200);await until(watcher,p=>p.type==='state'&&p.state.archived);assert.equal((await call(2,'/api/lobby')).data.games.find(g=>g.room===room).archived,true);
- for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();mf=new Miniflare(options);const restored=await call(1,'/api/labyrinth/'+room+'/state');assert.equal(restored.status,200);assert.equal(restored.data.state.archived,true);assert.equal(restored.data.state.players[0].appearance.shirt,'#cf514d');assert.equal(restored.data.state.players.find(p=>p.id==='2').health,98);
- assert.equal((await call(2,'/api/labyrinth/'+room+'/delete',{})).status,200);assert.equal((await call(1,'/api/lobby')).data.games.length,0);const next=await call(1,'/api/create',{game:'labyrinth'});assert.equal(next.data.state.number,1);
- const second=await call(2,'/api/create',{game:'labyrinth'});
- assert.equal(second.data.state.number,2);
- assert.equal((await call(1,'/api/labyrinth/'+next.data.state.room+'/delete',{})).status,200);
- const replacements=await Promise.all([3,4].map(player=>call(player,'/api/create',{game:'labyrinth'})));
- assert.deepEqual(replacements.map(result=>result.data.state.number).sort(),[1,3]);
- assert.ok(replacements.every(result=>result.data.state.room!==next.data.state.room));
- assert.equal((await call(1,'/api/lobby')).data.games.find(game=>game.room===second.data.state.room).number,2);
  // Spectator presence identifies the viewed table independently from an owned game.
  const chess=await call(20,'/api/create',{game:'chess'}),dama=await call(22,'/api/create',{game:'checkers'});
  const lobbyRes=await mf.dispatchFetch('https://unit.test/api/lobby/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(21)}});assert.equal(lobbyRes.status,101);
@@ -411,7 +384,7 @@ try{
  assert.equal(reused.rooms.length,2);
  console.log('PASS Cinema runtime: authenticated access, room-scoped channel and presence, global live favorites and persistence.');
  console.log('PASS Golf runtime: concurrent shots, read-only spectating, participant closure and no ranking for interrupted games.');
- console.log('PASS workerd runtime: authenticated create/join, four real WebSockets, spectator isolation, movement correction, action errors, shared updates, participant-only management, SQLite restart persistence and reusable lobby numbers.');
+ console.log('PASS workerd runtime: authenticated access, sessions, lobby presence and the multiplayer games above.');
 }finally{for(const ws of sockets)try{ws.close()}catch{}await mf.dispose();await rm(directory,{recursive:true,force:true})}
 
 const searchKey='synthetic-youtube-key',publicChannelId='UC_x5XG1OV2P6uZZ5FSM9Ttw';

@@ -6,7 +6,7 @@
 
 import { internalHeaders } from './worker-shared.js';
 
-export const SINGLETONS = [
+const SINGLETONS = [
   'checkmate-lobby-v1',
   'binotto-simulator-league-v1',
   'turn-notices-v1',
@@ -17,7 +17,6 @@ export const SINGLETONS = [
 export const KEEP = 8;
 const CHUNK = 900000;
 const ARCADE_PREFIX = {
-  labyrinth: 'lab:',
   golf: 'golf:',
   pong: 'pong:',
   'moto-trial': 'moto:',

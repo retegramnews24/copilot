@@ -1,7 +1,7 @@
 import {CAMPAIGNS,LEGACY_CAMPAIGN} from './campaigns.js?v=2685d41f38';
 export {CAMPAIGNS};
-import {validBallColors} from '../appearance.js?v=a866c9e8ce';
-export {BALL_KEY,validBallColors} from '../appearance.js?v=a866c9e8ce';
+import {validBallColors} from '../appearance.js?v=784dba932c';
+export {BALL_KEY,validBallColors} from '../appearance.js?v=784dba932c';
 
 const wall = (x, z, toX, toZ) => ({x, z, toX, toZ});
 const water = (x, z, w, h) => ({x, z, w, h});
@@ -29,10 +29,6 @@ export const COURSES = [
 ];
 export const WIDTH = 26, DEPTH = 16, RADIUS = .24, CUP = .61;
 export const COLORS = ['#ffd972','#ff82b6','#70eaff','#b39bff','#aaf58c','#ff9a70','#f9f3ed','#74a3ff'];
-export function rotorWall(course, seconds) {
-  return rotorWalls(course,seconds)[0]??null;
-}
-
 export function rotorWalls(course,seconds) {
   return (course.rotors??(course.rotor?[course.rotor]:[])).map(([x,z,length,rate])=>{
     const dx=Math.cos(seconds*rate)*length,dz=Math.sin(seconds*rate)*length;

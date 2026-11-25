@@ -135,20 +135,6 @@ export function control(f, team, attack, slide, angle) {
     f.rods[i].tAngle = a;
   });
 }
-// La coppia di aste più vicina alla palla (1 contro 1: cambia da sola), con un po' di isteresi.
-export function nearPair(f, team, current = 1) {
-  let best = null,
-    bd = 1e9;
-  rows.forEach(row => {
-    if (row.team !== team) return;
-    const d = Math.abs(row.x - f.ball.x) - (row.attack === current ? 0.03 : 0);
-    if (d < bd) {
-      bd = d;
-      best = row.attack;
-    }
-  });
-  return best ?? current;
-}
 // Una figura può arrivare alla palla?
 // team: solo le aste di quella squadra (da soli al tavolo le aste dell'altra squadra stanno ferme e non contano)
 function reachable(f, team = null) {

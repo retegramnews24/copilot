@@ -1,8 +1,8 @@
 // Il computer: prepara tanti colpi candidati (palla fantasma verso le buche, colpi sulla bilia avversaria,
 // accosti al pallino…), li simula con la fisica vera e le stesse regole, e sceglie il migliore.
 // Il livello decide quanto sbaglia la mira.
-import * as P from './physics.js?v=ba3146227c';
-import * as E from './engine.js?v=b130e0cb1b';
+import * as P from './physics.js?v=650caf6b85';
+import * as E from './engine.js?v=5d4ddc53d2';
 
 const LEVELS = {
   facile: { err: 0.022, pick: 5, spin: false, budget: 24 },

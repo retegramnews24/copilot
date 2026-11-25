@@ -181,7 +181,7 @@ export const RAMPS = [
     .map((p, i) => Math.hypot(p[0] - r.pts[i][0], p[1] - r.pts[i][1], p[2] - r.pts[i][2]));
   return { ...r, lens, len: lens.reduce((a, b) => a + b, 0) };
 });
-export const RAMP_MOUTHS = RAMPS.map(r => r.pts[0]);
+const RAMP_MOUTHS = RAMPS.map(r => r.pts[0]);
 // punto della rampa k a distanza s dall'ingresso: { x, y, z, dz (pendenza), dy (verso sul tavolo) }
 export function rampPoint(k, s) {
   const r = RAMPS[k];
@@ -227,9 +227,6 @@ export function newGame() {
     tilted: false,
     nudge: 0,
     multiball: false,
-    kickback: false, // le uscite laterali sono chiuse: il kickback non serve più
-    kickbackTimer: 0,
-    kickFlash: 0,
     pitFlash: 0,
     ramps: 0, // rampe fatte in questa partita
     jackpot: 10000, // jackpot del multiball (cresce a ogni rampa presa in multiball)
@@ -628,8 +625,6 @@ function stepBall(g, b, h) {
     });
   // i box (anche dalla rampa Pit lane)
   if (Math.hypot(b.x - t.pit.x, b.y - t.pit.y) < t.pit.r && Math.hypot(b.vx, b.vy) < 3.2) pitStop(g, b);
-  // kickback: la pallina che scende nell'uscita sinistra viene ributtata su (se la luce KICK è accesa)
-  kick(g, b);
   // pallina sul pistone: resta ferma nella corsia
   if (b.x > LANE_X && b.y < PLUNGER_Y + 0.002 && b.vy <= 0) {
     b.y = PLUNGER_Y + 0.001 - (g.pulling ? g.plunger * 0.02 : 0);
@@ -669,21 +664,6 @@ function pitStop(g, b) {
       say(g, 'PARTENZA IN GRIGLIA! Multiball', 3);
       addBall(g);
     } else say(g, 'PIT STOP · gomme e benzina', 1.5);
-  }
-}
-function kick(g, b) {
-  if (b.x < 0.047 && b.y < 0.16 && b.y > 0.05 && b.vy < 0) {
-    if (g.kickback && !g.tilted) {
-      b.x = 0.024;
-      b.vx = 0.08;
-      b.vy = 3.6;
-      g.kickback = false;
-      g.kickbackTimer = 20;
-      g.kickFlash = 0.4;
-      g.score += 500;
-      say(g, 'KICKBACK!', 1.5);
-      emit(g, 'kickback', 1);
-    }
   }
 }
 function ballsCollide(a, b) {
@@ -765,7 +745,6 @@ export function simulate(g, dt) {
     for (const bm of g.t.bumpers) bm.flash = Math.max(0, bm.flash - h);
     for (const w of g.t.walls) if (w.flash) w.flash = Math.max(0, w.flash - h);
     for (const tg of g.t.targets) if (tg.flash) tg.flash = Math.max(0, tg.flash - h);
-    g.kickFlash = Math.max(0, g.kickFlash - h);
     g.pitFlash = Math.max(0, g.pitFlash - h);
 
     if (g.save > 0 && !g.balls.some(b => b.x > LANE_X && b.y < 0.1)) g.save = Math.max(0, g.save - h);

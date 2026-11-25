@@ -7,7 +7,7 @@
 //   Palla 8: World Standardized Rules WPA (8-Ball). Snooker: Official Rules of Snooker WPBSA.
 //   5 birilli: regole UMB/FIBiS della specialità. Boccette: Regolamento tecnico FIBiS "Boccette 5 birilli" (2017).
 //   Palla 9: World Standardized Rules WPA (9-Ball). Carambola (libera, una sponda, tre sponde): regolamento UMB.
-import * as P from './physics.js?v=ba3146227c';
+import * as P from './physics.js?v=650caf6b85';
 
 export const VARIANTS = {
   otto: { name: 'Palla 8', table: 'pool', desc: 'Piene contro rigate, poi la nera in una buca chiamata.' },
@@ -21,7 +21,6 @@ export const TARGETS = { italiana: [25, 50, 60], boccette: [50, 80, 100], caramb
 export const DEFAULT_TARGET = { italiana: 60, boccette: 80, carambola: 15 };
 // carambola: sponde da toccare prima della seconda bilia (0 = libera, 1 = una sponda, 3 = tre sponde)
 export const CUSHIONS = [0, 1, 3];
-export const CUSH_NAMES = { 0: 'libera', 1: 'a una sponda', 3: 'a tre sponde' };
 export const REDS = [6, 10, 15];
 // colori del panno (online li sceglie chi crea la partita e li vedono uguali tutti)
 export const CLOTH_KEYS = ['verde', 'blu', 'rosso', 'grigio', 'viola'];

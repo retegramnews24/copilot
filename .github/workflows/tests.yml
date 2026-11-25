@@ -1,9 +1,9 @@
-# Runs every test on each push and pull request. A red cross on the commit in GitHub means something broke:
-# Cloudflare publishes main anyway, so fix it (or revert) straight away.
+# Runs every test on each push and pull request to main. A red cross on the commit in GitHub means something
+# broke: Cloudflare's deploy gate (scripts/deploy-gate.mjs) then refuses to publish main until it is fixed.
 name: Test
 
 on:
-  # Only the real app: staging is a blank test page without tests.
+  # Only main: staging gets the same app but is checked locally before moving changes to main.
   push:
     branches: [main]
   pull_request:

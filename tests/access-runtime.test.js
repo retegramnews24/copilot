@@ -18,7 +18,7 @@ const mf=new Miniflare(convertV4MiniflareOptions(conf));
 const call=async(id,path,body,extra={})=>mf.dispatchFetch('https://unit.test'+path,{method:body===undefined?'GET':'POST',headers:{...(id?{Authorization:'Bearer '+token(id)}:{}),'Content-Type':'application/json',...extra},...(body===undefined?{}:{body:JSON.stringify(body)})});
 try{
  const uuid='11111111-1111-4111-8111-111111111111';
- const routes=['/api/simulator/state','/api/lobby','/api/leaderboard','/api/room/'+uuid+'/state','/api/room/'+uuid+'/replay','/api/golf/'+uuid+'/state','/api/moto-trial/'+uuid+'/state','/api/pong/'+uuid+'/state','/api/labyrinth/'+uuid+'/state','/api/cinema/youtube','/api/cinema/group/media/'+uuid+'/'+uuid,'/api/blackboard/ws','/api/radio/now-playing'];
+ const routes=['/api/simulator/state','/api/lobby','/api/leaderboard','/api/room/'+uuid+'/state','/api/room/'+uuid+'/replay','/api/golf/'+uuid+'/state','/api/moto-trial/'+uuid+'/state','/api/pong/'+uuid+'/state','/api/cinema/youtube','/api/cinema/group/media/'+uuid+'/'+uuid,'/api/blackboard/ws','/api/radio/now-playing'];
  for(const path of routes){assert.equal((await call(null,path,undefined,{'X-Checkmate-User':'{"id":"1","player":"tg:1"}'})).status,401,path);assert.equal((await call(900,path)).status,403,path)}
  for(const id of [901,902])assert.equal((await call(id,'/api/simulator/state')).status,id===901?503:403);
  assert.equal((await call(null,'/api/simulator/state',undefined,{Authorization:'Bearer '+token(1,Date.now()-1)})).status,401);

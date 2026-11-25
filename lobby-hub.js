@@ -84,9 +84,17 @@ export class LobbyHub {
   }
   async lobbyList() {
     const entries = await this.ctx.storage.list({ prefix: 'game:' });
-    return [...entries.values()]
-      .filter(s => s.game !== 'cluedo' && (isArcade(s.game) || !activeTable(s) || s.expires > Date.now()))
-      .sort((a, b) => a.number - b.number);
+    return (
+      [...entries.values()]
+        // vecchie partite di giochi tolti (Cluedo, Labyrinth): non si mostrano
+        .filter(
+          s =>
+            s.game !== 'cluedo' &&
+            s.game !== 'labyrinth' &&
+            (isArcade(s.game) || !activeTable(s) || s.expires > Date.now())
+        )
+        .sort((a, b) => a.number - b.number)
+    );
   }
 
   // Classifiche (con e senza computer): si calcolano dai risultati salvati solo quando ne arriva uno nuovo, poi
@@ -154,19 +162,17 @@ export class LobbyHub {
           status: own
             ? 'In partita ' + own.number
             : watching
-              ? (watching.game === 'labyrinth'
-                  ? 'Labyrinth '
-                  : watching.game === 'moto-trial'
-                    ? 'Moto Trial '
-                    : watching.game === 'golf'
-                      ? 'Golf '
-                      : watching.game === 'pong'
-                        ? 'Pong '
-                        : watching.game === 'f1'
-                          ? 'F1 on paper! '
-                          : watching.game === 'biliardo'
-                            ? 'Biliardo '
-                            : 'Guarda ') + watching.number
+              ? (watching.game === 'moto-trial'
+                  ? 'Moto Trial '
+                  : watching.game === 'golf'
+                    ? 'Golf '
+                    : watching.game === 'pong'
+                      ? 'Pong '
+                      : watching.game === 'f1'
+                        ? 'F1 on paper! '
+                        : watching.game === 'biliardo'
+                          ? 'Biliardo '
+                          : 'Guarda ') + watching.number
               : 'In Lobby',
           game: own?.room || null,
           viewingRoom: watching?.room || null
@@ -461,7 +467,6 @@ export class LobbyHub {
           'naval',
           'briscola',
           'briscola5',
-          'labyrinth',
           'moto-trial',
           'golf',
           'pong',
@@ -495,17 +500,15 @@ export class LobbyHub {
       if (isArcade(body.game)) {
         const room = id(),
           prefix =
-            body.game === 'labyrinth'
-              ? 'lab:'
-              : body.game === 'golf'
-                ? 'golf:'
-                : body.game === 'pong'
-                  ? 'pong:'
-                  : body.game === 'f1'
-                    ? 'f1:'
-                    : body.game === 'biliardo'
-                      ? 'biliardo:'
-                      : 'moto:';
+            body.game === 'golf'
+              ? 'golf:'
+              : body.game === 'pong'
+                ? 'pong:'
+                : body.game === 'f1'
+                  ? 'f1:'
+                  : body.game === 'biliardo'
+                    ? 'biliardo:'
+                    : 'moto:';
         const stub = this.env.ROOMS.get(this.env.ROOMS.idFromName(prefix + room));
         const response = await stub.fetch(
           new Request('https://internal/' + body.game + '/init', {
@@ -539,8 +542,8 @@ export class LobbyHub {
         if (!response.ok) return response;
         const result = await response.json();
         await this.ctx.storage.put('game:' + room, result.summary);
-        // Shared rooms open to others (not single-player Pong, not the retired Labyrinth) appear in the chat.
-        if (body.game !== 'labyrinth' && !(body.game === 'pong' && body.mode === 'solo'))
+        // Shared rooms open to others (not single-player Pong) appear in the chat.
+        if (!(body.game === 'pong' && body.mode === 'solo'))
           await this.addNotice(tableNotice(user, body.game, number, room, result.summary));
         await this.lobbyBroadcast();
         return json(result);

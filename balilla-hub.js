@@ -4,8 +4,6 @@
 // (ibernazione) la lista si ricostruisce da lì, così chi era seduto al tavolo non perde il posto.
 import {
   rows,
-  figureZ,
-  W,
   newField,
   simulate,
   throwIn,
@@ -22,61 +20,6 @@ export const IDLE_STOP = 5 * 60000; // tavolo fermo dopo 5 minuti senza comandi
 // occupato da un collegamento morto). Chi si alza e torna entro SEAT_GRACE ritrova il punteggio.
 export const PAUSE = 6000,
   SEAT_GRACE = 30000;
-// Computer temporaneo sui blu quando al tavolo c'è una sola persona (per vedere come reagisce la pallina in allenamento):
-// mette la figura sulla traiettoria, para con le figure giù e tira quando la palla è lenta davanti al piede.
-export function practiceAI(f, team, dt, mem) {
-  const b = f.ball,
-    forward = team === 0 ? 1 : -1;
-  mem.think = (mem.think ?? 0) - dt;
-  const decide = mem.think <= 0;
-  if (decide) mem.think = 0.08 + Math.random() * 0.06;
-  rows.forEach((row, i) => {
-    if (row.team !== team) return;
-    const rod = f.rods[i],
-      m = (mem[i] ??= { slide: 0, kick: 0, wait: 0 });
-    if (decide) {
-      // dove sarà la palla (z) quando arriva a quest'asta, con i rimbalzi sulle sponde
-      let z = b.z;
-      if (Math.abs(b.vx) > 0.05 && (row.x - b.x) * b.vx > 0) {
-        z = b.z + b.vz * Math.min(1.2, (row.x - b.x) / b.vx);
-        const span = 4 * W;
-        z = ((((z + W) % span) + span) % span) - W;
-        if (z > W) z = 2 * W - z;
-      }
-      z += (Math.random() - 0.5) * 0.02;
-      let best = 0,
-        bd = 1e9;
-      for (let n = 0; n < row.count; n++) {
-        const shift = Math.max(-row.travel, Math.min(row.travel, z - figureZ(row, n, 0)));
-        const d = Math.abs(z - figureZ(row, n, shift));
-        if (d < bd) {
-          bd = d;
-          best = shift;
-        }
-      }
-      m.slide = best / row.travel;
-    }
-    const ahead = (b.x - row.x) * forward,
-      speed = Math.hypot(b.vx, b.vz);
-    let near = 1e9;
-    for (let n = 0; n < row.count; n++) near = Math.min(near, Math.abs(b.z - figureZ(row, n, rod.shift)));
-    let angle = 0;
-    if (m.kick > 0) {
-      m.kick -= dt;
-      angle = forward * 1.3; // tiro in avanti
-      if (m.kick <= 0) m.wait = 0.15;
-    } else if (m.wait > 0) m.wait -= dt;
-    else if (f.phase === 'play' && ahead > -0.01 && ahead < 0.1 && speed < 0.9 && near < 0.03) {
-      // palla lenta appena davanti: carica indietro e tira
-      if (rod.angle * forward < -0.5) m.kick = 0.08;
-      else angle = -forward * 0.8;
-    } else if (f.phase === 'play' && ahead < -0.03 && b.vx * forward > 0.25) angle = -forward * 1.3; // tiro di un compagno da dietro: figure su
-    rod.tShift = m.slide;
-    rod.tAngle = angle;
-  });
-}
-
-const PRACTICE_AI = false; // da soli al tavolo ci si allena: l'altra squadra resta ferma (computer spento)
 const SOUNDS = ['kick', 'rail', 'goal', 'stop', 'throw', 'post'];
 const round = v => Math.round(v * 1000) / 1000;
 // Solo quello che serve per disegnare il tavolo, con i numeri arrotondati (messaggi più leggeri).
@@ -372,10 +315,6 @@ export class BalillaHub {
       carry += Math.min(0.12, (now - last) / 1000);
       last = now;
       while (carry >= 1 / 120) {
-        if (PRACTICE_AI && this.field.practice) {
-          const human = this.seated()[0];
-          if (human) practiceAI(this.field, 1 - Math.floor(human.slot / 2), 1 / 120, (this.aiMem ??= {}));
-        }
         simulate(this.field, 1 / 120);
         carry -= 1 / 120;
       }

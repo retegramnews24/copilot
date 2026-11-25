@@ -222,11 +222,6 @@ async function route(req, env) {
     return env.ROOMS.get(env.ROOMS.idFromName('moto:' + moto[1])).fetch(
       new Request(u.origin + '/moto-trial/' + moto[2], req)
     );
-  const lab = u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
-  if (lab)
-    return env.ROOMS.get(env.ROOMS.idFromName('lab:' + lab[1])).fetch(
-      new Request(u.origin + '/labyrinth/' + lab[2] + u.search, req)
-    );
   const lobby = env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
   if (u.pathname === '/api/chat' && req.method === 'POST')
     return lobby.fetch(new Request(u.origin + '/lobby/chat', req));
