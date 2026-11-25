@@ -93,11 +93,11 @@ export function blackboard() {
     for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * 0.05})`; g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 10, 1 + Math.random() * 3); }
     g.fillStyle = '#f3f1e6'; g.textBaseline = 'top';
     g.font = 'bold 96px "Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive';
-    g.fillText('⚙ Settings', 60, 46);
+    g.fillText('⚙ Impostazioni', 60, 46, 900); // al massimo 900 px: la parola è più lunga di «Settings»
     g.font = '52px "Segoe Print", "Comic Sans MS", "Chalkboard SE", cursive';
     ['• Tema e colori', '• Il tuo personaggio', '• Avvisi e notifiche', '• Archivio · Informazioni'].forEach((t, i) => g.fillText(t, 80, 200 + i * 86));
     g.strokeStyle = 'rgba(243,241,230,.8)'; g.lineWidth = 5;
-    g.beginPath(); g.moveTo(60, 168); g.bezierCurveTo(300, 158, 520, 176, 640, 162); g.stroke();
+    g.beginPath(); g.moveTo(60, 168); g.bezierCurveTo(360, 158, 680, 176, 880, 162); g.stroke();
     // un disegnino: la palla 8
     g.beginPath(); g.arc(860, 470, 80, 0, 7); g.stroke();
     g.beginPath(); g.arc(860, 470, 32, 0, 7); g.stroke();

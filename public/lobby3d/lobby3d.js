@@ -2,9 +2,10 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=6dbfbe9612';
-import {buildBalilla} from './balilla.js?v=675a40fb58';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=ebc82174e3';
+import {buildBalilla} from './balilla.js?v=33b02edaf6';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
+import {helpFor, helpList} from './help.js?v=bf4fce1f30';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
 import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard/chalk.js?v=4027e504f0';
@@ -14,7 +15,7 @@ import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
-import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
+import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=743855ba47';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
@@ -49,13 +50,18 @@ const CSS = `
 .l3d-top>*{pointer-events:auto;flex:none;width:auto;margin:0}
 @media (max-width:520px){.l3d-top{gap:5px}.l3d-top>*{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(10.5px,3.3vw,14px)!important;padding:7px 9px!important}.l3d-where{padding:6px 8px!important}}
 .l3d button{font:inherit;color:#fff;background:rgba(18,14,28,.72);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer}
-/* telefono: niente sfocatura dietro ai tasti (con la scena che cambia andrebbe rifatta a ogni fotogramma per ogni tasto) */
-.l3d-touch button{backdrop-filter:none;-webkit-backdrop-filter:none}
+/* telefono: tutti i tasti uguali, gialli trasparenti al 50% e a pillola o tondi, il più piccoli possibile; al tocco
+   diventano gialli pieni. Niente sfocatura dietro (con la scena che cambia andrebbe rifatta a ogni fotogramma) */
+.l3d-touch button{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,200,40,.5);border:1px solid rgba(255,200,40,.75);color:#2a1600;font-weight:600;text-shadow:0 0 2px rgba(255,230,150,.8);border-radius:999px;min-width:38px;min-height:38px;width:auto;margin:0;padding:0 12px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
+.l3d-touch button[hidden]{display:none}
+.l3d-touch button:active,.l3d-touch button.on{background:rgba(255,200,40,.95)!important;color:#2a1600!important;text-shadow:none}
+.l3d-dock{position:absolute;left:calc(var(--ui-safe-left,0px) + 12px);bottom:calc(var(--ui-safe-bottom,0px) + 158px);display:flex;flex-direction:column;align-items:flex-start;gap:6px;max-width:70vw;pointer-events:none;z-index:2}
+.l3d-dock>*{pointer-events:auto}
 .l3d-where{margin-left:auto;padding:7px 12px;border-radius:999px;background:rgba(18,14,28,.6);font-weight:600;font-size:14px}
 .l3d-act{position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 34px);transform:translateX(-50%);width:auto!important;max-width:90vw;margin:0;font-weight:700!important;font-size:17px!important;padding:13px 24px!important;background:linear-gradient(180deg,#ffcf4a,#f29d1c)!important;color:#2a1600!important;border:0!important;box-shadow:0 6px 24px rgba(255,180,40,.45);white-space:nowrap}
-/* telefono: in basso ci sono joystick e tasti, quindi il tasto d'azione va in alto a sinistra (sotto "Lobby classica")
-   e l'avviso un po' più giù; i volumi vanno in alto a destra */
-.l3d-touch .l3d-act{left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 60px);bottom:auto;transform:none;max-width:48vw;font-size:14px!important;padding:10px 14px!important;white-space:normal;text-align:left}
+/* telefono: il tasto d'azione sta nella colonna in basso a sinistra, sopra il joystick (con volumi e sgabello),
+   come gli altri tasti; in alto restano solo le informazioni */
+.l3d-touch .l3d-act{position:static;order:4;transform:none;max-width:60vw;font-size:14px!important;font-weight:600!important;padding:0 14px!important;min-height:38px;background:rgba(255,200,40,.5)!important;color:#2a1600!important;border:1px solid rgba(255,200,40,.75)!important;box-shadow:none;white-space:normal;text-align:left}
 .l3d-act[hidden]{display:none}
 .l3d-stick{position:absolute;left:calc(var(--ui-safe-left,0px) + 26px);bottom:calc(var(--ui-safe-bottom,0px) + 26px);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:none}
 .l3d-stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6)}
@@ -78,6 +84,9 @@ export function createLobby3D(app) {
   const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   if (touch) el.classList.add('l3d-touch');
+  // telefono: colonna dei tasti in basso a sinistra sopra il joystick (dall'alto: volumi, sgabello, seduto, azione)
+  const dock = document.createElement('div'); dock.className = 'l3d-dock';
+  if (touch) { el.append(dock); dock.append(actB); }
   stick.hidden = !touch;
   // caricamento: modelli e texture passano tutti dal gestore predefinito di three.js. Lo splash ne mostra
   // l'avanzamento; finito tutto si preparano subito le luci di ogni sala, così aprendo la Lobby non scatta
@@ -535,11 +544,11 @@ export function createLobby3D(app) {
   for(const side of [-1,1])for(const end of [-1,1])addStool(-13+side*1.7,end*1.9,end>0?0:Math.PI,'Sala giochi');
   let carrying=null,requested=null;
   const stoolBar=document.createElement('div');
-  // tasti dello sgabello: sul telefono in alto a sinistra, sotto il tasto d'azione (in basso ci sono joystick e tasti)
-  stoolBar.style.cssText=touch?'position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 112px);display:flex;flex-wrap:wrap;gap:4px;max-width:60vw':'position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 112px);display:flex;gap:4px;white-space:nowrap';
-  el.append(stoolBar);
-  function stoolButton(label,fn){
-    const b=document.createElement('button');b.textContent=label;b.onclick=fn;stoolBar.append(b);return b;
+  // tasti dello sgabello: sul telefono nella colonna in basso a sinistra, sopra il joystick
+  stoolBar.style.cssText=touch?'display:flex;flex-wrap:wrap;gap:5px;order:2':'position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ui-safe-bottom,0px) + 112px);display:flex;gap:4px;white-space:nowrap';
+  (touch?dock:el).append(stoolBar);
+  function stoolButton(label,fn,name){
+    const b=document.createElement('button');b.textContent=label;b.onclick=fn;if(name)b.setAttribute('aria-label',name);stoolBar.append(b);return b;
   }
   function changeHeight(delta){
     const st=stools[seating?.stool];if(st)st.height=THREE.MathUtils.clamp(st.height+delta,-.12,.26); // oltre, lo stelo uscirebbe dal tubo
@@ -567,13 +576,16 @@ export function createLobby3D(app) {
     if(Math.hypot(test.x-to.x,test.z-to.z)>.025||stools.some(st=>st.id!==carrying&&Math.hypot(st.x-to.x,st.z-to.z)<.50))return;
     stoolRequest(carrying,'drop',to);
   }
-  const carryButton=stoolButton('Prendi · G',toggleCarry);
-  const raise=stoolButton('↑ W',()=>changeHeight(.05)),lower=stoolButton('↓ S',()=>changeHeight(-.05));
+  // sul telefono senza le lettere dei tasti (G, W, S sono della tastiera)
+  const carryButton=stoolButton(touch?'Prendi':'Prendi · G',toggleCarry);
+  // sul telefono solo il simbolo (tasti tondi, il meno spazio possibile); il nome resta per chi usa la lettura vocale
+  const raise=stoolButton(touch?'↑':'↑ W',()=>changeHeight(.05),'Alza lo sgabello'),lower=stoolButton(touch?'↓':'↓ S',()=>changeHeight(-.05),'Abbassa lo sgabello');
   function bounceStool(){
     const st=stools[seating?.stool];
     if(st)st.v=-.30;
   }
-  const rock=stoolButton('Molleggia',bounceStool);
+  const rock=stoolButton(touch?'〰':'Molleggia',bounceStool,'Molleggia');
+  if(touch)for(const b of [raise,lower,rock]){b.style.fontSize='19px';b.style.padding='0'} // simboli più grandi, tasto tondo
   function stepStools(dt){
     const people=app.peers?.()||[],layout=app.stoolLayout?.()||{};
     if(requested&&performance.now()-requested.at>4500){app.stoolSend?.({type:'stool',action:'cancel',id:requested.id});requested=null}
@@ -601,7 +613,7 @@ export function createLobby3D(app) {
     }
     const showCarry=!seating&&(carrying!==null||near?.stool!=null)&&!playing()&&!boardOpen;
     stoolBar.style.display=(mine&&touch)||showCarry?'flex':'none';
-    carryButton.hidden=!showCarry;carryButton.textContent=carrying===null?'Prendi · G':'Posa · G';
+    carryButton.hidden=!showCarry;carryButton.textContent=carrying===null?(touch?'Prendi':'Prendi · G'):(touch?'Posa':'Posa · G');
     if(!touch){
       stoolBar.style.display='none';
       if(carrying!==null&&!playing()){actB.hidden=false;actB.textContent='Posa lo sgabello (G)'}
@@ -860,7 +872,9 @@ export function createLobby3D(app) {
   window.addEventListener('keydown',unlockCinemaSound);
   function volumeControl(label,key,fallback,onInput){
     const wrap=document.createElement('label'),input=document.createElement('input'),out=document.createElement('span');
-    wrap.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 9px;background:#18151ded;color:white;border-radius:8px;font:12px system-ui';
+    // sul telefono senza riquadro scuro, giallo come i tasti
+    wrap.style.cssText=touch?'display:flex;align-items:center;gap:6px;color:#ffd77a;text-shadow:0 0 3px #000,0 1px 2px #000;font:600 13px system-ui':'display:flex;align-items:center;gap:6px;padding:5px 9px;background:#18151ded;color:white;border-radius:8px;font:12px system-ui';
+    if(touch)label='🔊 '+label;
     wrap.append(document.createTextNode(label),input,out);input.type='range';input.min=0;input.max=100;input.style.width='80px';
     function read(){if(!key)return fallback;try{const v=localStorage.getItem(key);return v===null?fallback:Math.max(0,Math.min(1,Number(v)))}catch{return fallback}}
     function sync(){input.value=String(Math.round(read()*100));out.textContent=input.value+'%'}
@@ -868,11 +882,28 @@ export function createLobby3D(app) {
     sync();return {wrap,input,out,read,sync};
   }
   let cinemaLevel=1,heard=0,lastYT=-1;
-  // volumi: sul telefono in alto a destra, sotto "Vista dagli occhi" (in basso ci sono joystick e tasti)
-  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'position:absolute;top:calc(var(--ui-safe-top,0px) + 60px);right:calc(var(--ui-safe-right,0px) + 10px);max-width:48vw;display:grid;gap:4px;justify-items:end':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
+  // volumi: sul telefono in cima alla colonna dei tasti, in basso a sinistra (compaiono solo vicino a chi suona)
+  const mixPanel=document.createElement('div');mixPanel.style.cssText=touch?'display:grid;gap:4px;justify-items:start;order:1':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 48px);right:8px;display:grid;gap:4px';
   const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
   const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
-  cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
+  cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);(touch?dock:el).append(mixPanel);
+  // Avvisi dentro la 3D (prima gli errori finivano nella pagina sotto, coperta): un messaggio che resta qualche secondo
+  // e, finché il collegamento della Lobby è caduto, «Riconnessione…» (gli altri si fermano: ora si capisce perché)
+  const alerts=document.createElement('div');
+  alerts.setAttribute('role','alert');
+  alerts.style.cssText='position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + '+(touch?118:104)+'px);display:grid;gap:6px;justify-items:center;max-width:88vw;pointer-events:none;z-index:6';
+  const noticeBox=document.createElement('div'),linkBox=document.createElement('div');
+  const chip='padding:8px 14px;border-radius:12px;font:600 14px/1.35 system-ui,sans-serif;text-align:center;color:#fff;box-shadow:0 4px 18px rgba(0,0,0,.35)';
+  noticeBox.style.cssText=chip+';background:rgba(150,28,40,.92)';linkBox.style.cssText=chip+';background:rgba(20,16,30,.85)';
+  noticeBox.hidden=linkBox.hidden=true;linkBox.textContent='Riconnessione…';
+  alerts.append(noticeBox,linkBox);el.append(alerts);
+  let noticeTimer=0;
+  // kind 'info': avviso neutro (scuro) invece che di errore (rosso)
+  function notice(text,kind){noticeBox.textContent=String(text||'');noticeBox.hidden=!text;noticeBox.style.background=kind==='info'?'rgba(20,16,30,.85)':'rgba(150,28,40,.92)';clearTimeout(noticeTimer);if(text)noticeTimer=setTimeout(()=>{noticeBox.hidden=true},kind==='info'?3500:5000)}
+  // la prima volta che il mouse si aggancia alla vista: come si libera (non era scritto da nessuna parte)
+  let escHint=false;
+  document.addEventListener('pointerlockchange',()=>{if(active&&!escHint&&document.pointerLockElement){escHint=true;notice('Esc libera il mouse','info')}});
+  function connection(on){linkBox.hidden=!!on}
   window.addEventListener('club-volume-change',radioVolume.sync);
   // Keep direct sound in stereo; short, asymmetric reflections widen the room.
   function cinemaMix(video){
@@ -1510,6 +1541,7 @@ export function createLobby3D(app) {
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
+    if(e.code==='KeyH'){if(e.type==='keydown'&&!e.repeat)toggleHelp();e.preventDefault();return} // i comandi
     if(pinball.active){const r=pinball.input(e);if(r==='exit'){pinball.close();resetMovement()}else if(r)e.preventDefault();return}
     if(tableFootball.active){if(tableFootball.input(e))e.preventDefault();return}
     if (seating && e.type==='keydown' && e.code==='Escape'){e.preventDefault();stand();return}
@@ -1627,7 +1659,7 @@ export function createLobby3D(app) {
   }).join('');
   el.append(moves);
   const movesCss = document.createElement('style');
-  movesCss.textContent = '.l3d-moves{position:absolute;inset:0;pointer-events:none;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{position:absolute;pointer-events:auto;width:58px!important;height:58px;min-height:58px;padding:0!important;margin:0!important;border-radius:50%;font-size:26px!important;background:rgba(18,14,28,.6)!important;touch-action:none}.l3d-moves button.on{background:#f0b429!important}';
+  movesCss.textContent = '.l3d-moves{position:absolute;inset:0;pointer-events:none;z-index:3}.l3d-moves[hidden]{display:none}.l3d-moves button{position:absolute;pointer-events:auto;width:58px!important;height:58px;min-height:58px;padding:0!important;margin:0!important;border-radius:50%;font-size:26px!important;background:rgba(255,200,40,.5)!important;touch-action:none}.l3d-moves button.on{background:rgba(255,200,40,.95)!important}';
   document.head.append(movesCss);
   const holdMove = (m, on) => {
     if (m === 'guard') guarding = on;
@@ -1866,6 +1898,7 @@ export function createLobby3D(app) {
     }
     if(playing()){stick.hidden=true;actB.hidden=true}else if(!seating){stick.hidden=!touch||boardOpen;actB.hidden=!near||boardOpen}
     moves.hidden=!touch||seating||playing()||boardOpen||!!parked;
+    if(!helpPanel.hidden)renderHelp(); // l'elenco segue quello che stai facendo
     topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
     if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
@@ -1920,16 +1953,41 @@ export function createLobby3D(app) {
     monitor.frame.contentWindow.cabinetMonitor.aim(1-hit.uv.y);return true;
   }
   const seatActions=document.createElement('div');
-  // seduti: "Entra nel cinema" / "Alzati"; sul telefono in alto a sinistra, al posto del tasto d'azione
-  seatActions.style.cssText=touch?'position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 60px);display:flex;gap:6px;flex-wrap:wrap;max-width:60vw':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  // seduti: "Entra nel cinema" / "Alzati"; sul telefono nella colonna in basso a sinistra, al posto del tasto d'azione
+  seatActions.style.cssText=touch?'display:flex;gap:6px;flex-wrap:wrap;order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 8px);left:50%;transform:translateX(-50%);white-space:nowrap';
   const enterButton=document.createElement('button'),standButton=document.createElement('button');
-  enterButton.textContent='Entra nel cinema';standButton.textContent='Alzati';seatActions.append(enterButton,standButton);el.append(seatActions);seatActions.hidden=true;
+  enterButton.textContent='Entra nel cinema';standButton.textContent='Alzati';seatActions.append(enterButton,standButton);(touch?dock:el).append(seatActions);seatActions.hidden=true;
   function stand(){
     if(!seating)return;
     if(seating.stool!=null)app.stoolSend?.({type:'stool',action:'stand',id:seating.stool,height:stools[seating.stool].height});
     camera.up.set(0,1,0);seating=null;seatActions.hidden=true;Object.assign(pos,returnPoint);collide(pos);me.root.visible=true;
     stick.hidden=!touch;near=null;resetMovement();
   }
+  // tasto «?»: i comandi di quello che stai facendo (camminare, sgabello, flipper, balilla, Pong), diversi per
+  // telefono e computer; l'elenco completo è in Impostazioni. Stesse righe in help.js
+  const helpButton=document.createElement('button');helpButton.textContent='?';
+  helpButton.setAttribute('aria-label','Comandi');helpButton.setAttribute('aria-expanded','false');if(!touch)helpButton.title='Comandi (H)';
+  helpButton.style.cssText='position:absolute;right:calc(var(--ui-safe-right,0px) + 12px);top:calc(var(--ui-safe-top,0px) + 64px);z-index:6;width:38px;min-width:38px;height:38px;min-height:38px;padding:0;margin:0;border-radius:50%;font-weight:700;font-size:17px';
+  const helpPanel=document.createElement('div');helpPanel.setAttribute('role','dialog');helpPanel.setAttribute('aria-label','Comandi');helpPanel.hidden=true;
+  helpPanel.style.cssText='position:absolute;right:calc(var(--ui-safe-right,0px) + 12px);top:calc(var(--ui-safe-top,0px) + 110px);z-index:6;width:min(340px,calc(100vw - 24px));max-height:60vh;overflow:auto;padding:10px 14px;border-radius:12px;background:rgba(10,8,16,.9);color:#fff;font:13px/1.45 system-ui,sans-serif;touch-action:pan-y;user-select:text';
+  el.append(helpButton,helpPanel);
+  let helpKey='';
+  function helpContext(){return tableFootball.active?'balilla':pinball.active?'pinball':monitor?'pong':(seating?.stool!=null||carrying!==null||near?.stool!=null)?'stool':'walk'}
+  function renderHelp(){
+    const key=helpContext();if(key===helpKey)return;helpKey=key;
+    const {title,rows}=helpFor(key,touch),head=document.createElement('b'),list=helpList(rows),more=document.createElement('p');
+    head.style.cssText='display:block;font-size:15px;margin-bottom:4px';head.textContent=title;
+    list.style.cssText='margin:0;padding-left:18px';
+    more.style.cssText='margin:6px 0 0;color:#cfc6e6;font-size:12px';more.textContent='Tutti i comandi: Impostazioni → Personaggio e pallina';
+    helpPanel.replaceChildren(head,list,more);
+  }
+  function toggleHelp(open=helpPanel.hidden){
+    helpPanel.hidden=!open;helpButton.setAttribute('aria-expanded',String(open));helpButton.classList.toggle('on',open);
+    if(open){helpKey='';renderHelp()}
+  }
+  helpButton.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();toggleHelp()});
+  helpButton.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();e.stopPropagation();toggleHelp()}});
+  helpPanel.addEventListener('pointerdown',e=>e.stopPropagation());
   enterButton.onclick=()=>{if(seating){const seat=seating;parked=currentPose();hide();seat.act();app.launched?.(seat)}};
   standButton.onclick=stand;
   // primo posto libero al cabinato (gli altri giocatori del club lo occupano con la loro posa)
@@ -1977,6 +2035,7 @@ export function createLobby3D(app) {
     if (active) return;
     restoreActivityView();
     parked=null;playProjection(app.projection?.());syncTransport(true);el.hidden = false; active = true; last = 0;
+    classicPage(true);
     app.clubVisibility?.();setTag();
     // trascinare in giù (joystick, pad dei giochi) non deve chiudere o ridurre la mini app di Telegram
     try { const tg = window.Telegram?.WebApp; if (tg?.isVersionAtLeast?.('7.7')) tg.disableVerticalSwipes(); } catch {}
@@ -1992,7 +2051,13 @@ export function createLobby3D(app) {
     setTimeout(() => { prepareLights(); }, 1200);
     setTimeout(prepareLights, 1500);
   }
+  // la pagina classica sotto la 3D si spegne (inert): con Tab il fuoco resta nella 3D invece di finire su tasti che
+  // non si vedono. Solo le schede e le pagine, non i riquadri dei giochi e i dialoghi che si aprono sopra
+  function classicPage(off){
+    for(const node of document.querySelectorAll('#app-shell>nav.tabs,#app-shell>section.page'))node.inert=off;
+  }
   function hide() {
+    classicPage(false);toggleHelp(false);
     if (document.pointerLockElement) document.exitPointerLock?.();
     if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
     carrying=null;requested=null;closeBoard();
@@ -2070,7 +2135,7 @@ export function createLobby3D(app) {
     const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
     return { progress, ready: loading.idle && lights && film };
   }
-  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, notice, connection, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

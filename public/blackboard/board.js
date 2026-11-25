@@ -354,7 +354,7 @@ window.addEventListener('message', event => {
       if (confirmClear.open) confirmClear.close('cancel');
       finishStroke();
       showPeople([]);
-      status.textContent = packet.expired ? 'Riapri da Telegram' : 'Riconnessione…';
+      status.textContent = packet.expired ? 'Chiudi e riapri Binottoland dal bot' : 'Riconnessione…';
       break;
     case 'people': showPeople(packet.people); break;
   }

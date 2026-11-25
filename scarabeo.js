@@ -14,7 +14,7 @@ export function playScarabeo(state,seat,a,rng=random){
   const required=Math.floor((n-1)/2)+1,yes=Object.values(p.votes).filter(Boolean).length,left=n-1-Object.keys(p.votes).length;
   if(yes>=required){for(const t of p.tiles)g.board[t.index]={id:t.id,letter:t.letter,blank:t.blank};g.racks[p.by]=g.racks[p.by].filter(t=>!p.tiles.some(x=>x.id===t.id));g.scores[p.by]+=p.score;while(g.racks[p.by].length<8&&g.bag.length)g.racks[p.by].push(g.bag.pop());g.lastEvent=p.words.join(', ')+' · '+p.score+' punti';g.pending=null;g.passes=0;if(!g.bag.length&&!g.racks[p.by].length)end(g,p.by);else advance(g)}else if(yes+left<required){g.pending=null;g.lastEvent='Parola respinta: ricomponi o passa.'}return g;
  }
- if(seat!==g.turn)throw Error('Non è il tuo turno.');
+ if(seat!==g.turn)throw Error('Non tocca a te.');
  if(a.kind==='cancel'&&g.pending){g.pending=null;g.lastEvent='Proposta ritirata';return g}if(g.pending)throw Error('Attendi la convalida delle parole.');
  if(a.kind==='pass'){g.passes++;g.lastEvent='Passa il turno';advance(g);return g}
  if(a.kind==='exchange'){const rack=g.racks[seat];if(rack.length!==8||rack.some(t=>t.letter==='?')||!([true,false].some(v=>rack.every(t=>'AEIOU'.includes(t.letter)===v))))throw Error('Cambio ammesso con otto vocali o otto consonanti.');g.bag=shuffled([...g.bag,...rack],rng);g.racks[seat]=g.bag.splice(0,8);g.passes++;g.lastEvent='Cambia le otto tessere';advance(g);return g}

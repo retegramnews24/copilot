@@ -294,7 +294,7 @@ export class Room extends DurableObject {
           (typeof a?.id === 'string' ? a.id.replace(/^tg:/, '') : null);
         let reason = null;
         if (!tag || a?.accessTag !== tag || !Number.isFinite(a?.expires) || a.expires <= Date.now())
-          reason = 'Sessione scaduta: riapri la Mini App';
+          reason = 'Sessione scaduta: chiudi e riapri Binottoland dal bot.';
         else if (!memberId || (await memberAccess({ id: memberId }, this.env)) === false)
           reason = 'Accesso al gruppo richiesto';
         if (reason) {
@@ -420,6 +420,7 @@ export class Room extends DurableObject {
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
           pair[1].serializeAttachment({
+            opened: Date.now(),
             memberId: userOf(req)?.id,
             accessTag: req.headers.get('X-Access-Tag'),
             expires: Number(req.headers.get('X-Session-Expires')),
@@ -636,7 +637,7 @@ export class Room extends DurableObject {
           !(s.naval?.phase === 'placement') &&
           who !== s.turn
         )
-          return json({ error: 'Non è il tuo turno.' }, 403);
+          return json({ error: 'Non tocca a te.' }, 403);
         if (path.endsWith('/offer-draw')) {
           if ((!s.chess && !s.checkers) || s.phase !== 'playing')
             return json({ error: 'Patta disponibile solo durante una partita.' }, 409);
@@ -661,7 +662,7 @@ export class Room extends DurableObject {
         } else if (path.endsWith('/pass')) {
           if (s.chess || s.checkers || s.connect4 || s.uno || s.scarabeo || s.scopa || s.naval || s.briscola)
             return json({ error: 'Devi effettuare una mossa.' }, 409);
-          if (who !== s.turn) return json({ error: 'Non è il tuo turno.' }, 403);
+          if (who !== s.turn) return json({ error: 'Non tocca a te.' }, 403);
           s.moves.push({ by: s.players[who].name, at: Date.now(), number: s.moves.length + 1 });
           s.turn = 1 - s.turn;
           if (s.moves.length >= 500) s.phase = 'finished';

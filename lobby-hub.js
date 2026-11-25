@@ -323,6 +323,7 @@ export class LobbyHub {
       this.ctx.acceptWebSocket(pair[1]);
       pair[1].serializeAttachment({
         kind: 'lobby',
+        opened: Date.now(),
         user,
         room: null,
         seen: Date.now(),

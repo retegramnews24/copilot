@@ -49,6 +49,19 @@ try{
  spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false,pose:null}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&!u.clubPose));
  spectator.ws.send(JSON.stringify({type:'presence',room:dama.data.state.room,away:true}));await until(spectator,p=>p.users&&!p.users.some(u=>u.id==='21'));
  console.log('PASS spectator presence: live chess/checkers table changes, unique identity, Lobby return and away removal.');
+ // Collegamento della Lobby: «ping» → «pong» (il telefono lo usa per capire se il collegamento è vivo) e il quarto
+ // collegamento della stessa persona chiude il più vecchio, non quello nuovo
+ async function rawLobby(id){const res=await mf.dispatchFetch('https://unit.test/api/lobby/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const c={ws:res.webSocket,raw:[],closed:null};c.ws.addEventListener('message',e=>c.raw.push(e.data));c.ws.addEventListener('close',e=>{c.closed=e.code});c.ws.accept();sockets.push(c.ws);return c}
+ const pinger=await rawLobby(60);pinger.ws.send('ping');
+ for(let i=0;i<50&&!pinger.raw.includes('pong');i++)await new Promise(r=>setTimeout(r,20));
+ assert.ok(pinger.raw.includes('pong'),'the Lobby answers ping with pong');
+ const mine=[pinger];for(let i=0;i<3;i++)mine.push(await rawLobby(60));
+ for(let i=0;i<50&&mine[0].closed===null;i++)await new Promise(r=>setTimeout(r,20));
+ assert.notEqual(mine[0].closed,null,'the oldest of four connections is closed');
+ assert.ok(mine.slice(1).every(c=>c.closed===null),'the newer three stay open');
+ mine[3].ws.send('ping');for(let i=0;i<50&&!mine[3].raw.includes('pong');i++)await new Promise(r=>setTimeout(r,20));
+ assert.ok(mine[3].raw.includes('pong'),'the newest connection works');
+ console.log('PASS Lobby connection: ping/pong, at most three connections per person (the oldest goes).');
  const four=await call(30,'/api/create',{game:'connect4'});assert.equal(four.status,200);const fourRoom=four.data.state.room;
  assert.equal((await call(31,'/api/room/'+fourRoom+'/claim',{})).status,200);assert.equal((await call(32,'/api/room/'+fourRoom+'/claim',{})).status,409);
  const fourRes=await mf.dispatchFetch('https://unit.test/api/room/'+fourRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(32)}});assert.equal(fourRes.status,101);const fourWatch={ws:fourRes.webSocket,packets:[],waiters:[]};fourWatch.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);fourWatch.packets.push(p);for(const fn of [...fourWatch.waiters])fn(p)});fourWatch.ws.accept();sockets.push(fourWatch.ws);await until(fourWatch,p=>p.game==='connect4');
@@ -262,6 +275,24 @@ try{
  assert.equal((await call(303,collisionPath+'/state')).data.state.collisions,true);
  assert.equal((await call(302,'/api/lobby')).data.games.find(g=>g.room===collisionRoom.state.room).collisions,true);
  assert.equal((await call(301,collisionPath+'/close',{})).status,200);
+ // Numerazione di tavoli e sale (prima la provava Labyrinth): primo numero libero, numero che resta, riuso dopo una
+ // chiusura anche con due creazioni nello stesso istante, mai due sale aperte con lo stesso numero
+ const openNumbers=async()=>(await call(401,'/api/lobby')).data.games.filter(g=>!g.archived&&g.phase!=='finished').map(g=>g.number);
+ const firstFree=list=>{let n=1;while(list.includes(n))n++;return n};
+ const expected=firstFree(await openNumbers());
+ const roomA=(await call(401,'/api/create',{game:'golf'})).data.state,roomB=(await call(402,'/api/create',{game:'golf'})).data.state;
+ assert.equal(roomA.number,expected,'the first free number');
+ assert.notEqual(roomB.number,roomA.number);
+ assert.equal((await call(401,'/api/golf/'+roomA.room+'/close',{})).status,200);
+ const together=await Promise.all([403,404].map(player=>call(player,'/api/create',{game:'golf'})));
+ const togetherNumbers=together.map(r=>r.data.state.number);
+ assert.ok(togetherNumbers.includes(roomA.number),'the freed number is used again');
+ assert.notEqual(togetherNumbers[0],togetherNumbers[1],'two rooms created together get different numbers');
+ const afterNumbers=await openNumbers();
+ assert.equal(new Set(afterNumbers).size,afterNumbers.length,'no two open rooms share a number');
+ assert.equal((await call(402,'/api/lobby')).data.games.find(g=>g.room===roomB.room).number,roomB.number,'a room keeps its number');
+ for(const [player,room] of [[402,roomB.room],[403,together[0].data.state.room],[404,together[1].data.state.room]])assert.equal((await call(player,'/api/golf/'+room+'/close',{})).status,200);
+ console.log('PASS room numbers: first free number, kept number, reuse after closing, two rooms created together.');
  assert.equal((await mf.dispatchFetch('https://unit.test/api/cinema/ws',{headers:{Upgrade:'websocket'}})).status,401);
  async function cinemaClient(id){
   const res=await mf.dispatchFetch('https://unit.test/api/cinema/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});

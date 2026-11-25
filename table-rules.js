@@ -78,6 +78,9 @@ export function publicTable(s, viewer = null, limit = TURN_LIMIT) {
 // A new table: creator seated; against the AI or in a tutorial the bots are seated and the game starts.
 export function newTable(room, b, token) {
   const game = b.game ?? 'chess';
+  // un solo orologio per le due date: con due letture, se in mezzo scattava il millisecondo, la scadenza non era a
+  // 7 giorni esatti dalla creazione (e la prova falliva una volta ogni tanto)
+  const now = Date.now();
   const s = {
     room,
     number: b.number || null,
@@ -90,8 +93,8 @@ export function newTable(room, b, token) {
     game,
     mode: b.mode ?? 'people',
     chess: null,
-    created: Date.now(),
-    expires: Date.now() + 7 * 86400000
+    created: now,
+    expires: now + 7 * 86400000
   };
   switch (game) {
     case 'naval':
@@ -232,7 +235,7 @@ export function applyMove(s, who, b) {
     });
     if (next.result) s.phase = 'finished';
   } else if (s.connect4) {
-    if (who !== s.turn) throw Error('Non è il tuo turno.');
+    if (who !== s.turn) throw Error('Non tocca a te.');
     const next = playConnect4(s.connect4, b.column);
     s.connect4 = next;
     s.turn = next.turn;
@@ -246,7 +249,7 @@ export function applyMove(s, who, b) {
     });
     if (next.result) s.phase = 'finished';
   } else if (s.checkers) {
-    if (who !== s.turn) throw Error('Non è il tuo turno.');
+    if (who !== s.turn) throw Error('Non tocca a te.');
     const played = playCheckers(s.checkers, b.path),
       key = checkersKey(played.game);
     s.positions = s.positions || {};
@@ -259,7 +262,7 @@ export function applyMove(s, who, b) {
   } else {
     if (!s.chess)
       throw Error('Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.');
-    if (who !== s.turn) throw Error('Non è il tuo turno.');
+    if (who !== s.turn) throw Error('Non tocca a te.');
     const game = new Chess();
     for (const move of s.moves) game.move(move.san);
     if (b.kind === 'claim-draw') {

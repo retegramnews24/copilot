@@ -9,7 +9,7 @@ function finish(g){const n=g.hands.length;
  else if(n===4){const totals=[g.points[0]+g.points[2],g.points[1]+g.points[3]];g.winners=totals[0]===totals[1]?[]:totals[0]>totals[1]?[0,2]:[1,3];g.reason='Coppie · '+totals[0]+' a '+totals[1];}
  else {const best=Math.max(...g.points),leaders=g.points.flatMap((p,i)=>p===best?[i]:[]);g.winners=leaders.length===1?leaders:[];g.reason=n===2?'Punti · '+g.points.join(' a '):'Punteggio più alto · '+best;}
  g.result=g.winners.length?'win':'draw';g.phase='finished';}
-export function playBriscola(state,seat,a,rng=random){if(state.result||seat!==state.turn||!state.hands[seat])throw Error('Non è il tuo turno.');const g=structuredClone(state),n=g.hands.length;
+export function playBriscola(state,seat,a,rng=random){if(state.result||seat!==state.turn||!state.hands[seat])throw Error('Non tocca a te.');const g=structuredClone(state),n=g.hands.length;
  if(g.phase==='auction'){
   if(a.kind==='bid'){const rank=a.rank,target=a.target??61;if(!ORDER.includes(rank)||!Number.isInteger(target)||target<61||target>120||rank!==2&&target!==61)throw Error('Offerta non valida.');if(g.bid&&(ORDER.indexOf(rank)<ORDER.indexOf(g.bid.rank)||rank===g.bid.rank&&(rank!==2||target<=g.bid.target)))throw Error('Chiama una carta più bassa o alza i punti del due.');g.bid={seat,rank,target};g.lastEvent='Asta · '+cardName({rank,suit:0}).split(' di ')[0]+(rank===2?' a '+target+' punti':'');}
   else if(a.kind==='bid-pass'){g.passed[seat]=true;g.lastEvent='Passa all’asta'}else throw Error('Devi chiamare o passare.');

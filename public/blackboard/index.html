@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Blackboard spazio libero</title>
+<title>Lavagna spazio libero</title>
 <link rel="stylesheet" href="./board.css?v=e1e351b2b4">
 <script src="../frame-errors.js?v=42f44db1ac"></script></head>
 <body>
 <main>
   <header>
     <a href="/" data-arcade-back aria-label="Torna a Binottoland">← <span>Binottoland</span></a>
-    <h1>Blackboard <span>spazio libero</span></h1>
+    <h1>Lavagna <span>spazio libero</span></h1>
     <span id="status" role="status">Collegamento…</span>
   </header>
   <section id="pictionary" aria-label="Pictionary">
@@ -45,7 +45,7 @@
             <option value="5">Fine</option><option value="9" selected>Medio</option>
             <option value="16">Grande</option><option value="26">Maxi</option>
           </select>
-          <button id="clear" class="clear-action" type="button" disabled>Cancella Blackboard</button>
+          <button id="clear" class="clear-action" type="button" disabled>Cancella lavagna</button>
         </div>
       </div>
     </section>
@@ -56,7 +56,7 @@
   <form method="dialog">
     <h2>Cancellare la lavagna?</h2>
     <p>I disegni di questa sala verranno cancellati per tutti.</p>
-    <div><button id="cancel-clear" type="button" autofocus>Annulla</button><button id="confirm-clear-action" class="clear-action" type="button">Cancella Blackboard</button></div>
+    <div><button id="cancel-clear" type="button" autofocus>Annulla</button><button id="confirm-clear-action" class="clear-action" type="button">Cancella lavagna</button></div>
   </form>
 </dialog>
 <dialog id="confirm-delete" aria-labelledby="delete-title">
@@ -67,6 +67,6 @@
   </form>
 </dialog>
 <script type="module" src="../arcade/bridge.js"></script>
-<script type="module" src="./board.js?v=7e65b85064"></script>
+<script type="module" src="./board.js?v=e46929fac7"></script>
 </body>
 </html>
