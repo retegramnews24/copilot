@@ -383,7 +383,7 @@ export class Room extends DurableObject {
           });
         }
         if (path === '/init') {
-          if (s) return json({ error: 'Stanza già esistente.' }, 409);
+          if (s) return json({ error: 'Tavolo già esistente.' }, 409);
           const raw = await req.text();
           if (raw.length > 4096) bad('Richiesta troppo grande.');
           const b = JSON.parse(raw);
@@ -394,10 +394,10 @@ export class Room extends DurableObject {
         }
         if (!s) {
           if (path.endsWith('/dismiss') && req.method === 'POST') return json({ left: true });
-          return json({ error: 'Stanza inesistente o scaduta.' }, 404);
+          return json({ error: 'Tavolo inesistente o scaduto.' }, 404);
         }
         if (activeTable(s) && s.expires < Date.now())
-          return json({ error: 'Stanza inesistente o scaduta.' }, 404);
+          return json({ error: 'Tavolo inesistente o scaduto.' }, 404);
         if (path === '/tidy-result' && req.method === 'POST') {
           if (concluded(s) && s.expires !== null) {
             if (!this.hasResultViewer(s)) {
@@ -416,7 +416,7 @@ export class Room extends DurableObject {
           makeRoomFor(this.ctx, userOf(req)?.id);
           const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
           if (!isPlayer && this.ctx.getWebSockets().length >= 60)
-            return json({ error: 'Stanza piena (60 connessioni).' }, 429);
+            return json({ error: 'Tavolo pieno: troppe persone collegate.' }, 429);
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
           pair[1].serializeAttachment({

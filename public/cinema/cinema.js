@@ -198,8 +198,7 @@ const screenShare=new WindowShare($('share-video'),action,(text,button)=>{
   $('share-audio').hidden=!room?.screen||!settings.monitor||!ready||!audio||local;
   const status=$('share-audio-state');
   status.hidden=!room?.screen||!settings.monitor||!ready;
-  status.textContent=audio?(local?'Audio in trasmissione':blocked?'Audio disattivato dal browser':''):'Solo video';
-  status.title=audio?'':'La sorgente non ha fornito una traccia audio';
+  status.textContent=audio?(local?'Audio in trasmissione':blocked?'Audio disattivato dal browser':''):'Solo video: la trasmissione non ha audio'; // la spiegazione sullo schermo, non nel title (sul telefono non si vede)
   if(!status.textContent)status.hidden=true;
 });
 $('share-audio').onclick=()=>{
@@ -492,7 +491,7 @@ $('youtube-form').onsubmit=event=>{
 function updateFavoriteButton(){
   const button=$('save-playing'),url=room?.channel?.url;
   const saved=favorites.some(item=>item.url===url);
-  button.hidden=!!room?.screen||!url||room?.channel?.file===true||room?.channel?.group===true;button.disabled=saved;button.textContent=saved?'★':'☆';
+  button.hidden=!!room?.screen||!url||room?.channel?.file===true||room?.channel?.group===true;button.disabled=saved;button.textContent=saved?'★ Salvato':'☆ Salva'; // con la parola: la spiegazione era solo nel title
 }
 $('save-playing').onclick=()=>{if(room?.channel)action('favorite-add',{channel:packetChannel(room.channel)});};
 function drawFavorites(){

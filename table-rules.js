@@ -261,7 +261,7 @@ export function applyMove(s, who, b) {
     if (s.checkers.result) s.phase = 'finished';
   } else {
     if (!s.chess)
-      throw Error('Questa è una stanza di prova precedente. Crea una nuova partita per giocare a scacchi.');
+      throw Error('Questo è un tavolo di prova precedente. Crea una nuova partita per giocare a scacchi.');
     if (who !== s.turn) throw Error('Non tocca a te.');
     const game = new Chess();
     for (const move of s.moves) game.move(move.san);

@@ -32,7 +32,7 @@ export class GolfRoom {
   }
   async remove(match){
     const removed=await this.lobby('remove',{room:match.room});
-    if(!removed.ok)throw Error('Impossibile chiudere la stanza. Riprova.');
+    if(!removed.ok)throw Error('Impossibile chiudere la sala. Riprova.');
     await this.ctx.storage.delete('golf');
     await this.ctx.storage.deleteAlarm();
   }
@@ -49,7 +49,7 @@ export class GolfRoom {
           await this.save(match);
           return json({state:match,summary:this.summary(match),now});
         }
-        if(!match)return json({error:'Stanza chiusa.'},404);
+        if(!match)return json({error:'Sala chiusa.'},404);
         if(advanceMatch(match,now)){await this.save(match);await this.update(match);}
         if(action==='state' && req.method==='GET')return json(url.searchParams.get('after')===String(match.revision)?{now}:{state:match,now});
         if(req.method!=='POST')return json({error:'Operazione non disponibile.'},405);
