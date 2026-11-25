@@ -2,11 +2,10 @@
 // Per ora si gioca sullo stesso telefono: Giallo è l'ospite (mette l'auto e muove per primo), Rosso chi crea la pista.
 import { Editor } from './editor.js?v=a5fab49dcc';
 import * as R from './rules.js?v=b5d4680e25';
-import { Race3D } from './scene3d.js?v=bbcf477aca';
-import { Sfx } from './sound.js?v=1fc4b2b833';
+import { Race3D } from './scene3d.js?v=1803f297b1';
+import { Sfx } from './sound.js?v=ea750ecabc';
 import { AiDriver, distField } from './ai.js?v=e75e4102f6';
-import { Tutorial } from './tutorial.js?v=b080978b11';
-import { Sprint, SPRINT, GEARS } from './sprint.js?v=442011bc22';
+import { Tutorial } from './tutorial.js?v=633df7e600';
 
 // suoni: il browser li accende solo dopo un tocco
 const sfx = new Sfx();
@@ -74,8 +73,7 @@ function toast(msg, ok) {
 const ed = new Editor($('c2'));
 const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2, time: 'day', mode: 'ai' };
 const NET_MAX = 8; // online: fino a 8 piloti
-const SPRINT_MAX = 6; // Sprint: tu e fino a 5 auto dell'IA
-const maxCars = () => (draft.mode === 'net' ? NET_MAX : draft.mode === 'sprint' ? SPRINT_MAX : R.MAX_CARS);
+const maxCars = () => (draft.mode === 'net' ? NET_MAX : R.MAX_CARS);
 
 // il giocatore: chi è (lo dice Binottoland) e le ultime scelte, ricordate in questo telefono come negli altri giochi
 let me = null;
@@ -87,7 +85,7 @@ function loadSetup() {
   let s = null;
   try { s = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); } catch (e) { /* niente memoria */ }
   if (!s) return;
-  if (['ai', 'local', 'sprint'].includes(s.mode) || (s.mode === 'net' && embedded)) draft.mode = s.mode;
+  if (['ai', 'local'].includes(s.mode) || (s.mode === 'net' && embedded)) draft.mode = s.mode;
   if (['day', 'sunset', 'night'].includes(s.time)) draft.time = s.time;
   if (Number.isInteger(s.players)) draft.players = Math.max(2, Math.min(maxCars(), s.players));
   if (Number.isInteger(s.laps)) draft.laps = Math.max(1, Math.min(9, s.laps));
@@ -131,8 +129,6 @@ function setupInfo() {
     ? 'Una tua auto contro una dell’IA. Muovete nello stesso momento: tu scegli, l’IA sceglie, e le auto partono insieme.'
     : draft.mode === 'net'
       ? `Gara online: disegni la pista, poi la gara compare negli avvisi di Binottoland e aspetta ${n === 2 ? 'un altro pilota' : `altri ${n - 1} piloti`}. Ognuno sceglie la sua mossa dal suo telefono, tutti nello stesso momento: quando ha scelto anche l’ultimo, le auto si muovono insieme. 1 minuto per scegliere, poi guida il pilota automatico.`
-      : draft.mode === 'sprint'
-        ? `Sprint: corsa vera, in tempo reale, contro ${n === 2 ? 'un’auto' : n - 1 + ' auto'} dell’IA. Le auto accelerano da sole, tutte uguali: tu sterzi tenendo premuto a sinistra o a destra.`
       : 'Giocate tutti sullo stesso telefono, a turno.';
   $('carN').textContent = n;
   $('carDots').innerHTML = R.carColors(n).map((c) => `<span style="--c:${c.hex}">${c.num}</span>`).join('');
@@ -271,8 +267,6 @@ qButtons();
 
 async function startRace(track, laps, n, mode = 'local') {
   lastTrack = track; lastLaps = laps; lastN = n; lastMode = mode;
-  stopSprint();
-  if (mode === 'sprint') return startSprint(track, laps, n);
   if (mode === 'ai') n = 2;
   show('rc');
   if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk')); }
@@ -526,7 +520,7 @@ function win(i) {
 $('grid').onclick = (e) => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); scene.setGrid(on); };
 $('view').onclick = (e) => { const top = scene.view !== 'top'; scene.setView(top ? 'top' : 'tilt'); e.target.textContent = top ? 'Vista inclinata' : 'Vista alta'; };
 // "Centra" riporta la vista sulla tua auto (o sulla linea) e da lì la vista torna a seguire il gioco
-$('center').onclick = () => { if (sprint) { scene.userMoved = false; scene.follow = scene.cars[0]; return; } const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true, true); else if (race) scene.focus(race.track.startSlots[0], true, true); };
+$('center').onclick = () => { const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true, true); else if (race) scene.focus(race.track.startSlots[0], true, true); };
 $('menuB').onclick = () => { $('menu').hidden = false; };
 $('snd').onclick = () => { sfx.unlock(); sfx.setOn(!sfx.on); sndLabel(); if (sfx.on) sfx.tick(true); };
 sndLabel();
@@ -534,7 +528,6 @@ $('close').onclick = () => { $('menu').hidden = true; };
 const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps, lastN, lastMode); };
 $('again').onclick = again; $('again2').onclick = again;
 const newTrack = () => {
-  stopSprint();
   $('menu').hidden = true; $('over').hidden = true;
   draft.outer = draft.inner = draft.finish = null; draft.normal = -1; ed.error = null;
   show('ed'); ed.resize(); setStep(1); setupInfo(); $('setup').hidden = false;
@@ -558,136 +551,6 @@ if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
   mo.observe($('over'), { attributes: true, attributeFilter: ['hidden'] });
   mo.observe($('rc'), { attributes: true, attributeFilter: ['class'] });
 }
-
-// ---------- Sprint: corsa in tempo reale ----------
-let sprint = null, sprintHudAt = 0, engines = [];
-// zoom dello Sprint: ricordato in questo telefono
-let sprintDist = 15;
-try { sprintDist = Math.max(6, Math.min(60, Number(localStorage.getItem('gara.sprintZoom')) || 15)); } catch (e) { /* niente */ }
-function sprintZoom(k) {
-  if (!scene) return;
-  sprintDist = Math.max(6, Math.min(60, (scene.rig.goal ? scene.rig.goal.dist : scene.rig.dist) * k));
-  scene.rig.goal = null; scene.rig.dist = sprintDist;
-  try { localStorage.setItem('gara.sprintZoom', String(Math.round(sprintDist))); } catch (e) { /* niente */ }
-}
-$('zOutR').onclick = () => sprintZoom(1.25);
-$('zInR').onclick = () => sprintZoom(0.8);
-$('pad').addEventListener('wheel', (e) => { e.preventDefault(); sprintZoom(Math.exp(e.deltaY * 0.0016)); }, { passive: false });
-function enginesOff() { for (const e of engines) e && e.stop(); engines = []; }
-const held = { l: false, r: false, b: false }, padTouch = new Map();
-const fmtTime = (s) => (s == null ? '–' : `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, '0')}`);
-function stopSprint() {
-  if (scene) scene.onFrame = null;
-  sprint = null;
-  enginesOff();
-  $('zOutR').hidden = $('zInR').hidden = true;
-  padTouch.clear();
-  $('pad').hidden = true;
-  for (const d of $('pad').children) d.classList.remove('on');
-}
-async function startSprint(track, laps, n) {
-  show('rc');
-  if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk')); }
-  scene.resize();
-  scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
-  scene.build(track, draft.time);
-  await scene.ready;
-  race = null; driver = null; busy = true;
-  $('over').hidden = true; $('netGo').hidden = true;
-  const s = new Sprint(track, laps, n);
-  COL = R.carColors(n).map((c, i) => ({ ...c, name: i ? 'IA ' + i : 'Tu', raw: i ? 'IA ' + i : 'Tu' }));
-  scene.setCars({ track, cars: s.cars.map((c) => ({ pos: { x: c.x, y: c.y } })) }, COL);
-  s.cars.forEach((c, i) => { scene.cars[i].rotation.y = -c.h; scene.setGear(i, 1); });
-  // vista più dall'alto e vicina, che segue la tua auto
-  scene.userMoved = false; scene.userPitch = 1.2; scene.rig.goal = null; scene.rig.dist = sprintDist; scene.follow = scene.cars[0];
-  $('zOutR').hidden = $('zInR').hidden = false;
-  sprint = s;
-  sprintHud(true);
-  $('pad').hidden = false;
-  $('rcHelp').textContent = 'Pronti…';
-  await tut.show('sprint');
-  if (sprint !== s) return;
-  await scene.startLights(() => sfx.light(false));
-  if (sprint !== s) return;
-  sfx.light(true);
-  busy = false;
-  scene.onFrame = (dt) => sprintFrame(s, dt);
-}
-function sprintInput() {
-  let l = held.l, r = held.r;
-  for (const side of padTouch.values()) { if (side === 'l') l = true; else r = true; }
-  const both = l && r;
-  for (const d of $('pad').children) d.classList.toggle('on', d.classList.contains('pl') ? l : r);
-  return { steer: both ? 0 : (r ? 1 : 0) - (l ? 1 : 0), brake: held.b || both, gas: true };
-}
-function sprintFrame(s, dt) {
-  if (sprint !== s) return;
-  // menu aperto: la corsa è in pausa e il motore gira al minimo
-  if (!$('menu').hidden) { if (engines[0]) engines[0].set(0.08, 0, 0.6); for (let i = 1; i < engines.length; i++) engines[i] && engines[i].set(0, 0, 0); return; }
-  const ev = s.step(dt, sprintInput());
-  s.cars.forEach((c, i) => {
-    const m = scene.cars[i], moved = Math.hypot(c.x - m.position.x, c.y - m.position.z);
-    m.position.set(c.x, 0, c.y); m.rotation.y = -c.h;
-    scene.rollWheels(m, moved, -c.steer * 0.45);
-  });
-  if (!scene.userMoved) scene.follow = scene.cars[0];
-  const me0 = s.cars[0], now = performance.now();
-  // motore continuo: il tuo, più forte; quelli delle due auto più vicine, più piano secondo la distanza
-  if (!engines.length && sfx.ready()) engines = [sfx.makeEngine(), sfx.makeEngine(), sfx.makeEngine()];
-  if (engines.length) {
-    engines[0] && engines[0].set(me0.rpm, me0.load, 1);
-    const near = s.cars.slice(1).map((c) => ({ c, d: Math.hypot(c.x - me0.x, c.y - me0.y) })).sort((a, b) => a.d - b.d);
-    for (let k = 1; k < 3; k++) {
-      const o = near[k - 1];
-      if (engines[k]) engines[k].set(o ? o.c.rpm : 0, o ? o.c.load : 0, o ? Math.max(0, 0.45 * (1 - o.d / 14)) : 0);
-    }
-  }
-  for (const e of ev) {
-    if (e.type === 'shift') { scene.setGear(e.car, e.gear); if (e.car === 0) sfx.shift(e.up); }
-    else if (e.type === 'wall' && e.car === 0) { sfx.skid(220); if (e.speed > 3) scene.skid(e.at, { x: me0.x, y: me0.y }); }
-    else if (e.type === 'lap' && e.car === 0) { sfx.line(); banner(`<div class="t">Giro ${Math.min(s.laps, e.lap)} di ${s.laps}</div>${me0.best ? 'Giro migliore ' + fmtTime(me0.best) : ''}`, 1200); }
-    else if (e.type === 'finish' && e.car !== 0) banner(`${COL[e.car].name} arriva ${e.place}°`, 1100);
-    else if (e.type === 'finish' && e.car === 0) return sprintEnd(s, e.place);
-  }
-  if (now > sprintHudAt) { sprintHudAt = now + 200; sprintHud(); }
-}
-function sprintHud(first) {
-  const s = sprint;
-  if (!s) return;
-  if (first) s.rank();
-  const box = $('chips');
-  box.innerHTML = [...s.cars].sort((a, b) => a.rank - b.rank).map((c) => {
-    const col = COL[c.id], lap = Math.min(s.laps, Math.max(1, c.progress));
-    return `<div class="chip ${c.id === 0 ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${c.rank}° ${col.name} <span class="muted">giro ${c.finished !== null ? '🏁' : lap + '/' + s.laps}</span></div>`;
-  }).join('');
-  setTopH();
-  if (!busy) $('rcHelp').textContent = `Posizione ${s.cars[0].rank}° di ${s.cars.length} · ${fmtTime(s.time)} · ${s.cars[0].gear}ª · ${Math.round(s.speed(s.cars[0]) * 38)} km/h`;
-}
-function sprintEnd(s, place) {
-  scene.onFrame = null;
-  enginesOff();
-  sprintHud();
-  $('pad').hidden = true;
-  if (place === 1) sfx.win();
-  $('winT').textContent = place === 1 ? 'Hai vinto!' : `Arrivi ${place}°`;
-  $('winT').style.color = place === 1 ? COL[0].hex : '#fff';
-  $('winS').textContent = `Tempo ${fmtTime(s.cars[0].finished)} · giro migliore ${fmtTime(s.cars[0].best)}`;
-  netOverButtons();
-  setTimeout(() => { if (sprint === s) $('over').hidden = false; }, 700);
-}
-// sterzo col dito: metà sinistra o destra dello schermo (anche più dita); tastiera sul computer
-$('pad').addEventListener('pointerdown', (e) => {
-  try { $('pad').setPointerCapture(e.pointerId); } catch (err) { /* niente */ }
-  padTouch.set(e.pointerId, e.clientX < innerWidth / 2 ? 'l' : 'r');
-});
-$('pad').addEventListener('pointermove', (e) => { if (padTouch.has(e.pointerId)) padTouch.set(e.pointerId, e.clientX < innerWidth / 2 ? 'l' : 'r'); });
-for (const t of ['pointerup', 'pointercancel', 'lostpointercapture']) $('pad').addEventListener(t, (e) => padTouch.delete(e.pointerId));
-const KEYS = { ArrowLeft: 'l', a: 'l', A: 'l', ArrowRight: 'r', d: 'r', D: 'r', ArrowDown: 'b', s: 'b', S: 'b', ' ': 'b' };
-addEventListener('keydown', (e) => { if (sprint && KEYS[e.key]) { held[KEYS[e.key]] = true; e.preventDefault(); } });
-addEventListener('keyup', (e) => { if (KEYS[e.key]) held[KEYS[e.key]] = false; });
-addEventListener('blur', () => { held.l = held.r = held.b = false; padTouch.clear(); });
-// app in secondo piano: i motori si spengono (si riaccendono da soli quando torni)
-document.addEventListener('visibilitychange', () => { if (document.hidden) enginesOff(); });
 
 // ---------- gara online (Multiplayer) ----------
 // Binottoland tiene la gara sul server e manda qui lo stato ("f1:state"): la pista, i piloti, l'elenco delle mosse.
@@ -926,4 +789,4 @@ if (embedded) {
 setStep(1);
 ed.setBoard(R.boardSize()); ed.resize(); ed.setZoom(R.startCells(draft.players)); syncZoom();
 // solo per le prove (?dev), come in Acquedotto: prima era sempre a disposizione della pagina
-if (new URLSearchParams(location.search).has('dev')) window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, get sprint() { return sprint; }, pick };
+if (new URLSearchParams(location.search).has('dev')) window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, pick };

@@ -25,16 +25,6 @@ export const STEPS = {
       ['👆 La vista', 'Un dito sposta la vista; due dita ingrandiscono, girano e inclinano. Se la sposti resta lì: «Centra» ti riporta sulla tua auto. Con «Griglia» nascondi i quadretti.']
     ]
   },
-  sprint: {
-    modal: true, ok: 'Via!', title: 'Sprint: si guida!',
-    items: [
-      ['🚦 Semaforo', 'Al verde partono tutti insieme. Le auto accelerano da sole, tutte allo stesso modo.'],
-      ['👈👉 Sterzo', 'Tieni premuto a sinistra o a destra dello schermo. Sul computer: frecce ← → oppure A e D.'],
-      ['✋ Freno', 'Due dita, una per parte (o freccia ↓). Nelle curve strette rallenta un attimo prima.'],
-      ['🧱 Muri', 'Se li tocchi rimbalzi e perdi velocità, ma non ti fermi.'],
-      ['🏁 Vittoria', 'Vince chi finisce per primo tutti i giri.']
-    ]
-  },
   crash: { title: 'Urto!', text: 'Al primo turno resti fermo. Al secondo l’auto si gira verso la pista. Poi riparti in prima, una casella alla volta.', auto: 7000 },
   lap: { title: 'Giro completato', text: 'Hai passato la linea nel verso giusto. La scia del giro prima diventa più chiara, quella di due giri fa sparisce.', auto: 6000 },
   end: { modal: true, ok: 'Fine', title: 'Fine del tutorial', text: 'Ora sai tutto. Il tutorial lo puoi rifare quando vuoi dal menu ☰ o dalla schermata «Nuova gara». Buona corsa!' }

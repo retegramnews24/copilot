@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BalillaHub } from '../balilla-hub.js';
+import { BalillaHub, TAKEOVER } from '../balilla-hub.js';
 import { L, W, R, rows, control, newField, simulate, cornerHeight } from '../public/lobby3d/balilla-rules.js';
 
 test('Le quattro rampe fanno uscire una pallina ferma', () => {
@@ -80,8 +80,13 @@ test('Chi si ricollega con una connessione nuova riprende il suo posto al tavolo
   send(old, 'watch');
   send(old, 'join', { mode: 2, slot: 0, target: 10, bar: true });
   assert.equal(old.state.slot, 0);
-  // la vecchia connessione resta aperta (morta): quella nuova chiede lo stesso posto
+  // un secondo dispositivo vivo della stessa persona non ruba il posto (la vecchia si è fatta sentire adesso)
   send(fresh, 'watch');
+  send(fresh, 'join', { mode: 2, slot: 0, target: 10, bar: true });
+  assert.equal(fresh.state.slot, -1, 'due dispositivi vivi: il secondo guarda');
+  assert.equal(old.state.slot, 0);
+  // la vecchia connessione resta aperta ma muta (rete caduta): passato TAKEOVER, quella nuova si riprende il posto
+  hub.viewers.get(old).seenAt = Date.now() - TAKEOVER - 1000;
   send(fresh, 'join', { mode: 2, slot: 0, target: 10, bar: true });
   assert.equal(fresh.state.slot, 0, 'il posto passa alla connessione nuova');
   assert.equal(hub.seated().length, 1);

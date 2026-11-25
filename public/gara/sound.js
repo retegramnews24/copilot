@@ -77,66 +77,6 @@ export class Sfx {
     lfo.connect(lg); lg.connect(out.gain); lfo.start(t0); lfo.stop(t0 + dur);
   }
 
-  // motore continuo (Sprint): resta acceso e cambia giri e carico in tempo reale.
-  // Tre onde (fondamentale, sottarmonica, armonica) filtrate, pulsazione dei cilindri, un filo di rumore d'aspirazione.
-  // Restituisce { set(giri 0..1, carico 0..1, volume 0..1), stop() }.
-  makeEngine() {
-    if (!this.ctx) return null;
-    const c = this.ctx, t0 = c.currentTime;
-    const out = c.createGain(), lp = c.createBiquadFilter(), shaper = c.createWaveShaper(), pulse = c.createGain();
-    out.gain.value = 0.0001;
-    lp.type = 'lowpass'; lp.Q.value = 2.2; lp.frequency.value = 800;
-    const curve = new Float32Array(256);
-    for (let i = 0; i < 256; i++) { const x = (i / 255) * 2 - 1; curve[i] = Math.tanh(x * 2.2); }
-    shaper.curve = curve;
-    pulse.gain.value = 0.75;
-    const oscs = [[1, 'sawtooth', 0.5, 0], [0.5, 'square', 0.32, -6], [2, 'sawtooth', 0.16, 9]].map(([mul, type, vol, det]) => {
-      const o = c.createOscillator(), g = c.createGain();
-      o.type = type; o.detune.value = det; g.gain.value = vol;
-      o.connect(g); g.connect(shaper); o.start(t0);
-      return { o, mul };
-    });
-    shaper.connect(lp); lp.connect(pulse); pulse.connect(out); out.connect(this.master);
-    // pulsazione dei cilindri: modula il volume alla frequenza degli scoppi
-    const lfo = c.createOscillator(), lfoG = c.createGain();
-    lfo.type = 'triangle'; lfoG.gain.value = 0.25; lfo.connect(lfoG); lfoG.connect(pulse.gain); lfo.start(t0);
-    // aspirazione: rumore filtrato che cresce con il carico
-    const nz = this.noise(t0, 3600), bp = c.createBiquadFilter(), ng = c.createGain();
-    bp.type = 'bandpass'; bp.Q.value = 1.2; bp.frequency.value = 1200; ng.gain.value = 0;
-    nz.connect(bp); bp.connect(ng); ng.connect(out);
-    let alive = true;
-    return {
-      set: (rpm, load, vol = 1) => {
-        if (!alive) return;
-        const t = c.currentTime, f = 42 + rpm * 210, k = 0.035;
-        for (const { o, mul } of oscs) o.frequency.setTargetAtTime(f * mul, t, k);
-        lfo.frequency.setTargetAtTime(f * 0.5, t, k);
-        lp.frequency.setTargetAtTime(500 + rpm * 2400 + load * 900, t, k);
-        bp.frequency.setTargetAtTime(900 + rpm * 1800, t, k);
-        ng.gain.setTargetAtTime(0.05 * load * vol, t, 0.08);
-        out.gain.setTargetAtTime(Math.max(0.0001, vol * (0.07 + 0.07 * load + 0.04 * rpm)), t, 0.06);
-      },
-      stop: () => {
-        if (!alive) return;
-        alive = false;
-        const t = c.currentTime;
-        out.gain.setTargetAtTime(0.0001, t, 0.08);
-        for (const { o } of oscs) o.stop(t + 0.4);
-        lfo.stop(t + 0.4); nz.stop(t + 0.4);
-        setTimeout(() => out.disconnect(), 600);
-      }
-    };
-  }
-
-  // cambio marcia: un piccolo colpo meccanico
-  shift(up) {
-    if (!this.ready()) return;
-    const c = this.ctx, t0 = c.currentTime, hp = c.createBiquadFilter(), g = c.createGain();
-    hp.type = 'highpass'; hp.frequency.value = up ? 1800 : 1200;
-    this.env(g, t0, 0.002, 0.06, 0.03, 0.05);
-    this.noise(t0, 0.06).connect(hp); hp.connect(g); g.connect(this.master);
-  }
-
   // stridio delle gomme quando si scala
   skid(ms) {
     if (!this.ready()) return;

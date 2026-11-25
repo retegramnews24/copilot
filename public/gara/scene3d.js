@@ -2079,7 +2079,6 @@ export class Race3D {
     const dt = Math.min(0.05, this.clock.getDelta()), now = performance.now();
     this.anims = this.anims.filter((a) => { const k = Math.min(1, (now - a.t0) / a.ms); a.fn(k); if (k >= 1) { a.res(); return false; } return true; });
     if (this.fx.length) this.stepFx(dt);
-    if (this.onFrame) this.onFrame(dt, now); // modalità Sprint: la corsa in tempo reale avanza a ogni fotogramma
     this.animCrowd(now, dt);
     this.animTalk(now);
     if (this.flags.length) this.waveFlags(now);

@@ -8,6 +8,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 3: Lobby 3D su telefono**, letta sul commit `dcbc5e6` (dopo i quattro commit «Multigiocatore (analisi Fable, area 2)»).
 - **Area 4: fisica e regole dei giochi**, letta sul commit `dbb8d06` (dopo i commit «Lobby 3D (analisi Fable, area 3…)»).
 - **Area 5: qualità del codice**, letta sul commit `ba287b1` (dopo i commit del calcio balilla del 25 novembre).
+- **Area 6: staging contro main**, fatta il 25 novembre 2026 confrontando `staging` al commit `a7a56b9` con `main` al commit `a615b09` (versione 1.0.60).
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -28,6 +29,25 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I punti più importanti dell'Area 6 (staging contro main)
+
+**Come leggere quest'area.** È un confronto fatto con git tra i due rami, file per file, quindi tutto è **[V]**. Non ho provato niente nell'app. I due rami oggi sono quasi uguali: su 22 file diversi, solo 2 esistono soltanto su `staging` e nessuno soltanto su `main`.
+
+| # | Cosa | Dove | Proposta |
+|---|---|---|---|
+| S1 | **Ruggine 89 non è solo su staging: è già in produzione.** I sette file sono identici sui due rami e il cabinato è nella sala giochi della Lobby 3D di `main` | `public/ruggine/`, `public/lobby3d/lobby3d.js` | decidere se va bene così (vedi rischio R6) |
+| S2 | Lo «Sprint» di F1 è solo su staging, in sette file | `public/gara/` | togliere da staging: dopo, F1 torna identico a `main` |
+| S3 | La ripresa del posto al balilla con una connessione nuova è solo su staging, con la sua prova | `balilla-hub.js`, `tests/balilla-bar.test.mjs` | portare su `main` |
+| S4 | La rimessa automatica della palla in allenamento guarda solo le aste di chi gioca: solo su staging (una riga) | `public/lobby3d/balilla-rules.js` | portare su `main` |
+| S5 | File di Blender: sono tutti su tutti e due i rami, tranne il sorgente dell'auto di F1 | `blender/auto.blend` | portare su `main` |
+| S6 | Nella cartella di staging ci sono cose fuori da git: un modello modificato e non salvato, nove copie di sicurezza di Blender | `blender/` | decidere e mettere `*.blend1` tra i file ignorati |
+| S7 | File dell'ambiente di prova diversi apposta (prove su GitHub, cancello di pubblicazione, documento) | `.github/`, `scripts/`, `wrangler.jsonc`, `docs/` | portare su `main`, così i file diventano uguali; il documento va prima aggiornato |
+| S8 | Numero di versione: 1.0.51 su staging, 1.0.60 su `main`, più i timbri `?v=` che ne discendono | sei file | allineare staging a `main` dopo ogni rilascio |
+
+Il dettaglio è nella sezione «Area 6: staging contro main», più sotto.
 
 ---
 
@@ -829,6 +849,136 @@ I programmi di prova sono rimasti fuori dal repo. Sono piccoli e ripetibili (ste
 
 ---
 
+## Area 6: staging contro main
+
+### 6.1 Lo stato dei due rami
+
+- **`main`:** commit `a615b09`, «1.0.60: pulizia e ordine del codice (analisi di Fable, area 5)». Cartella pulita, niente fuori da git.
+- **`staging`:** commit `a7a56b9`, «Ordine (analisi Fable, area 5, gruppo 3)». Il numero di versione scritto nei file è ancora 1.0.51.
+- **Storia:** i due rami si sono separati alla 1.0.46 (`c8d60d2`). Da allora staging ha 133 commit suoi e `main` 12. È giusto così: le modifiche si riportano a mano e i rami non si uniscono mai. Vuol dire però che git non può dire «cosa manca»: conta solo il confronto dei file, che è quello fatto qui.
+- **Il confronto:** 22 file diversi. 2 esistono solo su staging, 0 solo su `main`, 20 hanno contenuto diverso. Tutto il resto, cioè server, Lobby 3D, flipper, biliardo, cinema, Ruggine, prove, è identico.
+
+### 6.2 File per file
+
+**Solo su staging**
+
+| File | Cos'è | Proposta |
+|---|---|---|
+| `public/gara/sprint.js` (195 righe) | la modalità Sprint di F1: corsa in tempo reale contro l'IA | **togliere da staging** |
+| `blender/auto.blend` (276 KB) | il sorgente di Blender dell'auto di F1. Il modello che ne esce, `public/gara/models/auto.glb`, è già su `main` | **portare su `main`**: è l'unico modello pubblicato il cui sorgente non è su `main` |
+
+**Diversi per lo Sprint** (tutti da riportare uguali a `main`)
+
+| File | Righe in più su staging | Cosa c'è |
+|---|---|---|
+| `public/gara/main.js` | +144, −7 | tutta la guida dello Sprint (vedi 6.3) |
+| `public/gara/sound.js` | +60 | motore continuo e colpo del cambio |
+| `public/gara/tutorial.js` | +10 | il fumetto «Sprint: si guida!» |
+| `public/gara/gara.css` | +10 | i quattro tasti di modalità e i due pad per sterzare |
+| `public/gara/index.html` | +5, −4 | tasto «Sprint», pad, tasti di zoom, timbri |
+| `public/gara/scene3d.js` | +1 | l'aggancio che fa avanzare lo Sprint a ogni fotogramma |
+
+**Diversi per il calcio balilla**
+
+| File | Differenza | Proposta |
+|---|---|---|
+| `balilla-hub.js` | +17 righe (`:168-184`): chi si ricollega con una connessione nuova mentre quella vecchia, morta, tiene ancora il posto, si riprende subito il suo posto | **portare su `main`**. Su `main` oggi quella persona resta spettatrice finché il posto vecchio non si libera da solo, cioè fino a 30 secondi (`SEAT_GRACE`, `balilla-hub.js:22`), con la partita in pausa |
+| `tests/balilla-bar.test.mjs` | +26 righe: la prova di quel caso | **portare su `main`** insieme |
+| `public/lobby3d/balilla-rules.js` | 2 righe (`:139` un commento, `:441` la chiamata): in allenamento la palla ferma si rimette da sola se non ci arrivano le aste **di chi gioca**; su `main` si guardano tutte le aste, anche quelle ferme del lato vuoto | **portare su `main`**. Su `main` oggi, da soli, una palla ferma davanti alle aste del lato vuoto resta lì finché non premi Spazio |
+| `public/lobby3d/balilla.js`, `public/lobby3d/lobby3d.js` | 1 riga l'uno: solo il timbro `?v=` | **lasciare**: si sistemano da soli con `npm run stamp` quando i due file sopra sono uguali |
+
+**Diversi per l'ambiente di prova** (voluti)
+
+| File | Differenza | Proposta |
+|---|---|---|
+| `.github/workflows/tests.yml` | su staging le prove di GitHub partono solo per `main`; su `main` per ogni ramo | **portare su `main`**: per `main` non cambia niente e il file diventa uguale |
+| `scripts/deploy-gate.mjs` | +5 righe: su staging si pubblica senza aspettare le prove | **portare su `main`**: lì la riga non scatta mai (il ramo non è `staging`) |
+| `wrangler.jsonc` | +1 riga di commento | **portare su `main`** |
+| `docs/ambiente-di-prova.md` | spiega che staging pubblica senza prove; dice «Prove in corso su staging: Lobby 3D, F1 Sprint, Ruggine 89» (`:12`) | **aggiornare, poi portare su `main`**: quella riga non è più vera (Lobby 3D e Ruggine sono su `main`, lo Sprint va tolto) |
+
+**Diversi per il numero di versione**
+
+| File | Differenza | Proposta |
+|---|---|---|
+| `package.json`, `package-lock.json`, `api.js`, `public/app.js`, `public/index.html` | 1.0.51 su staging, 1.0.60 su `main`; in `app.js` e `index.html` anche i timbri che seguono | **allineare staging**: dopo ogni rilascio dare a staging lo stesso numero di `main` (`npm run release -- 1.0.60`). Non serve a chi usa l'app; serve a tenere il confronto pulito, così una differenza vera si vede subito |
+
+### 6.3 Lo Sprint di F1: dove si trova
+
+Va tolto del tutto. È solo su staging, in questi punti (numeri di riga di staging):
+
+- **`public/gara/sprint.js`**: tutto il file (fisica, cambio a 7 marce, guida dell'IA).
+- **`public/gara/main.js`:**
+  - `:9` l'importazione di `sprint.js`;
+  - `:77-78` `SPRINT_MAX` e il numero massimo di auto;
+  - `:90` la modalità `'sprint'` tra quelle ricordate sul telefono;
+  - `:134-135` il testo di spiegazione in «Nuova gara»;
+  - `:274-275` `stopSprint()` e il salto a `startSprint` dentro `startRace`;
+  - `:529` il tasto «Centra», che ha un ramo per lo Sprint;
+  - `:537` `stopSprint()` dentro «Nuova pista»;
+  - `:562-690` il blocco «Sprint: corsa in tempo reale»: zoom, motori, `startSprint`, `sprintInput`, `sprintFrame`, `sprintHud`, `sprintEnd`, i pad, i tasti della tastiera;
+  - `:929` `get sprint()` nell'aggancio di prova.
+- **`public/gara/index.html`:** `:36` il pad (`id="pad"`), `:38` i tasti di zoom `zOutR` e `zInR`, `:47` il tasto «Sprint» e la classe `modes`.
+- **`public/gara/gara.css`:** `:85-94` (`.row.modes` e `.pad`).
+- **`public/gara/sound.js`:** `:80-137` (`makeEngine` e `shift`), usati solo dallo Sprint.
+- **`public/gara/tutorial.js`:** `:28-37` (il passo `sprint`).
+- **`public/gara/scene3d.js`:** `:2082` (`onFrame`).
+- **`docs/ambiente-di-prova.md`:** `:12`.
+
+**Non c'entrano:** la parola `sprint` in `public/lobby3d/lobby3d.js` è il tasto per correre nella Lobby 3D (c'è anche su `main`). Non ci sono prove dello Sprint, né niente sul server.
+
+**Il modo più sicuro per toglierlo:** dato che in quei sei file le differenze con `main` sono solo lo Sprint e i timbri, basta prendere da `main` le loro versioni, cancellare `sprint.js` e lanciare `npm run stamp`. Dopo, tutta la cartella `public/gara/` è identica a `main`.
+
+**Cosa resta sui telefoni di chi l'ha provato:** due valori in memoria (`gara.sprintZoom` e la modalità `sprint` dentro `binotto-f1-setup`). Non danno fastidio: la modalità sconosciuta viene ignorata e si riparte da «Contro l'IA».
+
+### 6.4 Solo su main
+
+- **Nessun file.**
+- **Nel contenuto:** il numero di versione 1.0.60; le prove di GitHub che partono per ogni ramo; la versione vecchia del documento sull'ambiente di prova; nel balilla la rimessa che guarda tutte le aste. Sono le stesse differenze di 6.2 viste dall'altra parte: `main` non ha niente che manchi a staging.
+
+### 6.5 Fuori da git, nella cartella di staging
+
+- **`blender/binotto-gt.blend`:** modificato e non salvato in un commit. Non so se il modello pubblicato (`public/lobby3d/models/binotto-gt.glb`) corrisponde alla versione modificata o a quella salvata.
+- **Nove copie di sicurezza di Blender** (`.blend1`): `binotto-gt`, `divanetto`, `divano_lobby`, `drone`, `flipper`, `personaggio`, `sgabello`, `tavolo-balilla`, `tende`. Non sono in git e non sono ignorate, quindi compaiono a ogni controllo.
+- **`blender/drone.blend1`:** è la copia di un file che in git non c'è più (il drone è stato tolto con il commit `70b731b`).
+- **Le cartelle di Blender non vengono pubblicate:** Cloudflare serve solo `public/`. I sorgenti pesano circa 10 MB nel repo, ma non arrivano ai telefoni.
+
+### 6.6 Rischi nel portare su main quello che resta
+
+**R1. Ripresa del posto: stessa persona su due dispositivi** — media
+
+- **Dove:** `balilla-hub.js:170-184`.
+- **Cosa succede:** il blocco toglie dal tavolo ogni altra connessione della stessa persona, anche se è viva. Se la stessa persona ha la Lobby 3D aperta sul telefono e sul computer e tutti e due sono al tavolo, il telefono chiede il posto ogni 3 secondi quando non è seduto: i due dispositivi si rubano il posto a vicenda.
+- **Quanto è probabile:** poco, ma chi prova l'app (telefono più Telegram Desktop) ci può cadere.
+- **Rimedio possibile:** prendere il posto solo se la connessione vecchia tace da qualche secondo (c'è già `seenAt`).
+
+**R2. Ripresa del posto: lato diverso** — bassa
+
+- Se la connessione nuova chiede l'altro lato, quella vecchia viene tolta senza passare da `leave` (`:174-175`): non si fermano le sue aste e non si avvisa nessuno fino al passo dopo. Subito dopo la persona si siede dall'altra parte, quindi di solito non si nota.
+
+**R3. Rimessa in allenamento** — bassa
+
+- La riga nuova si fida del fatto che in allenamento «chi rimette» sia il lato di chi gioca. È così (`balilla-hub.js:289-290`), e quel codice è già uguale su `main`. Le regole girano anche sul server: va pubblicata insieme, telefono e server, come sempre.
+
+**R4. Il metodo: file con versione e timbri** — media
+
+- `public/app.js`, `public/index.html`, `public/lobby3d/balilla.js` e `public/lobby3d/lobby3d.js` contengono il numero di versione o timbri `?v=` diversi tra i rami. Copiandoli interi da staging si porta su `main` la versione 1.0.51 o un timbro sbagliato.
+- **Regola:** copiare interi solo i file senza versione (`balilla-hub.js`, `balilla-rules.js`, la prova, i file dell'ambiente di prova), poi su `main` `npm run stamp` e `npm run release:check`. Il controllo ferma l'errore, ma solo se lo si lancia.
+
+**R5. Togliere lo Sprint a metà** — media, vale per staging
+
+- `main.js` aggancia i tasti dello Sprint appena parte (`$('pad')`, `$('zOutR')`, `$('zInR')`). Se si toglie il tasto dalla pagina ma non il codice, o si cancella `sprint.js` lasciando l'importazione, F1 non parte più per niente. I sette punti vanno tolti insieme.
+
+**R6. Ruggine 89 è già pubblico** — da decidere
+
+- Su `main` il cabinato «Ruggine 89» è sempre presente nella sala giochi della Lobby 3D (`public/lobby3d/lobby3d.js:1010`) e apre il gioco a tutto schermo (`:1119-1125`). Non è nell'elenco dei giochi della Lobby classica (`public/index.html` e `public/games-catalog.js` non lo nominano).
+- Se era inteso come prova, oggi lo vedono tutti. Se va bene così, basta correggere il documento che lo dà ancora «in prova su staging».
+
+**R7. Le prove su staging non girano su GitHub** — bassa
+
+- È voluto, ma vuol dire che quello che si porta su `main` viene provato da GitHub solo dopo il commit su `main`. Prima di portare conviene lanciare a mano tutti i passi su `main`, come già fai.
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -937,3 +1087,20 @@ I programmi di prova sono rimasti fuori dal repo. Sono piccoli e ripetibili (ste
 | 5.13 | Piccole coerenze: `window.__gara` solo con `?dev`, commento di `tests.yml` aggiornato, una lingua sola per i commenti nuovi, codici d'errore distinti (400 richiesta sbagliata, 403 non puoi, 409 la partita è cambiata) | Q10 | piccolo |
 
 **Ordine consigliato per l'Area 5:** 5.1, 5.2 e 5.3 insieme (sono solo togliere, e alleggeriscono tutto il resto). Poi 5.4 e 5.10, che fanno vedere gli errori veri. Poi 5.7 e 5.11. La 5.5 conviene farla insieme alle correzioni dei flipper dell'Area 4. La 5.6 e la 5.8 sono i lavori grossi: vanno fatti a pezzi, quando si tocca comunque quel codice.
+
+### Proposte per l'Area 6
+
+| # | Proposta | Risolve | Sforzo |
+|---|---|---|---|
+| 6.1 | Togliere lo Sprint da staging: prendere da `main` i sei file di `public/gara/`, cancellare `sprint.js`, `npm run stamp`. Controllare che F1 parta in tutte e tre le modalità | S2, R5 | piccolo |
+| 6.2 | Portare su `main` la ripresa del posto al balilla con la sua prova, aggiungendo la condizione «solo se la connessione vecchia tace da qualche secondo» | S3, R1, R2 | piccolo |
+| 6.3 | Portare su `main` la rimessa in allenamento che guarda solo le aste di chi gioca | S4 | piccolo |
+| 6.4 | Portare su `main` `blender/auto.blend` | S5 | piccolo |
+| 6.5 | Portare su `main` i tre file dell'ambiente di prova (`tests.yml`, `deploy-gate.mjs`, `wrangler.jsonc`), che lì non cambiano niente | S7 | piccolo |
+| 6.6 | Aggiornare `docs/ambiente-di-prova.md` (togliere la riga «Prove in corso») e portarlo su `main` | S7, R6 | piccolo |
+| 6.7 | Dare a staging il numero di versione di `main` dopo ogni rilascio | S8, R4 | piccolo |
+| 6.8 | Blender: decidere il modello modificato del Binotto GT (salvarlo o scartarlo), cancellare `drone.blend1`, aggiungere `*.blend1` a `.gitignore` sui due rami | S6 | piccolo |
+| 6.9 | Decidere Ruggine 89: lasciarlo pubblico com'è, oppure toglierne il cabinato da `main` finché non è pronto | S1, R6 | piccolo |
+| 6.10 | Un controllo ripetibile: un piccolo programma che elenca le differenze tra i due rami lasciando fuori versione e timbri. Dopo 6.1-6.7 deve dire «nessuna differenza»; da lì in poi ogni riga che compare è una modifica ancora da portare | tutti | piccolo |
+
+**Ordine consigliato per l'Area 6:** 6.1 su staging. Poi, in un solo commit su `main` con versione +1, le 6.2, 6.3, 6.4, 6.5 e 6.6. Poi 6.7 su staging. A quel punto i due rami sono uguali, e la 6.10 serve a tenerli così. Le 6.8 e 6.9 sono decisioni tue e non bloccano il resto.
