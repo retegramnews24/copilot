@@ -30,12 +30,21 @@ const slug = text =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+// Keys of renamed games: the ★, the order and "recently played" saved on the phone move to the new key.
+export const RENAMED = { 'blackboard-spazio-libero': 'lavagna-spazio-libero' };
+export function migrateKeys(state) {
+  const to = key => RENAMED[key] || key;
+  const unique = list => [...new Set((list || []).map(to))];
+  const recent = {};
+  for (const [key, at] of Object.entries(state.recent || {})) recent[to(key)] = Math.max(recent[to(key)] || 0, at);
+  return { ...state, fav: unique(state.fav), order: unique(state.order), recent };
+}
 const read = () => {
   try {
     // order: the Giochi icons in the order chosen by dragging (this device only).
-    return { fav: [], recent: {}, order: [], ...JSON.parse(localStorage.getItem(STORE) || '{}') };
+    return migrateKeys({ fav: [], recent: {}, order: [], ...JSON.parse(localStorage.getItem(STORE) || '{}') });
   } catch {
-    return { fav: [], recent: {} };
+    return { fav: [], recent: {}, order: [] };
   }
 };
 const write = value => {
@@ -60,7 +69,8 @@ export function initCatalog() {
   cards = [...page.querySelectorAll('.catalog-card')];
   for (const card of cards) {
     const title = card.querySelector('.catalog-card-title h3')?.textContent || '';
-    const key = slug(title);
+    // The key is written in the card (data-game in index.html): renaming a game no longer changes it.
+    const key = card.dataset.game || slug(title);
     card.dataset.game = key;
     card.style.setProperty('--cover', COVERS[key] || 'var(--accent)');
     homes.set(card, card.parentElement);

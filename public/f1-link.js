@@ -4,7 +4,7 @@
 // joins, keeps the race in sync by polling and sends the moves; the iframe only shows and asks.
 // Telegram stays here too: safe-area insets, Back, haptics, closing confirmation while racing.
 import { telegramHaptic } from './haptic.js?v=c280753040';
-import { MSG } from './messages.js?v=a4f8bd3c10';
+import { MSG } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 
 export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {

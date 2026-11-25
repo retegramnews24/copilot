@@ -921,7 +921,9 @@ dd {
 .connection-pill {
   font-size: 12px;
   color: var(--muted);
-  max-width: 90px;
+  /* «Riconnessione…» a 12px è largo circa 90px: un po' di spazio in più, e mai su due righe (analisi 9.9) */
+  max-width: 110px;
+  white-space: nowrap;
   text-align: right;
 }
 .connection-pill[data-live='true'] {
@@ -4222,13 +4224,14 @@ html[data-env='staging'] .lobby-wordmark::after {
 /* Bell counter: a perfect circle (also for "9+"). */
 .notices-count {
   box-sizing: border-box;
-  width: 18px;
-  min-width: 0;
+  /* a 12px due cifre non stanno in un cerchio di 18px: con due cifre diventa una pillola (analisi 9.9) */
+  width: auto;
+  min-width: 18px;
   height: 18px;
-  padding: 0;
+  padding: 0 4px;
   display: grid;
   place-items: center;
-  border-radius: 50%;
+  border-radius: 9px;
   font-size: 12px;
   font-weight: 700;
   line-height: 1;

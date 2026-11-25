@@ -17,14 +17,20 @@ export const PINBALL_START_GAP = 2000; // al massimo un annuncio ogni 2 secondi 
 export const PINBALL_KEYS = { gp: 'pinballTop', gt: 'pinballTopGT' };
 export const pinballStartKey = id => 'pinballStart:' + id;
 
-// inizio partita (dal telefono): si segna l'ora, per persona e per tavolo
-export async function startPinball(ctx, attachment, table = 'gp') {
+// inizio partita (dal telefono): si segna l'ora, per persona e per tavolo. Il telefono rimanda l'inizio dopo una
+// riapertura finché non riceve la conferma (public/lobby-link.js), con lo stesso numero (ref): un inizio rimandato
+// non sposta l'ora, altrimenti il punteggio di fine partita sembrerebbe fatto in meno tempo.
+export async function startPinball(ctx, attachment, table = 'gp', ref = null) {
   const id = attachment?.user?.id;
   if (!PINBALL_KEYS[table] || id == null) return false;
   const now = Date.now(),
     starts = (await ctx.storage.get(pinballStartKey(id))) ?? {};
+  if (ref != null && starts.refs?.[table] === ref && now - starts[table] < PINBALL_GAME_MAX) return false;
   if (now - (starts[table] || 0) < PINBALL_START_GAP) return false;
-  await ctx.storage.put(pinballStartKey(id), { ...starts, [table]: now });
+  const refs = { ...starts.refs };
+  if (ref != null) refs[table] = ref;
+  else delete refs[table];
+  await ctx.storage.put(pinballStartKey(id), { ...starts, [table]: now, refs });
   return true;
 }
 
@@ -36,13 +42,13 @@ export async function recordPinball(ctx, attachment, score, table = 'gp') {
     stamp = table === 'gp' ? 'pinballAt' : 'pinballAt_' + table;
   // partita annunciata (da questo collegamento o da uno precedente della stessa persona) e punteggio possibile
   // per la sua durata
-  const { [table]: started, ...others } = (await ctx.storage.get(pinballStartKey(user.id))) ?? {};
+  const { [table]: started, refs = {}, ...others } = (await ctx.storage.get(pinballStartKey(user.id))) ?? {};
   if (!Number.isFinite(started) || started > now || now - started > PINBALL_GAME_MAX) return false;
   if (score > PINBALL_GRACE + (PINBALL_RATE * (now - started)) / 1000) return false;
   if (now - (attachment[stamp] || 0) < 20000) return false;
   attachment[stamp] = now;
   // un punteggio per partita annunciata
-  if (Object.keys(others).length) await ctx.storage.put(pinballStartKey(user.id), others);
+  if (Object.keys(others).length) await ctx.storage.put(pinballStartKey(user.id), { ...others, refs });
   else await ctx.storage.delete(pinballStartKey(user.id));
   const list = (await ctx.storage.get(key)) ?? [];
   const id = String(user.id),

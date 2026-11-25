@@ -1,6 +1,7 @@
 import {DEFAULT_SIZE, ERASER, validStroke} from './public/blackboard/chalk.js';
 import {normalizeAppearance} from './public/appearance.js';
 import {makeRoomFor} from './socket-limits.js';
+import {MSG} from './public/messages.js';
 
 const TAG = 'blackboard';
 const DEFAULT_ROOM = '1';
@@ -138,7 +139,7 @@ export class Blackboard {
       return Response.json(entry);
     }
     if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-      return new Response('WebSocket richiesto', {status:426});
+      return new Response(MSG.live, {status:426});
     }
     const query = new URL(request.url).searchParams;
     const legacy = query.get('directory') !== '1';
@@ -415,7 +416,7 @@ export class Blackboard {
           return seq;
         });
         for (const client of peers()) {
-          if (client.deserializeAttachment().legacy) client.close(4001, 'Riapri la Mini App');
+          if (client.deserializeAttachment().legacy) client.close(4001, MSG.closeReopen);
           else send(client, {type:'clear', mode, epoch:next});
         }
       } catch {

@@ -190,7 +190,7 @@ function step(dt) {
   for (const p of pickups) {
     if (p.wait > 0) { p.wait -= dt; if (p.wait <= 0) p.g.visible = true; continue; }
     const c = cars.find((o) => Math.hypot(o.x - p.x, o.z - p.z) < 1.8);
-    if (c) { c.nitro = 1; p.wait = 7; p.g.visible = false; if (c === player) { sfx.pickup(); $('signal').textContent = 'NITRO! (Shift)'; setTimeout(() => { if (mode === 'race') $('signal').textContent = ''; }, 1200); } }
+    if (c) { c.nitro = 1; p.wait = 7; p.g.visible = false; if (c === player) { sfx.pickup(); $('signal').textContent = touch ? 'NITRO!' : 'NITRO! (Shift)'; setTimeout(() => { if (mode === 'race') $('signal').textContent = ''; }, 1200); } }
   }
   const place = hud();
   if (player.finish && mode === 'race') {

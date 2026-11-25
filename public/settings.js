@@ -1,8 +1,9 @@
 // Settings page: a grouped list (profile, notifications, appearance, games and help) with sub-pages for
 // Aspetto (theme preview, swatches, text size) and the character; developer mode, problem report.
 import { pref, setPref } from './prefs.js?v=bd123656a4';
+import { isTouchDevice } from './touch-device.js';
 import { pieceSvg } from './pieces.js?v=fa35e21be7';
-import { HELP, helpList } from './lobby3d/help.js?v=bf4fce1f30';
+import { HELP, helpList } from './lobby3d/help.js?v=d35882a376';
 const $ = id => document.getElementById(id);
 
 export function initSettings({ appName, tg, trace, events }) {
@@ -41,7 +42,7 @@ export function initSettings({ appName, tg, trace, events }) {
   // dispositivo; un tasto mostra quelle dell'altro (telefono o computer)
   const helpBox = document.querySelector('.lobby3d-help');
   if (helpBox) {
-    let onTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+    let onTouch = isTouchDevice();
     const renderHelp = () => {
       const other = document.createElement('button');
       other.type = 'button';

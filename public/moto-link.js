@@ -1,6 +1,6 @@
 // Moto Trial seen from the app: solo or online races in their iframe. The race WebSocket (authenticated) stays
 // here, never in the iframe; the iframe receives state, poses and safe-area insets by postMessage.
-import { REOPEN } from './messages.js?v=a4f8bd3c10';
+import { REOPEN } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 
 export function createMotoLink({

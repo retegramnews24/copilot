@@ -3,7 +3,7 @@
 import { blackboardLink } from './blackboard/link.js?v=bb859dccee';
 import { telegramHaptic } from './haptic.js?v=c280753040';
 import { renderNumberLeaders } from './leaderboard.js?v=e0418faadc';
-import { REOPEN } from './messages.js?v=a4f8bd3c10';
+import { REOPEN } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
 

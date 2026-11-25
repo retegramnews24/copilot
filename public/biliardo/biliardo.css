@@ -79,13 +79,13 @@ input { font: inherit; font-size: 14px; color: #fff; background: rgba(255, 255, 
 .power .knob { position: absolute; left: 50%; top: 0; width: 38px; height: 38px; margin: -19px 0 0 -19px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #f1e6c8 45%, #b8955a 100%); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.65), 0 0 0 2px rgba(232, 194, 106, 0.6); transition: transform 0.15s; }
 .power.drag .knob { transform: scale(1.15); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 0 3px #fbbf24; }
 .power.cancel .knob { box-shadow: 0 0 0 3px #ef4444; }
-.power .lbl { font-size: 11px; color: #e7dcc6; text-shadow: 0 1px 3px #000; min-height: 14px; }
+.power .lbl { font-size: 12px; color: #e7dcc6; text-shadow: 0 1px 3px #000; min-height: 14px; }
 .power.off { opacity: 0.35; pointer-events: none; }
 
 /* scelta della specialità */
 .vgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .vgrid button { min-height: 58px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; text-align: left; gap: 2px; }
-.vgrid button small { color: #b9ad97; font-size: 11px; }
+.vgrid button small { color: #b9ad97; font-size: 12px; }
 .vgrid button.on { background: rgba(232, 194, 106, 0.22); border-color: var(--gold); }
 .seg3 button { flex: 1; padding: 9px 6px; }
 .num { min-width: 36px; text-align: right; }
@@ -100,7 +100,7 @@ input[type=range] { width: 100%; padding: 0; margin: 0; border: 0; background: n
 #camB.on { background: rgba(62, 231, 255, 0.3) !important; border-color: #3ee7ff; }
 .timer { position: absolute; left: 50%; top: calc(64px + var(--st)); transform: translateX(-50%); font-size: 12px; padding: 3px 10px; border-radius: 10px; background: rgba(0, 0, 0, 0.6); color: #ffe7ad; pointer-events: none !important; }
 .timer.late { color: #fca5a5; }
-.pl .me { color: var(--gold); font-size: 11px; margin-left: 4px; }
+.pl .me { color: var(--gold); font-size: 12px; margin-left: 4px; }
 #waitList { margin: 0; padding-left: 18px; }
 /* schermi bassi (telefono in orizzontale): pannelli più piccoli, barra della forza più corta, niente riga d'aiuto */
 @media (max-height: 520px) {

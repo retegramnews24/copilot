@@ -2,6 +2,7 @@ import { initial, act, advance, nextAlarm, view } from './engine.js';
 import { collectNotices } from './notify.js';
 import { lobbySummary } from './summary.js';
 import { failure, userOf, json } from '../worker-shared.js';
+import { MSG } from '../public/messages.js';
 // The existing Room namespace routes one dedicated object here. No changes to game-table storage.
 export class SimulatorLeague {
   constructor(ctx, env = {}) {
@@ -42,29 +43,28 @@ export class SimulatorLeague {
   }
   async fetch(req) {
     const u = userOf(req);
-    if (!u?.id) return json({ error: 'Accesso richiesto.' }, 401);
+    if (!u?.id) return json({ error: MSG.login }, 401);
     const path = new URL(req.url).pathname;
     // Lobby summary: read-only, no save, no presence update.
     if (path === '/simulator/summary') {
-      if (req.method !== 'GET') return json({ error: 'Metodo non consentito.' }, 405);
+      if (req.method !== 'GET') return json({ error: MSG.method }, 405);
       const now = Date.now(),
         s = await this.ctx.storage.transaction(tx => this.load(tx, now));
       return json(lobbySummary(s, u.id, now));
     }
-    if (!['/simulator/state', '/simulator/action'].includes(path))
-      return json({ error: 'Percorso non trovato.' }, 404);
+    if (!['/simulator/state', '/simulator/action'].includes(path)) return json({ error: MSG.notFound }, 404);
     if (
       (path.endsWith('state') && req.method !== 'GET') ||
       (path.endsWith('action') && req.method !== 'POST')
     )
-      return json({ error: 'Metodo non consentito.' }, 405);
+      return json({ error: MSG.method }, 405);
     let body = null;
     try {
       if (req.method === 'POST') {
         const raw = await req.text();
-        if (raw.length > 4096) return json({ error: 'Richiesta troppo grande.' }, 413);
+        if (raw.length > 4096) return json({ error: MSG.tooBig }, 413);
         body = JSON.parse(raw);
-        if (!body || typeof body !== 'object') throw Error('Richiesta non valida.');
+        if (!body || typeof body !== 'object') throw Error(MSG.unreadable);
       }
       let notices = [];
       const response = await this.ctx.storage.transaction(async tx => {

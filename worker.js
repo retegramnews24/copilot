@@ -263,7 +263,7 @@ export class Room extends DurableObject {
       try {
         const a = ws.deserializeAttachment();
         if (!tag || a?.accessTag !== tag) {
-          ws.close(4001, 'Riapri la Mini App');
+          ws.close(4001, MSG.closeReopen);
           continue;
         }
         ws.send(JSON.stringify(this.public(s, a.player)));
@@ -728,7 +728,7 @@ export class Room extends DurableObject {
       return;
     }
     if (!this.env.BOT_TOKEN || a?.accessTag !== (await telegramAccessTag(this.env))) {
-      ws.close(4001, 'Riapri la Mini App');
+      ws.close(4001, MSG.closeReopen);
       return;
     }
     if (a?.kind === 'blackboard') return this.blackboard.message(ws, message);
@@ -769,14 +769,21 @@ export class Room extends DurableObject {
       // flipper della Lobby 3D: la partita si annuncia all'inizio, poi il punteggio di fine partita entra nella
       // classifica (top 10 con il nome) se è possibile per il tempo giocato
       // (l'inizio si salva per persona, non nel collegamento: vedi club-pinball.js)
+      // Il telefono tiene il messaggio finché non arriva {type:'ack', ref} e lo rimanda dopo ogni riapertura
+      // (public/lobby-link.js): si conferma anche quando il punteggio non entra, così non lo rimanda per sempre.
+      const ack = () => Number.isInteger(b.ref) && ws.send(JSON.stringify({ type: 'ack', ref: b.ref }));
       if (b.type === 'pinball-start' && a.inClub && !a.closed) {
-        await this.ctx.blockConcurrencyWhile(() => startPinball(this.ctx, a, b.table === 'gt' ? 'gt' : 'gp'));
+        await this.ctx.blockConcurrencyWhile(() =>
+          startPinball(this.ctx, a, b.table === 'gt' ? 'gt' : 'gp', Number.isInteger(b.ref) ? b.ref : null)
+        );
+        ack();
         return;
       }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
         const table = b.table === 'gt' ? 'gt' : 'gp';
         const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score, table));
         ws.serializeAttachment(a);
+        ack();
         if (better) await this.lobbyHub.lobbyBroadcast();
         return;
       }

@@ -1,6 +1,6 @@
 // Cinema seen from the app: the room list in the Lobby, the authenticated WebSocket (it stays here, never in the
 // iframe), the Cinema iframe and its messages, and the reduced mode behind picture in picture.
-import { REOPEN } from './messages.js?v=a4f8bd3c10';
+import { REOPEN } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 
 export function createCinemaLobby({
@@ -283,7 +283,7 @@ export function createCinemaLobby({
         signal: controller.signal
       });
       result = await response.json().catch(() => null);
-      if (response.status === 401) error = 'La sessione è scaduta. Chiudi e riapri Binottoland dal bot.';
+      if (response.status === 401) error = 'La sessione è scaduta. ' + REOPEN;
       else if (!response.ok)
         error = result?.error || 'Ricerca YouTube non disponibile (HTTP ' + response.status + ').';
       else if (!Array.isArray(result?.items))
