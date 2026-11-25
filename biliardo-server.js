@@ -7,7 +7,7 @@
 // i telefoni rifanno il colpo per animarlo e poi prendono il tavolo del server.
 // Chi non tira in tempo fa tirare il pilota automatico, così la partita non si ferma mai.
 import * as E from './public/biliardo/engine.js';
-import { internalHeaders } from './worker-shared.js';
+import { internalHeaders, failure } from './worker-shared.js';
 
 const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const WAIT = 1800000, // una partita in cui non entra nessuno si chiude dopo 30 minuti
@@ -343,7 +343,7 @@ export class BiliardoRoom {
         }
         return json({ state: m, now });
       } catch (error) {
-        return json({ error: error.message }, 409);
+        return failure(error, 409, 'biliardo');
       }
     });
   }

@@ -9,7 +9,7 @@ import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=026328151
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
-import {events,trace,initDebugLog} from './debug-log.js?v=497d88fa03';
+import {events,trace,initDebugLog} from './debug-log.js?v=16c37bf5dd';
 import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=637e9e8793';
 import {renderMyGames,myTables,timeLeft} from './my-games.js?v=d184c87cf4';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
@@ -508,7 +508,7 @@ action('start-group',async()=>{
   render(await api('start',{revision:state.revision}));
  }catch(e){
   if(room!==selected)return;
-  try{render(await api('state'))}catch{}
+  try{render(await api('state'))}catch(e2){staleTable(e2)}
   if(room===selected&&state?.phase==='waiting')$('start-error').textContent=e.message;
  }
 });
@@ -630,7 +630,7 @@ async function sendMove(move){
  busy=true;board.clear();renderBoard();trace('MOVE',move.kind|| (move.path?move.path.join(' → '):move.from+' → '+move.to+(move.promotion?' = '+move.promotion:'')));
  const current=room;
  try{const result=await api('move',move);if(room===current)render(result)}
- catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch{}}
+ catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch(e2){staleTable(e2)}}
  finally{busy=false;if(room===current&&state)render(state)}
 }
 // Unexpected errors also reach the server logs (only once signed in; keepalive survives closing the app).
@@ -754,6 +754,8 @@ async function startSession(){
   const startRoom=alerts.startRoom();if(startRoom){try{await openRoom(startRoom);if(room===startRoom)selectPage('game')}catch(e){err(e.message)}}
  }catch(e){$('app-shell').hidden=true;accessFailed=true;window.binottolandAccessError?.(e.message,tg?.initData?startSession:null);trace('AUTH','Accesso non completato')}
 }
+// dopo un errore il tavolo si ricarica; se anche questo fallisce lo si dice (prima restava com'era, senza avvisi)
+function staleTable(e){trace('ERROR','Stato del tavolo non aggiornato: '+e.message);err('Tavolo non aggiornato: controlla la connessione, riprovo da solo.')}
 function sendPresence(away=document.hidden||tgAway){
  if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',inClub:!!lobby3d?.active,pose:lobby3d?.pose()??null,room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||room,away}));
 }

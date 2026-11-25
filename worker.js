@@ -40,7 +40,8 @@ import {
   noticeHub,
   internalHeaders,
   isInternal,
-  INTERNAL_PATHS
+  INTERNAL_PATHS,
+  failure
 } from './worker-shared.js';
 import * as tables from './table-rules.js';
 import { concluded } from './table-rules.js';
@@ -687,7 +688,7 @@ export class Room extends DurableObject {
         this.queueNotice(s);
         return json(this.public(s, viewer));
       } catch (e) {
-        return json({ error: e instanceof SyntaxError ? 'Richiesta non valida.' : e.message }, 400);
+        return failure(e, 400, 'table');
       }
     });
   }

@@ -6,7 +6,7 @@
 // race never stops. The clients replay the move list, so every phone shows the same race.
 import * as R from './public/gara/rules.js';
 import { distField } from './public/gara/ai.js';
-import { internalHeaders } from './worker-shared.js';
+import { internalHeaders, failure } from './worker-shared.js';
 
 const json = (body, status = 200) =>
   Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -428,7 +428,7 @@ export class F1Room {
         }
         return json({ state: publicRace(m), now });
       } catch (error) {
-        return json({ error: error.message }, 409);
+        return failure(error, 409, 'f1');
       }
     });
   }

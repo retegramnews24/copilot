@@ -1,6 +1,6 @@
 import { coursesFor } from './public/golf/courses.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, CAPACITY } from './public/golf/match.js';
-import { internalHeaders } from './worker-shared.js';
+import { internalHeaders, failure } from './worker-shared.js';
 const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
 const WAIT=900000, KEEP=300000;
 
@@ -68,7 +68,7 @@ export class GolfRoom {
         await this.save(match);
         if(action!=='shot')await this.update(match);
         return json({state:match,now});
-      } catch(error){return json({error:error.message},409);}
+      } catch(error){return failure(error,409,'golf');}
     });
   }
   alarm(){

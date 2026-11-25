@@ -1,6 +1,7 @@
 import { initial, act, advance, nextAlarm, view } from './engine.js';
 import { collectNotices } from './notify.js';
 import { lobbySummary } from './summary.js';
+import { failure } from '../worker-shared.js';
 const json = (data, status = 200) =>
   Response.json(data, {
     status,
@@ -97,7 +98,7 @@ export class SimulatorLeague {
       if (notices.length) this.ctx.waitUntil?.(this.notify(notices));
       return response;
     } catch (e) {
-      return json({ error: e.message || 'Richiesta non valida.' }, 400);
+      return failure(e, 400, 'simulator');
     }
   }
   async alarm() {

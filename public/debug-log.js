@@ -49,6 +49,14 @@ export function initDebugLog({ report } = {}) {
     trace('ERROR', event.message || 'Errore JavaScript');
     send({ message: event.message, source: event.filename, line: event.lineno });
   });
+  // errori dei giochi nei riquadri (public/frame-errors.js): stesso registro e stessi log
+  window.addEventListener('message', event => {
+    const d = event.data;
+    if (event.origin !== location.origin || d?.type !== 'binottoland:frame-error') return;
+    const page = String(d.page || '').slice(0, 80);
+    trace('ERROR', page + ' · ' + d.message);
+    send({ message: '[' + page + '] ' + d.message, source: d.source });
+  });
   window.addEventListener('unhandledrejection', event => {
     trace('ERROR', event.reason?.message || 'Operazione non completata');
     // Rejected network calls are already shown to the player; report only real code errors.
