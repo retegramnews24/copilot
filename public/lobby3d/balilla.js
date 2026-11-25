@@ -387,13 +387,11 @@ export function buildBalilla(scene, el, send, playSound) {
   }
   document.addEventListener('pointerlockchange', () => {
     if (!active) return;
-    if (mouseLocked()) {
-      hadLock = true;
-    } else if (hadLock) {
-      if (document.hidden || !document.hasFocus() || performance.now() - blurredAt < 400) {
-        hadLock = false;
-      } else close();
-    }
+    // Esc libera il mouse ma non fa più alzare dal tavolo (prima si perdeva il posto): ci si alza con E o con la X;
+    // per giocare di nuovo col mouse basta un clic sul campo
+    if (mouseLocked()) hadLock = true;
+    else hadLock = false;
+    renderStatus();
   });
   const targets = [
     { slide: 0, angle: 0 },
@@ -444,7 +442,8 @@ export function buildBalilla(scene, el, send, playSound) {
     else if (alone()) line = side + ' · allenamento, i gol non contano' + (f.phase === 'throw' ? ' · ' + out : '');
     else if (f.phase === 'throw') line = side + ' · pallina nel buco: ' + out;
     else line = side + ' · ' + (pair ? 'attacco' : 'difesa') + (mate() ? '' : touchUI ? '' : ' (Q cambia)');
-    statusBar.textContent = score + '\n' + line;
+    if (!touchUI && seated() && !mouseLocked()) line += ' · clicca sul campo per giocare col mouse';
+    statusBar.textContent = score + '\n' + line + (touchUI ? '' : ' · E lascia il tavolo');
   }
   function serve() {
     if (!seated()) return;
@@ -592,7 +591,7 @@ export function buildBalilla(scene, el, send, playSound) {
     });
   function input(e) {
     if (e.type !== 'keydown' || e.repeat) return false;
-    if (e.code === 'KeyE' || e.code === 'Escape') close();
+    if (e.code === 'KeyE') close();
     else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
     else if (e.code === 'Digit1' || e.code === 'Digit2') selectPair(Number(e.code.slice(-1)) - 1);
     else if (e.key === '+' || e.key === '-') {

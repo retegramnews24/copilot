@@ -74,6 +74,11 @@ export function buildFlipper(
   el,
   { audio, allowed, top = () => [], sendScore = () => {}, sendStart = () => {}, me = () => null, kind = 'gp' }
 ) {
+  // scritte del display adatte al dispositivo: sul telefono non ci sono i tasti E e S
+  const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const PLAY_TEXT = touchUI ? 'TOCCA PER GIOCARE' : 'PREMI E PER GIOCARE',
+    PLAY_SHORT = touchUI ? 'Tocca per giocare' : 'E per giocare',
+    AGAIN_TEXT = touchUI ? 'Tocca per ricominciare' : 'S per ricominciare';
   const T = TABLES[kind];
   const { newGame, makeTable, simulate, setFlipper, pull, drag, nudge, R, LANE_X, BALLS } = T.physics;
   const paintPlayfield = T.paintPlayfield,
@@ -142,7 +147,7 @@ export function buildFlipper(
     for (let y = 0; y < 64; y += 3) dmd.fillRect(0, y, 256, 1);
     dmdTexture.needsUpdate = true;
   }
-  drawDmd(T.title, 'PREMI E PER GIOCARE');
+  drawDmd(T.title, PLAY_TEXT);
   // pallina d'acciaio (fino a 3 col multiball), figlie del piano: coordinate del gioco → piano
   const steel = new THREE.MeshStandardMaterial({ color: '#d8dde2', metalness: 1, roughness: 0.12 });
   const balls = [0, 1, 2].map(() => new THREE.Mesh(new THREE.SphereGeometry(R, 24, 16), steel));
@@ -782,7 +787,7 @@ export function buildFlipper(
             balls: BALLS,
             mult: g.mult || 1,
             flash: art.flash,
-            message: g.messageTime > 0 ? g.message : g.over ? 'S per ricominciare' : '',
+            message: g.messageTime > 0 ? g.message : g.over ? AGAIN_TEXT : '',
             hour: g.hour
           };
         } else {
@@ -790,7 +795,7 @@ export function buildFlipper(
           info = best
             ? { label: 'RECORD', score: best.score, message: best.name, flash: 0 }
             : record
-              ? { label: 'IL TUO RECORD', score: record, message: 'E per giocare', flash: 0 }
+              ? { label: 'IL TUO RECORD', score: record, message: PLAY_SHORT, flash: 0 }
               : null;
         }
         paintBackglass(art.bgCanvas, tt, !g, info);
@@ -826,7 +831,7 @@ export function buildFlipper(
             e.score.toLocaleString('it-IT'),
             art.topIndex + 1 + '. ' + e.name.toUpperCase().slice(0, 20)
           );
-        else drawDmd(list.length ? 'CLASSIFICA' : T.title, 'E PER GIOCARE · 5 PALLINE');
+        else drawDmd(list.length ? 'CLASSIFICA' : T.title, PLAY_TEXT + ' · 5 PALLINE');
       }
       // display
       const now = performance.now();
