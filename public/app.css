@@ -3871,6 +3871,35 @@ html[data-env='staging'] body::before {
   margin-top: 16px;
 }
 
+/* Pagina Giochi: ricerca e filtri (games-filter.js) */
+.games-filter {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.games-filter-chips {
+  display: flex;
+  gap: 6px;
+}
+.games-filter-chips button {
+  flex: 1;
+  margin: 0;
+  padding: 7px 4px;
+  border-radius: 18px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.games-filter-chips button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 25%, var(--panel));
+}
+.games-filter .hint {
+  margin: 0;
+}
+#page-games .filtered-out {
+  display: none !important;
+}
+
 /* Lobby leaderboard: top 5 on one row above the chat; the full lists on the Giochi page are no longer shown. */
 #page-games.app-mode .leaderboard-panel {
   display: none;

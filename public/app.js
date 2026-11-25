@@ -5,7 +5,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=d38be2cad9';
 import {readAppearance} from './appearance.js?v=784dba932c';
 import './avatar-figure.js?v=723b251202';
-import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=0263281510';
+import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=c84d7aefea';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
@@ -16,6 +16,7 @@ import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} fro
 import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=1635e1bcff';
 import {createLobbyLink} from './lobby-link.js?v=6048d01790';
+import {initGamesFilter} from './games-filter.js?v=4298b3b8ad';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e0418faadc';
 import {createCinemaLobby} from './cinema-lobby.js?v=ba68bb1ccf';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
@@ -27,7 +28,7 @@ import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=371136c2a0';
 import {createGolfLink} from './golf-link.js?v=907761b1e9';
-import {createArcadeLink} from './arcade-link.js?v=56c520feb7';
+import {createArcadeLink} from './arcade-link.js?v=5a96f4521b';
 import {createF1Link} from './f1-link.js?v=2673c1f0cb';
 import {createBiliardoLink} from './biliardo-link.js?v=f6a32f5d65';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
@@ -440,6 +441,7 @@ document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selec
 $('open-archive').onclick=()=>{renderArchive();selectPage('archive')};
 $('open-info').onclick=()=>selectPage('info');
 const {renderThemePreview}=initSettings({appName:APP_NAME,tg,trace,events});
+initGamesFilter(); // pagina Giochi: ricerca e filtri
 async function createTable(game,target,mode,seats){
  const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});
  stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};

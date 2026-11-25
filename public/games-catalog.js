@@ -13,6 +13,7 @@ const COVERS = {
   'briscola-in-cinque': '#6b4a9a',
   'moto-trial': '#e07b39',
   'f1-on-paper': '#0b6b3a',
+  'ruggine-89': '#b5651d',
   pong: '#5bc0be',
   'golf-with-your-gay-friends': '#4caf50',
   'giulio-simulator': '#3a7bd5',
