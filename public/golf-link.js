@@ -147,7 +147,7 @@ export function createGolfLink({
     $('golf-collision-choice').hidden = !online;
     $('golf-collisions').checked = false;
     $('golf-setup-error').textContent = '';
-    golfConfirm.textContent = online ? 'Crea stanza' : 'Gioca';
+    golfConfirm.textContent = online ? 'Crea sala' : 'Gioca';
     golfSetup.hidden = false;
     golfCampaign.focus();
   }

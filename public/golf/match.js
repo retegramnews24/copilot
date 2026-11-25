@@ -21,7 +21,7 @@ export function joinMatch(match,user,appearance){
     return;
   }
   if(match.phase!=='waiting')fail('La gara è già iniziata.');
-  if(match.players.length>=CAPACITY)fail('Stanza al completo.');
+  if(match.players.length>=CAPACITY)fail('Sala al completo.');
   match.players.push(resetBall({id:user.player,name:user.name.slice(0,48),color:match.players.length,total:0,scores:[],appearance:palette},courseFor(0,match.courseVersion,match.campaign)));
   match.revision++;
 }
@@ -33,7 +33,7 @@ function openHole(match,now){
 }
 
 export function startMatch(match,id,now,minimum=2,campaign){
-  if(match.host!==id || match.phase!=='waiting')fail('Solo chi ha creato la stanza può avviare la gara.');
+  if(match.host!==id || match.phase!=='waiting')fail('Solo chi ha creato la sala può avviare la gara.');
   if(match.players.length<minimum)fail('Aspetta almeno un altro giocatore.');
   if(campaign!==undefined){
     if(match.courseVersion!==COURSE_VERSION||!CAMPAIGNS.some(set=>set.id===campaign))fail('Percorso non disponibile.');

@@ -1,6 +1,6 @@
 import {soundAllowed} from '../sound-pref.js';
 import { CAMPAIGNS, COURSE_VERSION, DEFAULT_CAMPAIGN, campaignInfo, coursesFor, RADIUS, ballColors } from './courses.js?v=d38be2cad9';
-import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=3bf05e096a';
+import { makeMatch, startMatch, takeShot, advanceMatch, ballRolling, LIMIT } from './match.js?v=6483056506';
 import { drawCourse } from './render.js?v=f4987c8b15';
 import { upright, rollBy } from './roll.js';
 import {golfColors,validBallColors} from '../appearance.js?v=784dba932c';
@@ -84,9 +84,9 @@ function updatePanel(){
   panel.hidden=!!state&&state.phase==='playing'&&!state.nextAt;
   if(panel.hidden)return;
   btn.hidden=true;
-  if(!state){title.textContent='Collegamento…';text.textContent='Apertura della stanza.';return;}
+  if(!state){title.textContent='Collegamento…';text.textContent='Apertura della sala.';return;}
   if(state.phase==='waiting'){
-    title.textContent=online?'Stanza '+state.number:'Scegli il percorso';
+    title.textContent=online?'Sala '+state.number:'Scegli il percorso';
     text.textContent=online ? state.players.map(p=>p.name).join(' · ')+' — '+state.players.length+'/8 giocatori. '+
       (player()?'Gli amici possono entrare dalla lobby.':'Stai assistendo. La gara deve ancora iniziare.') : 'Tre percorsi da dieci buche.';
     if(online&&!canChoose&&campaignInfo(state.campaign))text.textContent+=' '+campaignInfo(state.campaign).name+'.';
@@ -348,7 +348,7 @@ function dismissClose(){
 }
 $('close-game').onclick=()=>{
   if(busy||online&&!player())return;
-  $('close-message').textContent=online?'La stanza verrà chiusa per tutti.':'Il giro in corso verrà chiuso.';
+  $('close-message').textContent=online?'La sala verrà chiusa per tutti.':'Il giro in corso verrà chiuso.';
   $('close-confirm').hidden=false;
   $('cancel-close').focus();
 };

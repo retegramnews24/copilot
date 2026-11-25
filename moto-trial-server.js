@@ -2,6 +2,7 @@ import {COURSE_VERSION, makeCourse, ground} from './public/moto-trial/physics.js
 
 import {CAMPAIGN_LENGTH} from './public/moto-trial/courses.js';
 import { userOf, lobbyHub, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 const boundsFor = course => {
   const xs = course.tiers.flatMap(tier => tier.points.map(p => p.x));
@@ -68,7 +69,7 @@ export class MotoTrialRoom {
     return this.ctx.blockConcurrencyWhile(async () => {
       const path = new URL(req.url).pathname;
       const user = userOf(req);
-      if (!user?.player) return json({error: 'Accesso richiesto.'}, 401);
+      if (!user?.player) return json({error: MSG.login}, 401);
       let room = await this.ctx.storage.get('moto-trial');
       if (path === '/moto-trial/init' && req.method === 'POST' && !room) {
         const {room: id, number, seed} = await req.json(), course = makeCourse(seed);
@@ -81,7 +82,7 @@ export class MotoTrialRoom {
       if (!room) return json({error: 'Questa corsa è terminata.'}, 404);
       if (path === '/moto-trial/state' && req.method === 'GET') return json({state: this.state(room)});
       if (path !== '/moto-trial/ws' || req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-        return json({error: 'WebSocket richiesto.'}, 426);
+        return json({error: MSG.live}, 426);
       }
       const peers = this.sockets(), previous = peers.find(({member}) => member.id === user.player);
       if (!previous && peers.length >= LIMIT) return json({error: 'Corsa al completo.'}, 409);

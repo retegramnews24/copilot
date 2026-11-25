@@ -1,5 +1,6 @@
 // Cinema seen from the app: the room list in the Lobby, the authenticated WebSocket (it stays here, never in the
 // iframe), the Cinema iframe and its messages, and the reduced mode behind picture in picture.
+import { REOPEN } from './messages.js?v=a4f8bd3c10';
 const $ = id => document.getElementById(id);
 
 export function createCinemaLobby({
@@ -161,7 +162,7 @@ export function createCinemaLobby({
         cinemaRooms = { rooms: [], active: null };
         projectionChanged?.();
       }
-      if (expired) cinemaLobbyMessage = 'Chiudi e riapri Binottoland dal bot.';
+      if (expired) cinemaLobbyMessage = REOPEN;
       renderCinemaLobby();
       cinemaPost('connection', { connected: false, message: expired ? cinemaLobbyMessage : undefined });
       if (!expired) retryCinema();

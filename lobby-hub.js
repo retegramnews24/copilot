@@ -8,6 +8,7 @@ import { json, id, name, userOf } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
 import { gameTitle } from './public/game-info.js';
 import { makeRoomFor } from './socket-limits.js';
+import { MSG } from './public/messages.js';
 
 const BILIARDO_NAMES = {
   otto: 'Palla 8',
@@ -312,10 +313,9 @@ export class LobbyHub {
       return json(await this.lobbyPayload(games));
     }
     if (path === '/lobby/ws') {
-      if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
-        return json({ error: 'WebSocket richiesto.' }, 426);
+      if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket') return json({ error: MSG.live }, 426);
       const user = userOf(req);
-      if (!user) return json({ error: 'Accesso richiesto.' }, 401);
+      if (!user) return json({ error: MSG.login }, 401);
       // al massimo 3 collegamenti alla Lobby per persona (si chiude il suo più vecchio), poi il tetto totale
       makeRoomFor(this.ctx, user.id, 'lobby');
       if (this.ctx.getWebSockets().length >= 120) return json({ error: 'Troppe connessioni.' }, 429);
@@ -356,11 +356,11 @@ export class LobbyHub {
       });
       return json({ present });
     }
-    if (req.method !== 'POST') return json({ error: 'Metodo non consentito.' }, 405);
+    if (req.method !== 'POST') return json({ error: MSG.unknownAction }, 405);
     const body = await req.json();
     if (path === '/lobby/number-connect-score') {
       const user = userOf(req);
-      if (!user?.player) return json({ error: 'Accesso richiesto.' }, 401);
+      if (!user?.player) return json({ error: MSG.login }, 401);
       const game = replayNumberGame(body);
       if (!game || !Number.isSafeInteger(game.score) || game.score <= 0 || hasMove(game)) {
         return json({ error: 'Il punteggio richiede una partita completata.' }, 400);
@@ -393,7 +393,7 @@ export class LobbyHub {
     }
     if (path === '/lobby/join') {
       const user = userOf(req);
-      if (!user) return json({ error: 'Accesso richiesto.' }, 401);
+      if (!user) return json({ error: MSG.login }, 401);
       const tables = await this.lobbyList(),
         limit = seatLimit(tables, user.player, tables.find(g => g.room === body.room) || { room: body.room });
       if (limit)
@@ -450,7 +450,7 @@ export class LobbyHub {
     }
     if (path === '/lobby/create') {
       const user = userOf(req);
-      if (!user) return json({ error: 'Accesso richiesto.' }, 401);
+      if (!user) return json({ error: MSG.login }, 401);
       const playerName = name(user.name);
       // freno: al massimo 5 tavoli o sale nuovi ogni 10 minuti per persona (le sale arcade non hanno la regola
       // "un tavolo per gioco", e ognuna aggiunge un avviso alla campanella)
@@ -475,7 +475,7 @@ export class LobbyHub {
           'biliardo'
         ].includes(body.game)
       )
-        return json({ error: 'Gioco non disponibile.' }, 400);
+        return json({ error: MSG.noGame }, 400);
       const active = (await this.lobbyList()).filter(activeTable);
       if (!['moto-trial', 'golf', 'pong', 'f1', 'biliardo'].includes(body.game)) {
         const limit = seatLimit(active, user.player, {
@@ -589,7 +589,7 @@ export class LobbyHub {
       }
       return json({ ok: true });
     }
-    return json({ error: 'Percorso non trovato.' }, 404);
+    return json({ error: MSG.notFound }, 404);
   }
   async alarm() {
     return this.ctx.blockConcurrencyWhile(async () => {

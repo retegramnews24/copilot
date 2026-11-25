@@ -1,4 +1,5 @@
 import {validYouTubeChannelId} from './public/cinema/media.js';
+import { MSG } from './public/messages.js';
 
 const API='https://www.googleapis.com/youtube/v3/';
 const LIMIT=12, SEARCH_LIMIT=30;
@@ -111,7 +112,7 @@ export class YouTubeCatalog{
     })};
   }
   async fetch(req,player){
-    if(!player)return response({error:'Accesso richiesto.'},401);
+    if(!player)return response({error:MSG.login},401);
     const p=new URL(req.url).searchParams;
     const mode=p.get('mode'),type=p.get('type');
     const q=p.get('q')?.trim().replace(/\s+/g,' ');

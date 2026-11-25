@@ -1,5 +1,6 @@
 // Italian draughts: 12 men each, short kings, compulsory ranked captures.
 // Movement/capture rules: https://www.fid.it/regolamenti/capo1.htm (arts. 2–6).
+import { MSG } from './public/messages.js';
 const files='abcdefgh';
 const owner=p=>p===p.toUpperCase()?0:1;
 const king=p=>p.toLowerCase()==='k';
@@ -37,7 +38,7 @@ export function checkersMoves(board,turn){
  return captures.filter(m=>compare(m,best)===0).map(({path,captures})=>({path,captures}));
 }
 export function playCheckers(game,path){
- if(!Array.isArray(path)||path.length<2||path.length>13||path.some(s=>typeof s!=='string'||!/^([a-h])([1-8])$/.test(s)))throw Error('Mossa non valida.');
+ if(!Array.isArray(path)||path.length<2||path.length>13||path.some(s=>typeof s!=='string'||!/^([a-h])([1-8])$/.test(s)))throw Error(MSG.badMove);
  const move=checkersMoves(game.board,game.turn).find(m=>m.path.length===path.length&&m.path.every((s,i)=>s===path[i]));
  if(!move)throw Error('Mossa non consentita: rispetta le prese obbligatorie e le precedenze.');
  const board={...game.board},from=path[0],to=path.at(-1),p=board[from],promoted=crowns(p,to);

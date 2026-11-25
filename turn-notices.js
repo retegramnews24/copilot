@@ -1,5 +1,6 @@
 import { playScarabeo } from './scarabeo.js';
 import { userOf, lobbyHub, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 // Long-turn games: a private Telegram message from the bot when it is your turn and you are not at the table.
 // Games: chess, checkers, Forza 4, Scarabeo, people only. One message per turn, quiet hours 23-8 (Rome time),
 // a short delay so live games (both players at the table) never get messages.
@@ -263,7 +264,7 @@ export class TurnNotices {
     const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
     if (path === '/notices/queue' && req.method === 'POST') {
       if (!body.room || !body.key || !Array.isArray(body.targets))
-        return json({ error: 'Richiesta non valida.' }, 400);
+        return json({ error: MSG.unreadable }, 400);
       for (const target of body.targets.slice(0, 4)) {
         const userId = telegramId(target.player);
         if (!userId) continue;
@@ -325,7 +326,7 @@ export class TurnNotices {
         bot: BOT_USERNAME
       });
     }
-    return json({ error: 'Percorso non trovato.' }, 404);
+    return json({ error: MSG.notFound }, 404);
   }
   async alarm() {
     const now = this.now();

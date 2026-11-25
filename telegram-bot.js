@@ -4,6 +4,7 @@ import { secureEqual, requireMember } from './auth.js';
 import { cinemaSubmission } from './cinema-telegram.js';
 import { receiveCinemaSubmission } from './cinema-routes.js';
 import { json, BOT_USERNAME, noticeHub } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 async function webhookSecret(token) {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
   return [...new Uint8Array(digest)].map(x => x.toString(16).padStart(2, '0')).join('');
@@ -23,8 +24,7 @@ export async function telegramCall(token, method, payload) {
 export async function setupTelegram(req, env, u) {
   if (env.SETUP_ENABLED !== 'true') return json({ error: 'Configurazione disattivata.' }, 404);
   if (!env.BOT_TOKEN) return json({ error: 'Secret BOT_TOKEN non configurato.' }, 503);
-  if (Number(req.headers.get('Content-Length') || 0) > 4096)
-    return json({ error: 'Richiesta troppo grande.' }, 413);
+  if (Number(req.headers.get('Content-Length') || 0) > 4096) return json({ error: MSG.tooBig }, 413);
   try {
     const body = await req.json();
     if (typeof body.token !== 'string' || !secureEqual(body.token, env.BOT_TOKEN))

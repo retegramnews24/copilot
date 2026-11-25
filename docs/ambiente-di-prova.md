@@ -10,7 +10,7 @@ Serve a provare una modifica dentro Telegram prima di pubblicarla per tutti.
 **Test e pubblicazione.** Su `main` i test girano su GitHub a ogni push (azione "Test") e `scripts/deploy-gate.mjs` pubblica solo se sono verdi (se sono ancora in corso aspetta fino a 12 minuti; se GitHub non risponde li esegue lui). Su `staging` l'azione "Test" non parte e `deploy-gate` pubblica subito: è un posto per provare, i test si fanno quando la modifica si riporta su main.
 
 **Differenze con main:** dopo ogni rilascio i due rami sono uguali, tranne i file dell'ambiente di prova. Per vedere cosa resta da portare: `node scripts/branch-diff.mjs` (lascia fuori numero di versione e timbri `?v=`).
-3. Apri l'app di prova da Telegram: `https://t.me/checkmategame_bot/prova`. In cima c'è una riga rossa e accanto al nome la scritta **PROVA**.
+3. Apri l'app di prova da Telegram: `https://t.me/checkmategame_bot/prova`. In cima c'è una riga rossa e accanto al nome la scritta **PROVA**. Prima di portare su main fai i controlli a mano di `docs/controlli-prima-del-rilascio.md` (circa 10 minuti).
 4. Se va bene, la modifica si riporta a mano su `main`, con un commit a parte. **`staging` non si unisce mai in `main`**: la riga rossa e la scritta PROVA non devono finire nell'app vera.
 
 Dopo ogni rilascio su `main`, `staging` prende lo stesso numero di versione (`npm run release -- 1.0.xx` su staging): così il confronto tra i rami resta pulito.

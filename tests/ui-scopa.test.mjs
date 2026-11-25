@@ -783,7 +783,7 @@ assert.equal(frameCommands.at(-1).action.type,'screen-start');
 frameMessage('packet',{packet:{type:'rooms',rooms:cinemaRooms,active:{...activeCinema,screen:{id:share,peer:'host',local:true,name:'Fausto'}}}});
 assert.equal(cinemaElement('share-video').srcObject,captured);
 assert.equal(cinemaElement('share-video').muted,true);
-assert.equal(cinemaElement('share-audio-state').textContent,'Solo video');
+assert.equal(cinemaElement('share-audio-state').textContent,'Solo video: la trasmissione non ha audio');
 frameMessage('packet',{packet:{type:'screen-peer',share,peer:'guest'}});
 await new Promise(resolve=>setTimeout(resolve,0));
 assert.equal(frameCommands.at(-1).action.signal.type,'offer');

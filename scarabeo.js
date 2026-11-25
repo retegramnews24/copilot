@@ -1,5 +1,6 @@
 import {random,shuffled} from './table-random.js';
 import {SIZE,VALUES,premium} from './public/scarabeo-data.js';
+import { MSG } from './public/messages.js';
 export {SIZE,VALUES,premium} from './public/scarabeo-data.js';
 const quantities={A:12,E:12,I:12,O:12,C:7,R:7,S:7,T:7,L:6,M:6,N:6,B:4,D:4,F:4,G:4,P:4,V:4,U:4,H:2,Q:2,Z:2,'?':2};
 export function initialScarabeo(n=0,rng=random){let id=0;const bag=shuffled(Object.entries(quantities).flatMap(([letter,count])=>Array.from({length:count},()=>({id:id++,letter}))),rng);return {board:Array(SIZE*SIZE).fill(null),bag,racks:Array.from({length:n},()=>bag.splice(0,8)),scores:Array(n).fill(0),turn:n?Math.floor(rng()*n):0,passes:0,pending:null,result:null,winners:[],reason:'',lastEvent:'Componi la prima parola sul centro'};}
@@ -8,13 +9,13 @@ function end(g,finisher=null){for(let i=0;i<g.racks.length;i++){const penalty=g.
 function advance(g){g.turn=(g.turn+1)%g.racks.length;if(g.passes>=g.racks.length*2)end(g)}
 function line(board,row,col,dr,dc){while(row-dr>=0&&row-dr<SIZE&&col-dc>=0&&col-dc<SIZE&&board[(row-dr)*SIZE+col-dc]){row-=dr;col-=dc}const cells=[];while(row>=0&&row<SIZE&&col>=0&&col<SIZE&&board[row*SIZE+col]){cells.push(row*SIZE+col);row+=dr;col+=dc}return cells}
 export function playScarabeo(state,seat,a,rng=random){
- if(state.result||!state.racks[seat])throw Error('Partita non attiva.');const g=structuredClone(state),n=g.racks.length;
+ if(state.result||!state.racks[seat])throw Error(MSG.notActive);const g=structuredClone(state),n=g.racks.length;
  if(a.kind==='vote'){
   const p=g.pending;if(!p||seat===p.by||typeof a.accept!=='boolean'||Object.hasOwn(p.votes,seat))throw Error('Voto non consentito.');p.votes[seat]=a.accept;
   const required=Math.floor((n-1)/2)+1,yes=Object.values(p.votes).filter(Boolean).length,left=n-1-Object.keys(p.votes).length;
   if(yes>=required){for(const t of p.tiles)g.board[t.index]={id:t.id,letter:t.letter,blank:t.blank};g.racks[p.by]=g.racks[p.by].filter(t=>!p.tiles.some(x=>x.id===t.id));g.scores[p.by]+=p.score;while(g.racks[p.by].length<8&&g.bag.length)g.racks[p.by].push(g.bag.pop());g.lastEvent=p.words.join(', ')+' · '+p.score+' punti';g.pending=null;g.passes=0;if(!g.bag.length&&!g.racks[p.by].length)end(g,p.by);else advance(g)}else if(yes+left<required){g.pending=null;g.lastEvent='Parola respinta: ricomponi o passa.'}return g;
  }
- if(seat!==g.turn)throw Error('Non tocca a te.');
+ if(seat!==g.turn)throw Error(MSG.notYourTurn);
  if(a.kind==='cancel'&&g.pending){g.pending=null;g.lastEvent='Proposta ritirata';return g}if(g.pending)throw Error('Attendi la convalida delle parole.');
  if(a.kind==='pass'){g.passes++;g.lastEvent='Passa il turno';advance(g);return g}
  if(a.kind==='exchange'){const rack=g.racks[seat];if(rack.length!==8||rack.some(t=>t.letter==='?')||!([true,false].some(v=>rack.every(t=>'AEIOU'.includes(t.letter)===v))))throw Error('Cambio ammesso con otto vocali o otto consonanti.');g.bag=shuffled([...g.bag,...rack],rng);g.racks[seat]=g.bag.splice(0,8);g.passes++;g.lastEvent='Cambia le otto tessere';advance(g);return g}

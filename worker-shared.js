@@ -1,4 +1,5 @@
 // Small helpers shared by the Worker entry, the Room Durable Object and the route modules.
+import { MSG } from './public/messages.js';
 export const BOT_USERNAME = 'checkmategame_bot';
 export const json = (data, status = 200) =>
   Response.json(data, {
@@ -10,7 +11,7 @@ export const json = (data, status = 200) =>
 // log e il giocatore vede un messaggio generico. Prima diventavano tutti un 409 con il testo grezzo in inglese e nei
 // log non restava niente.
 export function failure(e, status = 409, where = '') {
-  if (e instanceof SyntaxError) return json({ error: 'Richiesta non valida.' }, 400);
+  if (e instanceof SyntaxError) return json({ error: MSG.unreadable }, 400);
   if (!(e instanceof Error) || e.constructor !== Error) {
     console.error(
       JSON.stringify({

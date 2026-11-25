@@ -51,6 +51,7 @@ import { LobbyHub } from './lobby-hub.js';
 import { handleRequest } from './api.js';
 import { BackupHub, exportStorage, importStorage, encode, decode } from './backup.js';
 import { makeRoomFor } from './socket-limits.js';
+import { MSG } from './public/messages.js';
 
 export default {
   fetch: handleRequest,
@@ -294,7 +295,7 @@ export class Room extends DurableObject {
           (typeof a?.id === 'string' ? a.id.replace(/^tg:/, '') : null);
         let reason = null;
         if (!tag || a?.accessTag !== tag || !Number.isFinite(a?.expires) || a.expires <= Date.now())
-          reason = 'Sessione scaduta: chiudi e riapri Binottoland dal bot.';
+          reason = MSG.expired;
         else if (!memberId || (await memberAccess({ id: memberId }, this.env)) === false)
           reason = 'Accesso al gruppo richiesto';
         if (reason) {
@@ -312,7 +313,7 @@ export class Room extends DurableObject {
     const path = new URL(req.url).pathname;
     // percorsi interni: solo con la chiave interna (vedi worker-shared.js)
     if (INTERNAL_PATHS.has(path) && !(await isInternal(req, this.env)))
-      return json({ error: 'Percorso non trovato.' }, 404);
+      return json({ error: MSG.notFound }, 404);
     if (path.startsWith('/simulator/'))
       return (this.simulator ??= new SimulatorLeague(this.ctx, this.env)).fetch(req);
     if (path.startsWith('/notices/'))
@@ -364,7 +365,7 @@ export class Room extends DurableObject {
       Number(req.headers.get('Content-Length') || 0) >
       (path === '/lobby/number-connect-score' || path === '/lobby/create' ? 420000 : 4096)
     )
-      return json({ error: 'Richiesta troppo grande.' }, 413);
+      return json({ error: MSG.tooBig }, 413);
     return this.ctx.blockConcurrencyWhile(async () => {
       try {
         const path = new URL(req.url).pathname;
@@ -383,9 +384,9 @@ export class Room extends DurableObject {
           });
         }
         if (path === '/init') {
-          if (s) return json({ error: 'Stanza già esistente.' }, 409);
+          if (s) return json({ error: 'Tavolo già esistente.' }, 409);
           const raw = await req.text();
-          if (raw.length > 4096) bad('Richiesta troppo grande.');
+          if (raw.length > 4096) bad(MSG.tooBig);
           const b = JSON.parse(raw);
           const token = id();
           s = this.newTable(req.headers.get('X-Room'), b, token);
@@ -394,10 +395,9 @@ export class Room extends DurableObject {
         }
         if (!s) {
           if (path.endsWith('/dismiss') && req.method === 'POST') return json({ left: true });
-          return json({ error: 'Stanza inesistente o scaduta.' }, 404);
+          return json({ error: MSG.tableGone }, 404);
         }
-        if (activeTable(s) && s.expires < Date.now())
-          return json({ error: 'Stanza inesistente o scaduta.' }, 404);
+        if (activeTable(s) && s.expires < Date.now()) return json({ error: MSG.tableGone }, 404);
         if (path === '/tidy-result' && req.method === 'POST') {
           if (concluded(s) && s.expires !== null) {
             if (!this.hasResultViewer(s)) {
@@ -411,12 +411,12 @@ export class Room extends DurableObject {
         }
         if (path.endsWith('/ws')) {
           if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
-            return json({ error: 'WebSocket richiesto.' }, 426);
+            return json({ error: MSG.live }, 426);
           // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
           makeRoomFor(this.ctx, userOf(req)?.id);
           const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
           if (!isPlayer && this.ctx.getWebSockets().length >= 60)
-            return json({ error: 'Stanza piena (60 connessioni).' }, 429);
+            return json({ error: 'Tavolo pieno: troppe persone collegate.' }, 429);
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
           pair[1].serializeAttachment({
@@ -485,9 +485,9 @@ export class Room extends DurableObject {
           }
           return json(this.public(s, viewer));
         }
-        if (req.method !== 'POST') return json({ error: 'Metodo non consentito.' }, 405);
+        if (req.method !== 'POST') return json({ error: MSG.unknownAction }, 405);
         const raw = await req.text();
-        if (raw.length > 4096) bad('Richiesta troppo grande.');
+        if (raw.length > 4096) bad(MSG.tooBig);
         const b = JSON.parse(raw || '{}');
         if (path.endsWith('/claim')) {
           if (
@@ -627,7 +627,7 @@ export class Room extends DurableObject {
           return json(this.public(s, viewer));
         }
         if (s.phase !== 'playing' && !(s.phase === 'waiting' && path.endsWith('/finish')))
-          return json({ error: 'Partita non attiva.' }, 409);
+          return json({ error: MSG.notActive }, 409);
         if (b.revision !== s.revision)
           return json({ error: 'La partita è cambiata. Riprova dopo l’aggiornamento.' }, 409);
         if (
@@ -637,7 +637,7 @@ export class Room extends DurableObject {
           !(s.naval?.phase === 'placement') &&
           who !== s.turn
         )
-          return json({ error: 'Non tocca a te.' }, 403);
+          return json({ error: MSG.notYourTurn }, 403);
         if (path.endsWith('/offer-draw')) {
           if ((!s.chess && !s.checkers) || s.phase !== 'playing')
             return json({ error: 'Patta disponibile solo durante una partita.' }, 409);
@@ -662,7 +662,7 @@ export class Room extends DurableObject {
         } else if (path.endsWith('/pass')) {
           if (s.chess || s.checkers || s.connect4 || s.uno || s.scarabeo || s.scopa || s.naval || s.briscola)
             return json({ error: 'Devi effettuare una mossa.' }, 409);
-          if (who !== s.turn) return json({ error: 'Non tocca a te.' }, 403);
+          if (who !== s.turn) return json({ error: MSG.notYourTurn }, 403);
           s.moves.push({ by: s.players[who].name, at: Date.now(), number: s.moves.length + 1 });
           s.turn = 1 - s.turn;
           if (s.moves.length >= 500) s.phase = 'finished';

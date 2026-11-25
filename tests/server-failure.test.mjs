@@ -1,7 +1,8 @@
 // Errori del server (analisi Fable, area 5, punto 5.4): i messaggi voluti arrivano al giocatore, gli errori di
-// programmazione finiscono nei log con un messaggio generico, una richiesta illeggibile è «Richiesta non valida».
+// programmazione finiscono nei log con un messaggio generico, una richiesta illeggibile dice che il server non l'ha capita e cosa fare (messaggi in public/messages.js).
 import assert from 'node:assert/strict';
 import { failure } from '../worker-shared.js';
+import { MSG } from '../public/messages.js';
 
 const logged = [];
 const realError = console.error;
@@ -35,7 +36,7 @@ try {
   }
   const badJson = failure(parse, 409);
   assert.equal(badJson.status, 400);
-  assert.deepEqual(await badJson.json(), { error: 'Richiesta non valida.' });
+  assert.deepEqual(await badJson.json(), { error: MSG.unreadable });
 } finally {
   console.error = realError;
 }
