@@ -14,7 +14,10 @@ export const MSG = {
   unknownAction: 'Azione sconosciuta per questa versione: ' + reopen,
   notFound: 'Indirizzo sconosciuto: ' + reopen,
   live: 'Serve un collegamento in diretta: ' + reopen,
+  method: 'Richiesta del tipo sbagliato per questo indirizzo: ' + reopen,
   tooBig: 'Richiesta troppo grande.',
+  // motivo di chiusura di un collegamento (corto: al massimo 123 byte)
+  closeReopen: 'Riapri Binottoland',
   // partite
   notYourTurn: 'Non tocca a te.',
   notActive: 'Partita non attiva.',

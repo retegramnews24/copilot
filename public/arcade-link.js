@@ -3,7 +3,7 @@
 import { blackboardLink } from './blackboard/link.js?v=bb859dccee';
 import { telegramHaptic } from './haptic.js?v=c280753040';
 import { renderNumberLeaders } from './leaderboard.js?v=e0418faadc';
-import { REOPEN } from './messages.js?v=a4f8bd3c10';
+import { REOPEN } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
 
@@ -115,7 +115,8 @@ export function createArcadeLink({
     arcadeFrame.title = title;
     const standalonePages = {
       blackboard: '/blackboard/index.html?v=6',
-      'lunar-lander-3d': '/lunar-lander-3d/'
+      'lunar-lander-3d': '/lunar-lander-3d/',
+      'ruggine-89': '/ruggine/'
     };
     arcadeFrame.src =
       standalonePages[game] ??
@@ -146,6 +147,7 @@ export function createArcadeLink({
     ['number-connect', 'Number Connect'],
     ['acquedotto', 'Acquedotto!'],
     ['lunar-lander-3d', 'Lunar Lander 3D'],
+    ['ruggine-89', 'Ruggine 89'],
     ['pong', 'Pong'],
     ['giulio-simulator', 'Giulio Simulator'],
     ['binotto-simulator', 'Binotto Simulator']
@@ -277,7 +279,7 @@ export function createArcadeLink({
     } else if (event.data?.type === 'arcade:ready') {
       simulatorBackReady = arcadeFrame.title === 'Binotto Simulator';
       sendArcadeInsets();
-    } else if (event.data?.type === 'arcade:exit') closeArcade();
+    } else if (event.data?.type === 'arcade:exit' || event.data?.type === 'ruggine:exit') closeArcade();
     else if (event.data?.type === 'arcade:haptic') {
       // games in the arcade frame (Acquedotto!) ask the app for Telegram's vibration
       telegramHaptic(tg, event.data.kind, event.data.style);

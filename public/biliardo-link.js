@@ -3,7 +3,7 @@
 // apre la partita (il server mette l'avviso con la specialità), entra, tiene lo stato aggiornato e manda i colpi;
 // l'iframe mostra e chiede. Anche Telegram resta qui: margini, Indietro, vibrazione, conferma di chiusura.
 import { telegramHaptic } from './haptic.js?v=c280753040';
-import { MSG } from './messages.js?v=a4f8bd3c10';
+import { MSG } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 
 export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {

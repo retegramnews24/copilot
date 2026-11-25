@@ -1,4 +1,5 @@
 import {avatarSVG} from '../avatar-figure.js?v=723b251202';
+import {REOPEN} from '../messages.js';
 import {BOARD_WIDTH, BOARD_HEIGHT, CHALKS, MAX_POINTS, ERASER, DEFAULT_SIZE} from './chalk.js?v=4027e504f0';
 
 const board = document.createElement('canvas');
@@ -354,7 +355,7 @@ window.addEventListener('message', event => {
       if (confirmClear.open) confirmClear.close('cancel');
       finishStroke();
       showPeople([]);
-      status.textContent = packet.expired ? 'Chiudi e riapri Binottoland dal bot' : 'Riconnessione…';
+      status.textContent = packet.expired ? REOPEN : 'Riconnessione…';
       break;
     case 'people': showPeople(packet.people); break;
   }

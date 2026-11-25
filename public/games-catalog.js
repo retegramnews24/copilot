@@ -13,6 +13,7 @@ const COVERS = {
   'briscola-in-cinque': '#6b4a9a',
   'moto-trial': '#e07b39',
   'f1-on-paper': '#0b6b3a',
+  'ruggine-89': '#b5651d',
   pong: '#5bc0be',
   'golf-with-your-gay-friends': '#4caf50',
   'giulio-simulator': '#3a7bd5',
@@ -20,7 +21,7 @@ const COVERS = {
   'number-connect': '#f0a202',
   acquedotto: '#2f8fd8',
   'cinema-streamer': '#d64575',
-  'blackboard-spazio-libero': '#6c8a6b'
+  'lavagna-spazio-libero': '#6c8a6b'
 };
 const slug = text =>
   text
@@ -29,12 +30,21 @@ const slug = text =>
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '');
+// Keys of renamed games: the ★, the order and "recently played" saved on the phone move to the new key.
+export const RENAMED = { 'blackboard-spazio-libero': 'lavagna-spazio-libero' };
+export function migrateKeys(state) {
+  const to = key => RENAMED[key] || key;
+  const unique = list => [...new Set((list || []).map(to))];
+  const recent = {};
+  for (const [key, at] of Object.entries(state.recent || {})) recent[to(key)] = Math.max(recent[to(key)] || 0, at);
+  return { ...state, fav: unique(state.fav), order: unique(state.order), recent };
+}
 const read = () => {
   try {
     // order: the Giochi icons in the order chosen by dragging (this device only).
-    return { fav: [], recent: {}, order: [], ...JSON.parse(localStorage.getItem(STORE) || '{}') };
+    return migrateKeys({ fav: [], recent: {}, order: [], ...JSON.parse(localStorage.getItem(STORE) || '{}') });
   } catch {
-    return { fav: [], recent: {} };
+    return { fav: [], recent: {}, order: [] };
   }
 };
 const write = value => {
@@ -59,7 +69,8 @@ export function initCatalog() {
   cards = [...page.querySelectorAll('.catalog-card')];
   for (const card of cards) {
     const title = card.querySelector('.catalog-card-title h3')?.textContent || '';
-    const key = slug(title);
+    // The key is written in the card (data-game in index.html): renaming a game no longer changes it.
+    const key = card.dataset.game || slug(title);
     card.dataset.game = key;
     card.style.setProperty('--cover', COVERS[key] || 'var(--accent)');
     homes.set(card, card.parentElement);

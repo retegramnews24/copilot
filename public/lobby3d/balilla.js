@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { isTouchDevice } from '../touch-device.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 import {
@@ -223,7 +224,7 @@ export function buildBalilla(scene, el, send, playSound) {
 
   // niente pannello: sul computer tasti (Spazio, Q, E, + e -), sul telefono gesti sul tavolo
   // col dito si trascina per giocare, un tocco veloce butta la pallina, l'asta più vicina al dito sceglie difesa o attacco
-  const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const touchUI = isTouchDevice();
   const exitChip = document.createElement('button');
   exitChip.textContent = '✕';
   exitChip.setAttribute('aria-label', 'Lascia il tavolo');
@@ -459,8 +460,9 @@ export function buildBalilla(scene, el, send, playSound) {
     const out = touchUI ? 'tocca il centro del campo' : 'premi Spazio';
     let line;
     if (!seated())
-      line =
-        net.occupied.includes(team * 2) && net.occupied.includes(team * 2 + 1)
+      line = net.elsewhere
+        ? 'Stai già giocando da un altro dispositivo'
+        : net.occupied.includes(team * 2) && net.occupied.includes(team * 2 + 1)
           ? 'Lato pieno: stai guardando'
           : 'Aspetto il posto…';
     else if (net.paused) line = 'In pausa: aspettiamo chi si è allontanato';

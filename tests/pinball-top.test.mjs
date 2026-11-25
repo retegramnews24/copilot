@@ -98,6 +98,15 @@ assert.equal(await startPinball(ctx, { user: {} }), false, 'senza persona niente
 // un inizio vecchissimo (partita mai finita) non vale più
 await played(elsa, PINBALL_GAME_MAX / 1000 + 60);
 assert.equal(await recordPinball(ctx, elsa, 1000), false, 'inizio scaduto');
+// 9.6: il telefono rimanda l'inizio dopo una riapertura con lo stesso numero: l'ora d'inizio non si sposta, quindi
+// un punteggio alto fatto in una partita lunga entra ancora; un inizio con un numero nuovo è una partita nuova
+const fede = { user: { id: '12', name: 'Fede' } };
+assert.equal(await startPinball(ctx, fede, 'gp', 501), true);
+const fedeKey = pinballStartKey('12');
+store.get(fedeKey).gp -= 60_000; // un minuto di partita
+assert.equal(await startPinball(ctx, fede, 'gp', 501), false, 'inizio rimandato: non riscrive');
+assert.equal(await recordPinball(ctx, fede, 50 * PINBALL_RATE, 'gp'), true, 'vale l’ora del primo invio');
+assert.equal(await startPinball(ctx, fede, 'gp', 502), true, 'numero nuovo: partita nuova');
 // amministrazione: si toglie il punteggio di una persona
 assert.equal(await removePinball(ctx, 'gp', '2'), true);
 assert.ok(!store.get('pinballTop').some(e => e.id === '2'));

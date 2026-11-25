@@ -3,7 +3,7 @@
 body{display:flex;flex-direction:column;padding:calc(var(--top) + 8px) calc(var(--right) + 12px) calc(var(--bottom) + 9px) calc(var(--left) + 12px);background:#172938;color:var(--ink)}
 header{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:9px;text-align:center;padding-bottom:8px}
 h1,h2,p{margin:0}h1{font-size:clamp(15px,4.4vw,25px);line-height:1.05;letter-spacing:-.025em}h2{font-size:clamp(16px,4vw,23px)}
-.brand,small{color:#a3e7dc;letter-spacing:.1em;font-weight:800;font-size:10px}
+.brand,small{color:#a3e7dc;letter-spacing:.1em;font-weight:800;font-size:12px}
 button{min-height:39px;padding:5px 10px;font:inherit;font-weight:750;color:var(--ink);border:1px solid var(--line);background:#253e50;border-radius:11px;touch-action:manipulation;cursor:pointer}
 button:disabled{opacity:.5;cursor:default}button:focus-visible,input:focus-visible{outline:2px solid #ffe58d;outline-offset:2px}
 main{width:min(100%,1300px);margin:0 auto;display:flex;flex:1;min-height:0;flex-direction:column;gap:6px}
@@ -34,7 +34,7 @@ canvas{width:100%;height:100%;display:block;touch-action:none}
 #power::-webkit-slider-thumb{appearance:none;width:15px;height:16px;margin-top:-3px;border-radius:5px;border:2px solid #172938;background:#fff3d1}
 #power::-moz-range-thumb{width:11px;height:12px;border-radius:5px;border:2px solid #172938;background:#fff3d1}
 
-#route-title{color:var(--muted);font-size:11px}
+#route-title{color:var(--muted);font-size:12px}
 #route-title:empty{display:none}
 #route-picker{padding:8px 0 4px}
 #route-picker label{display:grid;gap:4px;color:var(--muted);font-size:13px}

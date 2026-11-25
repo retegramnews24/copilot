@@ -5,6 +5,7 @@
 // Il cabinet è fatto in Blender: mobile, tabellone con il display, piano. Si muovono i tre flipper (girano sul perno),
 // la leva del lancio con la molla e i pulsanti. La fisica è sul piano inclinato: qui la pallina viene messa sul piano 3D.
 import * as THREE from 'three';
+import { isTouchDevice } from '../touch-device.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { paintPlayfield, paintBackglass } from './flipper-art.js?v=bfd8725542';
 import { paintPlayfieldGT, paintBackglassGT } from './gt-art.js?v=0105a1455e';
@@ -75,7 +76,7 @@ export function buildFlipper(
   { audio, allowed, top = () => [], sendScore = () => {}, sendStart = () => {}, me = () => null, kind = 'gp' }
 ) {
   // scritte del display adatte al dispositivo: sul telefono non ci sono i tasti E e S
-  const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  const touchUI = isTouchDevice();
   const PLAY_TEXT = touchUI ? 'TOCCA PER GIOCARE' : 'PREMI E PER GIOCARE',
     PLAY_SHORT = touchUI ? 'Tocca per giocare' : 'E per giocare',
     AGAIN_TEXT = touchUI ? 'Tocca per ricominciare' : 'S per ricominciare';
@@ -453,7 +454,7 @@ export function buildFlipper(
   el.append(hud, tip);
   const leverZone = document.createElement('div');
   // telefono: le tre scritte in basso diventano tasti veri (la zona del tocco è più grande del tasto)
-  if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
+  if (touchUI) {
     tip.textContent =
       'Tocca a sinistra e a destra i flipper · Leva: tieni premuto o trascina giù, lascia per lanciare';
     tip.style.whiteSpace = 'normal';

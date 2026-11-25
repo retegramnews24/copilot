@@ -230,7 +230,7 @@ export class LobbyHub {
     for (const ws of this.ctx.getWebSockets()) {
       try {
         if (!tag || ws.deserializeAttachment()?.accessTag !== tag) {
-          ws.close(4001, 'Riapri la Mini App');
+          ws.close(4001, MSG.closeReopen);
           continue;
         }
         ws.send(message);

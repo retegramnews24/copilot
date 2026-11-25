@@ -1,6 +1,7 @@
 // Calcio balilla attraverso il server vero (Miniflare, come in produzione ma in locale) con quattro telefoni finti,
 // due per lato: ognuno prende il suo posto, muove solo la sua coppia di aste, la partita si ferma se uno tace e
-// riparte quando torna, e chi si ricollega con una connessione nuova riprende il suo posto.
+// riparte quando torna, la stessa persona da un secondo dispositivo non ruba il posto, chi si ricollega con una
+// connessione nuova riprende il suo posto e chi tace da SEAT_GRACE lo lascia.
 // Non provato qui: la pausa del server (ibernazione) con i posti rimessi a posto, che Miniflare non sa simulare;
 // la parte che li ricostruisce (BalillaHub.restore) è provata in balilla-restore.test.mjs.
 // Si lancia dopo wrangler deploy --dry-run (npm run test:multiplayer-runtime).
@@ -11,7 +12,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { rows } from '../public/lobby3d/balilla-rules.js';
-import { PAUSE, TAKEOVER } from '../balilla-hub.js';
+import { PAUSE, TAKEOVER, SEAT_GRACE } from '../balilla-hub.js';
 
 const bundle = resolve(process.argv[2] || '.test-bundle/worker.js');
 const directory = await mkdtemp(join(tmpdir(), 'binottoland-balilla-')),
@@ -115,14 +116,38 @@ try {
   await until(anna, m => m.paused === false, 'si riparte quando Dario torna');
   console.log('PASS balilla runtime: one silent phone pauses the table, it resumes when it is back.');
 
+  // Anna apre il tavolo anche dal computer mentre il telefono è vivo: il secondo non le ruba il posto e sa perché
+  // (analisi 9.7: prima la riga di stato diceva «Aspetto il posto…» per sempre)
+  const annaPC = await phone(71);
+  annaPC.balilla('join', { slot: 0, mode: 2, target: 10, bar: true });
+  await until(
+    annaPC,
+    m => m.slot === -1 && m.elsewhere === true,
+    'secondo dispositivo di Anna: «già al tavolo»'
+  );
+  await sleep(300);
+  assert.equal(anna.last.slot, 0, 'Anna keeps her seat on the phone');
+  assert.equal(anna.last.elsewhere, false, 'the seated device is not told it plays elsewhere');
+  assert.equal(carla.last.elsewhere, false, 'other people are not told anything');
+  annaPC.ws.close();
+  console.log(
+    'PASS balilla runtime: the same person from a second live device does not steal the seat and is told so.'
+  );
+
   // Dario si ricollega con una connessione nuova mentre la vecchia tace da più di TAKEOVER: riprende il posto 3
   await sleep(TAKEOVER + 300);
   const again = await phone(74);
   again.balilla('join', { slot: 2, mode: 2, target: 10, bar: true });
   const back = await until(again, m => m.slot === 3, 'Dario riprende il posto 3 dalla connessione nuova');
   assert.deepEqual([...back.occupied].sort(), [0, 1, 2, 3], 'still four seats, no duplicate');
-  clearInterval(keep);
   console.log('PASS balilla runtime: a new connection of the same person takes back the seat.');
+
+  // Dario tace del tutto (analisi 9.11): dopo SEAT_GRACE il posto 3 si libera, gli altri restano seduti
+  await sleep(SEAT_GRACE + 1500);
+  const freed = await until(anna, m => !m.occupied.includes(3), 'posto 3 libero dopo SEAT_GRACE', 8000);
+  assert.deepEqual([...freed.occupied].sort(), [0, 1, 2], 'only the silent seat is freed');
+  clearInterval(keep);
+  console.log('PASS balilla runtime: a seat silent for SEAT_GRACE is freed, the others stay.');
 } finally {
   for (const p of phones)
     try {

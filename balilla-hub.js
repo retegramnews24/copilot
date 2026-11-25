@@ -359,8 +359,13 @@ export class BalillaHub {
     else if (this.field.bar) this.updateBar();
     this.broadcast(true);
   }
-  payload(slot, field, occupied, local) {
-    return `{"type":"balilla","mode":${this.mode},"slot":${slot},"occupied":${occupied},"playing":${!!this.timer},"paused":${!!this.timer && this.paused()},"busy":${this.busy() && !local},"field":${field}}`;
+  // elsewhere: la stessa persona è già seduta da un altro dispositivo (il telefono lo scrive invece di «Aspetto il
+  // posto…», analisi 9.7)
+  payload(slot, field, occupied, local, elsewhere = false) {
+    return `{"type":"balilla","mode":${this.mode},"slot":${slot},"occupied":${occupied},"playing":${!!this.timer},"paused":${!!this.timer && this.paused()},"busy":${this.busy() && !local},"elsewhere":${elsewhere},"field":${field}}`;
+  }
+  elsewhere(m) {
+    return m.slot < 0 && m.id != null && this.seated().some(v => v.id === m.id);
   }
   send(ws, m) {
     try {
@@ -369,7 +374,8 @@ export class BalillaHub {
           m.slot,
           JSON.stringify(publicField(this.field)),
           JSON.stringify(this.seated().map(v => v.slot)),
-          m.local
+          m.local,
+          this.elsewhere(m)
         )
       );
     } catch {}
@@ -383,7 +389,7 @@ export class BalillaHub {
     this.last = key;
     for (const [ws, m] of this.viewers)
       try {
-        ws.send(this.payload(m.slot, field, occupied, m.local));
+        ws.send(this.payload(m.slot, field, occupied, m.local, this.elsewhere(m)));
       } catch {}
   }
 }

@@ -35,13 +35,13 @@ kbd:first-child { margin-left: 0; }
 .control-pair { display: flex; gap: clamp(4px,1.5vw,12px); }
 #controls button { pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; display: grid; justify-items: center; align-content: center; min-width: clamp(42px,12vw,66px); height: clamp(44px,13vw,62px); padding: 3px 5px; border: 1px solid #ffe4b873; border-radius: 14px; background: #22303cec; box-shadow: inset 0 1px 0 #fff1,0 3px 8px #10141a50; }
 #controls button b { font-size: 21px; line-height: 1.05; }
-#controls button small { font-size: 10px; }
+#controls button small { font-size: 12px; }
 #controls button:active,#controls button[data-held] { border-color: #ffe2ac; background: #566369; }
 #controls [data-hold="throttle"] { background: #2f5554; }
 #controls #turn { background: #9c5c37; }
 .overlay { position: absolute; inset: 0; display: grid; place-items: center; background: #1823336b; padding: calc(var(--top) + 54px) calc(var(--right) + 14px) calc(var(--bottom) + 13px) calc(var(--left) + 14px); overflow: auto; }
 .panel { width: min(100%,445px); padding: clamp(15px,4vw,27px); border: 1px solid var(--line); border-radius: 19px; background: #263440f2; box-shadow: 0 15px 65px #14202b90; }
-.eyebrow { margin: 0; color: #f4bc7e; font-size: 10px; font-weight: 800; letter-spacing: .17em; }
+.eyebrow { margin: 0; color: #f4bc7e; font-size: 12px; font-weight: 800; letter-spacing: .17em; }
 .eyebrow span { margin: 0 .3em; }
 h1 { margin: 4px 0 7px; font-size: clamp(26px,7vmin,47px); line-height: 1; letter-spacing: -.05em; }
 #description { margin: 0 0 10px; max-width: 38ch; }

@@ -53,6 +53,7 @@ export const HELP = [
       ['Flipper', 'Z e M (o Maiuscole e le frecce), oppure i tasti sinistro e destro del mouse'],
       ['Leva', 'S, Freccia giù o Invio: tieni premuto e lascia; o trascina il pomello col mouse'],
       ['Colpo morbido o pieno', 'tocco breve o tasto tenuto'],
+      ['Scossa al tavolo', 'Spazio'],
       ['Nuova partita', 'E all’inizio, S a fine partita'],
       ['Lasciare il flipper', 'E o Esc']
     ],

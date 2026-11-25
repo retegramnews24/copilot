@@ -5,7 +5,7 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=d38be2cad9';
 import {readAppearance} from './appearance.js?v=784dba932c';
 import './avatar-figure.js?v=723b251202';
-import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=0263281510';
+import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=d5e86b959d';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
@@ -14,10 +14,11 @@ import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-
 import {renderMyGames,myTables,timeLeft} from './my-games.js?v=d184c87cf4';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
-import {initSettings} from './settings.js?v=1635e1bcff';
-import {createLobbyLink} from './lobby-link.js?v=6048d01790';
+import {initSettings} from './settings.js?v=bd073eae55';
+import {createLobbyLink} from './lobby-link.js?v=b3dd5d3e2f';
+import {initGamesFilter} from './games-filter.js?v=3118189233';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e0418faadc';
-import {createCinemaLobby} from './cinema-lobby.js?v=ba68bb1ccf';
+import {createCinemaLobby} from './cinema-lobby.js?v=45a50014c0';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
 import {createLobbyChips} from './lobby-chips.js?v=34f547ad4a';
@@ -25,19 +26,19 @@ import {createNotices} from './notices.js?v=2da209359f';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
-import {createMotoLink} from './moto-link.js?v=371136c2a0';
+import {createMotoLink} from './moto-link.js?v=30bcadda95';
 import {createGolfLink} from './golf-link.js?v=907761b1e9';
-import {createArcadeLink} from './arcade-link.js?v=56c520feb7';
-import {createF1Link} from './f1-link.js?v=2673c1f0cb';
-import {createBiliardoLink} from './biliardo-link.js?v=f6a32f5d65';
+import {createArcadeLink} from './arcade-link.js?v=bb117573ab';
+import {createF1Link} from './f1-link.js?v=03c12b4555';
+import {createBiliardoLink} from './biliardo-link.js?v=9dfb35a249';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
-import { MSG } from './messages.js?v=a4f8bd3c10';
+import { MSG } from './messages.js?v=3be0dc6ab5';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.63',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.64',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -45,7 +46,8 @@ const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),
 const noticeGame=room=>games.find(g=>g.room===room&&ongoing(g));
 const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
 // Lobby bell: personal notices (stored by the server, or made here), outside the chat (see notices.js).
-const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(g.game==='golf')golf.open(target);else if(g.game==='f1')f1.open(target);else if(g.game==='biliardo')biliardo.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
+// «Entra» from the 3D notice board: close the 3D first, like a cabinet does, or the game opens hidden under it (analisi 9.4)
+const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(lobby3d?.active){lobby3d.hide();lobby3dBack=Date.now();lobby3dIdle=0}if(g.game==='golf')golf.open(target);else if(g.game==='f1')f1.open(target);else if(g.game==='biliardo')biliardo.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
 const notices=createNotices({me:()=>identity,isOpen:target=>!!noticeGame(target),open:openGameRoom});
 // Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
 createLobbyChips({notice:item=>notices.add(item)});
@@ -91,7 +93,7 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=0e1369a622');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=b608ef7135');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
@@ -413,7 +415,9 @@ function connect(){
 const lobbyLink=createLobbyLink({
  open:()=>new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]),
  enabled:()=>!!sessionToken,
+ visible:()=>!document.hidden,
  hooks:{
+  beat:()=>sendPresence(),
   before:()=>cinema.connect(),
   created:socket=>{lobbyWS=socket},
   // il server dimentica sgabello e posto al balilla del collegamento vecchio: il telefono si rimette d'accordo
@@ -440,6 +444,7 @@ document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selec
 $('open-archive').onclick=()=>{renderArchive();selectPage('archive')};
 $('open-info').onclick=()=>selectPage('info');
 const {renderThemePreview}=initSettings({appName:APP_NAME,tg,trace,events});
+initGamesFilter(); // pagina Giochi: ricerca e filtri
 async function createTable(game,target,mode,seats){
  const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});
  stopRoom();room=j.state.room;state=null;credentials={token:j.token,player:j.player};
@@ -740,7 +745,7 @@ async function startSession(){
  enterFullscreen();
  accessFailed=false;
  try{
-  if(!tg?.initData)throw Error('Apri questa Mini App da @checkmategame_bot per usare il tuo account Telegram.');
+  if(!tg?.initData)throw Error(MSG.openFromTelegram);
   const response=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({initData:tg.initData})});
   const data=await response.json();if(!response.ok)throw Error(data.error||'Accesso non riuscito.');
   identity=data.user;sessionToken=data.token;$('name').textContent=identity.name;renderProfile();$('auth-notice').hidden=true;
@@ -790,7 +795,7 @@ function renderSocial(){
  chat.render(connected);
 }
 
-setInterval(()=>{if(!document.hidden){sendPresence();lobbyAlive()}},25000);
+lobbyLink.startBeat(); // ogni 25 s, con l'app in vista: presenza e collegamento vivo (lobby-link.js)
 window.addEventListener('pagehide',event=>{if(!event.persisted)discardResult(true);sendPresence(true);lobbyWS?.close()});
 
 
