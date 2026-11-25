@@ -5,16 +5,11 @@ import assert from 'node:assert/strict';
 import {initialScopa,scopaView} from '../scopa.js';
 import {initialScarabeo,scarabeoView,playScarabeo} from '../scarabeo.js';
 import {tutorial} from '../table-ai.js';
-import * as labCore from '../public/labyrinth/core.js';
-import * as labAdventure from '../public/labyrinth/adventure.js';
-import * as labTraps from '../public/labyrinth/traps.js';
 import {renderBriscola} from '../public/sea-cards-ui.js';
 import {sicilianSVG} from '../public/sicilian-cards.js';
-import * as labSpring from '../public/labyrinth/spring.js';
 import {CAMPAIGN_LENGTH} from '../public/moto-trial/courses.js';
 import {drawTrial} from '../public/moto-trial/render.js';
 import * as trialPhysics from '../public/moto-trial/physics.js';
-import {FrameBudget} from '../public/labyrinth/performance.js';
 import {newMatch,movePaddle,stepMatch,paddlePositions,width,height,radius} from '../public/arcade/pong-physics.js';
 import {createNumberGame,canMerge,mergeNumbers} from '../public/arcade/number-connect-rules.js';
 const source=await fs.readFile('public/app.js','utf8');
@@ -75,7 +70,6 @@ assert.equal(w.document.documentElement.dataset.telegramPlatform,'android');
 
 const get=id=>w.document.getElementById(id);
 assert.equal(get('tutorial-labyrinth'),null);
-assert.equal(get('solo-labyrinth').textContent,'Dev Mode');
 assert.match(get('leaderboard-multi').querySelector('details summary').textContent,/Anna/);
 assert.equal(get('leaderboard-multi').querySelector('details').open,false);
 const golfBall=get('golf-ball-preview'),separateColors=get('golf-ball-separate'),golfPalette=get('golf-ball-colors');
@@ -97,9 +91,6 @@ assert.deepEqual(ballColors(),['#cf514d','#529766']);
 separateColors.click();
 assert.deepEqual(ballColors(),['#e5be43','#8662b1']);
 separateColors.click();
-get('solo-labyrinth').click();
-assert.equal(get('labyrinth-frame').getAttribute('src'),'/labyrinth/index.html?dev=1&v=dev3');
-w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:get('labyrinth-frame').contentWindow,data:{type:'labyrinth:exit'}}));
 for(const game of ['number-connect','pong']){
  const launch=get('play-'+game),frame=get('arcade-frame'),overlay=get('arcade-overlay');
  launch.click();
@@ -413,113 +404,6 @@ for(const rank of [8,9,10]){
  const card=sicilianSVG({rank,suit:1});
  assert.equal((card.match(new RegExp('>'+rank+'</text>','g'))||[]).length,2);
 }
-// Telegram embeds Labyrinth in a sandbox where native confirm is suppressed.
-const labHtml=await fs.readFile('public/labyrinth/index.html','utf8');
-const labScript=(await fs.readFile('public/labyrinth/game.js','utf8')).replace(/^import .*;\r?\n/gm,'');
-const labDom=new JSDOM(labHtml,{url:'https://unit.test/labyrinth/index.html?dev=1',runScripts:'outside-only',pretendToBeVisual:true});
-const lab=labDom.window,labGet=id=>lab.document.getElementById(id);
-Object.assign(lab,labCore,labAdventure,labTraps,labSpring,{FrameBudget});
-lab.matchMedia=()=>({matches:false});
-let locked=null,lockRequests=0;
-Object.defineProperty(lab.document,'pointerLockElement',{get:()=>locked});
-const lockChange=()=>lab.document.dispatchEvent(new lab.Event('pointerlockchange'));
-labGet('scene').requestPointerLock=()=>{lockRequests++;locked=labGet('scene');lockChange()};
-lab.document.exitPointerLock=()=>{locked=null;lockChange()};
-const mKey=(repeat=false)=>lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'KeyM',repeat}));
-lab.confirm=()=>{throw Error('Native confirmation is unavailable')};
-lab.readAppearance=()=>({shirt:'#66b8cf',shorts:'#3c62a3'});
-lab.avatarSprite=()=>lab.document.createElement('canvas');
-lab.Renderer=class{load(world){this.world=world}draw(){}};
-lab.Atmosphere=class{constructor(enabled){this.enabled=enabled}active(){}resume(){}};
-const oldRun={...labAdventure.newRun(41),level:4,inventoryLayout:undefined,inventory:['key:4','pass']};
-const storageKey='binottoland-labyrinth-v2-guest';
-lab.localStorage.setItem(storageKey,JSON.stringify(oldRun));
-lab.eval(labScript+
- '\nwindow.__labTest={tick:()=>tick(lastTime+16),action:()=>actionState.remaining,resetSwing:()=>{actionState.remaining=actionState.cooldown=0}};');
-assert.equal(labGet('fullscreen'),null);assert.equal(labGet('sprint'),null);assert.equal(labGet('hand-view'),null);
-assert.equal(labGet('new-run').hidden,false);
-assert.equal(labGet('test-travel').hidden,false);
-assert.equal(labGet('guide-option').hidden,false);
-assert.equal(labGet('guide').hidden,false);
-labGet('guide-toggle').click();
-assert.equal(labGet('guide').hidden,true);
-labGet('guide-toggle').click();
-assert.equal(labGet('guide').hidden,false);
-const initialSlots=labGet('inventory').querySelectorAll('button');
-assert.equal(initialSlots.length,4);
-assert.equal(initialSlots[0].getAttribute('aria-label'),'Mano D · Keycard');
-assert.equal(initialSlots[2].getAttribute('aria-label'),'Tasca 1 · Passe-partout');
-labGet('new-run').click();assert.equal(labGet('new-run-confirm').hidden,false);
-labGet('new-run-cancel').click();assert.equal(labGet('new-run-confirm').hidden,true);
-assert.equal(JSON.parse(lab.localStorage.getItem(storageKey)).level,4);
-labGet('start').click();assert.equal(locked,labGet('scene'));
-mKey();assert.equal(locked,null);assert.equal(labGet('menu').hidden,true);
-mKey(true);assert.equal(locked,null);
-labGet('scene').dispatchEvent(new lab.MouseEvent('mousedown',{button:0}));
-assert.equal(lockRequests,1);
-initialSlots[2].click();
-assert.equal(labGet('menu').hidden,true);assert.equal(locked,null);
-mKey();assert.equal(locked,labGet('scene'));assert.equal(lockRequests,2);
-assert.deepEqual(JSON.parse(lab.localStorage.getItem(storageKey)).inventory,['pass',null,'key:4']);
-assert.equal(labGet('health-meter').value,100);
-labGet('scene').dispatchEvent(new lab.MouseEvent('mousedown',{button:2,cancelable:true}));
-assert.equal(labGet('guard').getAttribute('aria-pressed'),'true');
-lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'KeyF'}));
-assert.ok(lab.__labTest.action()>0,'Attacks work while guarding');
-lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'ControlLeft'}));
-lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'true');
-lab.dispatchEvent(new lab.KeyboardEvent('keyup',{code:'ControlLeft'}));
-lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'false');
-labGet('crouch').click();lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'true');
-labGet('crouch').click();lab.__labTest.tick();assert.equal(labGet('crouch').getAttribute('aria-pressed'),'false');
-
-lab.dispatchEvent(new lab.MouseEvent('mouseup',{button:2}));
-assert.equal(labGet('guard').getAttribute('aria-pressed'),'false');
-const touchPointer=(type,id,isPrimary)=>Object.assign(new lab.Event(type,{cancelable:true}),{pointerId:id,pointerType:'touch',isPrimary});
-labGet('guard').dispatchEvent(touchPointer('pointerdown',1,true));
-assert.equal(labGet('guard').getAttribute('aria-pressed'),'true');
-lab.__labTest.resetSwing();
-labGet('action').dispatchEvent(touchPointer('pointerdown',2,false));
-assert.ok(lab.__labTest.action()>0,'A second touch can strike while the first holds guard');
-assert.equal(labGet('guard').getAttribute('aria-pressed'),'true');
-labGet('guard').dispatchEvent(touchPointer('pointercancel',1,true));
-assert.equal(labGet('guard').getAttribute('aria-pressed'),'false');
-lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'Escape'}));
-labGet('new-run').click();labGet('new-run-start').click();
-assert.equal(labGet('menu').hidden,true);
-const restarted=JSON.parse(lab.localStorage.getItem(storageKey));
-assert.equal(restarted.level,1);assert.deepEqual(restarted.inventory,[]);
-lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'Escape'}));
-labGet('test-floor').value='6';
-labGet('test-travel-go').click();
-assert.equal(labGet('floor').textContent,'COLOSSEO');
-assert.equal(labGet('guide').hidden,true);
-lab.dispatchEvent(new lab.KeyboardEvent('keydown',{code:'Escape'}));
-labGet('dev-kit').click();
-assert.deepEqual(JSON.parse(lab.localStorage.getItem(storageKey)).inventory,['sword','shield','pass']);
-assert.equal(labGet('inventory').querySelectorAll('.inventory-slot').length>=8,true);
-labDom.window.close();
-
-{
- const mode='multiplayer';
- const instance=new JSDOM(labHtml,{url:'https://unit.test/labyrinth/index.html?'+mode+'=1&dev=1',runScripts:'outside-only',pretendToBeVisual:true});
- const child=instance.window,find=id=>child.document.getElementById(id);
- Object.assign(child,labCore,labAdventure,labTraps,labSpring,{FrameBudget,matchMedia:()=>({matches:false}),
-   readAppearance:lab.readAppearance,Renderer:lab.Renderer,Atmosphere:lab.Atmosphere});
- child.eval(labScript+'\nwindow.__labMode={level:()=>level,receive:receiveState,assign:value=>{multiplayer=value}};');
- {
-  const state={room:'qa',seed:41,revision:0,players:[],floors:{},cases:[]};
-  child.__labMode.assign({room:'qa',state,watch:true});
-  child.__labMode.receive(state);
- }
- assert.equal(find('guide').hidden,true,mode);
- assert.equal(find('guide-option').hidden,true,mode);
- assert.equal(find('test-travel').hidden,true,mode);
- find('test-floor').value='6';find('test-travel-go').click();find('dev-kit').click();
- assert.equal(child.__labMode.level(),1);
- instance.window.close();
-}
-console.log('PASS Labyrinth menu: reset uses an in-app confirmation, cancel preserves progress, restart saves floor one and there is no fullscreen button.');
 
 const trialHtml=await fs.readFile('public/moto-trial/index.html','utf8');
 const trialOptions={runScripts:'outside-only',pretendToBeVisual:true};
@@ -1055,7 +939,7 @@ console.log('PASS Arcade: both launchers, diagonal merge, pointer drag, combo, r
 // Save only a synthetic preview outside the shipped source.
 if(process.argv.includes('--preview')){
 const bundle=await build({stdin:{contents:source+exposed,resolveDir:root},bundle:true,write:false,format:'iife',platform:'browser'});
-const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/labyrinth',preview+'/public/labyrinth',{recursive:true});await fs.cp('public/moto-trial',preview+'/public/moto-trial',{recursive:true});await fs.cp('public/golf',preview+'/public/golf',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');
+const preview=new URL('../../scopa-preview',import.meta.url).pathname;await fs.mkdir(preview+'/public',{recursive:true});await fs.mkdir(preview+'/.openai',{recursive:true});await fs.writeFile(preview+'/.openai/hosting.json',JSON.stringify({static:{directory:'public'}}));const html=(await fs.readFile('public/index.html','utf8')).replace(/<script type="module" src="[^\"]*app.js[^\"]*"><\/script>/,'<script src="/fixture.js"></script><script src="/app.js"></script>');await fs.writeFile(preview+'/public/index.html',html);await fs.writeFile(preview+'/public/app.js',bundle.outputFiles[0].text);await fs.cp('public/moto-trial',preview+'/public/moto-trial',{recursive:true});await fs.cp('public/golf',preview+'/public/golf',{recursive:true});await fs.cp('public/safe-area.js',preview+'/public/safe-area.js');
 const fixture=`window.Telegram={WebApp:{ready(){},expand(){},onEvent(){},initData:'preview'}};const qaUser=${JSON.stringify(user)};const qaState=${JSON.stringify({...state,game:'scopa',scopa:view,scarabeo:null,turn:0,tutorial:tutorial('scopa',view,0,0)})};const qaPayload=${JSON.stringify(payload())};window.WebSocket=class{constructor(url){this.readyState=1;setTimeout(()=>{this.onopen?.();this.onmessage?.({data:JSON.stringify(url.endsWith('/api/lobby/ws')?qaPayload:qaState)})},10)}send(){}close(){this.readyState=3}};window.fetch=async(path)=>Response.json(path==='/api/session'?{user:qaUser,token:${JSON.stringify(fixtureToken)}}:path.startsWith('/api/leaderboard')?{...qaPayload,pending:false}:path==='/api/lobby'?qaPayload:qaState);window.addEventListener('load',()=>{setTimeout(()=>window.__qa.openRoom(qaState.room,true),200)});`;
 await fs.writeFile(preview+'/public/fixture.js',fixture);
 

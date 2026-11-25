@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4f7d6c73d7';
-import {buildBalilla} from './balilla.js?v=36a38e0d0d';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=6dbfbe9612';
+import {buildBalilla} from './balilla.js?v=86390d4233';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -11,12 +11,12 @@ import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard
 import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
-import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=47e47e2969';
-import * as E from '../biliardo/engine.js?v=b130e0cb1b';
-import { readAppearance, readLook } from '../appearance.js?v=a866c9e8ce';
+import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
+import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
+import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=faa543f96e';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
-import { gameTitle } from '../game-info.js?v=dab50e1d8e';
+import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 
 const H = 3.4; // altezza delle stanze
@@ -31,7 +31,6 @@ const ARCADE = [
   ['number-connect', 'Number Connect', '#f0a202'],
   ['f1-on-paper', 'F1 on paper!', '#1fae5f'],
   ['golf-with-your-gay-friends', 'Golf', '#4caf50'],
-  ['labyrinth', 'Labyrinth', '#7d6bd6'],
   ['giulio-simulator', 'Giulio Simulator', '#3a7bd5'],
   ['binotto-simulator', 'Binotto Simulator', '#ffd236'],
 ];
@@ -53,12 +52,10 @@ const CSS = `
 /* telefono: niente sfocatura dietro ai tasti (con la scena che cambia andrebbe rifatta a ogni fotogramma per ogni tasto) */
 .l3d-touch button{backdrop-filter:none;-webkit-backdrop-filter:none}
 .l3d-where{margin-left:auto;padding:7px 12px;border-radius:999px;background:rgba(18,14,28,.6);font-weight:600;font-size:14px}
-.l3d-hint{position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + 58px);padding:6px 12px;border-radius:10px;background:rgba(0,0,0,.45);font-size:13px;color:#e7e1f3;text-align:center;max-width:86vw;transition:opacity .6s;pointer-events:none}
 .l3d-act{position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 34px);transform:translateX(-50%);width:auto!important;max-width:90vw;margin:0;font-weight:700!important;font-size:17px!important;padding:13px 24px!important;background:linear-gradient(180deg,#ffcf4a,#f29d1c)!important;color:#2a1600!important;border:0!important;box-shadow:0 6px 24px rgba(255,180,40,.45);white-space:nowrap}
 /* telefono: in basso ci sono joystick e tasti, quindi il tasto d'azione va in alto a sinistra (sotto "Lobby classica")
    e l'avviso un po' più giù; i volumi vanno in alto a destra */
 .l3d-touch .l3d-act{left:calc(var(--ui-safe-left,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 60px);bottom:auto;transform:none;max-width:48vw;font-size:14px!important;padding:10px 14px!important;white-space:normal;text-align:left}
-.l3d-touch .l3d-hint{top:calc(var(--ui-safe-top,0px) + 120px)}
 .l3d-act[hidden]{display:none}
 .l3d-stick{position:absolute;left:calc(var(--ui-safe-left,0px) + 26px);bottom:calc(var(--ui-safe-bottom,0px) + 26px);width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.25);pointer-events:none}
 .l3d-stick i{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.35);border:2px solid rgba(255,255,255,.6)}
@@ -75,10 +72,10 @@ export function createLobby3D(app) {
   el.className = 'l3d'; el.hidden = true;
   el.innerHTML = `<div class="l3d-gl"></div><div class="l3d-load">Carico la Lobby 3D…</div>
 <div class="l3d-top"><button class="l3d-exit" aria-label="Torna alla Lobby classica">✕ Lobby classica</button><span class="l3d-where">Lobby</span></div>
-<div class="l3d-hint"></div><button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div><div class="l3d-stick l3d-look" hidden><i></i></div>`;
+<button class="l3d-act" hidden></button><div class="l3d-stick" hidden><i></i></div><div class="l3d-stick l3d-look" hidden><i></i></div>`;
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
-  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), hint = $('.l3d-hint'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
+  const host = $('.l3d-gl'), actB = $('.l3d-act'), whereEl = $('.l3d-where'), stick = $('.l3d-stick'), knob = stick.firstChild, lookStick = $('.l3d-look'), lookKnob = lookStick.firstChild, topBar = $('.l3d-top');
   const touch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   if (touch) el.classList.add('l3d-touch');
   stick.hidden = !touch;
@@ -90,8 +87,6 @@ export function createLobby3D(app) {
   const dot = document.createElement('div');
   dot.style.cssText = 'position:absolute;left:50%;top:50%;width:3px;height:3px;margin:-1.5px 0 0 -1.5px;border-radius:50%;background:rgba(255,255,255,.4);box-shadow:0 0 1px rgba(0,0,0,.5);pointer-events:none;z-index:3';
   dot.hidden = touch; host.append(dot);
-  hint.hidden = true; // i comandi sono spiegati in Settings → Personaggio e pallina
-  hint.textContent = touch ? 'Muoviti con il cerchio in basso, trascina il dito per girare la vista' : 'WASD o frecce · Shift sinistro per correre · Spazio per saltare · trascina per guardarti intorno · E per aprire';
 
   // la grafica 3D può non partire (telefono vecchio, scheda grafica esclusa, memoria finita): si toglie quello che
   // è già stato aggiunto alla pagina e l'app passa alla Lobby classica (prima restava un pezzo di pagina a ogni tentativo)
@@ -856,13 +851,6 @@ export function createLobby3D(app) {
   projection.hidden=true;host.prepend(projection);
   let previewKey='',hls=null,previewVideo=null,yt=null,disposeYT=null;
   let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false, cinemaGain=null;
-  const audioButton=document.createElement('button');
-  audioButton.style.cssText='position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 10px);right:8px;font-size:12px;padding:7px';
-  audioButton.hidden=true; // non va nella pagina: il volume del cinema compare già entrando (Cinema nel mixer)
-  function updateSoundButton(){
-    audioButton.textContent=soundEnabled?'Audio cinema · On':'Attiva audio cinema';
-    audioButton.setAttribute('aria-pressed',String(soundEnabled));
-  }
   function unlockCinemaSound(){
     if(!active)return;
     try{audioContext??=new AudioContext();if(audioContext.state==='suspended')audioContext.resume().then(()=>{if(mixEligible&&previewVideo)cinemaMix(previewVideo)}).catch(()=>{});else if(mixEligible&&previewVideo)cinemaMix(previewVideo)}catch{}
@@ -870,13 +858,6 @@ export function createLobby3D(app) {
   el.addEventListener('pointerdown',unlockCinemaSound);
   el.addEventListener('pointerup',unlockCinemaSound); // sul telefono l'audio si sblocca solo quando il dito si alza
   window.addEventListener('keydown',unlockCinemaSound);
-  audioButton.onclick=()=>{
-    soundEnabled=!soundEnabled;updateSoundButton();
-    if(soundEnabled)unlockCinemaSound();
-    if(previewVideo){previewVideo.muted=!(soundEnabled&&audibleZone);if(soundEnabled&&currentProgram?.playback?.playing!==false)previewVideo.play().catch(()=>{})}
-    if(yt){if(soundEnabled&&audibleZone){yt.unMute();if(currentProgram?.playback?.playing!==false)yt.playVideo()}else yt.mute()}
-  };
-  updateSoundButton();
   function volumeControl(label,key,fallback,onInput){
     const wrap=document.createElement('label'),input=document.createElement('input'),out=document.createElement('span');
     wrap.style.cssText='display:flex;align-items:center;gap:6px;padding:5px 9px;background:#18151ded;color:white;border-radius:8px;font:12px system-ui';
@@ -912,7 +893,7 @@ export function createLobby3D(app) {
     }
   }
   function stopProjection(){
-    mixEligible=false;disposeYT?.();disposeYT=null;yt=null;audioButton.hidden=true;
+    mixEligible=false;disposeYT?.();disposeYT=null;yt=null;
     mediaNodes.forEach(node=>node.disconnect());mediaNodes=[];projection.style.zIndex='';
     lastYT=-1;previewKey='';screenMesh.material=standby;projection.hidden=true;
     hls?.destroy();hls=null;
@@ -974,7 +955,7 @@ export function createLobby3D(app) {
           ready();player.setVolume(Math.round(heard*100));if(soundEnabled&&audibleZone)player.unMute();else player.mute();
           syncTransport(true);
         },
-        state(){},blocked(){if(!soundEnabled)return;soundEnabled=false;updateSoundButton();yt?.mute();if(currentProgram?.playback?.playing!==false)yt?.playVideo()},error(){screenMesh.material=standby}
+        state(){},blocked(){if(!soundEnabled)return;soundEnabled=false;yt?.mute();if(currentProgram?.playback?.playing!==false)yt?.playVideo()},error(){screenMesh.material=standby}
       });return;
     }
     const v=document.createElement('video');previewVideo=v;v.volume=heard;v.muted=!(soundEnabled&&audibleZone);v.playsInline=true;v.autoplay=play?.playing!==false;
@@ -1147,7 +1128,7 @@ export function createLobby3D(app) {
   // Cabinati: uno per gioco. Per i giochi a più giocatori il cabinato è più largo, con un posto e una pulsantiera
   // per ognuno (come i cabinati veri a 2, 4 e 5 giocatori): chi apre il gioco prende il primo posto libero
   // e gli altri lo vedono lì, alla sua pulsantiera.
-  const SEATS = { pong: 2, 'golf-with-your-gay-friends': 4, labyrinth: 4, 'f1-on-paper': 5, 'moto-trial': 5 };
+  const SEATS = { pong: 2, 'golf-with-your-gay-friends': 4, 'f1-on-paper': 5, 'moto-trial': 5 };
   const PLAYER_COLORS = ['#ff5252', '#4da3ff', '#ffd23f', '#3ddc84', '#c77dff'];
   const cabWidth = n => (n >= 5 ? 2.3 : n >= 4 ? 1.9 : n >= 2 ? 1.25 : 0.8);
   // angoli arrotondati: profilo laterale estruso con smusso morbido
@@ -1233,7 +1214,7 @@ export function createLobby3D(app) {
   // lungo le pareti, rivolti verso il centro della sala: a nord i grandi a 4 e 5 posti, a sud gli altri
   const byKey = new Map(list.map(e => [e[0], e]));
   const northKeys = ['moto-trial', 'f1-on-paper', 'golf-with-your-gay-friends'].filter(k => byKey.has(k));
-  const southKeys = ['labyrinth', 'pong', ...list.map(e => e[0]).filter(k => !['moto-trial', 'f1-on-paper', 'golf-with-your-gay-friends', 'labyrinth', 'pong'].includes(k))].filter(k => byKey.has(k));
+  const southKeys = ['pong', ...list.map(e => e[0]).filter(k => !['moto-trial', 'f1-on-paper', 'golf-with-your-gay-friends', 'pong'].includes(k))].filter(k => byKey.has(k));
   const row = (keys, zz, ry, from, limit) => {
     let xx = from;
     const rest = [];
@@ -1708,7 +1689,6 @@ export function createLobby3D(app) {
       const want = Math.atan2(-dx, -dz);
       let d = want - heading; d = Math.atan2(Math.sin(d), Math.cos(d));
       heading += d * Math.min(1, dt * 12);
-      if (hint.style.opacity !== '0' && t > 1.5) hint.style.opacity = '0';
     }
     moving += (speed - moving) * Math.min(1, dt * 10);
     me.root.position.x = pos.x; me.root.position.z = pos.z; me.root.rotation.set(0,heading,0);
@@ -1853,7 +1833,6 @@ export function createLobby3D(app) {
       if(yt){if(audible&&soundEnabled)yt.unMute();else yt.mute()}
     }
     playProjection(app.projection?.());
-    audioButton.hidden=!inRange||!previewKey;
     const insideArcade=pos.x< -7&&Math.abs(pos.z)<6.15;
     const doorDepth=insideArcade?-7-pos.x:-Math.hypot(Math.max(0,pos.x+7),Math.max(0,Math.abs(pos.z)-1.3));
     const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);

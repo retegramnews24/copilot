@@ -1,6 +1,6 @@
 // Leaderboards: the compact top 5 in the Lobby, plus the full lists (wins against the AI, between people,
 // Number Connect points) kept in the Giochi page markup.
-import { gameTitle } from './game-info.js?v=dab50e1d8e';
+import { gameTitle } from './game-info.js?v=637e9e8793';
 import { makeAvatar } from './avatar.js?v=7a059821b4';
 const $ = id => document.getElementById(id);
 

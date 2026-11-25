@@ -7,9 +7,8 @@
 // i telefoni rifanno il colpo per animarlo e poi prendono il tavolo del server.
 // Chi non tira in tempo fa tirare il pilota automatico, così la partita non si ferma mai.
 import * as E from './public/biliardo/engine.js';
-import { internalHeaders } from './worker-shared.js';
+import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
 
-const json = (body, status = 200) => Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 const WAIT = 1800000, // una partita in cui non entra nessuno si chiude dopo 30 minuti
   KEEP = 300000, // una partita finita resta 5 minuti
   TURN = 60000, // tempo per un colpo, poi tira il pilota automatico
@@ -264,7 +263,7 @@ export class BiliardoRoom {
   }
   // con la chiave interna: la Lobby accetta i risultati solo da un altro oggetto del server (worker-shared.js)
   async lobby(path, body) {
-    return this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch('https://internal/lobby/' + path, {
+    return lobbyHub(this.env).fetch('https://internal/lobby/' + path, {
       method: 'POST',
       headers: await internalHeaders(this.env),
       body: JSON.stringify(body)
@@ -289,7 +288,7 @@ export class BiliardoRoom {
   }
   fetch(req) {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user?.player) return json({ error: 'Accesso richiesto.' }, 401);
       const now = Date.now(),
         url = new URL(req.url),
@@ -343,7 +342,7 @@ export class BiliardoRoom {
         }
         return json({ state: m, now });
       } catch (error) {
-        return json({ error: error.message }, 409);
+        return failure(error, 409, 'biliardo');
       }
     });
   }

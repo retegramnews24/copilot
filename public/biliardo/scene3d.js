@@ -5,7 +5,7 @@ import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComp
 import { RenderPass } from '../vendor/three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
-import { PIN_R } from './physics.js?v=ba3146227c';
+import { PIN_R } from './physics.js?v=650caf6b85';
 
 export const CLOTHS = {
   verde: { c: '#0c5e38', name: 'Verde' },

@@ -1,4 +1,5 @@
 import { playScarabeo } from './scarabeo.js';
+import { userOf, lobbyHub, json } from './worker-shared.js';
 // Long-turn games: a private Telegram message from the bot when it is your turn and you are not at the table.
 // Games: chess, checkers, Forza 4, Scarabeo, people only. One message per turn, quiet hours 23-8 (Rome time),
 // a short delay so live games (both players at the table) never get messages.
@@ -205,9 +206,6 @@ export function resultRequest(s, key, told) {
   };
 }
 
-const json = (data, status = 200) =>
-  Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
-
 export class TurnNotices {
   // deps (for tests): now(), telegram(method, payload) -> {ok, status}, table(room, query), presence(player, room)
   constructor(ctx, env, deps = {}) {
@@ -241,7 +239,7 @@ export class TurnNotices {
     this.presence =
       deps.presence ||
       (async (player, room) => {
-        const lobby = env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
+        const lobby = lobbyHub(env);
         const response = await lobby.fetch(
           new Request('https://internal/lobby/presence?' + new URLSearchParams({ player, room }))
         );
@@ -308,7 +306,7 @@ export class TurnNotices {
       return json({ ok: true });
     }
     // From the app: read or change the user's own choice.
-    const viewer = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+    const viewer = userOf(req);
     if (path === '/notices/status' && viewer?.id) {
       if (req.method === 'POST') {
         if (typeof body.enabled !== 'boolean') return json({ error: 'Valore non valido.' }, 400);

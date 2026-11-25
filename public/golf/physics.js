@@ -1,4 +1,4 @@
-import { WIDTH, DEPTH, RADIUS, CUP, rotorWalls } from './courses.js?v=caf3baf8cd';
+import { WIDTH, DEPTH, RADIUS, CUP, rotorWalls } from './courses.js?v=d38be2cad9';
 
 const STEP = 1 / 100, MAX_STEP = 900;
 const clamp = (x,min,max) => Math.max(min,Math.min(max,x));

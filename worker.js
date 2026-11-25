@@ -17,7 +17,6 @@ import { F1Room } from './f1-server.js';
 import { BiliardoRoom } from './biliardo-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
-import { ExpeditionRoom } from './labyrinth-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
 import { initialCheckers, playCheckers } from './checkers.js';
@@ -41,7 +40,10 @@ import {
   noticeHub,
   internalHeaders,
   isInternal,
-  INTERNAL_PATHS
+  INTERNAL_PATHS,
+  failure,
+  userOf,
+  lobbyHub
 } from './worker-shared.js';
 import * as tables from './table-rules.js';
 import { concluded } from './table-rules.js';
@@ -68,7 +70,6 @@ export class Room extends DurableObject {
     this.balilla = new BalillaHub(ctx);
     this.ctx = ctx;
     this.env = env;
-    this.lab = new ExpeditionRoom(ctx, env, () => telegramAccessTag(env));
     this.moto = new MotoTrialRoom(ctx, env);
     this.pong = new PongRoom(ctx, env);
     this.golf = new GolfRoom(ctx, env);
@@ -120,7 +121,7 @@ export class Room extends DurableObject {
   recordSoon(s) {
     const results = resultsFor(s);
     if (!results.length) return;
-    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const lobby = lobbyHub(this.env);
     const send = (async () => {
       const headers = await internalHeaders(this.env);
       for (const result of results)
@@ -169,7 +170,7 @@ export class Room extends DurableObject {
     return result;
   }
   notifyTableRemoved(room) {
-    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const lobby = lobbyHub(this.env);
     this.ctx.waitUntil(
       lobby.fetch(
         new Request('https://internal/lobby/remove', { method: 'POST', body: JSON.stringify({ room }) })
@@ -245,7 +246,7 @@ export class Room extends DurableObject {
     this.sendNotice(noticeRequest(s));
   }
   async syncLobby(s) {
-    await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+    await lobbyHub(this.env).fetch(
       new Request('https://internal/lobby/update', {
         method: 'POST',
         body: JSON.stringify(this.summary(this.public(s)))
@@ -307,7 +308,7 @@ export class Room extends DurableObject {
   }
   async fetch(req) {
     await this.guardSockets();
-    const viewer = JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.player || null;
+    const viewer = userOf(req)?.player || null;
     const path = new URL(req.url).pathname;
     // percorsi interni: solo con la chiave interna (vedi worker-shared.js)
     if (INTERNAL_PATHS.has(path) && !(await isInternal(req, this.env)))
@@ -352,7 +353,6 @@ export class Room extends DurableObject {
     if (new URL(req.url).pathname.startsWith('/f1/')) return this.f1.fetch(req);
     if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
     if (new URL(req.url).pathname.startsWith('/moto-trial/')) return this.moto.fetch(req);
-    if (new URL(req.url).pathname.startsWith('/labyrinth/')) return this.lab.fetch(req);
     // amministrazione (solo da /api/admin/pinball, con ADMIN_TOKEN): toglie un punteggio falso dalla classifica
     if (path === '/pinball/remove' && req.method === 'POST') {
       const { table, id } = await req.json().catch(() => ({}));
@@ -382,8 +382,6 @@ export class Room extends DurableObject {
               turnTargets(s).includes(q.get('player'))
           });
         }
-        if (s?.game === 'cluedo')
-          return json({ error: 'Cluedo è stato rimosso. Crea un nuovo tavolo di Scopa.' }, 410);
         if (path === '/init') {
           if (s) return json({ error: 'Stanza già esistente.' }, 409);
           const raw = await req.text();
@@ -415,14 +413,14 @@ export class Room extends DurableObject {
           if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
             return json({ error: 'WebSocket richiesto.' }, 426);
           // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
-          makeRoomFor(this.ctx, JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id);
+          makeRoomFor(this.ctx, userOf(req)?.id);
           const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
           if (!isPlayer && this.ctx.getWebSockets().length >= 60)
             return json({ error: 'Stanza piena (60 connessioni).' }, 429);
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
           pair[1].serializeAttachment({
-            memberId: JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id,
+            memberId: userOf(req)?.id,
             accessTag: req.headers.get('X-Access-Tag'),
             expires: Number(req.headers.get('X-Session-Expires')),
             player: viewer
@@ -474,7 +472,7 @@ export class Room extends DurableObject {
             if (this.botSeat(s) >= 0 && (await this.ctx.storage.getAlarm()) === null)
               await this.ctx.storage.setAlarm(Math.min(Date.now() + 650, s.expires));
           }
-          const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null'),
+          const user = userOf(req),
             legacy = req.headers.get('X-Player-Token');
           const old = s.players.find(p => !p.id.startsWith('tg:') && legacy && p.token === legacy);
           if (user && old && !s.players.some(p => p.id === user.player)) {
@@ -505,7 +503,7 @@ export class Room extends DurableObject {
               },
               409
             );
-          const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+          const user = userOf(req);
           if (s.players.some(p => p.id === user?.player))
             return json({ error: 'Sei già un giocatore di questa partita.' }, 409);
           const token = id(),
@@ -519,7 +517,7 @@ export class Room extends DurableObject {
           this.queueNotice(s);
           return json({ token, player: p.id, state: this.public(s, viewer) });
         }
-        const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+        const user = userOf(req);
         const legacy = req.headers.get('X-Player-Token');
         const who = s.players.findIndex(
           p => p.id === user?.player || (!p.id.startsWith('tg:') && legacy && p.token === legacy)
@@ -692,7 +690,7 @@ export class Room extends DurableObject {
         this.queueNotice(s);
         return json(this.public(s, viewer));
       } catch (e) {
-        return json({ error: e instanceof SyntaxError ? 'Richiesta non valida.' : e.message }, 400);
+        return failure(e, 400, 'table');
       }
     });
   }
@@ -734,7 +732,7 @@ export class Room extends DurableObject {
     }
     if (a?.kind === 'blackboard') return this.blackboard.message(ws, message);
     if (a?.kind === 'cinema') return this.cinema.message(ws, message);
-    if (a?.kind === 'lab') return this.lab.message(ws, message);
+    if (a?.kind === 'lab') return; // Labyrinth tolto: collegamenti rimasti da prima, si chiudono da soli
     if (a?.kind === 'moto-trial') return this.moto.message(ws, message);
     if (a?.kind === 'pong') return this.pong.message(ws, message);
     if (a?.kind !== 'lobby') {
@@ -885,9 +883,7 @@ export class Room extends DurableObject {
     const attachment = ws.deserializeAttachment();
     if (attachment?.kind === 'blackboard') return this.blackboard.close(ws);
     if (attachment?.kind === 'cinema') return this.cinema.close(ws);
-    if (attachment?.kind === 'lab') {
-      await this.lab.close(ws);
-    } else if (attachment?.kind === 'moto-trial') {
+    if (attachment?.kind === 'moto-trial') {
       await this.moto.close(ws);
     } else if (attachment?.kind === 'pong') {
       await this.pong.close(ws);
@@ -919,7 +915,6 @@ export class Room extends DurableObject {
     const kind = ws.deserializeAttachment()?.kind;
     if (kind === 'blackboard') return this.blackboard.close(ws);
     if (kind === 'cinema') return this.cinema.close(ws);
-    if (kind === 'lab') return this.lab.close(ws);
     if (kind === 'moto-trial') return this.moto.close(ws);
     if (kind === 'pong') return this.pong.close(ws);
     ws.close(1011, 'Riconnettersi.');
@@ -933,7 +928,8 @@ export class Room extends DurableObject {
     if (this.ctx.id.toString() === this.env.ROOMS.idFromName('turn-notices-v1').toString())
       return (this.notices ??= new TurnNotices(this.ctx, this.env)).alarm();
     if (await this.ctx.storage.get('cinema-upload')) return this.ctx.storage.deleteAll();
-    if (await this.ctx.storage.get('expedition')) return this.lab.alarm();
+    // vecchie spedizioni di Labyrinth (gioco tolto): alla loro sveglia si svuota lo spazio
+    if (await this.ctx.storage.get('expedition')) return this.ctx.storage.deleteAll();
     if (await this.ctx.storage.get('golf')) return this.golf.alarm();
     if (await this.ctx.storage.get('f1')) return this.f1.alarm();
     if (await this.ctx.storage.get('biliardo')) return this.biliardo.alarm();

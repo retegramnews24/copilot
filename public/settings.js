@@ -108,7 +108,6 @@ export function initSettings({ appName, tg, trace, events }) {
   const isDev = () => pref('binottoland-dev', '0') === '1';
   function applyDevMode() {
     $('open-debug').hidden = !isDev();
-    if ($('solo-labyrinth')) $('solo-labyrinth').hidden = !isDev();
   }
   applyDevMode();
   let versionTaps = 0,

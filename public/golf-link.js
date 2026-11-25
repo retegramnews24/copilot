@@ -1,8 +1,8 @@
 // Golf seen from the app: the setup dialog (course set, collisions), solo games and online rooms in their iframe.
 // Online rooms are kept in sync by polling; actions from the iframe go to the server from here.
 // games(): the lobby list; roomClosed(id): the app drops a closed room from the Lobby.
-import { CAMPAIGNS, DEFAULT_CAMPAIGN } from './golf/courses.js?v=caf3baf8cd';
-import { golfColors } from './appearance.js?v=a866c9e8ce';
+import { CAMPAIGNS, DEFAULT_CAMPAIGN } from './golf/courses.js?v=d38be2cad9';
+import { golfColors } from './appearance.js?v=784dba932c';
 import { read, save } from './prefs.js?v=bd123656a4';
 const $ = id => document.getElementById(id);
 

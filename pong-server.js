@@ -1,7 +1,7 @@
 import {height,modes,validMode,newMatch,movePaddle,stepMatch} from './public/arcade/pong-physics.js';
+import { userOf, lobbyHub, json } from './worker-shared.js';
 
 const KEY='pong', EMPTY_GRACE=60_000, STEP=1/120;
-const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 export class PongRoom {
   constructor(ctx,env){
     this.ctx=ctx;this.env=env;
@@ -28,7 +28,7 @@ export class PongRoom {
     this.broadcastAt=Date.now();
   }
   async syncLobby(room,action='update'){
-    const lobby=this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const lobby=lobbyHub(this.env);
     await lobby.fetch('https://internal/lobby/'+action,{method:'POST',body:JSON.stringify(this.summary(room))});
   }
   async load(){
@@ -41,7 +41,7 @@ export class PongRoom {
   }
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
-      const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+      const user=userOf(req);
       if(!user?.player)return json({error:'Accesso richiesto.'},401);
       const path=new URL(req.url).pathname;
       let room=await this.load();
@@ -75,7 +75,7 @@ export class PongRoom {
       const pair=new WebSocketPair(),socket=pair[1];
       this.ctx.acceptWebSocket(socket,[KEY]);
       socket.serializeAttachment({kind:KEY,id:user.player,name:user.name.slice(0,45),seat,
-        memberId:JSON.parse(req.headers.get('X-Checkmate-User')||'null')?.id,expires:Number(req.headers.get('X-Session-Expires')),accessTag:req.headers.get('X-Access-Tag')});
+        memberId:userOf(req)?.id,expires:Number(req.headers.get('X-Session-Expires')),accessTag:req.headers.get('X-Access-Tag')});
       const current=this.peers();
       if(current.length===2&&room.phase==='waiting'){room.phase='playing';this.tickAt=Date.now();}
       await this.ctx.storage.deleteAlarm();

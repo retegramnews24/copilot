@@ -1,7 +1,7 @@
 // Lobby "Le tue partite": every open board-game table where you sit, the ones waiting for your move first.
-import { gameTitle, ongoing } from './game-info.js?v=dab50e1d8e';
+import { gameTitle, ongoing } from './game-info.js?v=637e9e8793';
 
-const ARCADE = ['golf', 'pong', 'moto-trial', 'labyrinth', 'f1', 'biliardo'];
+const ARCADE = ['golf', 'pong', 'moto-trial', 'f1', 'biliardo'];
 // Time left to move, short: "3 g 20 h", "5 h 10 min", "12 min".
 export function timeLeft(ms) {
   if (!(ms > 0)) return 'scaduto';

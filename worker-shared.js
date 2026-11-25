@@ -5,6 +5,33 @@ export const json = (data, status = 200) =>
     status,
     headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
   });
+// Errori nelle richieste dei giochi e dei tavoli: i messaggi voluti («Non tocca a te») sono Error semplici e arrivano
+// al giocatore così come sono; gli errori di programmazione (TypeError, ReferenceError, RangeError…) si scrivono nei
+// log e il giocatore vede un messaggio generico. Prima diventavano tutti un 409 con il testo grezzo in inglese e nei
+// log non restava niente.
+export function failure(e, status = 409, where = '') {
+  if (e instanceof SyntaxError) return json({ error: 'Richiesta non valida.' }, 400);
+  if (!(e instanceof Error) || e.constructor !== Error) {
+    console.error(
+      JSON.stringify({
+        type: 'game-error',
+        where,
+        message: String(e?.message || e).slice(0, 500),
+        stack: String(e?.stack || '').slice(0, 2000)
+      })
+    );
+    return json({ error: 'Errore del server: riprova tra poco.' }, 500);
+  }
+  return json({ error: e.message }, status);
+}
+// L'utente della richiesta (messo da api.js dopo il controllo della sessione), o null
+export const userOf = req => {
+  try {
+    return JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+  } catch {
+    return null;
+  }
+};
 export const id = () => crypto.randomUUID();
 export const bad = message => {
   throw new Error(message);

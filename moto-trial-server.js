@@ -1,6 +1,7 @@
 import {COURSE_VERSION, makeCourse, ground} from './public/moto-trial/physics.js';
 
 import {CAMPAIGN_LENGTH} from './public/moto-trial/courses.js';
+import { userOf, lobbyHub, json } from './worker-shared.js';
 
 const boundsFor = course => {
   const xs = course.tiers.flatMap(tier => tier.points.map(p => p.x));
@@ -11,7 +12,6 @@ const campaigns = new Map([6, 7, COURSE_VERSION].map(version => [version, Array.
   return {course, bounds: boundsFor(course)};
 })]));
 const LIMIT = 8, EMPTY_GRACE = 60_000;
-const json = (data, status = 200) => Response.json(data, {status, headers: {'Cache-Control': 'no-store'}});
 const modes = new Set(['ready', 'ride', 'paused', 'crash', 'offCourse', 'finish']);
 
 function readPose(packet, bounds) {
@@ -58,7 +58,7 @@ export class MotoTrialRoom {
   }
 
   async lobby(room, action) {
-    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const lobby = lobbyHub(this.env);
     await lobby.fetch(new Request('https://internal/lobby/' + action, {
       method: 'POST', body: JSON.stringify(this.summary(room))
     }));
@@ -67,7 +67,7 @@ export class MotoTrialRoom {
   fetch(req) {
     return this.ctx.blockConcurrencyWhile(async () => {
       const path = new URL(req.url).pathname;
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user?.player) return json({error: 'Accesso richiesto.'}, 401);
       let room = await this.ctx.storage.get('moto-trial');
       if (path === '/moto-trial/init' && req.method === 'POST' && !room) {

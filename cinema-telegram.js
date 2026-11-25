@@ -1,4 +1,5 @@
 import {MEDIA_LIMIT,MEDIA_TTL,storeCinemaMedia} from './cinema-media.js';
+import { userOf } from './worker-shared.js';
 
 const GROUPS='cinema-groups', ID=/^[a-f0-9-]{36}$/;
 const HOME='binotto corsa competizione';
@@ -66,7 +67,7 @@ export class TelegramCinema {
   }
   async fetch(req){
     const url=new URL(req.url),op=url.searchParams.get('op');
-    const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+    const user=userOf(req);
     if(!user?.id)return denied();
     const groups=await this.ctx.storage.get(GROUPS)??[];
     const group=groups.find(entry=>entry.id===url.searchParams.get('group'));

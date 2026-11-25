@@ -2,20 +2,20 @@ import {renderScopa} from './scopa-ui.js';
 import {renderNaval,renderBriscola} from './sea-cards-ui.js';
 import {renderScarabeo} from './board-games-ui.js';
 import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
-import {campaignInfo} from './golf/courses.js?v=caf3baf8cd';
-import {readAppearance} from './appearance.js?v=a866c9e8ce';
-import './labyrinth/avatar.js?v=32e186daf3';
-import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=bff5f99338';
+import {campaignInfo} from './golf/courses.js?v=d38be2cad9';
+import {readAppearance} from './appearance.js?v=784dba932c';
+import './avatar-figure.js?v=723b251202';
+import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=0263281510';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
-import {events,trace,initDebugLog} from './debug-log.js?v=497d88fa03';
-import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=dab50e1d8e';
-import {renderMyGames,myTables,timeLeft} from './my-games.js?v=8240b254bd';
+import {events,trace,initDebugLog} from './debug-log.js?v=16c37bf5dd';
+import {gameTitle,staged,gameLimits,ongoing,isLongTurn,LONG_LIMIT} from './game-info.js?v=637e9e8793';
+import {renderMyGames,myTables,timeLeft} from './my-games.js?v=d184c87cf4';
 import {pieceNames,pieceSvg,position,checkerSvg,unoNames,unoSymbols,unoCard} from './pieces.js?v=fa35e21be7';
 import {initThemes} from './themes.js?v=b6682dff0c';
-import {initSettings} from './settings.js?v=6f9a6958a5';
-import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=56908653f4';
+import {initSettings} from './settings.js?v=483de4fb32';
+import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e0418faadc';
 import {createCinemaLobby} from './cinema-lobby.js?v=2c676bfbeb';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
@@ -25,18 +25,17 @@ import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
-import {createLabyrinthLink} from './labyrinth-link.js?v=4a729985f0';
-import {createGolfLink} from './golf-link.js?v=cbf0a82bb6';
-import {createArcadeLink} from './arcade-link.js?v=34fb67f403';
-import {createF1Link} from './f1-link.js?v=972c89b8b2';
-import {createBiliardoLink} from './biliardo-link.js?v=3aa65b473a';
+import {createGolfLink} from './golf-link.js?v=b761c20f7c';
+import {createArcadeLink} from './arcade-link.js?v=442148f3f0';
+import {createF1Link} from './f1-link.js?v=ddd42671dd';
+import {createBiliardoLink} from './biliardo-link.js?v=bad852c408';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.59',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.60',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -54,7 +53,6 @@ const linkBase={tg,token:()=>sessionToken,me:()=>identity,request,onError:err,en
 const moto=createMotoLink(linkBase);
 // "Tocca a te" messages from the bot: Lobby invite, Settings switch, opening a table from the message (see turn-alerts.js).
 const alerts=initTurnAlerts({tg,request:(path,data)=>request(path,data),onError:msg=>err(msg)});
-const labyrinth=createLabyrinthLink({...linkBase,trace,leaveTable:()=>{stopRoom();room=null;state=null;$('draw-dialog').hidden=true;$('draw-response').hidden=true}});
 const golf=createGolfLink({...linkBase,games:()=>games,roomClosed:selected=>{games=games.filter(game=>game.room!==selected);renderLobby();selectPage('lobby')}});
 const arcade=createArcadeLink({...linkBase,readAppearance,refreshSession:()=>refreshSession(),renderNow:()=>renderNow(),selectPage:page=>selectPage(page)});
 // F1 on paper! (public/gara/): draw a track and race it in 3D, vs the AI or on the same phone (see f1-link.js).
@@ -98,7 +96,7 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=4f085fbb2c');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=4860494c6d');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
@@ -161,12 +159,12 @@ function renderTurnClock(){
 }
 setInterval(()=>{if(!$('table').hidden&&state?.clock)renderTurnClock()},60000);
 // Your open table that is not a long-turn game: only one of those at a time.
-function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='f1'&&g.game!=='biliardo'&&g.game!=='labyrinth'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
+function ownedGame(){return games.find(g=>g.game!=='golf'&&g.game!=='f1'&&g.game!=='biliardo'&&g.game!=='moto-trial'&&g.game!=='pong'&&!isLongTurn(g)&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player))}
 // Can you take a seat at this table? Long-turn games: up to LONG_LIMIT at once; any other: only without another open table.
 // One open table per game (long-turn games: up to LONG_LIMIT), as on the server.
 function canSit(g){return isLongTurn(g)?myTables(games,id=>seat(id).player).filter(isLongTurn).length<LONG_LIMIT:!games.some(o=>o.room!==g.room&&o.game===g.game&&!isLongTurn(o)&&ongoing(o)&&o.players.some(p=>p.id===seat(o.room).player))}
 // Bell: your open games (also single-player) stay pinned there, without ×, until they close.
-function pinnedGames(){return games.filter(g=>g.game!=='labyrinth'&&ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player||p.id===identity?.player)).map(g=>{const turn=g.phase==='playing'&&g.players[g.turn]?.id===seat(g.room).player;return {id:'pin-'+g.room,text:(turn?'Tocca a te · ':'')+gameTitle(g)+' · '+(['golf','pong','moto-trial','f1','biliardo'].includes(g.game)?'sala ':'Tavolo ')+g.number,detail:['ai','tutorial'].includes(g.mode)?'Partita singola aperta':'Partita aperta',label:turn?'Gioca':'Riprendi',urgent:turn,action:()=>openGameRoom(g.room)}})}
+function pinnedGames(){return games.filter(g=>ongoing(g)&&g.players.some(p=>p.id===seat(g.room).player||p.id===identity?.player)).map(g=>{const turn=g.phase==='playing'&&g.players[g.turn]?.id===seat(g.room).player;return {id:'pin-'+g.room,text:(turn?'Tocca a te · ':'')+gameTitle(g)+' · '+(['golf','pong','moto-trial','f1','biliardo'].includes(g.game)?'sala ':'Tavolo ')+g.number,detail:['ai','tutorial'].includes(g.mode)?'Partita singola aperta':'Partita aperta',label:turn?'Gioca':'Riprendi',urgent:turn,action:()=>openGameRoom(g.room)}})}
 
 function renderProfile(){
  const node=$('profile-avatar'),avatar=makeAvatar(identity||{name:'?'});node.replaceChildren(...avatar.childNodes);
@@ -174,7 +172,6 @@ function renderProfile(){
 }
 function renderLobby(){
  $('open-blackboard').disabled=!identity||arcade.blackboardOpening();
- $('play-labyrinth').disabled=!identity;
  $('create-golf').disabled=!identity||golf.pending();
  $('create-moto-trial').disabled=!identity||moto.opening();
  $('create-pong').disabled=!identity||arcade.pongOpening();
@@ -246,11 +243,6 @@ function renderLobby(){
    enter.onclick=()=>moto.open(game.room);card.append(title,info,enter);$('games').append(card);continue;
   }
 
-  if(game.game==='labyrinth'){
-   const card=document.createElement('article');card.className='table-card';const title=document.createElement('strong');title.textContent='Spedizione '+game.number+' · Labyrinth';const info=document.createElement('p');info.className='turn-note';info.textContent=(game.online||0)+' collegati · '+(game.arrived||0)+' nell’arena · '+(game.entryLocked?'Ingressi chiusi':'Ingressi aperti');const players=document.createElement('p');players.className='turn-note';players.textContent=game.players.map(p=>p.name).join(' · ');card.append(title,info,players);
-   const mine=game.players.some(p=>p.id===identity?.player);const enter=document.createElement('button');enter.textContent=mine?'Riprendi':game.entryLocked?'Assisti':'Entra';enter.onclick=()=>labyrinth.open(game.room,!mine&&game.entryLocked);card.append(enter);const watch=document.createElement('button');watch.className='alt';watch.textContent='Guarda';watch.onclick=()=>labyrinth.open(game.room,true);card.append(watch);
-   if(mine)for(const [kind,label] of [['archive','Archivia'],['delete','Elimina']]){const b=document.createElement('button');b.className='alt';b.textContent=label;b.onclick=async()=>{if(!confirm(label+' questa spedizione per tutti i partecipanti?'))return;try{await request('/api/labyrinth/'+game.room+'/'+kind,{});const data=await request('/api/lobby');games=data.games;renderLobby()}catch(e){err(e.message)}};card.append(b)}$('games').append(card);continue;
-  }
 
   const card=document.createElement('article');card.className='table-card';
   const title=document.createElement('div');title.className='table-title';
@@ -274,7 +266,7 @@ function renderLobby(){
 function renderNow(){
  const items=[],me=id=>seat(id).player;
  for(const game of games.filter(ongoing)){
-  if(['golf','pong','moto-trial','labyrinth','f1','biliardo'].includes(game.game))continue;
+  if(['golf','pong','moto-trial','f1','biliardo'].includes(game.game))continue;
   const mine=game.players.some(p=>p.id===me(game.room)),full=staged(game)&&game.players.length>=gameLimits(game).max;
   if(mine&&game.phase==='playing'&&game.players[game.turn]?.id===me(game.room))items.push({rank:0,text:'Tocca a te · Tavolo '+game.number+' · '+gameTitle(game),label:'Gioca',action:()=>openRoom(game.room,false)});
   else if(mine&&game.phase==='waiting')items.push({rank:2,text:'Il tuo tavolo '+game.number+' · '+gameTitle(game)+' aspetta giocatori',label:'Apri',action:()=>openRoom(game.room,false)});
@@ -328,7 +320,6 @@ async function openRoom(nextRoom,watchOnly=false){
  if(games.find(g=>g.room===nextRoom)?.game==='f1')return f1.open(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='biliardo')return biliardo.open(nextRoom);
  if(games.find(g=>g.room===nextRoom)?.game==='moto-trial')return moto.open(nextRoom);
- if(games.find(g=>g.room===nextRoom)?.game==='labyrinth')return labyrinth.open(nextRoom,watchOnly);
  if(busy)return;
  if(nextRoom!==room)discardResult();
  stopRoom();room=nextRoom;state=null;credentials=seat(room);const epoch=roomEpoch;
@@ -517,7 +508,7 @@ action('start-group',async()=>{
   render(await api('start',{revision:state.revision}));
  }catch(e){
   if(room!==selected)return;
-  try{render(await api('state'))}catch{}
+  try{render(await api('state'))}catch(e2){staleTable(e2)}
   if(room===selected&&state?.phase==='waiting')$('start-error').textContent=e.message;
  }
 });
@@ -578,7 +569,6 @@ $('debug-refresh').onclick=async()=>{
 function fitViewport(){
  const height=viewportHeight(tg,{innerHeight,visualHeight:window.visualViewport?.height,fullscreen:!!document.fullscreenElement});
  const insets=safeInsets(tg);applyInsets(document.documentElement,insets);
- labyrinth.insets(insets);
  moto.insets(insets);
  arcade.insets(insets);
  golf.insets(insets);
@@ -640,7 +630,7 @@ async function sendMove(move){
  busy=true;board.clear();renderBoard();trace('MOVE',move.kind|| (move.path?move.path.join(' → '):move.from+' → '+move.to+(move.promotion?' = '+move.promotion:'')));
  const current=room;
  try{const result=await api('move',move);if(room===current)render(result)}
- catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch{}}
+ catch(e){err(e.message);if(room===current)try{render(await api('state'))}catch(e2){staleTable(e2)}}
  finally{busy=false;if(room===current&&state)render(state)}
 }
 // Unexpected errors also reach the server logs (only once signed in; keepalive survives closing the app).
@@ -653,8 +643,8 @@ function renderArchive(){
   const article=document.createElement('article');article.className='archive-row';
   const heading=document.createElement('strong');heading.textContent='Partita '+game.number+' · '+gameTitle(game);
   const names=document.createElement('p');names.textContent=game.arenaResult?(game.arenaResult.winner?'Vincitore: '+game.arenaResult.winner.name:'Nessun superstite'):game.players.map(p=>p.name).join(' · ');
-  const button=document.createElement('button');button.className='alt';button.textContent=game.game==='labyrinth'?'Apri spedizione':staged(game)?'Apri storico pubblico':'Apri e rivedi le mosse';
-  button.onclick=async()=>{await openRoom(game.room,game.game==='labyrinth');if(room===game.room)selectPage('game')};
+  const button=document.createElement('button');button.className='alt';button.textContent=staged(game)?'Apri storico pubblico':'Apri e rivedi le mosse';
+  button.onclick=async()=>{await openRoom(game.room);if(room===game.room)selectPage('game')};
   article.append(heading,names,button);$('archive-games').append(article);
  }
 }
@@ -764,8 +754,10 @@ async function startSession(){
   const startRoom=alerts.startRoom();if(startRoom){try{await openRoom(startRoom);if(room===startRoom)selectPage('game')}catch(e){err(e.message)}}
  }catch(e){$('app-shell').hidden=true;accessFailed=true;window.binottolandAccessError?.(e.message,tg?.initData?startSession:null);trace('AUTH','Accesso non completato')}
 }
+// dopo un errore il tavolo si ricarica; se anche questo fallisce lo si dice (prima restava com'era, senza avvisi)
+function staleTable(e){trace('ERROR','Stato del tavolo non aggiornato: '+e.message);err('Tavolo non aggiornato: controlla la connessione, riprovo da solo.')}
 function sendPresence(away=document.hidden||tgAway){
- if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',inClub:!!lobby3d?.active,pose:lobby3d?.pose()??null,room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||labyrinth.room()||room,away}));
+ if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify({type:'presence',inClub:!!lobby3d?.active,pose:lobby3d?.pose()??null,room:arcade.pongRoom()||golf.room()||f1.room()||biliardo.room()||moto.room()||room,away}));
 }
 
 function renderSpectators(){
@@ -820,7 +812,6 @@ tg?.onEvent('backButtonClicked',()=>{
  else if(cinema.visible())cinema.leave();
  else if(golf.visible())golf.close();
  else if(moto.visible())moto.close();
- else labyrinth.close();
 });
 
 function renderTutorial(s){const box=$('tutorial-panel'),hint=s.tutorial;box.hidden=!hint;if(!hint)return;$('tutorial-title').textContent=hint.title;$('tutorial-text').textContent=hint.text;$('tutorial-reason').textContent=hint.reason;$('tutorial-move').hidden=!hint.action;$('tutorial-move').disabled=busy;$('tutorial-move').onclick=()=>sendMove({...hint.action,revision:state.revision});}

@@ -312,33 +312,26 @@ export function tableSummary(s) {
     created: s.created,
     expires: s.expires,
     deadline: s.clock?.deadline ?? null,
-    ...(s.game === 'labyrinth'
-      ? { online: s.online, arrived: s.arrived, entryLocked: s.entryLocked, arenaResult: s.arenaResult }
-      : s.game === 'moto-trial'
-        ? { online: s.online, capacity: s.capacity, courseName: s.courseName }
-        : s.game === 'golf'
-          ? {
-              capacity: s.capacity,
-              hole: s.hole,
-              campaign: s.campaign,
-              holes: s.holes,
-              collisions: s.collisions === true
-            }
-          : s.game === 'f1'
-            ? { capacity: s.capacity, laps: s.laps }
-            : s.game === 'biliardo'
-              ? { capacity: s.capacity, variant: s.variant }
-              : {})
+    ...(s.game === 'moto-trial'
+      ? { online: s.online, capacity: s.capacity, courseName: s.courseName }
+      : s.game === 'golf'
+        ? {
+            capacity: s.capacity,
+            hole: s.hole,
+            campaign: s.campaign,
+            holes: s.holes,
+            collisions: s.collisions === true
+          }
+        : s.game === 'f1'
+          ? { capacity: s.capacity, laps: s.laps }
+          : s.game === 'biliardo'
+            ? { capacity: s.capacity, variant: s.variant }
+            : {})
   };
 }
 // Which tables count where (Lobby list, one-table rule, finished tables).
 export const isArcade = game =>
-  game === 'labyrinth' ||
-  game === 'moto-trial' ||
-  game === 'golf' ||
-  game === 'pong' ||
-  game === 'f1' ||
-  game === 'biliardo';
+  game === 'moto-trial' || game === 'golf' || game === 'pong' || game === 'f1' || game === 'biliardo';
 // One open table per person, except long-turn tables (Scacchi, Dama, Forza 4, Scarabeo between people):
 // up to LONG_LIMIT of those at once, alongside the one other table. Returns 'long', 'other' or null.
 export function seatLimit(tables, player, target) {

@@ -223,9 +223,6 @@ export function simulate(T, balls, pins, maxT = 30) {
   return ev;
 }
 
-export const cloneBalls = (balls) => balls.map((b) => ({ ...b }));
-export const clonePins = (pins) => (pins ? pins.map((p) => ({ ...p })) : null);
-
 // Primo contatto lungo una direzione (per la linea di mira): {t, ball} oppure sponda
 export function castAim(T, balls, cue, dx, dz) {
   let best = { t: 6, ball: null };

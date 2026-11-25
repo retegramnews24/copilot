@@ -17,11 +17,10 @@ import {
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=763b693d50';
+} from './balilla-rules.js?v=eb1be44081';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
-const TEAM = ['Rossi', 'Blu'];
 
 export function buildBalilla(scene, el, send, playSound) {
   // ---------- il tavolo ----------
@@ -222,16 +221,8 @@ export function buildBalilla(scene, el, send, playSound) {
   });
   const ball = mesh(new THREE.SphereGeometry(0.017, 16, 12), white, 0, 0.758, 0);
 
-  const ui = document.createElement('div');
-  ui.style.cssText =
-    'position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:max-content;max-width:94%;background:#142026eb;color:white;padding:6px 10px;border-radius:8px;text-align:center;z-index:4;font-size:13px';
-  ui.hidden = true;
-  ui.innerHTML =
-    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
-  el.append(ui);
-  // niente pannello, né sul computer (tasti Spazio, Q, E, + e -) né sul telefono (gesti sul tavolo):
+  // niente pannello: sul computer tasti (Spazio, Q, E, + e -), sul telefono gesti sul tavolo
   // col dito si trascina per giocare, un tocco veloce butta la pallina, l'asta più vicina al dito sceglie difesa o attacco
-  const noPanel = true;
   const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
   const exitChip = document.createElement('button');
   exitChip.textContent = '✕';
@@ -260,7 +251,7 @@ export function buildBalilla(scene, el, send, playSound) {
   zoomPad.textContent = '🔍';
   const padLabel = document.createElement('span');
   pad.append(padLabel);
-  // taratura da telefono (provvisoria): si aprono i cursori con l'ingranaggio, i valori restano sul telefono
+  // taratura da telefono: con l'ingranaggio si aprono i cursori (pad, visuale, zoom), i valori restano sul telefono
   const tune = { slide: 1, spin: 1, pitch: 60, zoom: 1 };
   try {
     Object.assign(tune, JSON.parse(localStorage.getItem('balilla.touchTune') || '{}'));
@@ -322,16 +313,19 @@ export function buildBalilla(scene, el, send, playSound) {
   for (const c of touchControls) el.append(c);
   el.append(tunePanel);
   showTouch(false);
-  const sensitivity = ui.querySelector('input');
-  sensitivity.value = '1';
-  try {
-    sensitivity.value = localStorage.getItem('balilla.sensitivity') || '1';
-  } catch {}
-  sensitivity.oninput = () => {
-    try {
-      localStorage.setItem('balilla.sensitivity', sensitivity.value);
-    } catch {}
+  // sensibilità del mouse (tasti + e -), ricordata sul computer
+  const sensitivity = {
+    value: 1,
+    step(d) {
+      this.value = Math.round(Math.max(0.3, Math.min(2.5, this.value + d)) * 10) / 10;
+      try {
+        localStorage.setItem('balilla.sensitivity', String(this.value));
+      } catch {}
+    }
   };
+  try {
+    sensitivity.value = Number(localStorage.getItem('balilla.sensitivity')) || 1;
+  } catch {}
   const host = el.querySelector('.l3d-gl') || el;
   let active = false,
     watching = false,
@@ -367,16 +361,11 @@ export function buildBalilla(scene, el, send, playSound) {
   let hadLock = false,
     blurredAt = -1e9;
   addEventListener('blur', () => (blurredAt = performance.now()));
-  const lockHint = document.createElement('small');
-  lockHint.textContent = 'Clicca sul campo per agganciare il mouse';
-  lockHint.hidden = true;
-  ui.append(lockHint);
   function lockMouse() {
     if (mouseLocked()) {
       hadLock = true;
       return;
     }
-    lockHint.hidden = false;
     try {
       host.requestPointerLock?.()?.then?.(
         () => {
@@ -390,11 +379,9 @@ export function buildBalilla(scene, el, send, playSound) {
     if (!active) return;
     if (mouseLocked()) {
       hadLock = true;
-      lockHint.hidden = true;
     } else if (hadLock) {
       if (document.hidden || !document.hasFocus() || performance.now() - blurredAt < 400) {
         hadLock = false;
-        ui.hidden = noPanel; // si riaggancia con un clic sul campo
       } else close();
     }
   });
@@ -419,7 +406,6 @@ export function buildBalilla(scene, el, send, playSound) {
     grips.forEach((g, i) => {
       g.material = active && rows[i].team === team && rows[i].attack === pair ? brass : rubber;
     });
-    ui.querySelectorAll('[data-pair]').forEach(b => (b.disabled = Number(b.dataset.pair) === pair));
     padLabel.textContent = pair ? 'ATTACCO' : 'DIFESA';
   }
   function serve() {
@@ -430,18 +416,13 @@ export function buildBalilla(scene, el, send, playSound) {
   function close() {
     if (active && mouseLocked()) document.exitPointerLock();
     hadLock = false;
-    lockHint.hidden = true;
     if (watching) post('leave');
     active = watching = dirty = false;
-    ui.hidden = exitChip.hidden = true;
+    exitChip.hidden = true;
     showTouch(false);
     net = netBall = finger = tap = null;
     grips.forEach(g => (g.material = rubber));
   }
-  ui.querySelectorAll('[data-pair]').forEach(b => (b.onclick = () => selectPair(Number(b.dataset.pair))));
-  const serveButton = ui.querySelector('[data-serve]');
-  serveButton.onclick = serve;
-  ui.querySelector('[data-exit]').onclick = close;
   exitChip.onclick = close;
   // cambio coppia: scatta appena il dito tocca il tasto, anche con l'altro dito ancora sul pad
   swapChip.addEventListener('pointerdown', e => {
@@ -520,7 +501,7 @@ export function buildBalilla(scene, el, send, playSound) {
       finger.y = e.clientY;
     }
     const t = targets[pair],
-      gain = Number(sensitivity.value) * (team ? -1 : 1);
+      gain = sensitivity.value * (team ? -1 : 1);
     const now = performance.now();
     t.slide = clamp(t.slide + (deadZone('deadSlide', dy, now) * gain * 0.7) / 170, 1);
     t.angle = clamp(t.angle + (deadZone('deadSpin', dx, now) * gain * 0.7 * Math.PI) / 210, MAX_ANGLE);
@@ -576,9 +557,7 @@ export function buildBalilla(scene, el, send, playSound) {
     else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
     else if (e.code === 'Digit1' || e.code === 'Digit2') selectPair(Number(e.code.slice(-1)) - 1);
     else if (e.key === '+' || e.key === '-') {
-      if (e.key === '+') sensitivity.stepUp();
-      else sensitivity.stepDown();
-      sensitivity.oninput();
+      sensitivity.step(e.key === '+' ? 0.1 : -0.1);
     } else if (e.code === 'Space') serve();
     else return false;
     return true;
@@ -683,11 +662,8 @@ export function buildBalilla(scene, el, send, playSound) {
       for (const state of Object.values(deadState)) state.time = -Infinity;
       if (matchMedia('(any-pointer: fine)').matches || mouseLocked()) lockMouse();
       selectPair(pairIndex);
-      ui.hidden = noPanel;
       exitChip.hidden = !touchUI;
       showTouch(touchUI);
-      ui.querySelector('span').textContent = 'Collegamento al tavolo…';
-      serveButton.disabled = true;
       lastWatch = performance.now();
       post('watch');
       join();
@@ -717,31 +693,6 @@ export function buildBalilla(scene, el, send, playSound) {
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
       if ((!wasSeated && seated()) || (mate() && pair !== net.slot % 2)) selectPair(pair);
-      ui.hidden = noPanel;
-      const status = ui.querySelector('span');
-      status.textContent = data.paused
-        ? 'Partita in pausa: aspettiamo chi si è allontanato'
-        : seated()
-        ? TEAM[team] +
-          (mate() ? (pair ? ' · Attacco' : ' · Difesa') : '') +
-          ' · Su/giù sposta · Destra/sinistra ruota' +
-          (mate() ? '' : ' · Q cambia coppia') +
-          ' · E lascia'
-        : net.occupied.includes(team * 2) && net.occupied.includes(team * 2 + 1)
-          ? 'Lato occupato'
-          : 'In attesa del posto';
-      serveButton.disabled =
-        !seated() ||
-        !(
-          net.field.finished ||
-          alone() ||
-          net.field.phase === 'throw' // pallina nel buco: la fa uscire chiunque sia seduto
-        );
-      serveButton.textContent = net.field.finished
-        ? 'Nuova partita'
-        : alone() && net.field.phase === 'play'
-          ? 'Rimetti la pallina (Spazio)'
-          : 'Butta la pallina (Spazio)';
     },
     update(camera, dt, nearby) {
       if (!active && !nearby) {

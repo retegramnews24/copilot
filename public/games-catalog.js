@@ -14,7 +14,6 @@ const COVERS = {
   'moto-trial': '#e07b39',
   'f1-on-paper': '#0b6b3a',
   pong: '#5bc0be',
-  labyrinth: '#7d6bd6',
   'golf-with-your-gay-friends': '#4caf50',
   'giulio-simulator': '#3a7bd5',
   'binotto-simulator': '#ffd236',
@@ -85,9 +84,6 @@ export function initCatalog() {
       renderCatalog();
     });
   }
-  // Developer shortcuts stay out of sight unless enabled from the Debug page.
-  const dev = document.getElementById('solo-labyrinth');
-  if (dev) dev.hidden = !isDevMode();
   buildAppGrid(page);
   renderCatalog();
 }

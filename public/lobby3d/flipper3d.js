@@ -8,8 +8,8 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { paintPlayfield, paintBackglass } from './flipper-art.js?v=bfd8725542';
 import { paintPlayfieldGT, paintBackglassGT } from './gt-art.js?v=0105a1455e';
-import * as GP from '../flipper/physics.js?v=37b6d6d7de';
-import * as GT from '../flipper/physics-gt.js?v=ac65d70f6e';
+import * as GP from '../flipper/physics.js?v=fa74a615d3';
+import * as GT from '../flipper/physics-gt.js?v=99f8d6367a';
 
 // contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro);
 // il Binotto GT accanto, verso l'angolo
@@ -221,7 +221,6 @@ export function buildFlipper(
         halo((w.ax + w.bx) / 2 + (w.sling ? 0.02 : -0.02), (w.ay + w.by) / 2 - 0.02, 0.045, 0.05, '#ff2a3a')
       );
     glow.targets = table.targets.map(t => halo((t.ax + t.bx) / 2, t.ay, 0.04, 0.03, '#ffd23f'));
-    glow.kick = halo(0.026, 0.1, 0.004, 0.022, '#3cff7a');
     glow.pit = halo(T.pit[0], T.pit[1], 0.03, 0.04, '#3cff7a');
     glow.light = new THREE.PointLight('#ffb070', 0, 0.6, 1.6);
     piano.add(glow.light);
@@ -367,8 +366,7 @@ export function buildFlipper(
       jackpot: 'Jackpot!',
       super: 'Super jackpot!',
       extra: 'Palla extra!',
-      tilt: 'Tilt!',
-      kickback: 'Kickback!'
+      tilt: 'Tilt!'
     };
     if (words[type]) say(words[type]);
     if (type === 'combo' && power >= 0.75) say('Combo!');
@@ -705,9 +703,7 @@ export function buildFlipper(
         g.t.targets.forEach((t, i) =>
           set(glow.targets[i], (t.flash || 0) / 0.25 + (t.down ? 0.25 : 0), (t.ax + t.bx) / 2, t.ay)
         );
-        glow.kick.material.opacity = g.kickback ? 0.55 + 0.45 * Math.sin(now0() * 6) ** 2 : 0;
         set(glow.pit, g.pitFlash, T.pit[0], T.pit[1]);
-        if (g.kickFlash > 0) set(glow.kick, g.kickFlash / 0.4, 0.03, 0.1);
         glow.light.intensity = best * 0.8;
         if (at) glow.light.position.set(at[0] - 0.26, 0.08, -(at[1] - 0.53));
       }

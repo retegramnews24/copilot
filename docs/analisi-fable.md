@@ -7,6 +7,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 
 - **Area 3: Lobby 3D su telefono**, letta sul commit `dcbc5e6` (dopo i quattro commit «Multigiocatore (analisi Fable, area 2)»).
 - **Area 4: fisica e regole dei giochi**, letta sul commit `dbb8d06` (dopo i commit «Lobby 3D (analisi Fable, area 3…)»).
+- **Area 5: qualità del codice**, letta sul commit `ba287b1` (dopo i commit del calcio balilla del 25 novembre).
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -27,6 +28,27 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 5 (qualità del codice)
+
+**Come leggere quest'area.** Qui non ci sono errori che l'utente vede: sono cose che rendono il codice più lento da cambiare e più facile da rompere. I numeri vengono da piccoli programmi di misura fatti girare sul repo (fuori dal repo, niente è stato modificato), poi controllati a mano nei punti citati. Il codice misurato: 56 file sul server (479 KB), 128 sul telefono (2.108 KB), 65 file di prove (467 KB).
+
+| # | Problema | Gravità | Stato |
+|---|---|---|---|
+| Q1 | La Lobby 3D è una sola funzione da 2.026 righe (137 KB) che fa tutto | media | [V] |
+| Q2 | I due flipper sono due copie della stessa fisica (77% uguale): ogni correzione va fatta due volte, e già oggi non coincidono | media | [V] |
+| Q3 | I collegamenti dei giochi online sono copiati tra F1, Biliardo e Golf, sul telefono e sul server | media | [V] |
+| Q4 | Sul server gli errori veri dei giochi vengono mascherati: diventano «409» con il messaggio grezzo e non finiscono nei log | media | [V] |
+| Q5 | Codice morto e provvisorio rimasto dentro: computer del balilla, pannello nascosto, taratura provvisoria, pagine e file che nessuno apre | media-bassa | [V] |
+| Q6 | Labyrinth è «ritirato» ma è ancora tutto nel repo, con sei file di prove e un passo intero della CI | media-bassa | [V] |
+| Q7 | Due modi di scrivere il codice; il controllo di formattazione copre un file su tre | media-bassa | [V] |
+| Q8 | Piccoli pezzi ripetuti in decine di file (risposta JSON, lettura dell'utente, memoria del telefono, tocco, vibrazione) | bassa | [V] |
+| Q9 | Gli errori dentro i giochi nei riquadri non arrivano ai log; alcuni errori di rete vengono ignorati in silenzio | bassa | [V] |
+| Q10 | Piccole incoerenze: lingua dei commenti, codici d'errore, commenti rimasti indietro, un aggancio di prova lasciato acceso | bassa | [V] |
+
+Il dettaglio è nella sezione «Area 5: qualità del codice», più sotto.
 
 ---
 
@@ -700,6 +722,113 @@ I programmi di prova sono rimasti fuori dal repo. Sono piccoli e ripetibili (ste
 
 ---
 
+## Area 5: qualità del codice
+
+### 5.1 File e funzioni troppo grandi
+
+**Q1. La Lobby 3D è una sola funzione** — media, [V]
+
+- **Dove:** `public/lobby3d/lobby3d.js:72` (`createLobby3D`: 2.026 righe, 137 KB su un file da 145 KB).
+- **Cosa c'è dentro, tutto insieme:** le cinque sale, la bacheca con la chat, il cinema e il suo audio, il mixer dei volumi, gli sgabelli, i cabinati, i personaggi degli altri, i comandi da tastiera, mouse e telefono, il ciclo di disegno, le luci per sala. Condividono decine di variabili dichiarate qua e là (`pos`, `cam`, `seating`, `monitor`, `carrying`, `active`…), alcune usate centinaia di righe prima di dove sono dichiarate (`seating` e `monitor` nascono a riga 1909 e servono già nel ciclo di disegno, che sta prima).
+- **Perché pesa:** non si può provare un pezzo da solo, ogni modifica rischia di toccarne un altro, e chi legge deve tenere in testa tutto il file. È anche il motivo per cui le proposte 3.4 e 3.5 dell'Area 3 (sale e oggetti) sono difficili.
+- **Altre funzioni molto lunghe:** `buildBalilla` (`public/lobby3d/balilla.js:26`, 745 righe), `Room.fetch` (`worker.js:308`, 391 righe: tutti i percorsi dei tavoli in una catena di `if`), `LobbyHub.lobby` (`lobby-hub.js:257`, 333 righe), `createCinemaLobby` (`public/cinema-lobby.js:5`, 398 righe), `createArcadeLink` (`public/arcade-link.js:8`, 362 righe).
+- **I file più grandi:** `lobby3d.js` 145 KB, `public/gara/scene3d.js` 129 KB, `public/simulator/app.js` 96 KB, `public/app.js` 65 KB (832 righe, quindi righe molto fitte), `public/app.css` 82 KB in 4.205 righe, `public/index.html` 43 KB in 104 righe.
+- **Un oggetto che fa dodici mestieri:** la classe `Room` (`worker.js:65`) è insieme tavolo da gioco, Lobby, cinema, lavagna, backup, coda degli avvisi, simulatore e ogni sala arcade. Per capire di chi è una sveglia prova una chiave dopo l'altra (`worker.js`, funzione `alarm`). Funziona, ma ogni cosa nuova allunga le stesse due funzioni.
+
+### 5.2 Duplicazioni
+
+**Q2. Due flipper, due copie della fisica** — media, [V]
+
+- **Dove:** `public/flipper/physics.js` (685 righe) e `public/flipper/physics-gt.js` (784 righe).
+- **Misura:** il 77% delle righe del GT è identico al Grand Prix: urti, flipper, pistone, palline, scossa, fine pallina. Cambiano il tracciato, le rampe e i punti.
+- **La prova che fa danni:** il cancelletto inclinato che evita la pallina bloccata c'è solo nel GT (G2 dell'Area 4). I difetti G7 e G8 sono in tutti e due e vanno corretti due volte. Anche il kickback morto è copiato in tutti e due.
+- **Simile:** `public/lobby3d/flipper-art.js` e `gt-art.js` (27% uguale); `public/flipper/main.js` ripete pezzi di `public/lobby3d/flipper3d.js`.
+
+**Q3. Collegamenti dei giochi copiati** — media, [V]
+
+- **Sul telefono:** `public/biliardo-link.js` è al 75% identico a `public/f1-link.js` (apri, chiudi, chiedi lo stato, orologio, margini, vibrazione, conferma di chiusura). `golf-link.js`, `moto-link.js` e `labyrinth-link.js` rifanno le stesse cose con parole diverse.
+- **Sul server:** `f1-server.js`, `biliardo-server.js` e `golf-server.js` hanno lo stesso scheletro (`lobby`, `save`, `update`, `remove`, `fetch`, `alarm`, attesa di 30 minuti, partita finita tenuta 5 minuti, un minuto a mossa).
+- **La prova che fa danni:** il problema A dell'Area 2 (vittorie che non arrivavano alla Lobby) era lo stesso errore in tre file, ed è stato corretto in tre file. Lo stesso per «giocatore assente» (B) e «collegamento perso» (J).
+
+**Q8. Piccoli pezzi ripetuti** — bassa, [V]
+
+| Pezzo | Quante volte | In quanti file |
+|---|---|---|
+| lettura dell'utente dall'intestazione (`JSON.parse(req.headers.get('X-Checkmate-User')…`) | 26 | 12 (in `worker.js` anche sei volte nella stessa richiesta) |
+| nome dell'oggetto Lobby (`idFromName('checkmate-lobby-v1')`) | 14 | 10 (esiste già `lobbyHub` in `worker-shared.js`, usato poco) |
+| risposta JSON (`const json = (`) | 11 | 11 (con intestazioni leggermente diverse: solo quella di `worker-shared.js` ha `nosniff`) |
+| memoria del telefono dentro `try`/`catch` | 76 | 30 (esiste già `public/prefs.js`, importato da 4 file) |
+| `$ = id => document.getElementById(id)` | 32 | 32 |
+| `clamp` | 8 | 8 |
+| «è un telefono?» (`pointer: coarse` o `ontouchstart`) | 5 | 5 (tutti con lo stesso difetto sui portatili tattili, vedi Area 3) |
+| vibrazione di Telegram a richiesta di un gioco | 4 copie uguali | `f1-link.js`, `biliardo-link.js`, `arcade-link.js`, `app.js` |
+
+### 5.3 Codice morto e provvisorio
+
+**Q5. Cosa c'è che non serve più** — media-bassa, [V]
+
+- **Computer del calcio balilla sul server:** `balilla-hub.js:27` (`practiceAI`, una cinquantina di righe), `:79` (`PRACTICE_AI = false`) e `:375-377` (il ramo che non scatta mai).
+- **Computer del calcio balilla sul telefono:** tutto `public/lobby3d/balilla-ai.js` (127 righe). Nessun file lo importa, nemmeno le prove.
+- **Pannello del balilla nascosto:** `public/lobby3d/balilla.js:234` (`noPanel = true`). Il pannello con Difesa, Attacco, Butta la pallina, Azzera, Sensibilità ed Esci viene costruito ma non si mostra mai; resta vivo solo il cursore della sensibilità, usato di nascosto dai tasti + e −.
+- **Taratura provvisoria:** `balilla.js:263-316` (ingranaggio e quattro cursori sul telefono, dichiarati «provvisori»). È ancora attiva per tutti.
+- **Kickback dei flipper:** `public/flipper/physics.js:180` e `physics-gt.js:230` più i blocchi che lo usano: la luce non si accende mai.
+- **Pagine e file che nessuno apre:** `public/flipper/index.html` con `public/flipper/main.js` (15 KB, un flipper a pagina intera a cui l'app non porta), `public/telegram-setup.html` (vuoto), `staging-worker.js` (il file di prova «pagina bianca»: `wrangler.jsonc` usa `worker.js` anche per staging).
+- **Nella Lobby 3D:** il tasto «Audio cinema» creato e nascosto per sempre con i suoi gestori (`lobby3d.js:861`), l'avviso dei comandi nascosto per sempre (`:93`).
+- **Sagome provvisorie:** divani, divanetti del cinema, radio, tavolo e omini del balilla, sgabelli vengono prima costruiti a scatole e poi sostituiti dal modello di Blender (`lobby3d.js:799`, `:1020`; `balilla.js:63`, `:157`, commenti «finché non arriva»). I modelli sono arrivati: le sagome si costruiscono a ogni avvio e si buttano.
+- **Compatibilità con cose che non esistono più:** Cluedo (`worker.js:386`), giocatori senza Telegram con il vecchio gettone (`worker.js:478-486`, `:523-525`), il vecchio protocollo della lavagna (`blackboard-server.js`, 14 punti con `legacy`), il vecchio formato delle mosse di F1 «per le gare cominciate prima» (`public/gara/main.js:847`).
+- **Esportazioni mai usate (19):** tra le altre `nearPair` in `balilla-rules.js`, `cloneBalls` e `clonePins` in `public/biliardo/physics.js`, `CUSH_NAMES` in `engine.js`, `rotorWall` in `public/golf/courses.js`, `normalizeStyle` in `public/appearance.js`, `SINGLETONS` in `backup.js`, `RAMP_MOUTHS` in `physics-gt.js`.
+
+**Q6. Labyrinth: ritirato ma tutto presente** — media-bassa, [V]
+
+- **Dove:** `public/labyrinth/` (190 KB), `labyrinth-server.js` ed `expedition-model.js` (22 KB), sei file di prove (92 KB), più `public/labyrinth-link.js`.
+- **Stato:** il codice lo chiama «the retired Labyrinth» (`lobby-hub.js:542`) e si apre solo in modalità sviluppo (`public/settings.js:111`). Però cinque delle 42 prove di `npm test` sono sue, e il passo della CI `test:multiplayer-runtime` prova solo lui.
+- **Cosa decidere:** o torna un gioco vero, o esce dal repo (resta nella storia di git). Tenerlo a metà costa tempo a ogni controllo prima di `main`.
+
+### 5.4 Coerenza tra moduli
+
+**Q7. Due modi di scrivere** — media-bassa, [V]
+
+- **Misura:** `format:check` controlla 54 file di codice su 184 (866 KB su 2.584 KB). L'elenco è scritto a mano in `package.json` e i file nuovi non ci entrano: sono fuori tutta la Lobby 3D, il Biliardo, F1, `public/app.js`.
+- **Codice fitto:** 22 file (circa 280 KB) hanno righe lunghissime: `table-ai.js` arriva a 4.292 caratteri in una riga, `public/sea-cards-ui.js` a 3.121, `public/simulator/app.js` a 2.332, `public/app.js` a 861. In questi file un cambiamento di una parola diventa una riga intera diversa: le differenze tra versioni non si leggono.
+- **Nello stesso file:** `lobby3d.js` alterna righe formattate e righe fitte secondo quando sono state scritte.
+
+**Q10. Piccole incoerenze** — bassa, [V]
+
+- **Lingua dei commenti:** 39 file in italiano, 39 in inglese, 8 misti (tra cui `worker.js`, `lobby-hub.js`, `public/app.js`, `api.js`).
+- **Codici d'errore:** i tavoli rispondono 409 per quasi tutto (15 volte in `worker.js`) e 400 per ogni eccezione; F1, Biliardo e Golf 409 per ogni eccezione; altri moduli usano 400, 403, 404, 429 con più cura. Il telefono non può distinguere «non tocca a te» da «richiesta sbagliata».
+- **Commenti rimasti indietro:** `.github/workflows/tests.yml:6` dice che staging «è una pagina bianca senza prove», ma oggi staging è l'app intera; `staging-worker.js` racconta la stessa cosa.
+- **Controlli doppi:** nella CI `release:check` gira due volte (da solo e in fondo a `npm test`).
+- **`npm test` è una riga sola** con 42 comandi in fila: la prima prova che fallisce nasconde le altre, e aggiungerne una vuol dire ritoccare quella riga.
+- **Aggancio di prova acceso:** `public/gara/main.js:938` mette sempre `window.__gara` (regole, gara, avvio) a disposizione della pagina. In Acquedotto lo stesso aggancio c'è solo con `?dev` (`public/arcade/acquedotto.js:784`).
+- **Nomi globali:** otto nomi appesi a `window` per far parlare i moduli tra loro (`binottolandClubRadio`, `binottolandLobbyLoading`, `binottolandRadioLevels`, `cabinetMonitor`…) invece di passarseli.
+
+### 5.5 Gestione degli errori
+
+**Q4. Errori veri mascherati sul server** — media, [V]
+
+- **Dove:** `biliardo-server.js:345-346`, `f1-server.js:430-431`, `golf-server.js`, `labyrinth-server.js`, `simulator/server.js` (ogni eccezione → risposta 409 o simile con `error.message`), `worker.js:694-695` (ogni eccezione → 400 con `e.message`).
+- **Cosa succede:** questi blocchi servono per i messaggi voluti («Non tocca a te»). Ma prendono anche gli errori di programmazione: un «Cannot read properties of undefined» dentro le regole diventa una risposta 409 con quel testo in inglese mostrato al giocatore. Non viene scritto niente nei log, perché `api.js:52` registra solo quello che arriva fino a lui.
+- **Quando:** un difetto nelle regole del biliardo che scatta in una posizione rara. Il giocatore vede un messaggio strano e la partita si ferma; nei log di Cloudflare non resta traccia.
+- **Rimedio:** un tipo di errore per i messaggi voluti (per esempio `class GameError extends Error`); tutto il resto si registra e risponde 500 con un testo generico.
+
+**Q9. Errori che non si vedono sul telefono** — bassa, [V]
+
+- **Dove:** `public/debug-log.js:48-57` (la cattura degli errori è solo sulla pagina principale).
+- **Cosa succede:** Lobby 3D, flipper e balilla girano nella pagina principale e sono coperti. Biliardo, F1, Golf, Moto Trial, Pong, Acquedotto, Lunar Lander e gli altri giochi girano in un riquadro con la loro pagina: lì gli errori non vengono né mostrati nel registro né mandati al server.
+- **Errori di rete ignorati:** `public/app.js:520` e `:643` (`try { render(await api('state')) } catch {}`): se l'aggiornamento del tavolo fallisce non succede niente e non si dice niente.
+- **Catch vuoti:** sono 175 (più 36 `.catch(() => {})`). La gran parte è giusta: 61 proteggono la memoria del telefono, 32 un collegamento che può essere già chiuso, 26 le chiamate a Telegram, 14 puntatore e schermo intero, 10 l'audio. Ne restano una ventina su rete e altro, da guardare uno per uno.
+
+### 5.6 Cose fatte bene
+
+- **Le prove sono tante e girano tutte:** 65 file, 467 KB, quasi quanto tutto il codice del server. Nessun file di prova è rimasto fuori dagli script.
+- **Una sola versione delle regole:** il server importa le regole dal telefono (`balilla-rules.js`, `public/biliardo/engine.js`, `public/gara/rules.js`, `public/golf/match.js`, `public/arcade/pong-physics.js`). È la scelta giusta e spiega perché l'Area 4 ha trovato poco.
+- **Versione e timbri controllati da un programma** (`scripts/release.mjs`): niente file vecchi in memoria sul telefono.
+- **Registro degli errori con i segreti oscurati** (`public/debug-log.js:4-8`) e invio al server limitato.
+- **Nessun «da fare» dimenticato:** nel codice non ci sono TODO o FIXME.
+- **Commenti che spiegano il perché**, spesso con il difetto che c'era prima.
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -788,3 +917,23 @@ I programmi di prova sono rimasti fuori dal repo. Sono piccoli e ripetibili (ste
 | 4.12 | Togliere il codice del kickback che non si usa più; un solo limite di durata del colpo per server e animazione | 4.1, 4.3 | piccolo |
 
 **Ordine consigliato per l'Area 4:** 4.1 e 4.2 (sono i due casi in cui una partita si rovina o si blocca), poi 4.6, 4.7 e 4.5 che sono righe singole. Poi 4.3. La 4.9 conviene farla insieme alle correzioni, così ogni caso resta controllato. La 4.4 cambia il gioco e va provata con calma.
+
+### Proposte per l'Area 5
+
+| # | Proposta | Risolve | Sforzo |
+|---|---|---|---|
+| 5.1 | Pulizia del codice morto, in un commit solo: computer del balilla (server e telefono), pannello nascosto, kickback, tasto audio e avviso nascosti della Lobby 3D, `staging-worker.js`, `telegram-setup.html`, le 19 esportazioni mai usate, compatibilità con Cluedo e con il vecchio formato di F1 | Q5 | piccolo |
+| 5.2 | Decidere tre cose provvisorie: la taratura del balilla sul telefono (tenerla e toglierle l'etichetta, o toglierla), il flipper a pagina intera (collegarlo o toglierlo), le sagome a scatole (toglierle ora che i modelli ci sono) | Q5 | piccolo |
+| 5.3 | Decidere Labyrinth: se resta fuori, togliere gioco, server, prove e il passo della CI | Q6 | piccolo |
+| 5.4 | Errori del server: un tipo di errore per i messaggi voluti; ogni altro errore si scrive nei log e risponde 500 con un testo generico. In tutti i giochi e nei tavoli | Q4 | piccolo |
+| 5.5 | Fisica dei flipper in un modulo solo (urti, flipper, pistone, palline, scossa, fine pallina) e due file piccoli con tracciato, rampe e punti | Q2 | medio |
+| 5.6 | Una base comune per i giochi online a turni: sul server la parte Lobby, salvataggio, sveglia e assenze; sul telefono apri, chiudi, stato, orologio, margini e vibrazione. F1, Biliardo e Golf ci mettono solo le loro regole | Q3 | medio |
+| 5.7 | Piccoli aiuti condivisi sul server: `userOf(req)` per leggere l'utente una volta, `lobbyHub(env)` ovunque, una sola `json`. Sul telefono: `prefs.js` ovunque, un solo «è un telefono?», una sola vibrazione | Q8 | piccolo |
+| 5.8 | Dividere la Lobby 3D in moduli, uno per volta, cominciando da quelli più staccati: audio e mixer, cinema, bacheca, sgabelli, cabinati, comandi. Ogni modulo riceve quello che gli serve invece di leggere le variabili comuni | Q1 | grande (a tappe piccole) |
+| 5.9 | Formattazione: far controllare a prettier tutte le cartelle (non un elenco a mano), con un elenco corto di esclusi. Portare dentro i file fitti un po' per volta, ognuno in un commit di sola formattazione | Q7 | piccolo per la regola, medio per i file |
+| 5.10 | Cattura degli errori anche nelle pagine dei giochi: un piccolo modulo che manda l'errore alla pagina principale, che lo registra come gli altri. Messaggio visibile quando l'aggiornamento del tavolo fallisce | Q9 | piccolo |
+| 5.11 | `npm test` che esegue tutti i file di `tests/` da solo e riporta tutti i fallimenti (per esempio `node --test`), senza la riga lunga; togliere il controllo doppio dalla CI | Q10 | piccolo |
+| 5.12 | Dividere `Room.fetch` e `LobbyHub.lobby` in una tabella percorso → funzione; una chiave «tipo» salvata in ogni oggetto, così la sveglia sa subito di chi è | Q1 | medio |
+| 5.13 | Piccole coerenze: `window.__gara` solo con `?dev`, commento di `tests.yml` aggiornato, una lingua sola per i commenti nuovi, codici d'errore distinti (400 richiesta sbagliata, 403 non puoi, 409 la partita è cambiata) | Q10 | piccolo |
+
+**Ordine consigliato per l'Area 5:** 5.1, 5.2 e 5.3 insieme (sono solo togliere, e alleggeriscono tutto il resto). Poi 5.4 e 5.10, che fanno vedere gli errori veri. Poi 5.7 e 5.11. La 5.5 conviene farla insieme alle correzioni dei flipper dell'Area 4. La 5.6 e la 5.8 sono i lavori grossi: vanno fatti a pezzi, quando si tocca comunque quel codice.

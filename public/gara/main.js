@@ -707,16 +707,6 @@ async function netSync() {
       if (await play(list, ev)) { busy = false; return; }
       continue;
     }
-    // vecchio formato (una mossa alla volta), per le gare cominciate prima
-    const car = race.cars[i], from = { ...car.pos }, prevGear = car.gear;
-    const opt = { x: e.x, y: e.y, gear: e.gear, crash: e.crash, stop: e.stop };
-    const ev = R.applyMove(race, opt);
-    if (instant) continue;
-    busy = true;
-    scene.clearMarks();
-    scene.setGear(i, opt.crash ? 0 : opt.gear);
-    if (e.auto) banner(`${COL[i].name}: guida il pilota automatico`, 900);
-    if (await play([{ i, from, opt, prevGear }], ev)) { busy = false; return; }
   }
   if (instant) race.cars.forEach((c, i) => scene.jumpCar(i, c));
   busy = false;
@@ -798,4 +788,5 @@ if (embedded) {
 // avvio
 setStep(1);
 ed.setBoard(R.boardSize()); ed.resize(); ed.setZoom(R.startCells(draft.players)); syncZoom();
-window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, pick };
+// solo per le prove (?dev), come in Acquedotto: prima era sempre a disposizione della pagina
+if (new URLSearchParams(location.search).has('dev')) window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, pick };

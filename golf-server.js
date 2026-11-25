@@ -1,7 +1,6 @@
 import { coursesFor } from './public/golf/courses.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, CAPACITY } from './public/golf/match.js';
-import { internalHeaders } from './worker-shared.js';
-const json=(body,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
+import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
 const WAIT=900000, KEEP=300000;
 
 export class GolfRoom {
@@ -13,7 +12,7 @@ export class GolfRoom {
   }
   // con la chiave interna: la Lobby accetta i risultati solo da un altro oggetto del server (worker-shared.js)
   async lobby(path,body){
-    return this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch('https://internal/lobby/'+path,
+    return lobbyHub(this.env).fetch('https://internal/lobby/'+path,
       {method:'POST',headers:await internalHeaders(this.env),body:JSON.stringify(body)});
   }
   async save(match){
@@ -39,7 +38,7 @@ export class GolfRoom {
   }
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
-      const user=JSON.parse(req.headers.get('X-Checkmate-User')||'null');
+      const user=userOf(req);
       if(!user?.player)return json({error:'Accesso richiesto.'},401);
       const now=Date.now(), url=new URL(req.url), action=url.pathname.split('/').at(-1);
       let match=await this.ctx.storage.get('golf');
@@ -68,7 +67,7 @@ export class GolfRoom {
         await this.save(match);
         if(action!=='shot')await this.update(match);
         return json({state:match,now});
-      } catch(error){return json({error:error.message},409);}
+      } catch(error){return failure(error,409,'golf');}
     });
   }
   alarm(){

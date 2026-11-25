@@ -10,7 +10,6 @@ Gira su Cloudflare Workers (Worker `binottoland-motore`, Durable Objects con SQL
 | --- | --- |
 | Accesso, sessioni, pubblicazione e conservazione dello stato | [docs/accesso.md](docs/accesso.md) |
 | Giochi da tavolo: scacchi, Dama italiana, Forza 4, UNO, Scarabeo, Battaglia navale, Briscola, Scopa; avversari AI, tornei e classifica | [docs/giochi-da-tavolo.md](docs/giochi-da-tavolo.md) |
-| Labyrinth · spedizioni multiplayer in prima persona (ritirato: non compare più nella pagina Giochi) | [docs/labyrinth.md](docs/labyrinth.md) |
 | Golf with your gay friends | [docs/golf.md](docs/golf.md) |
 | Moto Trial · platform 2D | [docs/moto-trial.md](docs/moto-trial.md) |
 | Acquedotto! · puzzle 3D con l'acqua | [docs/acquedotto.md](docs/acquedotto.md) |

@@ -2,7 +2,7 @@
 // then authenticated /api/ routes, forwarded to the right Durable Object.
 import { secureEqual, requireMember, telegramAccessTag, login, issueSession, sessionUser } from './auth.js';
 import { radioNowPlaying } from './radio-metadata.js';
-import { json, noticeHub, internalHeaders, INTERNAL_HEADER } from './worker-shared.js';
+import { json, noticeHub, internalHeaders, INTERNAL_HEADER, lobbyHub } from './worker-shared.js';
 import { setupTelegram, telegramWebhook } from './telegram-bot.js';
 import { cinemaHub, groupCinema } from './cinema-routes.js';
 import { seatLimit, longLimitText } from './table-rules.js';
@@ -110,14 +110,11 @@ async function admin(req, env, u) {
   if (u.pathname === '/api/admin/pinball' && req.method === 'POST') {
     const body = await req.text();
     if (body.length > 256) return json({ error: 'Richiesta troppo grande.' }, 413);
-    return env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
-      'https://internal/pinball/remove',
-      {
-        method: 'POST',
-        headers: await internalHeaders(env),
-        body
-      }
-    );
+    return lobbyHub(env).fetch('https://internal/pinball/remove', {
+      method: 'POST',
+      headers: await internalHeaders(env),
+      body
+    });
   }
   if (one && one[2] && req.method === 'POST') {
     const body = await req.text();
@@ -143,7 +140,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.59', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.60', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
@@ -222,12 +219,7 @@ async function route(req, env) {
     return env.ROOMS.get(env.ROOMS.idFromName('moto:' + moto[1])).fetch(
       new Request(u.origin + '/moto-trial/' + moto[2], req)
     );
-  const lab = u.pathname.match(/^\/api\/labyrinth\/([a-f0-9-]{36})\/(state|join|archive|delete|ws)$/);
-  if (lab)
-    return env.ROOMS.get(env.ROOMS.idFromName('lab:' + lab[1])).fetch(
-      new Request(u.origin + '/labyrinth/' + lab[2] + u.search, req)
-    );
-  const lobby = env.ROOMS.get(env.ROOMS.idFromName('checkmate-lobby-v1'));
+  const lobby = lobbyHub(env);
   if (u.pathname === '/api/chat' && req.method === 'POST')
     return lobby.fetch(new Request(u.origin + '/lobby/chat', req));
   if (u.pathname === '/api/notices' && ['GET', 'POST'].includes(req.method)) {
