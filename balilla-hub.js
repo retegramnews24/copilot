@@ -130,7 +130,8 @@ export class BalillaHub {
         this.mode = a.balilla.mode === 4 ? 4 : 2;
         this.field = newField({ bar: a.balilla.bar, target: a.balilla.target, bestOf: a.balilla.bestOf });
       }
-      if (slot > 3 || (this.mode === 2 && slot % 2) || seated.some(v => v.slot === slot)) slot = -1;
+      if (slot > 3 || (!this.field.bar && this.mode === 2 && slot % 2) || seated.some(v => v.slot === slot))
+        slot = -1;
       this.viewers.set(ws, { id, slot, local: false, seenAt: Date.now() });
     }
     if (this.field.bar) this.updateBar();
@@ -152,6 +153,10 @@ export class BalillaHub {
   }
   seated() {
     return [...this.viewers.values()].filter(v => v.slot >= 0);
+  }
+  // al tavolo del bar: c'è un compagno dallo stesso lato (allora ognuno ha la sua coppia di aste)
+  mate(member) {
+    return this.seated().some(v => v !== member && v.slot >> 1 === member.slot >> 1);
   }
   // Qualcuno gioca al tavolo contro il computer o sullo stesso telefono: online non ci si siede.
   // occupato da una partita sul telefono: vale finché chi l'ha dichiarato si fa sentire (il telefono manda "watch"
@@ -218,6 +223,20 @@ export class BalillaHub {
     if (b.action === 'join') {
       if (member.slot >= 0) return;
       const occupied = this.seated();
+      // tavolo del bar: da soli ci si allena, poi 1 contro 1, 2 contro 1, 2 contro 2. Chi arriva prende il posto libero del
+      // suo lato (il primo comanda tutte le aste del lato, con un compagno ognuno ha la sua coppia)
+      let slot = b.slot;
+      if (
+        (this.field.bar || !occupied.length) &&
+        b.bar === true &&
+        Number.isInteger(slot) &&
+        slot >= 0 &&
+        slot <= 3
+      ) {
+        const side = slot & 2,
+          taken = s => occupied.some(v => v.slot === s);
+        slot = !taken(side) ? side : !taken(side + 1) ? side + 1 : -1;
+      }
       if (!occupied.length && !this.busy()) {
         // chi apre il tavolo sceglie 1 contro 1 o 2 contro 2, i gol e se è secca o al meglio di 3
         this.mode = b.mode === 4 ? 4 : 2;
@@ -230,33 +249,18 @@ export class BalillaHub {
       }
       if (
         this.busy() ||
-        !Number.isInteger(b.slot) ||
-        b.slot < 0 ||
-        b.slot > 3 ||
-        (this.mode === 2 && b.slot % 2) ||
-        occupied.some(v => v.slot === b.slot || v.id === id) ||
-        b.mode !== this.mode
+        !Number.isInteger(slot) ||
+        slot < 0 ||
+        slot > 3 ||
+        (!this.field.bar && this.mode === 2 && slot % 2) ||
+        occupied.some(v => v.slot === slot || v.id === id) ||
+        (!this.field.bar && b.mode !== this.mode)
       )
         return this.send(ws, member);
-      member.slot = b.slot;
+      member.slot = slot;
       this.remember(ws, member);
       if (this.field.bar) this.updateBar();
       else if (occupied.length + 1 === this.mode) this.start();
-      // torna chi si era alzato da poco: riprende il punteggio; se si siede un altro si riparte da zero
-      const held = this.held;
-      this.held = null;
-      if (
-        held &&
-        held.id === id &&
-        held.slot === b.slot &&
-        Date.now() < held.until &&
-        this.field.bar &&
-        !this.field.practice
-      ) {
-        this.field.score = held.score;
-        this.field.games = held.games;
-        this.field.gameNo = held.gameNo;
-      }
       this.broadcast(true);
     } else if (b.action === 'tune' && member.slot >= 0 && this.field.practice) {
       tuneField(this.field, b.values);
@@ -264,11 +268,13 @@ export class BalillaHub {
     } else if (b.action === 'ready' && member.slot >= 0 && this.timer) {
       // rimessa: la fa partire chi deve rimettere (nel 2 contro 2 uno qualsiasi dei due)
       if (this.field.practice) {
-        this.field.thrower = member.slot / 2;
+        this.field.thrower = member.slot >> 1;
         this.field.phase = 'throw';
       }
+      // al tavolo del bar la pallina la fa uscire dal buco chiunque sia seduto (Spazio o tocco al centro), anche dopo
+      // un gol: prima solo chi doveva rimettere, e gli altri premevano senza che succedesse niente
       if (
-        (this.field.practice || Math.floor(member.slot / 2) === this.field.thrower) &&
+        (this.field.practice || this.field.bar || Math.floor(member.slot / 2) === this.field.thrower) &&
         throwIn(this.field, Math.random, b.pair === 0 ? 0 : 1)
       )
         this.broadcast(true);
@@ -279,8 +285,10 @@ export class BalillaHub {
       Number.isFinite(b.angle)
     ) {
       const team = Math.floor(member.slot / 2),
-        pair = this.mode === 4 ? member.slot % 2 : b.pair === 0 ? 0 : 1;
-      if (this.field.bar) {
+        mate = this.field.bar && this.mate(member),
+        pair = this.mode === 4 || mate ? member.slot % 2 : b.pair === 0 ? 0 : 1;
+      // da soli sul proprio lato si comanda una coppia alla volta: l'altra resta dov'è
+      if (this.field.bar && !mate) {
         rows.forEach((row, i) => {
           if (row.team !== team || row.attack === pair) return;
           const rod = this.field.rods[i];
@@ -289,8 +297,8 @@ export class BalillaHub {
         });
       }
       control(this.field, team, pair, b.slide, b.angle);
-    } else if (member.slot >= 0 && ((b.action === 'again' && this.field.finished) || b.action === 'reset')) {
-      // nuova partita, oppure contapunti azzerati da chi è al tavolo
+    } else if (member.slot >= 0 && b.action === 'again' && this.field.finished) {
+      // nuova partita a partita finita (il punteggio non si azzera più a metà: niente comando «reset»)
       this.field = newField({
         bar: this.field.bar,
         target: this.field.target,
@@ -312,13 +320,15 @@ export class BalillaHub {
         this.remember(ws, m);
       }
   }
+  // Il punteggio conta quando ci sono giocatori su tutti e due i lati; se uno va via la partita resta com'è (punteggio
+  // compreso) e i gol tornano a contare appena qualcuno si risiede. Si riparte da zero solo a tavolo vuoto.
   updateBar() {
-    const seated = this.seated();
-    this.field.practice = seated.length === 1;
-    if (this.field.practice) {
-      this.field.score = [0, 0];
-      this.field.thrower = seated[0].slot / 2;
-    } else tuneField(this.field);
+    const seated = this.seated(),
+      sides = new Set(seated.map(v => v.slot >> 1));
+    const was = this.field.practice;
+    this.field.practice = sides.size < 2;
+    if (this.field.practice && seated.length) this.field.thrower = seated[0].slot >> 1;
+    else if (was && !this.field.practice) tuneField(this.field);
     if (seated.length) this.start();
   }
   start() {
@@ -371,21 +381,13 @@ export class BalillaHub {
     this.viewers.delete(ws);
     this.remember(ws, null);
     if (member.slot >= 0) {
-      // il punteggio resta da parte per SEAT_GRACE: se torna la stessa persona si continua
-      if (this.field.bar && !this.field.practice && member.id != null)
-        this.held = {
-          id: member.id,
-          slot: member.slot,
-          score: [...this.field.score],
-          games: Array.isArray(this.field.games) ? [...this.field.games] : this.field.games,
-          gameNo: this.field.gameNo,
-          until: Date.now() + SEAT_GRACE
-        };
-      // chi resta aspetta un altro giocatore; le aste di chi è uscito si fermano
+      // chi resta aspetta un altro giocatore (la partita e il punteggio restano); le aste di chi è uscito si fermano
+      // (tutte quelle del suo lato se era da solo, la sua coppia se aveva un compagno)
       this.stop();
-      const team = Math.floor(member.slot / 2);
+      const team = member.slot >> 1,
+        mate = this.mate(member);
       rows.forEach((row, i) => {
-        if (row.team === team && (this.mode === 2 || row.attack === member.slot % 2)) {
+        if (row.team === team && ((this.mode === 2 && !mate) || row.attack === member.slot % 2)) {
           const rod = this.field.rods[i];
           rod.tAngle = rod.angle;
           rod.tShift = rod.shift / row.travel;

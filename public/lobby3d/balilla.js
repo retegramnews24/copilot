@@ -227,9 +227,9 @@ export function buildBalilla(scene, el, send, playSound) {
     'position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:max-content;max-width:94%;background:#142026eb;color:white;padding:6px 10px;border-radius:8px;text-align:center;z-index:4;font-size:13px';
   ui.hidden = true;
   ui.innerHTML =
-    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <button data-reset>Azzera</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
+    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
   el.append(ui);
-  // niente pannello, né sul computer (tasti Spazio, Q, E, R, + e -) né sul telefono (gesti sul tavolo):
+  // niente pannello, né sul computer (tasti Spazio, Q, E, + e -) né sul telefono (gesti sul tavolo):
   // col dito si trascina per giocare, un tocco veloce butta la pallina, l'asta più vicina al dito sceglie difesa o attacco
   const noPanel = true;
   const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -403,9 +403,14 @@ export function buildBalilla(scene, el, send, playSound) {
     { slide: 0, angle: 0 }
   ];
   const post = (action, data = {}) => send?.({ type: 'balilla', action, ...data });
-  const seated = () => active && net?.slot === team * 2;
+  const seated = () => active && net?.slot >= 0;
+  // compagno dallo stesso lato (2 contro 1, 2 contro 2): allora ognuno ha la sua coppia di aste, fissa
+  const mate = () => !!net && net.slot >= 0 && net.occupied.includes(net.slot ^ 1);
+  // da soli al tavolo, o tutti dallo stesso lato: allenamento (i gol non contano)
+  const alone = () => !!net && new Set(net.occupied.map(s => s >> 1)).size < 2;
   const join = () => post('join', { slot: team * 2, mode: 2, target: 10, bar: true });
   function selectPair(next) {
+    if (mate()) next = net.slot % 2;
     pair = next;
     const i = rows.findIndex(r => r.team === team && r.attack === pair);
     const rod = net?.field?.rods[i];
@@ -420,7 +425,7 @@ export function buildBalilla(scene, el, send, playSound) {
   function serve() {
     if (!seated()) return;
     if (net.field.finished) post('again');
-    else if (net.occupied.length === 1 || net.field.phase === 'throw') post('ready', { pair });
+    else if (alone() || net.field.phase === 'throw') post('ready', { pair });
   }
   function close() {
     if (active && mouseLocked()) document.exitPointerLock();
@@ -502,7 +507,6 @@ export function buildBalilla(scene, el, send, playSound) {
   sidePad(zoomPad, dy => {
     tune.zoom = Math.max(0.5, Math.min(1.5, tune.zoom + dy * 0.004));
   });
-  ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
     if (!seated() || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
@@ -570,8 +574,6 @@ export function buildBalilla(scene, el, send, playSound) {
     if (e.type !== 'keydown' || e.repeat) return false;
     if (e.code === 'KeyE' || e.code === 'Escape') close();
     else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
-    else if (e.code === 'KeyR' && seated())
-      post('reset'); // contapunti a zero
     else if (e.code === 'Digit1' || e.code === 'Digit2') selectPair(Number(e.code.slice(-1)) - 1);
     else if (e.key === '+' || e.key === '-') {
       if (e.key === '+') sensitivity.stepUp();
@@ -670,7 +672,7 @@ export function buildBalilla(scene, el, send, playSound) {
   return {
     pose,
     get seat() {
-      return seated() ? { station: 'balilla', slot: team * 2, mode: 2, pair } : null;
+      return seated() ? { station: 'balilla', slot: net.slot, mode: mate() ? 4 : 2, pair } : null;
     },
     get active() {
       return active;
@@ -714,26 +716,30 @@ export function buildBalilla(scene, el, send, playSound) {
       net = data;
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
-      if (!wasSeated && seated()) selectPair(pair);
+      if ((!wasSeated && seated()) || (mate() && pair !== net.slot % 2)) selectPair(pair);
       ui.hidden = noPanel;
       const status = ui.querySelector('span');
       status.textContent = data.paused
         ? 'Partita in pausa: aspettiamo chi si è allontanato'
         : seated()
-        ? TEAM[team] + ' · Su/giù sposta · Destra/sinistra ruota · Q cambia coppia · E lascia'
-        : net.occupied.includes(team * 2)
+        ? TEAM[team] +
+          (mate() ? (pair ? ' · Attacco' : ' · Difesa') : '') +
+          ' · Su/giù sposta · Destra/sinistra ruota' +
+          (mate() ? '' : ' · Q cambia coppia') +
+          ' · E lascia'
+        : net.occupied.includes(team * 2) && net.occupied.includes(team * 2 + 1)
           ? 'Lato occupato'
           : 'In attesa del posto';
       serveButton.disabled =
         !seated() ||
         !(
           net.field.finished ||
-          net.occupied.length === 1 ||
-          (net.field.phase === 'throw' && (net.occupied.length === 1 || net.field.thrower === team))
+          alone() ||
+          net.field.phase === 'throw' // pallina nel buco: la fa uscire chiunque sia seduto
         );
       serveButton.textContent = net.field.finished
         ? 'Nuova partita'
-        : net.occupied.length === 1 && net.field.phase === 'play'
+        : alone() && net.field.phase === 'play'
           ? 'Rimetti la pallina (Spazio)'
           : 'Butta la pallina (Spazio)';
     },

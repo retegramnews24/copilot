@@ -44,11 +44,11 @@ try {
   assert.equal(hub.field.practice, true);
   join(b, 2);
   assert.deepEqual(hub.field.score, [4, 3], 'same person back: score kept');
-  // B si alza e al suo posto si siede C: si riparte da zero
+  // B si alza e al suo posto si siede C: la partita continua com'è (si riparte da zero solo a tavolo vuoto)
   send(b, 'leave');
   const c = player('c');
   join(c, 2);
-  assert.deepEqual(hub.field.score, [0, 0], 'someone else sits: new score');
+  assert.deepEqual(hub.field.score, [4, 3], 'someone else sits: the match goes on');
 
   // il telefono di C tace (rete caduta, collegamento rimasto aperto): dopo SEAT_GRACE il posto si libera
   clock += SEAT_GRACE + 1000;
