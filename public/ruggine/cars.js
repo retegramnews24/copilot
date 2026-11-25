@@ -2,6 +2,12 @@
 import * as THREE from 'three';
 import { N, HALF, WALL, at, frame, nearest } from './world.js?v=63baabd3ac';
 
+// Numeri del gioco provati in tests/ruggine.test.mjs. Il caso (corsie, colpi) passa da random(): la prova mette un
+// generatore con seme, così ogni corsa di prova è sempre la stessa.
+export const MIN_TARGET = 6, STUN = 0.9, GUARD = 1;
+let random = Math.random;
+export function setRandom(fn) { random = fn || Math.random; }
+
 const box = new THREE.BoxGeometry(1, 1, 1);
 const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.36, 18); wheelGeo.rotateX(Math.PI / 2);
 const rimGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.38, 8); rimGeo.rotateX(Math.PI / 2);
@@ -98,7 +104,7 @@ export class Car {
 // input: { steer -1..1, gas, brake, fire }
 export function drive(c, input, dt, cars) {
   if (c.finish) { c.v *= Math.exp(-dt * 1.2); input = { steer: 0, gas: false, brake: false }; }
-  c.stun = Math.max(0, c.stun - dt); c.cool = Math.max(0, c.cool - dt); c.boost = Math.max(0, c.boost - dt);
+  c.stun = Math.max(0, c.stun - dt); c.guard = Math.max(0, (c.guard || 0) - dt); c.cool = Math.max(0, c.cool - dt); c.boost = Math.max(0, c.boost - dt);
   c.spin *= Math.exp(-dt * 5);
   const p = at(c.idx), off = Math.hypot(c.x - p.x, c.z - p.z);
   c.offroad = off > HALF + 0.6;
@@ -140,15 +146,17 @@ export function aiInput(c, cars, dt) {
   const ang = Math.atan2(f.z + f.nz * c.lane - c.z, f.x + f.nx * c.lane - c.x);
   const delta = Math.atan2(Math.sin(ang - c.a), Math.cos(ang - c.a));
   const curve = Math.abs(Math.atan2(Math.sin(far.a - f.a), Math.cos(far.a - f.a)));
-  const target = (24 - curve * 16) * c.skill;
+  // velocità obiettivo minima: da fermo davanti a una curva stretta (punti 430-433 del tracciato) l'obiettivo era zero o
+  // meno, niente gas e l'auto restava ferma per sempre (analisi 10.5)
+  const target = Math.max(MIN_TARGET, (24 - curve * 16) * c.skill);
   // ogni tanto cambia corsia, per sorpassare o schivare
   c.laneT = (c.laneT || 0) - dt;
-  if (c.laneT <= 0) { c.lane = (Math.random() * 2 - 1) * (HALF - 1.6); c.laneT = 2 + Math.random() * 3; }
+  if (c.laneT <= 0) { c.lane = (random() * 2 - 1) * (HALF - 1.6); c.laneT = 2 + random() * 3; }
   let fire = false;
   for (const o of cars) {
     if (o === c || o.finish) continue;
     const rx = o.x - c.x, rz = o.z - c.z, fwd = Math.cos(c.a) * rx + Math.sin(c.a) * rz, side = Math.abs(Math.sin(c.a) * rx - Math.cos(c.a) * rz);
-    if (fwd > 2 && fwd < 22 && side < 1.3) fire = Math.random() < 0.08;
+    if (fwd > 2 && fwd < 22 && side < 1.3) fire = random() < 0.08;
   }
   return { steer: THREE.MathUtils.clamp(delta * 2.2, -1, 1), gas: c.v < target, brake: c.v > target + 4, fire };
 }
@@ -185,7 +193,9 @@ export class Shots {
       const s = this.list[i], p = s.mesh.position;
       p.x += s.dx * s.v * dt; p.z += s.dz * s.v * dt; s.life -= dt;
       const hit = cars.find((c) => c !== s.owner && !c.finish && Math.hypot(c.x - p.x, c.z - p.z) < 1.6);
-      if (hit) { hit.stun = 0.9; hit.v *= 0.45; hit.spin = (Math.random() < 0.5 ? -1 : 1) * 2.4; onHit(hit, p.x, p.z); }
+      // dopo uno stordimento un secondo senza colpi: prima un avversario allineato dietro ti teneva fermo a lungo
+      if (hit && (hit.stun > 0 || hit.guard > 0)) { this.scene.remove(s.mesh); this.list.splice(i, 1); continue; }
+      if (hit) { hit.stun = STUN; hit.guard = STUN + GUARD; hit.v *= 0.45; hit.spin = (random() < 0.5 ? -1 : 1) * 2.4; onHit(hit, p.x, p.z); }
       if (hit || s.life <= 0) { this.scene.remove(s.mesh); this.list.splice(i, 1); }
     }
   }

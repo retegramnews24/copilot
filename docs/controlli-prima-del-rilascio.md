@@ -51,6 +51,10 @@ inspecting» nelle impostazioni avanzate di Telegram). Nella Console non devono 
       turno.
 - [ ] Un gioco arcade e la Lavagna si aprono e si torna alla Lobby.
 - [ ] Impostazioni: Aspetto, Personaggio e pallina (con i Comandi), Informazioni.
+- [ ] Ruggine 89 dal telefono, una volta dalla pagina Giochi e una dal cabinato della 3D: si corre, gli avversari
+      girano, «Esci» riporta indietro e la 3D **non** si riapre sotto il gioco (niente radio del club mentre si corre).
+- [ ] F1 on paper! online **in due**: si crea la gara, l'altro entra dalla campanella, qualche giro di mosse,
+      «Centra» porta sulla propria auto, poi uno abbandona: l'altro vede guidare il pilota automatico.
 
 ## 6. Rete
 

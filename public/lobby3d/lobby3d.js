@@ -1148,15 +1148,6 @@ export function createLobby3D(app) {
     }
   }
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  function openRuggine(){
-    const panel=document.createElement('div');panel.className='l3d';panel.style.zIndex='100';
-    const frame=document.createElement('iframe');frame.title='Ruggine 89';frame.src='/ruggine/';frame.style.cssText='width:100%;height:100%;border:0';
-    function exitGame(event){
-      if(event.origin!==location.origin||event.source!==frame.contentWindow||event.data?.type!=='ruggine:exit')return;
-      window.removeEventListener('message',exitGame);panel.remove();show();
-    }
-    window.addEventListener('message',exitGame);panel.append(frame);document.body.append(panel);
-  }
   // Cabinati: uno per gioco. Per i giochi a più giocatori il cabinato è più largo, con un posto e una pulsantiera
   // per ognuno (come i cabinati veri a 2, 4 e 5 giocatori): chi apre il gioco prende il primo posto libero
   // e gli altri lo vedono lì, alla sua pulsantiera.
@@ -1241,7 +1232,7 @@ export function createLobby3D(app) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - half - .03, z + half + .03); else solid(x - half - .03, x + half + .03, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: key==='ruggine-89'?openRuggine:() => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => app.open(key), mq });
   };
   // lungo le pareti, rivolti verso il centro della sala: a nord i grandi a 4 e 5 posti, a sud gli altri
   const byKey = new Map(list.map(e => [e[0], e]));
@@ -2030,7 +2021,8 @@ export function createLobby3D(app) {
     if(s.station)parked={station:s.station,slot:freeSeat(s)};
     hide();
     s.act();
-    if (app.launched && s.label!=='Ruggine 89') app.launched(s);
+    // anche Ruggine 89 passa da app.open (margini di Telegram, tasto Indietro, 3D ferma): analisi 10.7
+    if (app.launched) app.launched(s);
   }
   function show() {
     if (active) return;

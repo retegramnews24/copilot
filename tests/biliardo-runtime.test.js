@@ -98,8 +98,22 @@ try {
   assert.equal((await call(owner, '/api/biliardo/' + room + '/close', {})).status, 200);
   assert.equal((await call(owner, '/api/biliardo/' + room + '/state')).status, 404);
   assert.ok(!(await call(9002, '/api/lobby')).data.games.some(g => g.room === room));
+  // «Abbandona» passa da api.js e arriva al gioco (analisi 10.1): in 1 contro 1 vince chi resta
+  const again = await call(9001, '/api/create', { game: 'biliardo', variant: 'italiana', points: 25 });
+  const room2 = again.data.state.room;
+  assert.equal((await call(9002, '/api/biliardo/' + room2 + '/join', {})).data.state.phase, 'playing');
+  const left = await call(9002, '/api/biliardo/' + room2 + '/abandon', {});
+  assert.equal(left.status, 200, JSON.stringify(left.data));
+  const after = (await call(9001, '/api/biliardo/' + room2 + '/state')).data.state;
+  assert.equal(after.phase, 'finished');
+  assert.equal(after.forfeit, true, 'won by forfeit');
+  assert.deepEqual(
+    after.winners.map(p => p.id),
+    ['tg:9001'],
+    'who stays wins'
+  );
   console.log(
-    'PASS Biliardo runtime: create with specialty, notice, join and auto start, turn guard, server replay, close.'
+    'PASS Biliardo runtime: create with specialty, notice, join and auto start, turn guard, server replay, close, abandon.'
   );
 } finally {
   await mf.dispose();

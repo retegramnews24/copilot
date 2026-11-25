@@ -54,6 +54,10 @@ export function makeTrack(body) {
     finish.innerSeg >= inner.length
   )
     throw Error('Linea di partenza non valida.');
+  // limiti prima di ogni calcolo pesante (analisi 10.2): punti nella griglia e a mezza casella, linea sui bordi
+  // dichiarati, pista non enorme
+  const limit = R.checkBorderShape(outer) || R.checkBorderShape(inner) || R.checkTrackSize(outer, inner);
+  if (limit) throw Error(limit);
   const players = body.players;
   if (!Number.isInteger(players) || players < 2 || players > F1_MAX)
     throw Error('Da 2 a ' + F1_MAX + ' piloti.');
@@ -61,6 +65,8 @@ export function makeTrack(body) {
   if (nl < 0.5) throw Error('Verso di gara non valido.');
   const inside = R.checkInner(outer, inner, R.MIN_WIDTH);
   if (inside.error) throw Error(inside.error);
+  const ends = R.checkFinishEnds(outer, inner, finish);
+  if (ends) throw Error(ends);
   const built = R.buildTrack(outer, inner, finish, { x: normal.x / nl, y: normal.y / nl }, players);
   if (built.error) throw Error(built.error);
   return built.track;
@@ -121,7 +127,10 @@ export function makeRace(room, number, user, now, body, track) {
     race: null,
     turnAt: null,
     finished: null,
-    winners: []
+    winners: [],
+    // versione delle regole con cui gira la gara: un telefono con regole diverse (rilascio a gara aperta) lo dice
+    // invece di rompersi in silenzio (analisi 10.14)
+    rules: R.RULES_VERSION
   };
 }
 export function joinRace(m, user) {
@@ -261,6 +270,22 @@ export function publicRace(m) {
   const { pending, picked, ...rest } = m;
   return { ...rest, chosen: pending ? pending.map(Boolean) : null };
 }
+// Stato per i telefoni con ?moves=N (analisi 10.4): solo le mosse dalla N in poi, e le auto senza il percorso fatto
+// (il telefono ha già le mosse vecchie e il percorso lo ricostruisce rifacendole). Prima ogni telefono riscaricava
+// tutta la gara a ogni scelta di ogni pilota: fino a centinaia di MB in una gara lunga a 8.
+// Senza ?moves (prima apertura, prove) si manda tutto come prima.
+export function stateFor(m, known = null) {
+  const state = publicRace(m),
+    n = Number(known);
+  if (known === null || known === '' || !Number.isInteger(n) || n < 0 || n > (m.moves?.length ?? 0))
+    return state;
+  return {
+    ...state,
+    moves: m.moves.slice(n),
+    movesFrom: n,
+    race: m.race && { ...m.race, cars: m.race.cars.map(({ path, ...car }) => car) }
+  };
+}
 // The first seat still to choose (the "tocca a te" of the Lobby), or the car on the line.
 export const raceTurn = m =>
   m.phase === 'race' && m.pending
@@ -322,14 +347,11 @@ export class F1Room {
   }
   // with the internal key: the Lobby takes results only from another object of the server (worker-shared.js)
   async lobby(path, body) {
-    return lobbyHub(this.env).fetch(
-      'https://internal/lobby/' + path,
-      {
-        method: 'POST',
-        headers: await internalHeaders(this.env),
-        body: JSON.stringify(body)
-      }
-    );
+    return lobbyHub(this.env).fetch('https://internal/lobby/' + path, {
+      method: 'POST',
+      headers: await internalHeaders(this.env),
+      body: JSON.stringify(body)
+    });
   }
   async loadTrack() {
     if (!this.track) this.track = await this.ctx.storage.get('f1-track');
@@ -388,7 +410,9 @@ export class F1Room {
         if (action === 'track' && req.method === 'GET') return json({ track });
         if (action === 'state' && req.method === 'GET')
           return json(
-            url.searchParams.get('after') === String(m.revision) ? { now } : { state: publicRace(m), now }
+            url.searchParams.get('after') === String(m.revision)
+              ? { now }
+              : { state: stateFor(m, url.searchParams.get('moves')), now }
           );
         if (req.method !== 'POST') return json({ error: MSG.unknownAction }, 405);
         const raw = await req.text();
@@ -425,7 +449,7 @@ export class F1Room {
           await this.save(m);
           await this.update(m);
         }
-        return json({ state: publicRace(m), now });
+        return json({ state: stateFor(m, url.searchParams.get('moves')), now });
       } catch (error) {
         return failure(error, 409, 'f1');
       }

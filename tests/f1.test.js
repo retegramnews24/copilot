@@ -12,19 +12,22 @@ import {
   advanceRace,
   autoMove,
   roundOpts,
-  publicRace
+  publicRace,
+  stateFor
 } from '../f1-server.js';
 import { tableNotice } from '../lobby-hub.js';
 
-const ring = (rx, ry, n = 96) =>
+// piste come quelle del gioco: dentro la griglia (centro a C) e un punto ogni 1,3 caselle al massimo
+const C = 500;
+const ring = (rx, ry, n = 200) =>
   Array.from({ length: n }, (_, i) => {
     const a = ((i - 0.5) / n) * Math.PI * 2;
-    return { x: Math.cos(a) * rx, y: Math.sin(a) * ry };
+    return { x: C + Math.cos(a) * rx, y: C + Math.sin(a) * ry };
   });
 const drawn = players => ({
   outer: ring(40, 26),
   inner: ring(30, 16),
-  finish: { a: { x: 30, y: 0 }, b: { x: 40, y: 0 }, outerSeg: 0, innerSeg: 0 },
+  finish: { a: { x: C + 30, y: C }, b: { x: C + 40, y: C }, outerSeg: 0, innerSeg: 0 },
   normal: { x: 0, y: 1 },
   players
 });
@@ -35,6 +38,46 @@ assert.ok(track.startSlots.length >= 3, 'start slots');
 assert.throws(() => makeTrack({ ...drawn(3), outer: [{ x: 0, y: 0 }] }), /Pista non valida/);
 assert.throws(() => makeTrack(drawn(9)), /Da 2 a 8/);
 assert.throws(() => makeTrack({ ...drawn(2), inner: ring(41, 27) }), /bordi|dentro/);
+// limiti prima di ogni calcolo pesante (analisi 10.2): ognuno di questi teneva il server occupato a lungo
+const far = { ...drawn(2).finish, a: { x: C - 4000, y: C }, b: { x: C + 4000, y: C } };
+assert.throws(
+  () => makeTrack({ ...drawn(2), finish: far }),
+  /Linea di partenza/,
+  'line ends far from the borders'
+);
+const shifted = list => list.map(p => ({ x: p.x - 600, y: p.y }));
+assert.throws(
+  () => makeTrack({ ...drawn(2), outer: shifted(ring(40, 26)) }),
+  /fuori dalla griglia/,
+  'off the grid'
+);
+assert.throws(
+  () => makeTrack({ ...drawn(2), inner: ring(1.2, 1.2, 2400) }),
+  /disegnato male/,
+  'border far too dense'
+);
+assert.throws(
+  () => makeTrack({ ...drawn(2), outer: ring(40, 26, 40) }),
+  /disegnato male/,
+  'points too far apart'
+);
+const big = ring(450, 450, 3000),
+  island = ring(50, 50, 400);
+assert.throws(
+  () =>
+    makeTrack({
+      ...drawn(2),
+      outer: big,
+      inner: island,
+      finish: { a: { x: C + 50, y: C }, b: { x: C + 450, y: C }, outerSeg: 0, innerSeg: 0 }
+    }),
+  /troppo grande/,
+  'huge track: the autopilot map would not fit in memory'
+);
+assert.ok(
+  R.trackCells(ring(200, 200, 1400), ring(30, 30, 200)) < R.MAX_TRACK_CELLS,
+  'a large normal track fits'
+);
 
 const anna = { player: 'p-anna', name: 'Anna' },
   bruno = { player: 'p-bruno', name: 'Bruno' },
@@ -161,4 +204,23 @@ assert.equal(m2.phase, 'finished');
 assert.equal(m2.abandoned, false);
 assert.equal(m2.winners.length, 1);
 
-console.log('PASS F1 on paper! online: track check, join, start order, turns, autopilot, replay, finish.');
+// solo le mosse nuove (analisi 10.4): con ?moves=N arrivano le mosse dalla N in poi e le auto senza percorso;
+// attaccate a quelle già avute danno la stessa gara di prima, molto più leggera
+const full = publicRace(m2),
+  known = m2.moves.length - 3;
+const part = stateFor(m2, String(known));
+assert.equal(part.movesFrom, known);
+assert.equal(part.moves.length, 3, 'only the new moves');
+assert.ok(
+  part.race.cars.every(c => c.path === undefined),
+  'no paths: the phone rebuilds them'
+);
+assert.deepEqual(full.moves.slice(0, known).concat(part.moves), full.moves, 'joined, the same moves');
+assert.ok(JSON.stringify(part).length < JSON.stringify(full).length / 3, 'much lighter');
+assert.deepEqual(stateFor(m2, null), full, 'without ?moves: everything, as before');
+for (const bad of ['', '-1', 'x', String(m2.moves.length + 1)])
+  assert.deepEqual(stateFor(m2, bad), full, bad);
+
+console.log(
+  'PASS F1 on paper! online: track check, join, start order, turns, autopilot, replay, finish, only new moves.'
+);

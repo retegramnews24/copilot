@@ -4,6 +4,9 @@
 // La pista si approva dalla linea verde di partenza: ci devono stare tutte le auto affiancate.
 // La larghezza tra i bordi ha solo un minimo piccolo e fisso, per far passare le auto.
 export const MIN_WIDTH = 2.5;
+// Versione delle regole: da aumentare quando un cambio di questo file cambia il risultato delle mosse. Il server la
+// scrive nella gara; un telefono rimasto aperto con regole diverse chiede di chiudere e riaprire (analisi 10.14).
+export const RULES_VERSION = 1;
 export const MAX_CARS = 16;
 export const minWidth = () => MIN_WIDTH;
 // griglia di disegno quasi infinita
@@ -47,6 +50,44 @@ export function pointInPoly(p, poly) {
 }
 
 const segsOf = (poly) => poly.map((p, i) => [p, poly[(i + 1) % poly.length]]);
+
+// ---------- limiti della pista (analisi 10.2 e 10.10) ----------
+// Il gioco disegna i bordi con un punto ogni mezza casella dentro la griglia. Il server li ricontrolla prima di ogni
+// calcolo pesante: una pista fatta apposta (punti lontanissimi, bordo fittissimo, pista enorme) lo terrebbe occupato
+// per decine di secondi. Le stesse regole valgono mentre si disegna, così il giocatore lo sa subito.
+export const MAX_TRACK_CELLS = 150000; // caselle tra i due bordi; oltre, il pilota automatico non sta in memoria
+export const MIN_GAP = 0.1, MAX_GAP = 2; // distanza tra due punti vicini dello stesso bordo
+const MARGIN = 5;
+export const polyArea = (poly) => {
+  let a = 0;
+  for (const [p, q] of segsOf(poly)) a += p.x * q.y - q.x * p.y;
+  return Math.abs(a) / 2;
+};
+export function trackCells(outer, inner) {
+  return polyArea(outer) - polyArea(inner);
+}
+export function checkBorderShape(poly) {
+  for (const [a, b] of segsOf(poly)) {
+    if (a.x < -MARGIN || a.y < -MARGIN || a.x > BOARD + MARGIN || a.y > BOARD + MARGIN) return 'Bordo fuori dalla griglia.';
+    const d = dist(a, b);
+    if (d < MIN_GAP || d > MAX_GAP) return 'Bordo disegnato male: chiudi e riapri il gioco.';
+  }
+  return null;
+}
+export function checkTrackSize(outer, inner) {
+  return trackCells(outer, inner) > MAX_TRACK_CELLS
+    ? 'Pista troppo grande: disegnala più piccola (al massimo ' + MAX_TRACK_CELLS / 1000 + ' mila caselle).'
+    : null;
+}
+// la linea di partenza va da un bordo all'altro: un estremo sul segmento dichiarato del bordo esterno, l'altro
+// su quello del bordo interno
+export function checkFinishEnds(outer, inner, finish) {
+  const on = (p, poly, k) => distToSeg(p, poly[k], poly[(k + 1) % poly.length]).d < 0.1;
+  const ok =
+    (on(finish.a, outer, finish.outerSeg) && on(finish.b, inner, finish.innerSeg)) ||
+    (on(finish.b, outer, finish.outerSeg) && on(finish.a, inner, finish.innerSeg));
+  return ok ? null : 'Linea di partenza non valida.';
+}
 
 // Indice a "secchi" dei segmenti di bordo: ogni controllo guarda solo i segmenti vicini,
 // così anche le piste enormi (griglia quasi infinita) restano veloci.

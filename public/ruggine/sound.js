@@ -1,9 +1,12 @@
 // Suoni di Ruggine 89 (WebAudio, niente file): motore che sale di giri, colpi, impatti, sterzate, semaforo.
+// Partono spenti se in Impostazioni «Suoni» è spento (analisi 10.12); il tasto del gioco li riaccende.
+import { soundAllowed } from '../sound-pref.js';
 export class Sfx {
   constructor() {
     this.ctx = null;
     this.on = true;
     try { this.on = localStorage.getItem('ruggine.snd') !== '0'; } catch (e) { /* niente storage */ }
+    if (!soundAllowed()) this.on = false;
   }
   unlock() {
     if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }

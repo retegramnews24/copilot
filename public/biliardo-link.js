@@ -6,7 +6,18 @@ import { telegramHaptic } from './haptic.js?v=c280753040';
 import { MSG } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 
-export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {
+export function createBiliardoLink({
+  tg,
+  me,
+  request,
+  onError,
+  enterFullscreen,
+  sendPresence,
+  safeInsets,
+  games,
+  roomClosed,
+  away = () => false // mini app ridotta a icona in Telegram (analisi 10.9)
+}) {
   const overlay = $('biliardo-overlay'),
     frame = $('biliardo-frame');
   let room = null,
@@ -19,7 +30,8 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
     if (typeof result?.now === 'number') skew = result.now - Date.now();
   };
   const post = (type, payload = {}) => {
-    if (!overlay.hidden) frame.contentWindow?.postMessage({ type: 'bil:' + type, ...payload }, location.origin);
+    if (!overlay.hidden)
+      frame.contentWindow?.postMessage({ type: 'bil:' + type, ...payload }, location.origin);
   };
   const identity = () => {
     const who = me();
@@ -45,7 +57,7 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
   }
   async function poll() {
     const selected = room;
-    if (!selected || !snapshot || document.hidden || polling) return;
+    if (!selected || !snapshot || document.hidden || away() || polling) return;
     polling = true;
     try {
       const result = await request('/api/biliardo/' + selected + '/state?after=' + snapshot.revision);
@@ -63,10 +75,7 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
       else if (++failures >= 3)
         post('net', {
           lost: true,
-          message:
-            error.status === 401 || error.status === 403
-              ? MSG.expired
-              : 'Collegamento perso, riprovo…'
+          message: error.status === 401 || error.status === 403 ? MSG.expired : 'Collegamento perso, riprovo…'
         });
     } finally {
       polling = false;
@@ -167,7 +176,10 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
       } finally {
         pending = false;
       }
-    } else if (data?.type === 'bil:action' && ['start', 'play', 'close', 'leave', 'team', 'join', 'abandon'].includes(data.kind)) {
+    } else if (
+      data?.type === 'bil:action' &&
+      ['start', 'play', 'close', 'leave', 'team', 'join', 'abandon'].includes(data.kind)
+    ) {
       const selected = room;
       if (!selected) return;
       try {

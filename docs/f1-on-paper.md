@@ -1,0 +1,53 @@
+# F1 on paper! · gara a quadretti
+
+[← Binottoland](../README.md)
+
+Gara a turni su una griglia: si disegna la pista col dito (o col mouse), poi si corre in 3D muovendo l'auto di
+casella in casella. Nel codice si chiama anche «Gara a quadretti» (`public/gara`). Da soli contro l'IA sullo stesso
+telefono, oppure online da 2 a 8 piloti (`f1-server.js`, un oggetto del server per gara).
+
+## Regole concordate
+
+- **Pista.** Si sceglie prima il numero di piloti; si disegnano bordo esterno, bordo interno e linea di partenza. La
+  pista è approvata se sulla linea verde ci stanno tutte le auto affiancate; la larghezza ha solo un minimo fisso di
+  2,5 caselle. Niente griglia sfalsata: tutte le auto sulla stessa linea. Chi è ospite mette l'auto per primo.
+- **Mosse.** Sempre su una casella. Marce da N a 7 con inerzia: le mosse possibili sono le 3×3 caselle attorno alla
+  mossa precedente; la marcia sale o scende di una alla volta.
+- **Bordo.** Toccarlo ferma l'auto sull'ultima casella buona e fa saltare 2 giri di mosse (al primo resta ferma, al
+  secondo si gira verso il verso di gara), poi riparte in prima. Le auto non si urtano tra loro.
+- **Traguardo.** La linea conta solo nel verso di gara; i giri li sceglie chi crea la pista.
+- **Online.** Tutti scelgono insieme e le auto si muovono quando ha scelto l'ultimo. 60 secondi per mossa, poi guida
+  il pilota automatico; per chi non c'è (app nascosta o ridotta a icona da 20 secondi, o ha abbandonato) guida subito.
+  «Abbandona la gara»: la gara continua, la tua auto la guida il pilota automatico e non puoi vincere.
+
+## Limiti della pista
+
+Controllati dal server prima di ogni calcolo pesante, in `api.js` prima di entrare nella Lobby
+(`public/gara/rules.js`: `checkBorderShape`, `checkFinishEnds`, `checkTrackSize`):
+
+- punti dentro la griglia (2.000 × 2.000 caselle) e a distanza tra 0,1 e 2 caselle l'uno dall'altro (il gioco li mette
+  a mezza casella);
+- estremi della linea di partenza sui due segmenti di bordo dichiarati;
+- al massimo 150 mila caselle tra i due bordi: oltre, la mappa del pilota automatico non sta in memoria. Il gioco lo
+  dice già mentre si disegna («Pista troppo grande»).
+
+## Rete
+
+Il telefono chiede lo stato ogni 0,9 secondi (`public/f1-link.js`), e non lo chiede con l'app nascosta o ridotta a
+icona. Con `?moves=N` il server manda solo le mosse dalla N in poi e le auto senza il percorso fatto: il telefono
+attacca le mosse nuove a quelle che ha e ricostruisce i percorsi rifacendole. Prima ogni telefono riscaricava tutta la
+gara a ogni scelta (fino a centinaia di MB in una gara lunga a 8).
+
+Da fare se servirà: il server riscrive tutta la gara nel suo archivio a ogni scelta; una gara a 8 molto lunga si
+avvicina al tetto di un valore salvato (2 MB). Si potranno salvare le mosse a blocchi.
+
+## Grafica
+
+Partenza «Media» sui telefoni e «Alta» sul computer (la scelta resta ricordata). La scena non disegna quando è
+nascosta e, ferma, disegna un fotogramma su due. Se la grafica 3D non parte la gara lo dice.
+
+## Prove
+
+`tests/f1.test.js` (regole, limiti della pista, solo le mosse nuove), `tests/f1-runtime.test.js` (server vero: crea,
+pista sbagliata fermata in `api.js`, entra, mosse insieme, mosse nuove, abbandono, chiude),
+`tests/absent-players.test.mjs` (pilota automatico per chi non c'è).

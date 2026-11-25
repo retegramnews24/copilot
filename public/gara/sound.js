@@ -1,6 +1,9 @@
 // Suoni della gara, creati al momento con Web Audio: nessun file da scaricare.
 // Il browser li permette solo dopo il primo tocco: unlock() va chiamato su un tocco.
 
+// Partono spenti se in Impostazioni «Suoni» è spento (analisi 10.12); il tasto del gioco li riaccende.
+import { soundAllowed } from '../sound-pref.js';
+
 const KEY = 'gara.audio';
 
 export class Sfx {
@@ -8,7 +11,7 @@ export class Sfx {
     this.ctx = null;
     let on = true;
     try { on = localStorage.getItem(KEY) !== 'off'; } catch (e) { /* senza memoria del browser: audio acceso */ }
-    this.on = on;
+    this.on = on && soundAllowed();
   }
 
   unlock() {

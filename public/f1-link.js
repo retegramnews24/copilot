@@ -7,7 +7,18 @@ import { telegramHaptic } from './haptic.js?v=c280753040';
 import { MSG } from './messages.js?v=3be0dc6ab5';
 const $ = id => document.getElementById(id);
 
-export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {
+export function createF1Link({
+  tg,
+  me,
+  request,
+  onError,
+  enterFullscreen,
+  sendPresence,
+  safeInsets,
+  games,
+  roomClosed,
+  away = () => false // mini app ridotta a icona in Telegram (su alcuni telefoni la pagina non risulta nascosta)
+}) {
   const overlay = $('f1-overlay'),
     frame = $('f1-frame');
   let room = null,
@@ -22,7 +33,8 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     if (typeof result?.now === 'number') skew = result.now - Date.now();
   };
   const post = (type, payload = {}) => {
-    if (!overlay.hidden) frame.contentWindow?.postMessage({ type: 'f1:' + type, ...payload }, location.origin);
+    if (!overlay.hidden)
+      frame.contentWindow?.postMessage({ type: 'f1:' + type, ...payload }, location.origin);
   };
   const identity = () => {
     const who = me();
@@ -30,6 +42,16 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
   };
   function publish(ack = false) {
     if (snapshot && track) post('state', { state: snapshot, track, player: me()?.player, ack, skew });
+  }
+  // Solo le mosse nuove (analisi 10.4): il telefono dice quante ne ha (?moves=N) e il server manda le altre, che qui
+  // si attaccano a quelle già avute. Se mancasse un pezzo (non dovrebbe succedere) si riscarica tutto.
+  const known = () => (snapshot?.moves ? 'moves=' + snapshot.moves.length : '');
+  async function merge(selected, state) {
+    if (!state || state.movesFrom == null) return state;
+    const { movesFrom, ...rest } = state;
+    if (snapshot?.moves && snapshot.moves.length >= movesFrom)
+      return { ...rest, moves: snapshot.moves.slice(0, movesFrom).concat(state.moves) };
+    return (await request('/api/f1/' + selected + '/state')).state;
   }
   async function loadTrack(selected) {
     const result = await request('/api/f1/' + selected + '/track');
@@ -52,15 +74,20 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
   }
   async function poll() {
     const selected = room;
-    if (!selected || !snapshot || document.hidden || polling) return;
+    // ridotta a icona: niente richieste, così il server vede che non ci sei e guida il pilota automatico (analisi 10.9)
+    if (!selected || !snapshot || document.hidden || away() || polling) return;
     polling = true;
     try {
-      const result = await request('/api/f1/' + selected + '/state?after=' + snapshot.revision);
+      const result = await request(
+        '/api/f1/' + selected + '/state?after=' + snapshot.revision + '&' + known()
+      );
       clock(result);
       if (failures >= 3) post('net', { lost: false, message: 'Collegamento ripreso.' });
       failures = 0;
       if (room === selected && result.state && result.state.revision >= snapshot.revision) {
-        snapshot = result.state;
+        const state = await merge(selected, result.state);
+        if (room !== selected || !state) return;
+        snapshot = state;
         publish();
       }
     } catch (error) {
@@ -70,10 +97,7 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
       else if (++failures >= 3)
         post('net', {
           lost: true,
-          message:
-            error.status === 401 || error.status === 403
-              ? MSG.expired
-              : 'Collegamento perso, riprovo…'
+          message: error.status === 401 || error.status === 403 ? MSG.expired : 'Collegamento perso, riprovo…'
         });
     } finally {
       polling = false;
@@ -90,9 +114,11 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
       const result = await request(path + '/state');
       if (!overlay.hidden) close();
       clock(result);
+      // la sala si segna solo con la pista in mano: prima, se la pista non arrivava, restava segnata a gioco chiuso
+      // e da quel telefono non si creava più nessuna gara (analisi 10.11)
+      await loadTrack(selected);
       room = selected;
       snapshot = result.state;
-      await loadTrack(selected);
       show(true);
       startSync();
       sendPresence();
@@ -146,7 +172,11 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
     } else if (data?.type === 'f1:haptic') telegramHaptic(tg, data.kind, data.style);
     else if (data?.type === 'f1:create') {
       // the creator has drawn the track: open the race online (the server checks the track again)
-      if (pending || room || !me()) return;
+      if (pending || !me()) return;
+      if (room)
+        return post('error', {
+          message: "Hai già una gara online aperta: chiudila prima di crearne un'altra."
+        });
       pending = true;
       try {
         const result = await request('/api/create', {
@@ -156,9 +186,9 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
           time: data.time
         });
         clock(result);
+        await loadTrack(result.state.room);
         room = result.state.room;
         snapshot = result.state;
-        await loadTrack(room);
         publish(true);
         startSync();
         sendPresence();
@@ -167,11 +197,17 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
       } finally {
         pending = false;
       }
-    } else if (data?.type === 'f1:action' && ['start', 'play', 'close', 'leave', 'join', 'abandon'].includes(data.kind)) {
+    } else if (
+      data?.type === 'f1:action' &&
+      ['start', 'play', 'close', 'leave', 'join', 'abandon'].includes(data.kind)
+    ) {
       const selected = room;
       if (!selected) return;
       try {
-        const result = await request('/api/f1/' + selected + '/' + data.kind, data.payload || {});
+        const result = await request(
+          '/api/f1/' + selected + '/' + data.kind + '?' + known(),
+          data.payload || {}
+        );
         if (room !== selected) return;
         clock(result);
         if (data.kind === 'close' || data.kind === 'leave') {
@@ -184,7 +220,11 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
           close();
           return;
         }
-        if (result.state.revision >= snapshot.revision) snapshot = result.state;
+        if (result.state.revision >= snapshot.revision) {
+          const state = await merge(selected, result.state);
+          if (room !== selected) return;
+          if (state) snapshot = state;
+        }
         publish(true);
       } catch (error) {
         if (room !== selected) return;

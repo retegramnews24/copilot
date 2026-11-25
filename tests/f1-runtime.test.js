@@ -45,15 +45,19 @@ const call = async (id, path, body) => {
   return { status: res.status, data: await res.json().catch(() => null) };
 };
 // a big track: many points, like one drawn with the finger (0.5 cell apart)
+const C = 500; // dentro la griglia del gioco, come una pista vera
 const ring = (rx, ry, n) =>
   Array.from({ length: n }, (_, i) => {
     const a = ((i - 0.5) / n) * Math.PI * 2;
-    return { x: Math.round(Math.cos(a) * rx * 100) / 100, y: Math.round(Math.sin(a) * ry * 100) / 100 };
+    return {
+      x: C + Math.round(Math.cos(a) * rx * 100) / 100,
+      y: C + Math.round(Math.sin(a) * ry * 100) / 100
+    };
   });
 const track = {
   outer: ring(120, 80, 1300),
   inner: ring(108, 68, 1100),
-  finish: { a: { x: 108, y: 0 }, b: { x: 120, y: 0 }, outerSeg: 0, innerSeg: 0 },
+  finish: { a: { x: C + 108, y: C }, b: { x: C + 120, y: C }, outerSeg: 0, innerSeg: 0 },
   normal: { x: 0, y: 1 },
   players: 2
 };
@@ -64,6 +68,11 @@ try {
   assert.ok(JSON.stringify({ game: 'f1', track }).length > 50000, 'the track is really big');
   const room = big.data.state.room;
   assert.equal(big.data.state.phase, 'waiting');
+  // una pista sbagliata si ferma in api.js, prima del blocco della Lobby (analisi 10.3)
+  const far = { ...track.finish, a: { x: C - 4000, y: C }, b: { x: C + 4000, y: C } };
+  const bad = await call(8001, '/api/create', { game: 'f1', track: { ...track, finish: far }, laps: 1 });
+  assert.equal(bad.status, 400, JSON.stringify(bad.data));
+  assert.match(bad.data.error, /Linea di partenza/);
   // other games keep the small limit
   const huge = await call(8001, '/api/create', { game: 'golf', pad: 'x'.repeat(5000) });
   assert.equal(huge.status, 413);
@@ -112,6 +121,24 @@ try {
   const second = await choose(8002, first.data.state, 0);
   assert.equal(second.data.state.moves.at(-1).kind, 'round');
   assert.deepEqual(second.data.state.chosen, [false, false]);
+  // solo le mosse nuove attraverso api.js (analisi 10.4)
+  const all = second.data.state.moves.length;
+  const light = await call(8001, '/api/f1/' + room + '/state?moves=' + (all - 1));
+  assert.equal(light.data.state.movesFrom, all - 1);
+  assert.equal(light.data.state.moves.length, 1, 'only the last move');
+  assert.ok(
+    light.data.state.race.cars.every(c => c.path === undefined),
+    'no paths'
+  );
+  // «Abbandona la gara» passa da api.js e arriva al gioco (analisi 10.1: prima era «Indirizzo sconosciuto»)
+  const left = await call(8002, '/api/f1/' + room + '/abandon', {});
+  assert.equal(left.status, 200, JSON.stringify(left.data));
+  assert.deepEqual(left.data.state.gone, ['tg:8002'], 'the server knows who abandoned');
+  assert.equal(
+    (await call(8003, '/api/f1/' + room + '/abandon', {})).status,
+    409,
+    'who watches cannot abandon'
+  );
   // the creator closes the race: gone from the Lobby
   assert.equal(
     (await call(8002, '/api/f1/' + room + '/close', {})).status,

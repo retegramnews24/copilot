@@ -13,6 +13,8 @@ Gira su Cloudflare Workers (Worker `binottoland-motore`, Durable Objects con SQL
 | Golf with your gay friends | [docs/golf.md](docs/golf.md) |
 | Moto Trial · platform 2D | [docs/moto-trial.md](docs/moto-trial.md) |
 | Acquedotto! · puzzle 3D con l'acqua | [docs/acquedotto.md](docs/acquedotto.md) |
+| F1 on paper! · gara a quadretti, da soli o online | [docs/f1-on-paper.md](docs/f1-on-paper.md) |
+| Ruggine 89 · corsa con i colpi | [docs/ruggine-89.md](docs/ruggine-89.md) |
 | Binotto Simulator · manager di scuderia | [docs/binotto-simulator.md](docs/binotto-simulator.md), [docs/circuit-pits.md](docs/circuit-pits.md) |
 | Cinema Streamer | [docs/cinema.md](docs/cinema.md) |
 | Radio | [docs/radio.md](docs/radio.md) |

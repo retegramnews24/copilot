@@ -29,15 +29,17 @@ const anna = { player: 'p-anna', name: 'Anna' },
 
 // ---- F1 ----
 {
-  const ring = (rx, ry, n = 96) =>
+  // piste come quelle del gioco: dentro la griglia (centro a C) e un punto ogni 1,3 caselle al massimo
+  const C = 500;
+  const ring = (rx, ry, n = 200) =>
     Array.from({ length: n }, (_, i) => {
       const a = ((i - 0.5) / n) * Math.PI * 2;
-      return { x: Math.cos(a) * rx, y: Math.sin(a) * ry };
+      return { x: C + Math.cos(a) * rx, y: C + Math.sin(a) * ry };
     });
   const track = makeTrack({
     outer: ring(40, 26),
     inner: ring(30, 16),
-    finish: { a: { x: 30, y: 0 }, b: { x: 40, y: 0 }, outerSeg: 0, innerSeg: 0 },
+    finish: { a: { x: C + 30, y: C }, b: { x: C + 40, y: C }, outerSeg: 0, innerSeg: 0 },
     normal: { x: 0, y: 1 },
     players: 2
   });
