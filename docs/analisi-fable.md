@@ -10,6 +10,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 5: qualità del codice**, letta sul commit `ba287b1` (dopo i commit del calcio balilla del 25 novembre).
 - **Area 6: staging contro main**, fatta il 25 novembre 2026 confrontando `staging` al commit `a7a56b9` con `main` al commit `a615b09` (versione 1.0.60).
 - **Area 7: prove** e **Area 8: esperienza d'uso**, fatte il 25 novembre 2026 su `staging` al commit `ed88d2a` (versione 1.0.61, Labyrinth e Sprint già tolti).
+- **Area 9: verifica delle correzioni**, fatta il 25 novembre 2026 su `staging` al commit `5e6e881` (versione 1.0.63). I commit con «analisi» nel messaggio sono 24, da `e253adc` a `7d04052`. I primi 16 (aree 1-6) li avevo già riletti man mano, perché ogni area è stata letta dopo le correzioni della precedente: qui li ho solo ricontrollati a campione. Ho letto riga per riga gli ultimi 8 (da `fa79eab` a `7d04052`, aree 7 e 8) e `5e6e881` (filtro della pagina Giochi), che nessuno aveva ancora riletto.
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -30,6 +31,27 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 9 (verifica delle correzioni)
+
+**Come leggere quest'area.** Ho riletto le correzioni fatte dopo le aree 1-8 cercando tre cose: cosa hanno rotto, cosa le prove nuove non coprono, cosa è stato fatto a metà. **[V]** = verificato leggendo il codice, **[P]** = provato eseguendo, **[S]** = sospetto da confermare a occhio. **Non ho guardato l'app su un telefono né su Telegram Desktop.** Gli 8 passi della CI passano tutti al commit `5e6e881` (dettaglio nella sezione 9.5).
+
+| # | Problema | Dove si sente | Gravità | Stato |
+|---|---|---|---|---|
+| V1 | Rinominando «Blackboard» in «Lavagna» è cambiata la chiave del gioco, ma la Lobby 3D cerca ancora quella vecchia: la Lavagna appesa nell'atrio non c'è più e in sala giochi compare un cabinato in più chiamato «lavagna spazio libero». **È anche su `main` (1.0.63)** | telefono e computer | media-alta | [V] |
+| V2 | Nella bacheca della 3D il tasto «Entra» di un avviso apre la partita **sotto** la 3D, che resta davanti. Non nasce dalle correzioni, ma ora la pagina sotto è anche spenta (`inert`) | telefono e computer | media | [S] |
+| V3 | Un computer con lo schermo tattile viene trattato da telefono. Prima cambiava solo la disposizione; ora cambiano anche scritte, tasto «?» e pagina dei comandi, che mostrano i comandi sbagliati | computer | media-bassa | [V] il meccanismo, [S] l'effetto |
+| V4 | Ricerca nella pagina Giochi: «Golf with your gay friends» esce anche cercando «un», «fine», «def» | telefono e computer | bassa | [P] |
+| V5 | Flipper: inizio e punteggio mandati mentre il collegamento è aperto ma muto vanno persi (la coda nuova li tiene solo se il collegamento risulta chiuso) | telefono | bassa | [V] |
+| V6 | Calcio balilla, stessa persona da due dispositivi: sul secondo la riga di stato dice «Aspetto il posto…» per sempre | telefono e computer | bassa | [V] |
+| V7 | Proposta 8.10 fatta a metà: 12 px minimi solo in `app.css`. Restano caratteri da 8 a 11 px in Cinema, Giulio Simulator, Ruggine 89, Golf, Moto Trial e nella barra in alto della 3D sui telefoni stretti | telefono | bassa | [V] |
+| V8 | Proposta 8.8 fatta a metà: il Simulator, la Lavagna e tre punti del telefono hanno ancora le frasi vecchie scritte a mano («Accesso richiesto.», «Richiesta non valida.», «Mini App») | telefono e computer | bassa | [V] |
+| V9 | Nessuna prova lega i nomi dei giochi tra la pagina Giochi e la Lobby 3D: V1 è passato da tutti gli 8 passi della CI | prove | media | [V] |
+| V10 | Proposte 7.3, 7.4 e 7.5 fatte in parte: restano senza prova il posto tenuto 30 secondi nel server vero, il giro dei 25 secondi sul telefono e il riavvio del server al balilla | prove | bassa | [V] |
+
+Il dettaglio è nella sezione «Area 9: verifica delle correzioni», più sotto.
 
 ---
 
@@ -1220,6 +1242,118 @@ Le due che non passano con l'orologio spostato (`access-runtime`, `simulator-run
 
 ---
 
+## Area 9: verifica delle correzioni
+
+**Cosa ho letto per intero:** `public/lobby-link.js`, `public/messages.js`, `public/games-filter.js`, `public/games-catalog.js`, `public/lobby3d/help.js`, le prove nuove (`lobby-link`, `balilla-runtime`, `balilla-restore`, `game-links-network`, `games-filter`), e le differenze tra `fa79eab` e `5e6e881` di `public/app.js`, `public/lobby3d/lobby3d.js`, `balilla.js`, `flipper3d.js`, `textures.js`, `public/index.html`, `public/app.css` e dei 34 file toccati dal commit dei messaggi. **Solo a campione:** i 16 commit delle aree 1-6 (`socket-limits.js`, la ripresa del posto in `balilla-hub.js`). **Non fatto:** nessuna prova a occhio su telefono o su Telegram Desktop; tutto quello che riguarda «come appare» è [S].
+
+### 9.1 Cose rotte o peggiorate dalle correzioni
+
+**V1. La Lavagna è sparita dall'atrio della Lobby 3D (gravità media-alta, [V], anche su `main`).**
+
+- **Causa.** La chiave di ogni gioco si ricava dal titolo della sua scheda (`public/games-catalog.js:62-64`). Il commit `b9559ab` ha cambiato il titolo da «Blackboard spazio libero» a «Lavagna spazio libero» (`public/index.html:39`): la chiave è passata da `blackboard-spazio-libero` a `lavagna-spazio-libero` ([P]: ho eseguito la stessa funzione sui due titoli).
+- **Dove resta la chiave vecchia.** `public/lobby3d/lobby3d.js:523`, `:733`, `:736`, `:1042`, `:1859` e il colore in `public/games-catalog.js:24`.
+- **Cosa succede al giocatore, telefono e computer.**
+  - La Lavagna appesa al muro dell'atrio, con il disegno che si aggiorna dal vivo, non viene più costruita (`lobby3d.js:733-737`) e il disegno non viene più chiesto al server (`:1859-1861`). Non c'è più il punto «Lavagna» a cui avvicinarsi.
+  - In sala giochi compare un cabinato in più, con la scritta «lavagna spazio libero» in minuscolo e il colore dei giochi sconosciuti (`lobby3d.js:1042-1043`). Aprendolo si arriva comunque alla Lavagna.
+  - Nella pagina Giochi l'icona della Lavagna ha perso il suo colore verde (prende il colore del tema).
+  - Chi aveva messo la stella alla Lavagna l'ha persa, e l'icona è tornata in fondo all'ordine scelto a mano: preferiti e ordine sono salvati sul telefono con la chiave vecchia (`games-catalog.js:36`, `:74`, `:241`).
+- **Su `main`.** Stesso titolo nuovo e stesse cinque righe vecchie: il difetto è in produzione dalla 1.0.62 (commit `0a881f8`; nella 1.0.61 il titolo era ancora quello vecchio).
+- **Correzione proposta.** Subito: mettere `lavagna-spazio-libero` nei sei punti. Meglio: scrivere la chiave nella scheda (`data-game="..."` in `index.html`) invece di ricavarla dal titolo, così una rinomina non cambia più niente; e al primo avvio spostare stella e ordine dalla chiave vecchia alla nuova.
+
+**V2. «Entra» dalla bacheca della 3D apre la partita sotto la 3D (gravità media, [S]).**
+
+- **Meccanismo.** Aprendo la bacheca, l'elenco degli avvisi viene spostato dentro la 3D (`lobby3d.js:355`). Il tasto «Entra» di un avviso chiama `openGameRoom` (`public/notices.js:99-106`, `public/app.js:49`), che apre il tavolo o il riquadro del gioco. Nessuno nasconde la 3D: in `app.js` non c'è nessuna chiamata a `hide()`, e la 3D sta sopra tutto (livello 60 contro 20-30 dei riquadri dei giochi, `lobby3d.js:46`, `app.css:802-806`, `:1634-1654`, `:2617-2620`).
+- **Cosa succede.** Il giocatore tocca «Entra» e non vede cambiare niente: la partita è aperta sotto. Per vederla deve chiudere la bacheca e uscire con «✕ Lobby classica».
+- **Rapporto con le correzioni.** Il difetto c'era già. La proposta 8.9 lo rende un po' peggiore: la pagina sotto ora è spenta finché la 3D è aperta, quindi il tavolo aperto così non risponde nemmeno alla tastiera.
+- **Correzione proposta.** In `openGameRoom`, se la 3D è aperta, chiuderla prima come fa un cabinato (`hide()` e poi `launched()`, vedi `lobby3d.js:2030-2032`). Da confermare a mano prima di toccare.
+
+**V3. Computer con schermo tattile trattato da telefono (gravità media-bassa, [V] il meccanismo).**
+
+- **Meccanismo.** «È un telefono» vale anche se il dispositivo ha soltanto la possibilità del tocco: `matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window` (`lobby3d.js:85`, `flipper3d.js:78` e `:456`, `balilla.js:226`, `public/settings.js:44`). Un portatile con schermo tattile usato con mouse e tastiera risponde sì.
+- **Cosa è peggiorato.** Prima dipendevano da questo solo joystick e tasti. Dopo le proposte 8.3-8.6 dipendono anche: le scritte dei flipper («TOCCA PER GIOCARE»), i tasti dello sgabello senza lettere, la riga di stato del balilla (senza «premi Spazio», «Q cambia», «E lascia il tavolo»), il tasto «?» e la pagina dei comandi, che su quel computer elencano i comandi del telefono. I tasti della tastiera funzionano, ma non sono più scritti da nessuna parte.
+- **Correzione proposta.** Considerare telefono solo chi ha il tocco come puntatore principale (`(pointer: coarse)` da solo), e passare alla disposizione a tocco al primo tocco vero (era la proposta 3.16).
+
+**V4. Ricerca dei Giochi: «undefined» nel testo cercato (gravità bassa, [P]).**
+
+- **Causa.** `public/games-filter.js:33` unisce titolo e descrizione; la scheda del Golf non ha descrizione (`index.html:53`) e al suo posto finisce la parola `undefined`.
+- **Cosa succede.** Cercando «un» (per UNO), «fine», «def» esce anche il Golf. Ho eseguito la riga: il testo cercato è `golf with your gay friends undefined`.
+- **Perché la prova non l'ha visto.** La scheda finta di `tests/games-filter.test.mjs:10` ha sempre una descrizione.
+- **Correzione proposta.** `(card.querySelector('p')?.textContent || '')` e un caso di prova senza descrizione.
+
+**Da guardare a occhio: caratteri portati a 12 px in spazi stretti (gravità bassa, [S]).** Il commit `4a1cf1b` ha alzato 47 misure in `app.css`, alcune da 9,5 o 10 px. Tre stanno in riquadri a misura fissa e vanno guardate su un telefono stretto: `.connection-pill` (larga al massimo 90 px, `app.css:921-926`, con dentro «Riconnessione…»), `.game-badge` (senza a capo, `:1019-1026`, da 9,5 a 12 px) e `.notices-count` (cerchio di 18 px con numeri a due cifre).
+
+**Altre piccole cose.**
+
+- `public/lobby3d/balilla.js:397-399`: `blurredAt` e `hadLock` non servono più a niente dopo che Esc non fa più alzare.
+- `public/ruggine/main.js:193`: sul telefono compare «NITRO! (Shift)».
+- `public/lobby3d/help.js:52-58`: nei comandi del flipper su computer manca «Spazio = scossa» (c'è solo nella riga in basso mentre giochi).
+- `package.json`, `format:check`: i file nuovi (`public/lobby-link.js`, `public/messages.js`, `public/games-filter.js`, `public/lobby3d/help.js`) non sono nell'elenco dei file controllati.
+
+### 9.2 Cose controllate e trovate a posto
+
+- **`public/messages.js` (lo usano 30 file e una prova).** Le 14 frasi sono tutte usate e nessun file ne chiede una che non esiste ([P], contate con un programma). I codici di risposta non sono cambiati. Nessun punto del telefono confronta il testo di un errore per decidere cosa fare (ho cercato i confronti in tutto `public/`), quindi cambiare le frasi non rompe nessun comportamento. I sei file del telefono lo caricano tutti con lo stesso timbro.
+- **`public/lobby-link.js`.** Confrontato riga per riga con il codice che stava in `app.js`: stessi passi nello stesso ordine (presenza, poi coda dopo 800 ms, poi avviso alla 3D). Nessuna variabile vecchia rimasta in `app.js`. `lobbyAlive` e `connectLobby` ora sono costanti, ma sono usate solo dopo la riga in cui nascono (`app.js:429`, usi a `:535`, `:567`, `:584`, `:751`, `:795`).
+- **`inert`.** Spegne solo le schede e le pagine (`lobby3d.js:2056-2058`). Dialoghi, radio, messaggio d'errore e riquadri dei giochi stanno fuori dalle pagine (`index.html:71-94`) e restano vivi. Chat e avvisi vengono spostati dentro la 3D quando si apre la bacheca, quindi funzionano. Tutte le uscite dalla 3D passano da `hide()`, che riaccende la pagina come prima cosa (`:2060`).
+- **Tasti del telefono in `.l3d-dock`.** L'ordine è fisso (volumi, sgabello, seduto, azione). I riquadri con `display:flex` scritto a mano spariscono lo stesso quando sono nascosti, grazie alla regola generale `[hidden]` di `app.css:285`. In verticale la colonna non arriva alla barra in alto nemmeno nel caso peggiore (a conti fatti sulle misure del codice, circa 380 px dal basso su 640; non misurato su uno schermo). In orizzontale su un telefono basso, con tre volumi insieme, può arrivarci: [S], da guardare.
+- **Filtro dei Giochi.** Nasconde le icone con una classe e non con `hidden` (`games-filter.js:60`): l'elenco dei giochi che la 3D legge dalle schede (`app.js:98`) non cambia mentre il filtro è attivo. L'ordine scelto trascinando si salva giusto anche con il filtro acceso.
+- **Rinomine.** «Impostazioni» è ovunque nelle scritte; «stanza» non compare più in nessuna scritta; il titolo «Lavagna spazio libero» è uguale nei due punti che lo confrontano (`public/arcade-link.js:85`, `:286`). L'unico danno è V1.
+- **Tasto «?».** Ho confrontato le righe di `help.js` con i tasti veri di `lobby3d.js:1538-1569`, `flipper3d.js:538-552` e `balilla.js`: corrispondono. Il tasto H non si attiva mentre si scrive nella chat della bacheca né con la radio aperta.
+
+### 9.3 Casi che le prove nuove non coprono
+
+| Prova | Cosa non copre | Perché conta |
+|---|---|---|
+| nessuna | **V9.** Le chiavi dei giochi usate dalla 3D (`ARCADE`, `BOARD`, Lavagna, Cinema, Biliardo, Ruggine) contro le schede di `index.html` | V1 è passato da tutta la CI. Basta una prova che legge i due file |
+| `games-filter` | Scheda senza descrizione (V4); la parte che lavora sulla pagina (barra sopra le icone, tasto premuto, «Nessun gioco trovato») | la prova usa solo schede finte complete |
+| `lobby-link` | **V5.** Messaggio mandato su un collegamento aperto ma muto: `send` risponde «mandato» (`lobby-link.js:84-88`) e il messaggio non arriva mai; la riapertura avviene fino a 30 secondi dopo e non lo rimanda | il punteggio del flipper di fine partita si perde proprio quando la rete cambia |
+| `lobby-link` | Collegamento che resta «in apertura» senza mai aprirsi: `alive()` non fa niente (`:69`) e non c'è un tempo massimo | su rete mobile l'apertura può restare appesa a lungo |
+| `lobby-link` | Il giro dei 25 secondi e il ritorno nell'app: sono rimasti in `app.js:535`, `:584`, `:795` | la proposta 7.4 li voleva nel modulo provato |
+| `balilla-runtime` | **V6.** Stessa persona da due dispositivi vivi: il secondo non deve rubare il posto (`balilla-hub.js:176`, `:221`) | è la condizione aggiunta dalla proposta 6.2; è provato solo il caso opposto |
+| `balilla-runtime` | Posto liberato dopo 30 secondi di silenzio, un gol contato attraverso il server, fine partita e «ancora», 2 contro 1 | la prova arriva fino alla pausa |
+| `balilla-runtime` | Riavvio del server con i posti rimessi (dichiarato nella prova: Miniflare non lo sa fare) | resta provata solo la funzione `restore`, da sola |
+| `expedition-runtime` | App nascosta e posto tenuto 30 secondi, nel server vero (proposta 7.3, terza parte) | c'è solo la prova del modulo (`seat-grace`) |
+| `game-links-network` | Golf, Moto Trial e Pong sul telefono | provati solo F1 e Biliardo |
+| nessuna | Errori mostrati dentro la 3D e 3D che non si riapre sopra un errore (8.2); pagina spenta con `inert` (8.9); righe di `help.js` contro i tasti veri (8.3) | sono tutte in file che non si possono caricare senza la grafica |
+
+**V6 in dettaglio (gravità bassa, [V]).** Con la stessa persona al tavolo da telefono e da computer, il server rifiuta il secondo (`balilla-hub.js:221`) senza dire perché. Sul secondo dispositivo la riga di stato sceglie tra «Lato pieno: stai guardando» e «Aspetto il posto…» (`balilla.js:461-465`): se il lato non è pieno resta «Aspetto il posto…» per sempre. Correzione: il server manda il motivo, o il telefono riconosce che il posto è già suo, e la riga dice «Stai già giocando da un altro dispositivo».
+
+### 9.4 Punti dichiarati fatti nei commit, ma fatti a metà
+
+| Proposta | Commit | Cosa manca | Stato |
+|---|---|---|---|
+| 8.7 nomi unici | `b9559ab`, `e1481b8` | La chiave della Lavagna nella 3D (V1). «Mini App» in `public/app.js:745` e nei motivi di chiusura dei collegamenti (`worker.js:266`, `:731`, `lobby-hub.js:233`, `blackboard-server.js:418`) | [V] |
+| 8.8 messaggi in un file | `7d04052` | **V8.** `simulator/server.js:45-67` ha ancora «Accesso richiesto.», «Metodo non consentito.», «Percorso non trovato.», «Richiesta non valida.», «Richiesta troppo grande.»; `blackboard-server.js:141` «WebSocket richiesto»; `public/blackboard/board.js:357` e `public/cinema-lobby.js:286` hanno la frase «Chiudi e riapri…» scritta a mano | [V] |
+| 8.10 caratteri minimi | `4a1cf1b` | **V7.** Fuori da `app.css` restano sotto i 12 px: `public/cinema/cinema.css` 18 punti (fino a 9 px), `public/giulio/cab.css` 18 (9 px), `public/ruggine/ruggine.css` 5 (8 px), Golf e Moto Trial 2 ciascuno (10 px), Biliardo e Lavagna 3 ciascuno (11 px), `public/simulator/style.css` 55 (8 px, non è il cruscotto). Nella 3D la barra in alto scende a 10,5 px sui telefoni più stretti di 364 px (`lobby3d.js:51`) | [V] |
+| 8.11 spiegazioni nei `title` | `e1481b8` | Fatte due (Cinema). Nei file del telefono restano 28 punti che scrivono un `title` | [V] il numero, non li ho riletti uno a uno |
+| 8.5 scritte per dispositivo | `1a97e5b` | «NITRO! (Shift)» di Ruggine sul telefono; e tutto dipende dal riconoscimento del telefono (V3) | [V] |
+| 7.3 collegamento, lato server | `fa79eab` | Manca la terza parte: app nascosta e posto tenuto 30 secondi nel server vero | [V] |
+| 7.4 collegamento, lato telefono | `ca49fdd` | Il giro dei 25 secondi è rimasto fuori dal modulo | [V] |
+| 7.5 balilla nel server vero | `ca49fdd` | Riavvio del server (dichiarato) e i casi della tabella sopra | [V] |
+| 7.12 controlli a mano | `e1481b8` | Fatta la lista (`docs/controlli-prima-del-rilascio.md`); nella lista non c'è «la Lavagna dell'atrio si vede e si apre», che avrebbe trovato V1 | [V] |
+
+Le proposte 8.1, 8.2, 8.3, 8.4, 8.6 e 8.9 risultano fatte per intero.
+
+### 9.5 Le prove eseguite
+
+Tutte al commit `5e6e881`, cartella senza modifiche in sospeso.
+
+| Passo | Esito | Tempo |
+|---|---|---|
+| `release:check` | passa (1.0.63 ovunque, timbri aggiornati) | 1 s |
+| `format:check` | passa | 4 s |
+| `npm test` | passano tutti i 40 file | 46 s |
+| `test:ui` | passa | 5 s |
+| `test:multiplayer-runtime` | passa (comprese numerazione delle sale, ping/pong e le quattro prove del balilla) | 21 s |
+| `test:simulator` | passa | 34 s |
+| `test:access` | passa | 1 s |
+| `test:table-runtime` | passa | 50 s |
+
+Passano tutti e otto. Questo conferma V9: il difetto V1 non fa fallire nessuna prova.
+
+Per il confronto con `main` ho aggiornato i riferimenti remoti con `git fetch` (non tocca i file né i rami locali). `main` è al commit `276a437`, versione 1.0.63.
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -1383,3 +1517,22 @@ Le due che non passano con l'orologio spostato (`access-runtime`, `simulator-run
 | 8.11 | Le spiegazioni messe nei `title` che servono davvero: scriverle anche sullo schermo, perché sul telefono non compaiono | U5 | telefono | piccolo |
 
 **Ordine consigliato per l'Area 8:** 8.1 e 8.2 (sono i due punti in cui chi gioca non capisce cosa succede). Poi 8.5 e 8.4, piccoli e molto visibili. Poi 8.3, che chiude tutti i comandi nascosti. Il resto quando capita.
+
+### Proposte per l'Area 9
+
+| # | Proposta | Risolve | Dove | Sforzo |
+|---|---|---|---|---|
+| 9.1 | Lavagna nella 3D: mettere la chiave nuova `lavagna-spazio-libero` nei cinque punti di `lobby3d.js` e nel colore di `games-catalog.js`. Va portata anche su `main` | V1 | tutti e due | piccolo |
+| 9.2 | Chiave dei giochi scritta nella scheda (`data-game` in `index.html`) invece che ricavata dal titolo; al primo avvio spostare stella e ordine salvati dalla chiave vecchia alla nuova | V1 | tutti e due | piccolo |
+| 9.3 | Prova nuova, senza grafica: legge `index.html` e `lobby3d.js` e controlla che ogni chiave usata dalla 3D abbia la sua scheda, e che nessuna scheda finisca tra i cabinati sconosciuti | V9 | prove | piccolo |
+| 9.4 | Bacheca della 3D: «Entra» chiude la 3D prima di aprire la partita, come fa un cabinato. Prima confermare a mano che oggi la partita resta sotto | V2 | tutti e due | piccolo |
+| 9.5 | Ricerca dei Giochi: descrizione vuota quando manca; un caso di prova con una scheda senza descrizione | V4 | tutti e due | piccolo |
+| 9.6 | Flipper: il server conferma inizio e punteggio, e il telefono li rimanda finché la conferma non arriva (oppure li rimanda dopo ogni riapertura per collegamento muto). Tempo massimo di 10 secondi per un collegamento che non finisce di aprirsi. Prove in `lobby-link.test.mjs` | V5 | telefono | piccolo |
+| 9.7 | Calcio balilla: «Stai già giocando da un altro dispositivo» sul secondo dispositivo; una prova nel server vero con la stessa persona da due collegamenti vivi | V6 | tutti e due | piccolo |
+| 9.8 | Telefono solo se il tocco è il puntatore principale, e disposizione a tocco al primo tocco vero; un solo punto che lo decide, usato da 3D, flipper, balilla e pagina dei comandi | V3 | computer | piccolo |
+| 9.9 | Finire la 8.10: 12 px minimi anche in Cinema, Giulio Simulator, Ruggine 89, Golf, Moto Trial e nella barra in alto della 3D. Guardare su un telefono stretto i tre riquadri a misura fissa di `app.css` | V7 | telefono | piccolo |
+| 9.10 | Finire la 8.8 e la 8.7: `simulator/server.js`, `blackboard-server.js`, `board.js` e `cinema-lobby.js` prendono le frasi da `messages.js`; via «Mini App» da `app.js:745` | V8 | tutti e due | piccolo |
+| 9.11 | Prove mancanti del balilla nel server vero: posto liberato dopo 30 secondi, un gol contato, fine partita. Posto tenuto 30 secondi con l'app nascosta. Giro dei 25 secondi spostato in `lobby-link.js` e provato con l'orologio finto | V10 | prove | medio |
+| 9.12 | Aggiungere ai controlli a mano prima del rilascio: la Lavagna dell'atrio si vede e si apre; «Entra» dalla bacheca; un giro con un portatile a schermo tattile. Aggiungere i quattro file nuovi a `format:check` | V1, V2, V3 | prove | piccolo |
+
+**Ordine consigliato per l'Area 9:** 9.1 subito, perché è in produzione (staging e poi `main` con versione +1), insieme alla 9.3 che impedisce che torni. Poi 9.4 e 9.5, che sono righe singole. Poi 9.2, 9.6 e 9.7. Il resto quando capita.

@@ -22,7 +22,12 @@ inspecting» nelle impostazioni avanzate di Telegram). Nella Console non devono 
       vista.
 - [ ] Si entra in ogni sala: atrio, Sala tavoli, sala giochi, sala biliardo, cinema. Luci accese, niente blocchi
       entrando.
+- [ ] Nell'atrio la Lavagna è appesa al muro, mostra il disegno e avvicinandosi si apre. In sala giochi non ci
+      sono cabinati con il nome in minuscolo (vuol dire che un gioco ha cambiato nome).
+- [ ] Bacheca della 3D: «Entra» su un avviso chiude la 3D e mostra la partita.
 - [ ] Il tasto «?» (e H sul computer) mostra i comandi giusti per quello che si sta facendo.
+- [ ] Se c'è a portata di mano un portatile con schermo tattile: usato con mouse e tastiera mostra i comandi del
+      computer.
 
 ## 3. Sedersi e sgabelli
 

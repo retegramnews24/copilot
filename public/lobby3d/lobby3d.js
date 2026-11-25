@@ -520,7 +520,7 @@ export function createLobby3D(app) {
   jb.position.set(17.9, 0, -5.55); scene.add(jb); solid(17.4, 18.4, -6, -5.2);
 
   // Card room beyond the north doorway. Aisles run between all nine tables.
-  const avail = new Set(app.games ? app.games() : [...ARCADE,...BOARD].map(a=>a[0]).concat(['cinema-streamer','blackboard-spazio-libero','biliardo']));
+  const avail = new Set(app.games ? app.games() : [...ARCADE,...BOARD].map(a=>a[0]).concat(['cinema-streamer','lavagna-spazio-libero','biliardo']));
   const walnut=std('#583828',.42), brassTrim=std('#c3a064',.32,.64), chairLeather=std('#773e36',.68);
   // sgabelli in pelle di tutti i colori (blender/sgabello.blend): quando ci si siede il pistone scende con un piccolo rimbalzo
   const stools=[],stoolColors=['#b3101a','#d2520a','#e0a412','#1f7a2a','#0f8a84','#1a3fa8','#5a1c8c','#d8456f'];
@@ -730,10 +730,10 @@ export function createLobby3D(app) {
     }
     paint.restore();if(packet.more)nextBoard=0;
   }
-  if(avail.has('blackboard-spazio-libero')){
+  if(avail.has('lavagna-spazio-libero')){
     box(.075,1.52,2.00,brassTrim,6.78,1.75,3.6);
     plane(1.91,1.433,new THREE.MeshBasicMaterial({map:artwork}),6.73,1.75,3.6,-Math.PI/2);
-    spots.push({x:6.65,z:3.6,hx:.12,hz:.95,pad:1,label:'Lavagna',act:()=>app.enterGallery?app.enterGallery(boardRoom):app.open('blackboard-spazio-libero')});
+    spots.push({x:6.65,z:3.6,hx:.12,hz:.95,pad:1,label:'Lavagna',act:()=>app.enterGallery?app.enterGallery(boardRoom):app.open('lavagna-spazio-libero')});
   }
   poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
@@ -1039,7 +1039,7 @@ export function createLobby3D(app) {
   // ========== SALA ARCADE (x -19…-7) ==========
   const list = ARCADE.filter(([k]) => avail.has(k));
   list.push(['ruggine-89','Ruggine 89','#ffb448']);
-  const known = new Set([...ARCADE,...BOARD].map(([key])=>key).concat(['ruggine-89','biliardo','blackboard-spazio-libero','cinema-streamer']));
+  const known = new Set([...ARCADE,...BOARD].map(([key])=>key).concat(['ruggine-89','biliardo','lavagna-spazio-libero','cinema-streamer']));
   for(const key of avail)if(key&&!known.has(key))list.push([key,key.replaceAll('-',' '),'#82becd']);
   let tableLevel=.8,tableRoomGain=0,tableBus=null;
   const tableVolume=volumeControl('Calcio balilla · tutti',null,.8,v=>{tableLevel=v;unlockCinemaSound()});
@@ -1856,7 +1856,7 @@ export function createLobby3D(app) {
     const audible=heard>.001 || target>.001;
     cinemaVolume.wrap.style.display=depth>0&&Math.abs(pos.x)<7&&previewKey?'flex':'none'; // solo dentro la Sala Cinema
     radioVolume.wrap.style.display=(Math.hypot(pos.x-counterX,pos.z-counterZ)<3)?'flex':'none';
-    if(avail.has('blackboard-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
+    if(avail.has('lavagna-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
       nextBoard=t+2;app.gallery?.({room:boardRoom,epoch:boardEpoch,since:boardSeq},drawGallery);
     }
     if(audibleZone!==audible){

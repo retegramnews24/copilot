@@ -30,7 +30,10 @@ export function matches(card, filter, query) {
   if (filter === 'together' && !k.together) return false;
   if (filter === 'turns' && !k.turns) return false;
   if (!query) return true;
-  const text = fold(card.querySelector('h3')?.textContent + ' ' + card.querySelector('p')?.textContent);
+  // the Golf card has no description: use an empty string, never the word "undefined"
+  const text = fold(
+    (card.querySelector('h3')?.textContent || '') + ' ' + (card.querySelector('p')?.textContent || '')
+  );
   return fold(query)
     .split(/\s+/)
     .filter(Boolean)

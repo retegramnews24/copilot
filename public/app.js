@@ -46,7 +46,8 @@ const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),
 const noticeGame=room=>games.find(g=>g.room===room&&ongoing(g));
 const chat=createChat({me:()=>identity,request,onError:err,refresh:()=>renderSocial()});
 // Lobby bell: personal notices (stored by the server, or made here), outside the chat (see notices.js).
-const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(g.game==='golf')golf.open(target);else if(g.game==='f1')f1.open(target);else if(g.game==='biliardo')biliardo.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
+// «Entra» from the 3D notice board: close the 3D first, like a cabinet does, or the game opens hidden under it (analisi 9.4)
+const openGameRoom=target=>{const g=noticeGame(target);if(!g)return;if(lobby3d?.active){lobby3d.hide();lobby3dBack=Date.now();lobby3dIdle=0}if(g.game==='golf')golf.open(target);else if(g.game==='f1')f1.open(target);else if(g.game==='biliardo')biliardo.open(target);else if(g.game==='pong')arcade.openPong(target);else if(g.game==='moto-trial')moto.open(target);else openRoom(target,false).then(()=>{if(room===target)selectPage('game')})};
 const notices=createNotices({me:()=>identity,isOpen:target=>!!noticeGame(target),open:openGameRoom});
 // Lobby B: chips for games and rooms, game notices inside the chat (see lobby-chips.js).
 createLobbyChips({notice:item=>notices.add(item)});
