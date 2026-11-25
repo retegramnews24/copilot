@@ -420,6 +420,7 @@ export class Room extends DurableObject {
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
           pair[1].serializeAttachment({
+            opened: Date.now(),
             memberId: userOf(req)?.id,
             accessTag: req.headers.get('X-Access-Tag'),
             expires: Number(req.headers.get('X-Session-Expires')),

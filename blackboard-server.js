@@ -147,7 +147,7 @@ export class Blackboard {
     const {0:client, 1:socket} = new WebSocketPair();
     this.ctx.acceptWebSocket(socket, [TAG]);
     socket.serializeAttachment({
-      expires:Number(request.headers.get('X-Session-Expires')), kind:TAG, player:user.player, name:user.name.slice(0, 45), accessTag, legacy, room:null,
+      opened:Date.now(), expires:Number(request.headers.get('X-Session-Expires')), kind:TAG, player:user.player, name:user.name.slice(0, 45), accessTag, legacy, room:null,
       canPlay:!legacy && query.get('pictionary') === '1',
       outfit:normalizeAppearance({shirt:query.get('shirt'), shorts:query.get('shorts')})
     });

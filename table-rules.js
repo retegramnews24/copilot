@@ -78,6 +78,9 @@ export function publicTable(s, viewer = null, limit = TURN_LIMIT) {
 // A new table: creator seated; against the AI or in a tutorial the bots are seated and the game starts.
 export function newTable(room, b, token) {
   const game = b.game ?? 'chess';
+  // un solo orologio per le due date: con due letture, se in mezzo scattava il millisecondo, la scadenza non era a
+  // 7 giorni esatti dalla creazione (e la prova falliva una volta ogni tanto)
+  const now = Date.now();
   const s = {
     room,
     number: b.number || null,
@@ -90,8 +93,8 @@ export function newTable(room, b, token) {
     game,
     mode: b.mode ?? 'people',
     chess: null,
-    created: Date.now(),
-    expires: Date.now() + 7 * 86400000
+    created: now,
+    expires: now + 7 * 86400000
   };
   switch (game) {
     case 'naval':

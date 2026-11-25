@@ -22,6 +22,16 @@ export function makeRoomFor(ctx, person, kind = null, limit = PER_PERSON) {
       return false;
     }
   });
+  // dal più vecchio (opened: quando è stato aperto). L'elenco di getWebSockets() non è in ordine di apertura: prima
+  // si chiudeva un collegamento qualsiasi della persona invece del più vecchio
+  const opened = ws => {
+    try {
+      return ws.deserializeAttachment()?.opened ?? 0;
+    } catch {
+      return 0;
+    }
+  };
+  mine.sort((x, y) => opened(x) - opened(y));
   for (const ws of mine.slice(0, Math.max(0, mine.length - limit + 1)))
     try {
       ws.serializeAttachment({ ...ws.deserializeAttachment(), closed: true }); // già fuori dal conto

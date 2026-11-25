@@ -9,6 +9,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 4: fisica e regole dei giochi**, letta sul commit `dbb8d06` (dopo i commit «Lobby 3D (analisi Fable, area 3…)»).
 - **Area 5: qualità del codice**, letta sul commit `ba287b1` (dopo i commit del calcio balilla del 25 novembre).
 - **Area 6: staging contro main**, fatta il 25 novembre 2026 confrontando `staging` al commit `a7a56b9` con `main` al commit `a615b09` (versione 1.0.60).
+- **Area 7: prove** e **Area 8: esperienza d'uso**, fatte il 25 novembre 2026 su `staging` al commit `ed88d2a` (versione 1.0.61, Labyrinth e Sprint già tolti).
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -29,6 +30,49 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 8 (esperienza d'uso)
+
+**Come leggere quest'area.** Ho letto le scritte e il codice dei comandi, e ho raccolto con un programma tutte le scritte visibili (1.092) e tutti i messaggi d'errore (353). **Non ho guardato l'app su un telefono né su Telegram Desktop**: quello che il codice mostra o non mostra è **[V]**; come appare davvero è da controllare a occhio. Il codice distingue solo «telefono» e «computer», mai Android da iPhone: le differenze tra i due sono quelle tecniche dell'Area 3.
+
+| # | Problema | Dove si sente | Gravità | Stato |
+|---|---|---|---|---|
+| U1 | Calcio balilla senza nessuna scritta di stato: non dice se sei seduto, se il lato è pieno, se la partita è in pausa, a chi tocca la pallina | telefono e computer | media | [V] |
+| U2 | I messaggi d'errore finiscono sotto la Lobby 3D, che dopo un secondo e mezzo si riapre da sola e li copre. Nella 3D non c'è nemmeno il segno «collegamento perso» | telefono e computer | media | [V] |
+| U3 | Comandi che non si possono scoprire: tasti dei flipper, del balilla, dello sgabello, di Pong; e il mouse «agganciato» che si libera con Esc senza che sia scritto | computer | media | [V] |
+| U4 | Scritte da tastiera mostrate sul telefono: «PREMI E PER GIOCARE» sui flipper, «Prendi · G», «↑ W», «↓ S» sui tasti dello sgabello | telefono | media | [V] |
+| U5 | Comandi del telefono senza nome o spiegazione: i due pad ↕ e 🔍 del balilla, la «Taratura» con numeri grezzi, la zona della leva del flipper non segnata | telefono | media-bassa | [V] |
+| U6 | Nomi diversi per la stessa cosa: Settings e Impostazioni, Blackboard e Lavagna, tavolo/sala/stanza/partita/gara, tre modi di dire «non tocca a te» | telefono e computer | media-bassa | [V] |
+| U7 | Al balilla su computer Esc libera il mouse ma ti fa anche alzare dal tavolo | computer | media-bassa | [V] |
+| U8 | Con la 3D aperta il tasto Tab porta sui tasti della pagina sotto, che non si vedono | computer | bassa | [V] |
+| U9 | Inglese rimasto: «Settings», «Debug», «Live», «Blackboard», «DNS unavailable»; messaggi tecnici («WebSocket richiesto.») e generici («Richiesta non valida.») | telefono e computer | bassa | [V] |
+| U10 | Caratteri piccoli (288 punti sotto i 12 px, fino a 7 px nel Simulator) e un testo di Informazioni non più vero | telefono e computer | bassa | [V] |
+
+Il dettaglio è nella sezione «Area 8: esperienza d'uso», più sotto.
+
+---
+
+## I problemi più importanti dell'Area 7 (prove)
+
+**Come leggere quest'area.** Ho letto le prove e le ho fatte girare molte volte in condizioni diverse (fuso orario, computer occupato, date particolari, ripetizioni). **[P]** = provato facendole girare. Niente è stato modificato; i programmi che le lanciano sono fuori dal repo.
+
+**In breve:** le prove sono tante e solide: 61 file, circa 2.280 controlli, tutti gli 8 passi passano in circa due minuti e mezzo. In 1.331 esecuzioni ripetute ne è fallita a caso una sola. Il buco vero è quello che non ha prove: il 40% del codice del telefono, quasi tutto 3D.
+
+| # | Problema | Gravità | Stato |
+|---|---|---|---|
+| T1 | Una prova fallisce a caso circa 2 volte su 100 (`tests/table-rules.test.js`), nel passo «Test principali»: può bloccare una pubblicazione su `main` senza che ci sia un errore | media | [V] [P] |
+| T2 | La numerazione di tavoli e sale non ha più prove: erano dentro la parte di Labyrinth | media | [V] |
+| T3 | Il 40% del codice del telefono non ha nessuna prova (53 file, 923 KB): tutta la Lobby 3D, le scene 3D e i programmi principali di Biliardo e F1, Acquedotto, Ruggine, la radio | media | [V] |
+| T4 | Il collegamento della Lobby non è provato: né il «ping» sul server, né la riapertura sul telefono | media | [V] |
+| T5 | Calcio balilla a più giocatori provato solo con collegamenti finti dentro il modulo: mai attraverso il server vero, mai il ripristino dopo una pausa del server | media-bassa | [V] |
+| T6 | Lavagna quasi senza prove; fisica del flipper Binotto GT senza prove | media-bassa | [V] |
+| T7 | Prove che dipendono dai tempi veri: una ha 10 millisecondi di margine. Oggi reggono anche a computer occupato | bassa | [V] [P] |
+| T8 | Due prove a copione unico (253 e 320 controlli in fila): il primo errore nasconde tutti gli altri. Una ha ancora il nome di Labyrinth | bassa | [V] |
+| T9 | Le partite complete usano il caso vero: se una fallisce non si può rifare uguale | bassa | [V] |
+
+Il dettaglio è nella sezione «Area 7: prove», più sotto.
 
 ---
 
@@ -801,7 +845,7 @@ I programmi di prova sono rimasti fuori dal repo. Sono piccoli e ripetibili (ste
 **Q6. Labyrinth: ritirato ma tutto presente** — media-bassa, [V]
 
 - **Dove:** `public/labyrinth/` (190 KB), `labyrinth-server.js` ed `expedition-model.js` (22 KB), sei file di prove (92 KB), più `public/labyrinth-link.js`.
-- **Stato:** il codice lo chiama «the retired Labyrinth» (`lobby-hub.js:542`) e si apre solo in modalità sviluppo (`public/settings.js:111`). Però cinque delle 42 prove di `npm test` sono sue, e il passo della CI `test:multiplayer-runtime` prova solo lui.
+- **Stato:** il codice lo chiama «the retired Labyrinth» (`lobby-hub.js:542`) e si apre solo in modalità sviluppo (`public/settings.js:111`). Però cinque delle 42 prove di `npm test` sono sue. **Correzione (Area 7):** avevo scritto che il passo della CI `test:multiplayer-runtime` provava solo Labyrinth. Era sbagliato: quel file (`tests/expedition-runtime.test.js`) ha il nome vecchio di Labyrinth ma prova tutti i giochi in diretta (tavoli, Pong, Moto Trial, Golf, Cinema); di Labyrinth aveva solo una trentina di righe.
 - **Cosa decidere:** o torna un gioco vero, o esce dal repo (resta nella storia di git). Tenerlo a metà costa tempo a ogni controllo prima di `main`.
 
 ### 5.4 Coerenza tra moduli
@@ -979,6 +1023,203 @@ Va tolto del tutto. È solo su staging, in questi punti (numeri di riga di stagi
 
 ---
 
+## Area 7: prove
+
+### 7.1 Cosa coprono gli 8 passi della CI
+
+Tempi misurati su questo computer; tutti passano.
+
+| # | Passo | Cosa controlla | File | Tempo |
+|---|---|---|---|---|
+| 1 | `release:check` | lo stesso numero di versione in sei punti e i timbri `?v=` aggiornati | — | 1 s |
+| 2 | `format:check` | la formattazione di 54 file scelti a mano (un terzo del codice, vedi Area 5) | — | 2 s |
+| 3 | `npm test` | regole di tutti i giochi da tavolo con partite complete; limiti e controlli del server (accessi, collegamenti, grandezza delle richieste, risultati, errori); calcio balilla, flipper, biliardo, F1, golf, Moto Trial; avvisi dei turni; radio; piccoli moduli della pagina | 36 | 49 s |
+| 4 | `test:ui` | la pagina principale dentro un browser finto: Scopa, tutorial, avvio di Moto Trial e Golf, classifica | 1 (320 controlli) | 5 s |
+| 5 | `test:simulator` | Binotto Simulator: fisica, sessioni, campionato, sponsor, avvisi, interfaccia | 17 | 32 s |
+| 6 | `test:access` | 13 percorsi rifiutano accessi falsi, sessioni scadute, chi non è del gruppo | 1 | 1 s |
+| 7 | `test:table-runtime` | dentro il server vero impacchettato: tavoli contro il computer, orologio dei turni, backup, F1, Biliardo | 5 | 46 s |
+| 8 | `test:multiplayer-runtime` | dentro il server vero: spettatori, Forza 4, UNO, Scarabeo, navale, Briscola, Moto Trial, Pong, Number Connect, Cinema, Golf | 1 (253 controlli) | 8 s |
+
+In tutto 61 file di prove e circa 2.280 controlli, in poco meno di due minuti e mezzo.
+
+**Cosa non coprono per costruzione:** niente gira in un browser vero né dentro Telegram; niente guarda cosa si vede sullo schermo; su `staging` la CI non parte (voluto).
+
+### 7.2 Prove fragili
+
+**T1. Una prova fallisce a caso** — media, [V] [P]
+
+- **Dove:** `tests/table-rules.test.js:24` (`assert.equal(own.uno.hand.length, 7)`).
+- **Cosa succede:** la prova crea un tavolo di UNO contro il computer e si aspetta 7 carte in mano. Ma il mazzo è mescolato a caso: se la prima carta scoperta è un «+2», il primo giocatore ne pesca due e ne ha 9.
+- **Prova:** 150 esecuzioni di fila, 3 fallite, tutte con «actual: 9». È fallita anche una volta durante le mie prove sui fusi orari.
+- **Quando pesa:** è nel passo «Test principali». Circa una pubblicazione su 50 verso `main` trova la croce rossa su GitHub, e il cancello di pubblicazione di Cloudflare si ferma, senza che ci sia niente di rotto.
+- **Aggiornamento del 25 novembre 2026: corretta su `staging`** (non ancora in un commit). Le cause erano due:
+  - le carte di UNO: la prova ora accetta 7 carte, o 9 dopo un «+2» d'apertura, e controlla che la mano mostrata sia quella del server;
+  - una seconda, più rara (2 volte su 400), scoperta ripetendo la prova: `table-rules.js` leggeva l'orologio due volte per «creato» e «scade», e se in mezzo scattava il millisecondo la scadenza non era a 7 giorni esatti (`tests/table-rules.test.js:10`). Ora l'orologio si legge una volta sola.
+  - Dopo: 1000 esecuzioni di fila, nessun fallimento.
+
+**T7. Prove che aspettano tempi veri** — bassa, [V] [P]
+
+- `tests/lobby-presence.test.mjs`: aspetta 210 e 260 millisecondi un invio che parte dopo 200. Dieci millisecondi di margine.
+- `tests/simulator-runtime.test.js`: quattro attese da 1,6 a 3,5 secondi. `tests/ui-scopa.test.mjs`: 22 attese fino a 1,2 secondi. `tests/simulator-ui.test.js`: 20 attese fino a 0,55 secondi. `tests/table-ai-runtime.test.js` e `tests/turn-clock-runtime.test.js`: orologio dei turni accorciato ma vero.
+- **Prova:** fatte girare tre volte, dodici alla volta (computer molto occupato): 165 esecuzioni, nessun fallimento. Oggi reggono; il rischio è su una macchina di CI più lenta.
+
+**T8. Prove a copione unico** — bassa, [V]
+
+- `tests/expedition-runtime.test.js` (253 controlli) e `tests/ui-scopa.test.mjs` (320) sono un solo copione ciascuna, con un solo server finto o una sola pagina che passa da una parte all'altra. Se un controllo all'inizio fallisce, tutto il resto non gira e non si sa se è rotto.
+- `expedition-runtime` ha ancora il nome di Labyrinth e, senza argomento, cerca il server in `/tmp/labyrinth-…`, un percorso che su Windows non esiste.
+
+**T9. Partite complete con il caso vero** — bassa, [V]
+
+- Scopa (90 partite), UNO (72), Forza 4 (600), battaglia navale (60), Briscola (240) vengono giocate fino in fondo con mescolate casuali vere. È un ottimo controllo, ma se un giorno una fallisce non c'è un seme da cui rifarla uguale. È la stessa radice di T1.
+
+**Cosa ho provato per cercare fragilità [P]**
+
+| Prova | Quanto | Esito |
+|---|---|---|
+| Tutte le prove, 25 volte l'una | 1.331 esecuzioni | nessun fallimento |
+| `table-rules.test.js` da sola | 150 esecuzioni | 3 fallimenti (T1) |
+| Tre fusi orari (Pacifico +14, Los Angeles, UTC) | 165 esecuzioni | un solo fallimento, quello a caso di T1 |
+| Computer occupato: 12 prove insieme, 3 giri | 165 esecuzioni | nessun fallimento; la più lenta 34 s (`biliardo.test.js`) |
+| Orologio spostato su 5 date (cambio dell'ora di marzo e ottobre, Capodanno, domenica notte, 29 febbraio) | 275 esecuzioni | 53 file su 55 passano sempre |
+
+Le due che non passano con l'orologio spostato (`access-runtime`, `simulator-runtime`) non sono fragili: usano il server vero, che tiene l'orologio giusto mentre la prova lo aveva spostato. Con questo metodo non si possono giudicare.
+
+**Dipendenza dal sistema:** non ne ho trovate di attive. Gli a capo di Windows sono gestiti dove servono (`tests/simulator-layout.test.js:15`). I passi 7 e 8 hanno bisogno di `wrangler` per impacchettare il server: **[S]** senza rete potrebbero non partire.
+
+### 7.3 Zone importanti senza prove
+
+**T2. Numerazione di tavoli e sale** — media, [V]
+
+- **Dove:** `lobby-hub.js:497-499` (il primo numero libero) e `:586` (il numero resta quando la sala si aggiorna).
+- **Cosa c'era:** nella parte di Labyrinth di `expedition-runtime.test.js`, tolta con il commit `49bfc59`, c'erano i controlli «la prima sala è la 1, la seconda la 2; cancellata la 1, due sale create nello stesso istante prendono 1 e 3; la 2 resta 2». Era l'unico punto che provava due creazioni contemporanee e il riuso dei numeri.
+- **Oggi:** nessuna prova. Se la numerazione si rompe (due sale con lo stesso numero, numeri che crescono senza fine) non se ne accorge nessuno.
+
+**T3. Il 40% del codice del telefono** — media, [V]
+
+- 53 file sorgenti su 165 non sono toccati da nessuna prova: 923 KB su 2.337.
+- **I più grandi:** `public/lobby3d/lobby3d.js` (143 KB), `public/gara/scene3d.js` (127), `public/biliardo/scene3d.js` (49), `public/arcade/acquedotto.js` (48), `public/biliardo/main.js` (46), `public/gara/main.js` (40), `public/lobby3d/flipper3d.js` (36), `public/radio.js` (35), `public/lobby3d/balilla.js` (29).
+- **Tutta la Lobby 3D** è qui: scena, comandi, sgabelli, cinema, mixer, flipper e balilla visti dal telefono.
+- **Anche pezzi piccoli ma delicati:** i collegamenti dei giochi (`f1-link.js`, `biliardo-link.js`, `golf-link.js`, `moto-link.js`), `public/games-catalog.js`, `public/settings.js`, `public/splash/intro.js`, e i due moduli nuovi `public/frame-errors.js` e `public/haptic.js`.
+- **Perché è così:** il 3D non gira senza scheda grafica, e la Lobby 3D è una funzione sola (Area 5, Q1): non c'è niente di piccolo da provare.
+
+**T4. Collegamento della Lobby** — media, [V]
+
+- **Sul server:** la risposta al «ping» (`worker.js:710-712`) non è provata da nessuna prova. Sono provati il tetto di 3 collegamenti a persona e l'invio delle presenze.
+- **Sul telefono:** la logica «riapri solo se chiuso o muto», il ping ogni 25 secondi e la coda dei messaggi del flipper stanno dentro `public/app.js` e non si possono provare da soli.
+- **Quando pesa:** è il pezzo che ha causato i problemi C, D ed E dell'Area 2. Una modifica che lo rompe si vede solo dentro Telegram.
+
+**T5. Calcio balilla a più giocatori** — media-bassa, [V]
+
+- **Cosa c'è:** tre file (`balilla-bar`, `balilla-serve`, `seat-grace`), 61 controlli, con collegamenti finti dentro `BalillaHub`. Coprono: ingresso, due posti per lato, lato pieno, rimessa, pausa se uno tace, posto ripreso, posti fantasma.
+- **Cosa manca:** i comandi di ognuno sulla propria coppia di aste quando c'è un compagno; il ripristino dei posti dopo una pausa del server (`restore`); tutto il giro vero, cioè i messaggi `balilla` che passano da `worker.js`, l'obbligo di essere nel club, l'app nascosta per 30 secondi.
+
+**T6. Altre zone** — media-bassa, [V]
+
+- **Lavagna:** `blackboard-server.js` (22 KB) ha prove solo su chi può cancellare e sui limiti. Entrare, disegnare, cancellare, indovinare a Pictionary: niente.
+- **Flipper Binotto GT:** `public/flipper/physics-gt.js` non è importato da nessuna prova. `tests/physics-edges.test.mjs` prova solo il Grand Prix.
+- **Sgabelli e classifica del flipper:** provati come moduli, mai attraverso i messaggi veri del collegamento.
+- **Solo dentro il server impacchettato**, senza prove dirette: `worker.js`, `backup.js`, `pong-server.js`, `moto-trial-server.js`, `table-strategy.js`, `telegram-bot.js`. Va bene così, ma un errore lì si legge male.
+
+### 7.4 Cose fatte bene
+
+- Ogni gioco da tavolo viene giocato fino in fondo centinaia di volte.
+- Il server vero impacchettato viene acceso nelle prove: non solo i pezzi, anche l'insieme.
+- Le correzioni delle aree 1-6 hanno ognuna la sua prova (`absent-players`, `seat-grace`, `server-failure`, `physics-edges`, `arcade-result`, `abuse-limits`…).
+- `npm test` ora trova da solo i file e li elenca tutti se falliscono.
+- Nessuna dipendenza dal fuso orario o dalla data, nemmeno nei giorni del cambio dell'ora.
+
+---
+
+## Area 8: esperienza d'uso
+
+### 8.1 Telefono e computer insieme
+
+**U1. Calcio balilla senza scritte di stato** — media, [V]
+
+- **Dove:** `public/lobby3d/balilla.js` (funzione `receive`: quando arriva lo stato dal server non scrive più niente; il pannello che lo faceva è stato tolto con la pulizia dell'Area 5), `:409` (l'unica scritta rimasta, «ATTACCO» o «DIFESA», è dentro il pad del telefono).
+- **Cosa non viene detto:** se sei seduto o stai solo guardando; se il lato è pieno; se la partita è in pausa perché un giocatore non si fa sentire; a chi tocca far uscire la pallina; il punteggio, che si legge solo sulle palline del segnapunti.
+- **Quando:** ti avvicini al tavolo con due persone già dal tuo lato e premi «Gioca». La vista va sul tavolo, le aste non rispondono e niente ti dice perché.
+- **Su computer in più:** non c'è scritto nemmeno quale coppia di aste comandi. Lo dice solo il colore ottone delle manopole.
+
+**U2. Messaggi d'errore sotto la Lobby 3D** — media, [V]
+
+- **Dove:** `public/app.js:143` (`err` scrive nel riquadro `#error` della pagina classica), il foglio di stile in testa a `public/lobby3d/lobby3d.js` (la 3D copre tutta la pagina), `public/app.js:74` e `:123` (se la Lobby classica è libera, dopo due controlli a 0,7 secondi la 3D si riapre da sola; il controllo non guarda se c'è un errore mostrato).
+- **Quando:** dalla 3D apri un tavolo di scacchi ma ne hai già uno aperto. La 3D si chiude, compare «Hai già un tavolo aperto di questo gioco: lo trovi nella campanella», e dopo un secondo e mezzo la 3D torna e lo copre. Lo stesso per «Troppe connessioni», «Hai aperto troppi tavoli di fila» e ogni errore di apertura.
+- **Collegamento perso:** la scritta «● In diretta / Riconnessione…» è solo nella Lobby classica. Nella 3D, se il collegamento cade, gli altri personaggi si fermano e niente lo dice.
+
+**U6. Nomi diversi per la stessa cosa** — media-bassa, [V]
+
+- **Settings e Impostazioni:** la scheda e i tasti «‹ Settings» nell'app; «Impostazioni» sull'avviso della lavagna nella 3D; «⚙ Settings» disegnato sulla lavagna (`public/lobby3d/textures.js`).
+- **Blackboard e Lavagna:** «Sale Blackboard», «Blackboard spazio libero» nell'app; «Lavagna» nella 3D e nei messaggi.
+- **Tavolo, sala, stanza, partita, gara:** «Stanza inesistente o scaduta.», «La sala Pong è stata chiusa.», «Partita chiusa.», «Gara chiusa.», «Questa sala è stata chiusa.» per dire la stessa cosa.
+- **Il turno:** «Non tocca a te.», «Non è il tuo turno.», «Non è il tuo turno di tiro.».
+- **L'accesso:** cinque frasi diverse per «riapri l'app da Telegram».
+
+**U9. Inglese rimasto e messaggi poco chiari** — bassa, [V]
+
+- **Inglese nell'app:** «Settings», «Debug», «Live», «Blackboard», «Mini App». Nei flipper il gergo è voluto (Pit stop, Safety car, Jackpot, Multiball, Tilt). I nomi dei giochi in inglese sono nomi.
+- **Un messaggio in inglese:** «DNS unavailable» (`radio-dns.js:12`).
+- **Tecnici:** «WebSocket richiesto.» in quattro file; «BOT_TOKEN mancante.» (lo vede solo chi amministra).
+- **Generici:** «Richiesta non valida.» e «Operazione non disponibile.», 11 volte in tutto: non dicono cosa è andato storto né cosa fare.
+- **Il resto è buono:** su 353 messaggi d'errore, 267 diversi, quasi tutti in italiano semplice e con il motivo.
+
+**U10. Caratteri piccoli e un testo vecchio** — bassa, [V]
+
+- 288 punti con caratteri sotto i 12 px: 128 nel cruscotto del Simulator (fino a 7 px), 55 nel resto del Simulator, 47 in `public/app.css` (fino a 9,5 px), 19 nel Cinema, 18 in Giulio Simulator. Nella 3D le barre dei flipper sono a 11 px.
+- C'è la scelta «Dimensione del testo» in Settings, che ingrandisce tutta la pagina (`public/settings.js:15`), 3D compresa: bene. Ma arriva al massimo a 1,25 volte: 7 px diventano 9.
+- **Testo di Informazioni non più vero:** «La Lobby mostra nome, username e foto forniti da Telegram» (`public/index.html:62`). Dopo le correzioni dell'Area 1 lo username non viene più mandato agli altri.
+
+### 8.2 Telefono (Android e iPhone dentro Telegram)
+
+**U4. Scritte da tastiera sul telefono** — media, [V]
+
+- **Flipper:** il display dice «PREMI E PER GIOCARE» (`public/lobby3d/flipper3d.js:145`), «E PER GIOCARE · 5 PALLINE» (`:818`, `:829`), «E per giocare» (`:793`) e a fine partita «S per ricominciare» (`:785`). Sul telefono non ci sono né E né S: si gioca con il tasto d'azione e si ricomincia toccando.
+- **Sgabello:** i tasti sul telefono si chiamano «Prendi · G», «Posa · G», «↑ W», «↓ S» (`public/lobby3d/lobby3d.js:570-571`, `:604`). Le lettere sono i tasti della tastiera.
+- **Fatto bene altrove:** il tasto d'azione aggiunge «(E)» solo su computer (`lobby3d.js:1734-1736`), e «Vista dagli occhi (V)» perde la lettera sul telefono (`:1283-1284`).
+
+**U5. Comandi senza nome o spiegazione** — media-bassa, [V]
+
+- **Balilla:** i due pad per inclinare la vista e per lo zoom mostrano solo «↕» e «🔍» (`balilla.js:248`, `:251`) e non hanno un nome per chi usa la lettura dello schermo. L'ingranaggio apre una «Taratura» con numeri grezzi («Pad: scorrimento 1.00», `:263` e seguenti).
+- **Flipper:** la leva si tira tenendo premuto in basso al centro, ma la zona non è disegnata: ci sono solo tre barre con le scritte. La scossa non c'è (Area 3).
+- **Spiegazioni invisibili:** 28 punti del codice mettono la spiegazione nel `title`, che compare passando il mouse. Sul telefono non compare mai.
+- **Barra in alto:** sotto i 520 punti di larghezza i tasti si restringono e il testo viene tagliato con i puntini (regola `@media (max-width:520px)` nel foglio di stile di `lobby3d.js`): «✕ Lobby classica» e «Vista dagli occhi» possono non leggersi per intero. **[S]** Da guardare su un telefono stretto.
+
+**Android e iPhone:** nelle scritte non c'è differenza. Le differenze note sono tecniche e stanno nell'Area 3: volumi su iPhone, tasto del silenzioso, tastiera sopra la chat della bacheca, voce del flipper assente su Android.
+
+### 8.3 Computer (Telegram Desktop)
+
+**U3. Comandi che non si possono scoprire** — media, [V]
+
+- **Dove sono spiegati:** solo in Settings → Personaggio e pallina → «Comandi della Lobby 3D» (`public/index.html:62`): camminare, guardarsi intorno, aprire, abbassarsi, colpo, parata, sedersi. Sullo schermo della 3D non c'è niente (l'avviso iniziale è stato tolto).
+- **Cosa manca del tutto, anche in Settings:**
+  - **Flipper:** Z e M (o Maiuscole, o frecce) per i flipper; S, freccia giù o Invio per la leva; Spazio per la scossa. La riga d'aiuto sotto il flipper (`flipper3d.js:446`) parla di «tocco breve» e di «Spazio scossa», ma non dice quali tasti muovono i flipper.
+  - **Calcio balilla:** Q cambia coppia, 1 e 2 la scelgono, Spazio fa uscire la pallina, E lascia il tavolo, + e − cambiano la sensibilità.
+  - **Sgabello:** G lo prende e lo posa, W e S lo alzano e abbassano, Spazio molleggia. (G compare nel tasto d'azione, il resto no.)
+  - **Pong del cabinato:** I e K (compare solo dopo averlo acceso).
+  - **Bacheca:** Esc per tornare a camminare.
+- **Mouse agganciato:** il primo clic nella 3D aggancia il mouse alla vista (`lobby3d.js:1546-1548`). Per liberarlo serve Esc, ma non è scritto da nessuna parte. Finché è agganciato non si possono toccare i cursori del volume né i tasti in alto.
+
+**U7. Al balilla Esc ti fa alzare** — media-bassa, [V]
+
+- **Dove:** `balilla.js:378-385`: quando il mouse si sgancia mentre la finestra è attiva, il tavolo si chiude.
+- **Quando:** stai giocando, premi Esc per liberare il mouse (per esempio per abbassare il volume): perdi il posto.
+
+**U8. Tab finisce sotto la 3D** — bassa, [V]
+
+- La 3D copre la pagina classica ma non la spegne (nessun `inert`). Con Tab il fuoco passa ai tasti della pagina sotto, che non si vedono; Invio li preme.
+- **Lettura dello schermo:** la 3D è un disegno, senza descrizioni. L'uscita però c'è ed è il primo tasto: «✕ Lobby classica», con il suo nome.
+
+### 8.4 Cose fatte bene
+
+- Quasi tutto è in italiano semplice: su 1.092 scritte raccolte, le sospette in inglese sono 11, quasi tutte nomi.
+- Gli errori del server dicono quasi sempre il motivo e spesso cosa fare.
+- Tutte le pagine hanno la lingua dichiarata; nessun tasto delle pagine è senza nome; gli errori della pagina classica sono annunciati (`role="alert"`).
+- Il fuoco da tastiera si vede (21 regole `:focus-visible`), e chi ha chiesto meno animazioni viene rispettato in 10 punti.
+- I tasti del telefono nella 3D sono grandi (46-58 punti) e rispettano i margini sicuri.
+- La pagina dei comandi in Settings esiste ed è scritta bene: va solo completata.
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -1104,3 +1345,41 @@ Va tolto del tutto. È solo su staging, in questi punti (numeri di riga di stagi
 | 6.10 | Un controllo ripetibile: un piccolo programma che elenca le differenze tra i due rami lasciando fuori versione e timbri. Dopo 6.1-6.7 deve dire «nessuna differenza»; da lì in poi ogni riga che compare è una modifica ancora da portare | tutti | piccolo |
 
 **Ordine consigliato per l'Area 6:** 6.1 su staging. Poi, in un solo commit su `main` con versione +1, le 6.2, 6.3, 6.4, 6.5 e 6.6. Poi 6.7 su staging. A quel punto i due rami sono uguali, e la 6.10 serve a tenerli così. Le 6.8 e 6.9 sono decisioni tue e non bloccano il resto.
+
+### Proposte per l'Area 7 (prove nuove, in ordine di utilità)
+
+| # | Proposta | Risolve | Sforzo |
+|---|---|---|---|
+| 7.1 | Rendere certa `table-rules.test.js`: mazzo con seme fisso, oppure accettare 7 o 9 carte spiegando perché. Nelle prove a partite complete usare un seme e stamparlo quando falliscono | T1, T9 | piccolo |
+| 7.2 | Numerazione di tavoli e sale, nel server vero: la prima è la 1, la seconda la 2; cancellata la 1, due creazioni nello stesso istante prendono 1 e 3; il numero resta dopo un aggiornamento. Con sale di Pong o Golf al posto di Labyrinth | T2 | piccolo |
+| 7.3 | Collegamento della Lobby, lato server: «ping» → «pong», quarto collegamento della stessa persona che chiude il più vecchio, app nascosta e posto tenuto 30 secondi. Nel server vero | T4 | piccolo |
+| 7.4 | Collegamento della Lobby, lato telefono: spostare la logica (riapri solo se chiuso o muto, ping ogni 25 secondi, coda dei messaggi) in un modulo piccolo e provarlo con un collegamento finto e un orologio finto | T4 | medio |
+| 7.5 | Calcio balilla attraverso il server vero, con quattro telefoni finti: due per lato, ognuno muove solo la sua coppia, pausa se uno tace, posto ripreso da una connessione nuova, server messo in pausa e riacceso con i posti al loro posto | T5 | medio |
+| 7.6 | Flipper: i casi limite del Binotto GT (cancelletto, tre rampe, box) e partite a caso con seme fisso su tutti e due i tavoli, dai programmi dell'Area 4 | T6 | piccolo |
+| 7.7 | Lavagna nel server vero: entrare, disegnare, cancellare, eliminare solo la propria, indovinare a Pictionary | T6 | medio |
+| 7.8 | Collegamenti di F1 e Biliardo sul telefono: richiesta di stato che fallisce → «Collegamento perso», sessione scaduta, ritorno della rete. Con una rete finta | T3 | piccolo |
+| 7.9 | Sgabelli e classifica del flipper attraverso i messaggi veri del collegamento (non solo i moduli) | T6 | piccolo |
+| 7.10 | Dividere le due prove a copione unico in parti che falliscono da sole; rinominare `expedition-runtime` in `multiplayer-runtime` | T8 | piccolo |
+| 7.11 | `lobby-presence`: orologio finto al posto delle attese vere | T7 | piccolo |
+| 7.12 | Lobby 3D: man mano che si divide in moduli (proposta 5.8), provare le parti senza grafica: urti con i muri, gradini del cinema, sala e luci, primo posto libero, posa mandata al server. Per il resto una lista di controlli a mano da fare prima di ogni rilascio (camminare in ogni sala, sedersi, flipper, balilla in due, cinema) | T3 | medio |
+| 7.13 | Un nono passo facoltativo, non bloccante: partite a caso lunghe di balilla e biliardo con seme fisso (Area 4) | T3 | piccolo |
+
+**Ordine consigliato per l'Area 7:** 7.1 subito (oggi una pubblicazione su 50 si ferma per niente). Poi 7.2 e 7.3, che rimettono le prove perse e coprono il punto più delicato. Poi 7.5 e 7.6. La 7.4 e la 7.12 vanno insieme al riordino del codice dell'Area 5.
+
+### Proposte per l'Area 8
+
+| # | Proposta | Risolve | Dove | Sforzo |
+|---|---|---|---|---|
+| 8.1 | Calcio balilla: una riga di stato sempre visibile mentre sei al tavolo: «Rossi · attacco», «Lato pieno: stai guardando», «In pausa: aspettiamo Anna», «Tocca a te far uscire la pallina», e il punteggio in cifre | U1 | tutti e due | piccolo |
+| 8.2 | Mostrare gli errori dentro la 3D (un avviso in alto che resta qualche secondo), e non riaprire la 3D finché c'è un errore mostrato sotto. Un segno «Riconnessione…» nella 3D quando il collegamento cade | U2 | tutti e due | piccolo |
+| 8.3 | Un tasto «?» nella 3D che mostra i comandi di quello che stai facendo (camminare, flipper, balilla, sgabello, Pong), diversi per telefono e computer. Completare la pagina dei comandi in Settings con le stesse righe | U3, U5 | tutti e due | medio |
+| 8.4 | Sul computer, al primo clic che aggancia il mouse: un avviso breve «Esc libera il mouse». Al balilla, Esc libera il mouse senza far alzare; ci si alza con E | U3, U7 | computer | piccolo |
+| 8.5 | Scritte giuste per il dispositivo: sul telefono il display dei flipper dice «TOCCA PER GIOCARE» e «Tocca per ricominciare»; i tasti dello sgabello senza lettere («Prendi», «Posa», «↑», «↓») | U4 | telefono | piccolo |
+| 8.6 | Nome ai due pad del balilla («Vista», «Zoom») e alla zona della leva del flipper; taratura con parole al posto dei numeri, o tolta | U5 | telefono | piccolo |
+| 8.7 | Un solo nome per ogni cosa, deciso una volta: Impostazioni o Settings, Lavagna o Blackboard, e «sala» per i giochi arcade e «tavolo» per i giochi da tavolo anche nei messaggi. Una sola frase per «non tocca a te» e una per «riapri l'app da Telegram» | U6, U9 | tutti e due | piccolo |
+| 8.8 | Raccogliere i messaggi d'errore in un solo file, così le frasi uguali restano uguali; sostituire «Richiesta non valida.» e «Operazione non disponibile.» con il motivo; tradurre «DNS unavailable» | U9 | tutti e due | medio |
+| 8.9 | Spegnere la pagina sotto quando la 3D è aperta (`inert`), così Tab resta nella 3D | U8 | computer | piccolo |
+| 8.10 | Caratteri: minimo 12 px fuori dal cruscotto del Simulator; aggiornare il testo di Informazioni sullo username | U10 | tutti e due | piccolo |
+| 8.11 | Le spiegazioni messe nei `title` che servono davvero: scriverle anche sullo schermo, perché sul telefono non compaiono | U5 | telefono | piccolo |
+
+**Ordine consigliato per l'Area 8:** 8.1 e 8.2 (sono i due punti in cui chi gioca non capisce cosa succede). Poi 8.5 e 8.4, piccoli e molto visibili. Poi 8.3, che chiude tutti i comandi nascosti. Il resto quando capita.

@@ -21,7 +21,10 @@ assert.throws(() => newTable(ROOM, { game: 'uno', mode: 'ai', seats: 11, name: '
 // Privacy: each viewer sees only their own hand; tokens never leave the server.
 const own = publicTable(solo, 'tg:1'),
   stranger = publicTable(solo, 'tg:9');
-assert.equal(own.uno.hand.length, 7);
+// la propria mano, così com'è sul server: di solito 7 carte, 9 se la prima carta scoperta era un +2 (mazzo a caso:
+// prima qui c'era «7» e la prova falliva circa 2 volte su 100)
+assert.deepEqual(own.uno.hand, solo.uno.hands[0]);
+assert.ok([7, 9].includes(own.uno.hand.length), 'starting hand: 7 cards, or 9 after an opening +2');
 assert.deepEqual(stranger.uno.hand, []);
 assert.ok(!JSON.stringify(own).includes('tok'), 'player token not exposed');
 
