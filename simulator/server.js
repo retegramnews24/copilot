@@ -1,12 +1,7 @@
 import { initial, act, advance, nextAlarm, view } from './engine.js';
 import { collectNotices } from './notify.js';
 import { lobbySummary } from './summary.js';
-import { failure } from '../worker-shared.js';
-const json = (data, status = 200) =>
-  Response.json(data, {
-    status,
-    headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
-  });
+import { failure, userOf, json } from '../worker-shared.js';
 // The existing Room namespace routes one dedicated object here. No changes to game-table storage.
 export class SimulatorLeague {
   constructor(ctx, env = {}) {
@@ -46,7 +41,7 @@ export class SimulatorLeague {
     else await tx.deleteAlarm();
   }
   async fetch(req) {
-    const u = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+    const u = userOf(req);
     if (!u?.id) return json({ error: 'Accesso richiesto.' }, 401);
     const path = new URL(req.url).pathname;
     // Lobby summary: read-only, no save, no presence update.

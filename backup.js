@@ -4,7 +4,7 @@
 // keeps the last KEEP snapshots (in chunks), and if BACKUP_CHAT_ID is set the bot also sends the file privately.
 // Started by the weekly cron (worker.js `scheduled`) or by the admin API (api.js, needs ADMIN_TOKEN).
 
-import { internalHeaders } from './worker-shared.js';
+import { internalHeaders, json } from './worker-shared.js';
 
 const SINGLETONS = [
   'checkmate-lobby-v1',
@@ -23,8 +23,6 @@ const ARCADE_PREFIX = {
   f1: 'f1:',
   biliardo: 'biliardo:'
 };
-const json = (data, status = 200) =>
-  Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 
 // Storage values are plain data, sometimes bytes: JSON with bytes as base64.
 export function encode(value) {

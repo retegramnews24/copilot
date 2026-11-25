@@ -41,7 +41,9 @@ import {
   internalHeaders,
   isInternal,
   INTERNAL_PATHS,
-  failure
+  failure,
+  userOf,
+  lobbyHub
 } from './worker-shared.js';
 import * as tables from './table-rules.js';
 import { concluded } from './table-rules.js';
@@ -119,7 +121,7 @@ export class Room extends DurableObject {
   recordSoon(s) {
     const results = resultsFor(s);
     if (!results.length) return;
-    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const lobby = lobbyHub(this.env);
     const send = (async () => {
       const headers = await internalHeaders(this.env);
       for (const result of results)
@@ -168,7 +170,7 @@ export class Room extends DurableObject {
     return result;
   }
   notifyTableRemoved(room) {
-    const lobby = this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1'));
+    const lobby = lobbyHub(this.env);
     this.ctx.waitUntil(
       lobby.fetch(
         new Request('https://internal/lobby/remove', { method: 'POST', body: JSON.stringify({ room }) })
@@ -244,7 +246,7 @@ export class Room extends DurableObject {
     this.sendNotice(noticeRequest(s));
   }
   async syncLobby(s) {
-    await this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+    await lobbyHub(this.env).fetch(
       new Request('https://internal/lobby/update', {
         method: 'POST',
         body: JSON.stringify(this.summary(this.public(s)))
@@ -306,7 +308,7 @@ export class Room extends DurableObject {
   }
   async fetch(req) {
     await this.guardSockets();
-    const viewer = JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.player || null;
+    const viewer = userOf(req)?.player || null;
     const path = new URL(req.url).pathname;
     // percorsi interni: solo con la chiave interna (vedi worker-shared.js)
     if (INTERNAL_PATHS.has(path) && !(await isInternal(req, this.env)))
@@ -411,14 +413,14 @@ export class Room extends DurableObject {
           if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
             return json({ error: 'WebSocket richiesto.' }, 426);
           // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
-          makeRoomFor(this.ctx, JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id);
+          makeRoomFor(this.ctx, userOf(req)?.id);
           const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
           if (!isPlayer && this.ctx.getWebSockets().length >= 60)
             return json({ error: 'Stanza piena (60 connessioni).' }, 429);
           const pair = new WebSocketPair();
           this.ctx.acceptWebSocket(pair[1]);
           pair[1].serializeAttachment({
-            memberId: JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id,
+            memberId: userOf(req)?.id,
             accessTag: req.headers.get('X-Access-Tag'),
             expires: Number(req.headers.get('X-Session-Expires')),
             player: viewer
@@ -470,7 +472,7 @@ export class Room extends DurableObject {
             if (this.botSeat(s) >= 0 && (await this.ctx.storage.getAlarm()) === null)
               await this.ctx.storage.setAlarm(Math.min(Date.now() + 650, s.expires));
           }
-          const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null'),
+          const user = userOf(req),
             legacy = req.headers.get('X-Player-Token');
           const old = s.players.find(p => !p.id.startsWith('tg:') && legacy && p.token === legacy);
           if (user && old && !s.players.some(p => p.id === user.player)) {
@@ -501,7 +503,7 @@ export class Room extends DurableObject {
               },
               409
             );
-          const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+          const user = userOf(req);
           if (s.players.some(p => p.id === user?.player))
             return json({ error: 'Sei già un giocatore di questa partita.' }, 409);
           const token = id(),
@@ -515,7 +517,7 @@ export class Room extends DurableObject {
           this.queueNotice(s);
           return json({ token, player: p.id, state: this.public(s, viewer) });
         }
-        const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+        const user = userOf(req);
         const legacy = req.headers.get('X-Player-Token');
         const who = s.players.findIndex(
           p => p.id === user?.player || (!p.id.startsWith('tg:') && legacy && p.token === legacy)

@@ -6,10 +6,8 @@
 // race never stops. The clients replay the move list, so every phone shows the same race.
 import * as R from './public/gara/rules.js';
 import { distField } from './public/gara/ai.js';
-import { internalHeaders, failure } from './worker-shared.js';
+import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
 
-const json = (body, status = 200) =>
-  Response.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
 export const F1_MAX = 8;
 const WAIT = 1800000, // a race nobody joins closes after 30 minutes
   KEEP = 300000, // a finished race stays 5 minutes
@@ -323,7 +321,7 @@ export class F1Room {
   }
   // with the internal key: the Lobby takes results only from another object of the server (worker-shared.js)
   async lobby(path, body) {
-    return this.env.ROOMS.get(this.env.ROOMS.idFromName('checkmate-lobby-v1')).fetch(
+    return lobbyHub(this.env).fetch(
       'https://internal/lobby/' + path,
       {
         method: 'POST',
@@ -362,7 +360,7 @@ export class F1Room {
   }
   fetch(req) {
     return this.ctx.blockConcurrencyWhile(async () => {
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user?.player) return json({ error: 'Accesso richiesto.' }, 401);
       const now = Date.now(),
         url = new URL(req.url),

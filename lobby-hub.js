@@ -4,7 +4,7 @@ import { telegramAccessTag } from './auth.js';
 import { topFive } from './leaderboard.js';
 import { activeTable, createSeries } from './match-series.js';
 import { hasMove, replayNumberGame } from './public/arcade/number-connect-rules.js';
-import { json, id, name } from './worker-shared.js';
+import { json, id, name, userOf } from './worker-shared.js';
 import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './table-rules.js';
 import { gameTitle } from './public/game-info.js';
 import { makeRoomFor } from './socket-limits.js';
@@ -314,7 +314,7 @@ export class LobbyHub {
     if (path === '/lobby/ws') {
       if (req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
         return json({ error: 'WebSocket richiesto.' }, 426);
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user) return json({ error: 'Accesso richiesto.' }, 401);
       // al massimo 3 collegamenti alla Lobby per persona (si chiude il suo più vecchio), poi il tetto totale
       makeRoomFor(this.ctx, user.id, 'lobby');
@@ -327,7 +327,7 @@ export class LobbyHub {
         room: null,
         seen: Date.now(),
         closed: false,
-        memberId: JSON.parse(req.headers.get('X-Checkmate-User') || 'null')?.id,
+        memberId: userOf(req)?.id,
         accessTag: req.headers.get('X-Access-Tag'),
         expires: Number(req.headers.get('X-Session-Expires'))
       });
@@ -358,7 +358,7 @@ export class LobbyHub {
     if (req.method !== 'POST') return json({ error: 'Metodo non consentito.' }, 405);
     const body = await req.json();
     if (path === '/lobby/number-connect-score') {
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user?.player) return json({ error: 'Accesso richiesto.' }, 401);
       const game = replayNumberGame(body);
       if (!game || !Number.isSafeInteger(game.score) || game.score <= 0 || hasMove(game)) {
@@ -391,7 +391,7 @@ export class LobbyHub {
       return json({ ok: true });
     }
     if (path === '/lobby/join') {
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user) return json({ error: 'Accesso richiesto.' }, 401);
       const tables = await this.lobbyList(),
         limit = seatLimit(tables, user.player, tables.find(g => g.room === body.room) || { room: body.room });
@@ -421,7 +421,7 @@ export class LobbyHub {
       return response;
     }
     if (path === '/lobby/chat') {
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user || (await this.lobbyPayload()).users.every(u => u.id !== user.id))
         return json({ error: 'Collegati alla Lobby prima di scrivere.' }, 409);
       const text = typeof body.text === 'string' ? body.text.trim() : '';
@@ -448,7 +448,7 @@ export class LobbyHub {
       return json({ ok: true, message });
     }
     if (path === '/lobby/create') {
-      const user = JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+      const user = userOf(req);
       if (!user) return json({ error: 'Accesso richiesto.' }, 401);
       const playerName = name(user.name);
       // freno: al massimo 5 tavoli o sale nuovi ogni 10 minuti per persona (le sale arcade non hanno la regola

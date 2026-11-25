@@ -26,9 +26,9 @@ import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=a67dbdac2c';
 import {createGolfLink} from './golf-link.js?v=b761c20f7c';
-import {createArcadeLink} from './arcade-link.js?v=bdb1821cb2';
-import {createF1Link} from './f1-link.js?v=972c89b8b2';
-import {createBiliardoLink} from './biliardo-link.js?v=3aa65b473a';
+import {createArcadeLink} from './arcade-link.js?v=442148f3f0';
+import {createF1Link} from './f1-link.js?v=ddd42671dd';
+import {createBiliardoLink} from './biliardo-link.js?v=bad852c408';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';

@@ -2,6 +2,7 @@
 // Da solo (contro il computer, sullo stesso telefono) il gioco non chiede niente qui. Online la rete la fa l'app:
 // apre la partita (il server mette l'avviso con la specialità), entra, tiene lo stato aggiornato e manda i colpi;
 // l'iframe mostra e chiede. Anche Telegram resta qui: margini, Indietro, vibrazione, conferma di chiusura.
+import { telegramHaptic } from './haptic.js?v=c280753040';
 const $ = id => document.getElementById(id);
 
 export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {
@@ -133,15 +134,8 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
         if (data.on) tg?.enableClosingConfirmation?.();
         else tg?.disableClosingConfirmation?.();
       } catch {}
-    } else if (data?.type === 'bil:haptic') {
-      const hf = tg?.HapticFeedback;
-      try {
-        if (data.kind === 'selection') hf?.selectionChanged();
-        else if (data.kind === 'impact' && ['light', 'medium', 'heavy'].includes(data.style)) hf?.impactOccurred(data.style);
-        else if (data.kind === 'notification' && ['error', 'success', 'warning'].includes(data.style))
-          hf?.notificationOccurred(data.style);
-      } catch {}
-    } else if (data?.type === 'bil:create') {
+    } else if (data?.type === 'bil:haptic') telegramHaptic(tg, data.kind, data.style);
+    else if (data?.type === 'bil:create') {
       // apre la partita online con la specialità scelta (il server controlla di nuovo le opzioni)
       if (pending || !me()) return;
       // la rivincita: dopo una partita finita se ne apre una nuova (quella vecchia si lascia andare)

@@ -1,10 +1,6 @@
+import { json } from './worker-shared.js';
 // Accesso a Binottoland: identità Telegram firmata, sessioni e appartenenza al gruppo.
 // Tutte le richieste /api/ passano da qui (vedi worker.js) prima di raggiungere giochi e servizi.
-const json = (data, status = 200) =>
-  Response.json(data, {
-    status,
-    headers: { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
-  });
 export function secureEqual(a, b) {
   if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
   let diff = 0;

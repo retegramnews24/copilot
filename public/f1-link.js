@@ -3,6 +3,7 @@
 // it creates the race with the drawn track (the server posts the bell notice with the drivers wanted),
 // joins, keeps the race in sync by polling and sends the moves; the iframe only shows and asks.
 // Telegram stays here too: safe-area insets, Back, haptics, closing confirmation while racing.
+import { telegramHaptic } from './haptic.js?v=c280753040';
 const $ = id => document.getElementById(id);
 
 export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {
@@ -141,16 +142,8 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
         if (data.on) tg?.enableClosingConfirmation?.();
         else tg?.disableClosingConfirmation?.();
       } catch {}
-    } else if (data?.type === 'f1:haptic') {
-      const hf = tg?.HapticFeedback;
-      try {
-        if (data.kind === 'selection') hf?.selectionChanged();
-        else if (data.kind === 'impact' && ['light', 'medium', 'heavy'].includes(data.style))
-          hf?.impactOccurred(data.style);
-        else if (data.kind === 'notification' && ['error', 'success', 'warning'].includes(data.style))
-          hf?.notificationOccurred(data.style);
-      } catch {}
-    } else if (data?.type === 'f1:create') {
+    } else if (data?.type === 'f1:haptic') telegramHaptic(tg, data.kind, data.style);
+    else if (data?.type === 'f1:create') {
       // the creator has drawn the track: open the race online (the server checks the track again)
       if (pending || room || !me()) return;
       pending = true;

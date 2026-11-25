@@ -24,6 +24,14 @@ export function failure(e, status = 409, where = '') {
   }
   return json({ error: e.message }, status);
 }
+// L'utente della richiesta (messo da api.js dopo il controllo della sessione), o null
+export const userOf = req => {
+  try {
+    return JSON.parse(req.headers.get('X-Checkmate-User') || 'null');
+  } catch {
+    return null;
+  }
+};
 export const id = () => crypto.randomUUID();
 export const bad = message => {
   throw new Error(message);

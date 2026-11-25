@@ -925,4 +925,5 @@ if (embedded) {
 // avvio
 setStep(1);
 ed.setBoard(R.boardSize()); ed.resize(); ed.setZoom(R.startCells(draft.players)); syncZoom();
-window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, get sprint() { return sprint; }, pick };
+// solo per le prove (?dev), come in Acquedotto: prima era sempre a disposizione della pagina
+if (new URLSearchParams(location.search).has('dev')) window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, get sprint() { return sprint; }, pick };
