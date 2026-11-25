@@ -244,7 +244,7 @@ export function buildBalilla(scene, el, send, playSound) {
   // telefono: tasto per cambiare coppia (a sinistra, simmetrico alla X), pad di gioco sotto il tavolo
   // e, alla sua sinistra, un pad verticale stretto per inclinare la visuale sul campo
   const chipCss =
-    'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 18px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:22px!important;background:rgba(18,14,28,.6)!important;z-index:4';
+    'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 18px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:22px!important;background:rgba(255,200,40,.5)!important;border:1px solid rgba(255,200,40,.75)!important;z-index:4';
   const swapChip = document.createElement('button');
   swapChip.textContent = '🔄';
   swapChip.setAttribute('aria-label', 'Cambia coppia (difesa/attacco)');
@@ -254,11 +254,18 @@ export function buildBalilla(scene, el, send, playSound) {
   const pad = document.createElement('div');
   pad.style.cssText = padCss + ';left:30%;width:38%;top:72%;bottom:calc(var(--ui-safe-bottom,0px) + 18px)';
   const viewPad = document.createElement('div');
-  viewPad.style.cssText = padCss + ';left:13%;width:13%;top:72%;height:14%;font-size:18px';
-  viewPad.textContent = '↕';
+  // i due pad laterali con il simbolo e il nome sotto (prima solo ↕ e 🔍, senza nome per la lettura vocale)
+  const namePad = (el, icon, name, help) => {
+    el.style.flexDirection = 'column';
+    el.innerHTML = `<span style="font-size:18px;line-height:1">${icon}</span><span style="font-size:12px">${name}</span>`;
+    el.setAttribute('role', 'slider');
+    el.setAttribute('aria-label', name + ': ' + help);
+  };
+  viewPad.style.cssText = padCss + ';left:13%;width:13%;top:72%;height:14%';
+  namePad(viewPad, '↕', 'Vista', 'trascina su e giù per inclinare la vista');
   const zoomPad = document.createElement('div');
-  zoomPad.style.cssText = padCss + ';left:72%;width:13%;top:72%;height:14%;font-size:16px';
-  zoomPad.textContent = '🔍';
+  zoomPad.style.cssText = padCss + ';left:72%;width:13%;top:72%;height:14%';
+  namePad(zoomPad, '🔍', 'Zoom', 'trascina su e giù per avvicinare o allontanare');
   const padLabel = document.createElement('span');
   pad.append(padLabel);
   // taratura da telefono: con l'ingranaggio si aprono i cursori (pad, visuale, zoom), i valori restano sul telefono
@@ -281,13 +288,13 @@ export function buildBalilla(scene, el, send, playSound) {
   tunePanel.style.cssText =
     'position:absolute;left:calc(var(--ui-safe-left,0px) + 14px);top:calc(var(--ui-safe-top,0px) + 118px);z-index:5;background:#142026ee;color:#fff;padding:8px 10px;border-radius:12px;font:600 12px system-ui,sans-serif;display:none;gap:6px;flex-direction:column;width:min(260px,80vw)';
   const sliders = [
-    ['slide', 'Pad: scorrimento', 0.3, 3, 0.05],
-    ['spin', 'Pad: rotazione', 0.3, 3, 0.05],
-    ['pitch', 'Visuale (gradi)', 30, 88, 1],
+    ['slide', 'Scorrimento delle stecche', 0.3, 3, 0.05],
+    ['spin', 'Rotazione delle stecche', 0.3, 3, 0.05],
+    ['pitch', 'Vista', 30, 88, 1],
     ['zoom', 'Zoom', 0.5, 1.5, 0.01]
   ].map(([key, label, min, max, step]) => {
     const row = document.createElement('label');
-    row.style.cssText = 'display:grid;grid-template-columns:1fr 44px;gap:2px 8px;align-items:center';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center';
     const name = document.createElement('span');
     name.textContent = label;
     const out = document.createElement('b');
@@ -297,7 +304,26 @@ export function buildBalilla(scene, el, send, playSound) {
     input.style.cssText = 'grid-column:1/3;width:100%';
     const sync = () => {
       input.value = String(tune[key]);
-      out.textContent = key === 'pitch' ? Math.round(tune[key]) + '°' : Number(tune[key]).toFixed(2);
+      // parole al posto dei numeri grezzi
+      const v = Number(tune[key]);
+      out.textContent =
+        key === 'pitch'
+          ? v > 72
+            ? "dall'alto"
+            : v < 48
+              ? 'di lato'
+              : 'normale'
+          : key === 'zoom'
+            ? v > 1.1
+              ? 'vicino'
+              : v < 0.9
+                ? 'lontano'
+                : 'normale'
+            : v > 1.15
+              ? 'veloce'
+              : v < 0.85
+                ? 'lenta'
+                : 'normale';
     };
     input.oninput = () => {
       tune[key] = Number(input.value);
@@ -439,7 +465,8 @@ export function buildBalilla(scene, el, send, playSound) {
           : 'Aspetto il posto…';
     else if (net.paused) line = 'In pausa: aspettiamo chi si è allontanato';
     else if (f.finished) line = 'Partita finita: ' + out + ' per una nuova partita';
-    else if (alone()) line = side + ' · allenamento, i gol non contano' + (f.phase === 'throw' ? ' · ' + out : '');
+    else if (alone())
+      line = side + ' · allenamento, i gol non contano' + (f.phase === 'throw' ? ' · ' + out : '');
     else if (f.phase === 'throw') line = side + ' · pallina nel buco: ' + out;
     else line = side + ' · ' + (pair ? 'attacco' : 'difesa') + (mate() ? '' : touchUI ? '' : ' (Q cambia)');
     if (!touchUI && seated() && !mouseLocked()) line += ' · clicca sul campo per giocare col mouse';

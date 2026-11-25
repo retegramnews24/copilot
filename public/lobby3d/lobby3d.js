@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=2996162db1';
-import {buildBalilla} from './balilla.js?v=12dd91d888';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=ebc82174e3';
+import {buildBalilla} from './balilla.js?v=33b02edaf6';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -2007,6 +2007,7 @@ export function createLobby3D(app) {
     if (active) return;
     restoreActivityView();
     parked=null;playProjection(app.projection?.());syncTransport(true);el.hidden = false; active = true; last = 0;
+    classicPage(true);
     app.clubVisibility?.();setTag();
     // trascinare in giù (joystick, pad dei giochi) non deve chiudere o ridurre la mini app di Telegram
     try { const tg = window.Telegram?.WebApp; if (tg?.isVersionAtLeast?.('7.7')) tg.disableVerticalSwipes(); } catch {}
@@ -2022,7 +2023,13 @@ export function createLobby3D(app) {
     setTimeout(() => { prepareLights(); }, 1200);
     setTimeout(prepareLights, 1500);
   }
+  // la pagina classica sotto la 3D si spegne (inert): con Tab il fuoco resta nella 3D invece di finire su tasti che
+  // non si vedono. Solo le schede e le pagine, non i riquadri dei giochi e i dialoghi che si aprono sopra
+  function classicPage(off){
+    for(const node of document.querySelectorAll('#app-shell>nav.tabs,#app-shell>section.page'))node.inert=off;
+  }
   function hide() {
+    classicPage(false);
     if (document.pointerLockElement) document.exitPointerLock?.();
     if(carrying!==null||requested)app.stoolSend?.({type:'stool',action:'cancel',id:carrying??requested.id});
     carrying=null;requested=null;closeBoard();

@@ -428,7 +428,7 @@ export function buildFlipper(
   // ---------- partita ----------
   const hud = document.createElement('div');
   hud.style.cssText =
-    'position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 10px);transform:translateX(-50%);display:none;gap:10px;align-items:flex-end;font:600 11px system-ui,sans-serif;color:#ffe2b8;text-shadow:0 1px 2px #000;pointer-events:none;z-index:4';
+    'position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 10px);transform:translateX(-50%);display:none;gap:10px;align-items:flex-end;font:600 12px system-ui,sans-serif;color:#ffe2b8;text-shadow:0 1px 2px #000;pointer-events:none;z-index:4';
   const bar = label => {
     const w = document.createElement('div');
     w.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px';
@@ -447,10 +447,11 @@ export function buildFlipper(
   const bars = [bar('Flipper sinistro'), bar('Leva'), bar('Flipper destro')];
   const tip = document.createElement('div');
   tip.style.cssText =
-    'position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 46px);transform:translateX(-50%);display:none;font:600 11px system-ui,sans-serif;color:#ffe2b8cc;text-shadow:0 1px 2px #000;pointer-events:none;white-space:nowrap;z-index:4';
+    'position:absolute;left:50%;bottom:calc(var(--ui-safe-bottom,0px) + 46px);transform:translateX(-50%);display:none;font:600 12px system-ui,sans-serif;color:#ffe2b8cc;text-shadow:0 1px 2px #000;pointer-events:none;white-space:nowrap;z-index:4';
   tip.textContent =
     'Tocco breve = colpo morbido · Tenuto = colpo pieno · Leva: trascina il pomello (più tiri, più forte) · Spazio scossa';
   el.append(hud, tip);
+  const leverZone = document.createElement('div');
   // telefono: le tre scritte in basso diventano tasti veri (la zona del tocco è più grande del tasto)
   if (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window) {
     tip.textContent =
@@ -461,7 +462,12 @@ export function buildFlipper(
     tip.style.bottom = 'calc(var(--ui-safe-bottom,0px) + 70px)';
     for (const { w } of bars)
       w.style.cssText +=
-        ';padding:8px 10px 6px;border-radius:14px;background:rgba(18,14,28,.55);border:1px solid #ffffff38;font-size:12px';
+        ';padding:8px 10px 6px;border-radius:14px;background:rgba(255,200,40,.5);border:1px solid rgba(255,200,40,.75);color:#2a1600;text-shadow:none;font-size:12px';
+    // la zona della leva (in basso al centro, vedi il tocco più sotto) segnata da un bordo tratteggiato
+    leverZone.style.cssText =
+      'position:absolute;left:34%;width:32%;top:75%;bottom:0;border:2px dashed rgba(255,200,40,.6);border-bottom:0;border-radius:18px 18px 0 0;pointer-events:none;z-index:3;display:none';
+    leverZone.setAttribute('aria-hidden', 'true');
+    el.append(leverZone);
   }
   const touchSide = new Map(); // dito → flipper che sta tenendo (si lascia lo stesso anche se il dito scivola)
   addEventListener('mouseup', e => {
@@ -654,7 +660,7 @@ export function buildFlipper(
         if (!idle) {
           idle = true;
           for (const b of balls) b.visible = false;
-          hud.style.display = tip.style.display = 'none';
+          hud.style.display = tip.style.display = leverZone.style.display = 'none';
           engine(null);
         }
         return;
@@ -715,6 +721,7 @@ export function buildFlipper(
       // barre della potenza
       hud.style.display = tip.style.display = active ? 'flex' : 'none';
       if (active) tip.style.display = 'block';
+      leverZone.style.display = active ? 'block' : 'none';
       if (g) {
         g.t.flippers.slice(0, 2).forEach((f, i) => {
           const k = Math.max(0, Math.min(1, (f.a - f.rest) / (f.up - f.rest)));
