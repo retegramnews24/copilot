@@ -403,9 +403,14 @@ export function buildBalilla(scene, el, send, playSound) {
     { slide: 0, angle: 0 }
   ];
   const post = (action, data = {}) => send?.({ type: 'balilla', action, ...data });
-  const seated = () => active && net?.slot === team * 2;
+  const seated = () => active && net?.slot >= 0;
+  // compagno dallo stesso lato (2 contro 1, 2 contro 2): allora ognuno ha la sua coppia di aste, fissa
+  const mate = () => !!net && net.slot >= 0 && net.occupied.includes(net.slot ^ 1);
+  // da soli al tavolo, o tutti dallo stesso lato: allenamento (i gol non contano)
+  const alone = () => !!net && new Set(net.occupied.map(s => s >> 1)).size < 2;
   const join = () => post('join', { slot: team * 2, mode: 2, target: 10, bar: true });
   function selectPair(next) {
+    if (mate()) next = net.slot % 2;
     pair = next;
     const i = rows.findIndex(r => r.team === team && r.attack === pair);
     const rod = net?.field?.rods[i];
@@ -420,7 +425,7 @@ export function buildBalilla(scene, el, send, playSound) {
   function serve() {
     if (!seated()) return;
     if (net.field.finished) post('again');
-    else if (net.occupied.length === 1 || net.field.phase === 'throw') post('ready', { pair });
+    else if (alone() || net.field.phase === 'throw') post('ready', { pair });
   }
   function close() {
     if (active && mouseLocked()) document.exitPointerLock();
@@ -667,7 +672,7 @@ export function buildBalilla(scene, el, send, playSound) {
   return {
     pose,
     get seat() {
-      return seated() ? { station: 'balilla', slot: team * 2, mode: 2, pair } : null;
+      return seated() ? { station: 'balilla', slot: net.slot, mode: mate() ? 4 : 2, pair } : null;
     },
     get active() {
       return active;
@@ -711,26 +716,30 @@ export function buildBalilla(scene, el, send, playSound) {
       net = data;
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
-      if (!wasSeated && seated()) selectPair(pair);
+      if ((!wasSeated && seated()) || (mate() && pair !== net.slot % 2)) selectPair(pair);
       ui.hidden = noPanel;
       const status = ui.querySelector('span');
       status.textContent = data.paused
         ? 'Partita in pausa: aspettiamo chi si è allontanato'
         : seated()
-        ? TEAM[team] + ' · Su/giù sposta · Destra/sinistra ruota · Q cambia coppia · E lascia'
-        : net.occupied.includes(team * 2)
+        ? TEAM[team] +
+          (mate() ? (pair ? ' · Attacco' : ' · Difesa') : '') +
+          ' · Su/giù sposta · Destra/sinistra ruota' +
+          (mate() ? '' : ' · Q cambia coppia') +
+          ' · E lascia'
+        : net.occupied.includes(team * 2) && net.occupied.includes(team * 2 + 1)
           ? 'Lato occupato'
           : 'In attesa del posto';
       serveButton.disabled =
         !seated() ||
         !(
           net.field.finished ||
-          net.occupied.length === 1 ||
+          alone() ||
           net.field.phase === 'throw' // pallina nel buco: la fa uscire chiunque sia seduto
         );
       serveButton.textContent = net.field.finished
         ? 'Nuova partita'
-        : net.occupied.length === 1 && net.field.phase === 'play'
+        : alone() && net.field.phase === 'play'
           ? 'Rimetti la pallina (Spazio)'
           : 'Butta la pallina (Spazio)';
     },

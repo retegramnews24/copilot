@@ -47,6 +47,39 @@ try {
   // niente azzeramento a metà partita
   send(a, 'reset');
   assert.deepEqual(hub.field.score, [1, 0], 'reset is ignored');
+
+  // 2 contro 1: chi arriva dal lato già occupato prende il secondo posto di quel lato, con la sua coppia di aste
+  const c = player('c');
+  join(c, 0);
+  const sc = hub.viewers.get(c).slot;
+  assert.equal(sc, 1, 'second player on the red side');
+  assert.equal(c.state.occupied.length, 3);
+  assert.equal(hub.field.practice, false);
+  // c muove: si muove solo la sua coppia (attacco), la difesa di a non viene bloccata
+  send(a, 'input', { pair: 1, slide: 0.5, angle: 0 }); // a chiede l'attacco ma col compagno comanda la difesa
+  send(c, 'input', { pair: 0, slide: -0.5, angle: 0 }); // c chiede la difesa ma comanda l'attacco
+  const { rows } = await import('../public/lobby3d/balilla-rules.js');
+  const rod = (team, attack) => hub.field.rods[rows.findIndex(r => r.team === team && r.attack === attack)];
+  assert.equal(rod(0, 0).tShift, 0.5, 'a (first seat) has the defence');
+  assert.equal(rod(0, 1).tShift, -0.5, 'c (second seat) has the attack');
+
+  // 2 contro 2
+  const d = player('d');
+  join(d, 2);
+  assert.equal(hub.viewers.get(d).slot, 3);
+  // un quarto/quinto dallo stesso lato non trova posto
+  const e = player('e');
+  join(e, 2);
+  assert.equal(hub.viewers.get(e).slot, -1, 'side full');
+
+  // chi va via non cambia la partita; tutti via dal lato blu: allenamento, punteggio fermo ma non azzerato
+  send(b, 'leave');
+  send(d, 'leave');
+  assert.equal(hub.field.practice, true);
+  assert.deepEqual(hub.field.score, [1, 0], 'score kept while one side is empty');
+  join(d, 2);
+  assert.equal(hub.field.practice, false, 'points count again');
+  assert.deepEqual(hub.field.score, [1, 0]);
 } finally {
   hub.stop();
 }
