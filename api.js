@@ -7,6 +7,7 @@ import { setupTelegram, telegramWebhook } from './telegram-bot.js';
 import { cinemaHub, groupCinema } from './cinema-routes.js';
 import { seatLimit, longLimitText } from './table-rules.js';
 import { MSG } from './public/messages.js';
+import { makeTrack } from './f1-server.js';
 
 // Unexpected server errors are logged (Workers Logs) instead of disappearing; the player gets a short message.
 // Grandezza delle richieste: il contenuto si legge a pezzi e la lettura si ferma appena supera il limite, anche se
@@ -141,7 +142,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.64', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.65', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
@@ -194,13 +195,15 @@ async function route(req, env) {
     );
 
   const bil = u.pathname.match(
-    /^\/api\/biliardo\/([a-f0-9-]{36})\/(state|join|leave|start|play|close|team)$/
+    /^\/api\/biliardo\/([a-f0-9-]{36})\/(state|join|leave|start|play|close|team|abandon)$/
   );
   if (bil)
     return env.ROOMS.get(env.ROOMS.idFromName('biliardo:' + bil[1])).fetch(
       new Request(u.origin + '/biliardo/' + bil[2] + u.search, req)
     );
-  const f1 = u.pathname.match(/^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|start|play|close)$/);
+  const f1 = u.pathname.match(
+    /^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|start|play|close|abandon)$/
+  );
   if (f1)
     return env.ROOMS.get(env.ROOMS.idFromName('f1:' + f1[1])).fetch(
       new Request(u.origin + '/f1/' + f1[2] + u.search, req)
@@ -257,6 +260,15 @@ async function route(req, env) {
     const raw = await req.text();
     // F1 on paper! sends the drawn track with the race (up to 400 kB); every other game a few settings.
     if (raw.length > (/^\{"game":"f1"/.test(raw) ? 400000 : 4096)) return json({ error: MSG.tooBig }, 413);
+    // La pista si controlla qui, prima di entrare nella Lobby (analisi 10.3): la creazione gira dentro il blocco della
+    // Lobby, e finché il controllo non finiva nessun altro veniva servito. Una pista sbagliata non arriva più lì.
+    if (/^\{"game":"f1"/.test(raw)) {
+      try {
+        makeTrack(JSON.parse(raw).track);
+      } catch (error) {
+        return json({ error: error instanceof SyntaxError ? MSG.unreadable : error.message }, 400);
+      }
+    }
     return lobby.fetch(
       new Request(u.origin + '/lobby/create', {
         method: 'POST',

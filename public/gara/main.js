@@ -1,11 +1,16 @@
 // Gara a quadretti: collega disegno, regole e scena 3D.
 // Per ora si gioca sullo stesso telefono: Giallo è l'ospite (mette l'auto e muove per primo), Rosso chi crea la pista.
-import { Editor } from './editor.js?v=a5fab49dcc';
-import * as R from './rules.js?v=b5d4680e25';
-import { Race3D } from './scene3d.js?v=1803f297b1';
-import { Sfx } from './sound.js?v=ea750ecabc';
-import { AiDriver, distField } from './ai.js?v=e75e4102f6';
+import { Editor } from './editor.js?v=bca0c74f62';
+import * as R from './rules.js?v=227a503e49';
+import { Race3D } from './scene3d.js?v=eb44a87fdd';
+import { Sfx } from './sound.js?v=cca82ba0d6';
+import { AiDriver, distField } from './ai.js?v=3e6daa39f8';
 import { Tutorial } from './tutorial.js?v=633df7e600';
+import { isTouchDevice } from '../touch-device.js';
+
+// scritte giuste per il dispositivo (analisi 10.12): «col dito» e «tocca» sul telefono, «col mouse» e «clicca» sul computer
+const touchUI = isTouchDevice();
+const tap = touchUI ? 'tocca' : 'clicca', Tap = touchUI ? 'Tocca' : 'Clicca';
 
 // suoni: il browser li accende solo dopo un tocco
 const sfx = new Sfx();
@@ -21,7 +26,7 @@ const tut = new Tutorial($('tut'));
 // Dentro Binottoland Playground il gioco gira in un iframe: Telegram lo gestisce l'app (margini, tasto Indietro,
 // vibrazione, conferma di chiusura) e parla con il gioco con postMessage (messaggi "f1:...").
 const embedded = window.parent !== window;
-const tg = !embedded && window.Telegram && window.Telegram.WebApp;
+// (il codice per Telegram di quando il gioco era una mini app a sé è stato tolto: non girava più, analisi 10.13)
 const toApp = (type, data = {}) => { if (embedded) window.parent.postMessage({ type: 'f1:' + type, ...data }, location.origin); };
 if (embedded) {
   const wrap = (name, fn) => { const o = sfx[name].bind(sfx); sfx[name] = (...a) => { fn(...a); return o(...a); }; };
@@ -30,36 +35,6 @@ if (embedded) {
   wrap('light', (green) => toApp('haptic', { kind: 'impact', style: green ? 'heavy' : 'light' }));
   wrap('line', () => toApp('haptic', { kind: 'impact', style: 'medium' }));
   wrap('win', () => toApp('haptic', { kind: 'notification', style: 'success' }));
-}
-function insets() {
-  if (!tg || !tg.initData) return;
-  const a = tg.safeAreaInset || {}, b = tg.contentSafeAreaInset || {}, s = document.documentElement.style;
-  s.setProperty('--st', (a.top || 0) + (b.top || 0) + 'px');
-  s.setProperty('--sb', (a.bottom || 0) + (b.bottom || 0) + 'px');
-  s.setProperty('--sl', (a.left || 0) + (b.left || 0) + 'px');
-  s.setProperty('--sr', (a.right || 0) + (b.right || 0) + 'px');
-}
-if (tg) {
-  const v = (n) => tg.isVersionAtLeast && tg.isVersionAtLeast(n);
-  tg.ready(); tg.expand();
-  if (v('7.7')) tg.disableVerticalSwipes(); // trascinare il dito per disegnare non deve chiudere la mini app
-  tg.onEvent && ['safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged', 'fullscreenChanged'].forEach((e) => tg.onEvent(e, insets));
-  // colori della barra di Telegram uguali al gioco
-  if (v('6.1')) { tg.setHeaderColor('#0f172a'); tg.setBackgroundColor('#0f172a'); }
-  if (v('7.10')) tg.setBottomBarColor('#0f172a');
-  // sul telefono a tutto schermo: la pista si vede meglio (i margini li danno safeAreaInset e contentSafeAreaInset)
-  if (v('8.0') && /android|ios/.test(tg.platform || '')) { try { tg.requestFullscreen(); } catch (e) { /* non supportato: resta così */ } }
-  insets();
-  // vibrazione leggera con i suoni principali
-  const hf = v('6.1') && tg.HapticFeedback;
-  if (hf) {
-    const wrap = (name, fn) => { const o = sfx[name].bind(sfx); sfx[name] = (...a) => { try { fn(...a); } catch (e) { /* niente */ } return o(...a); }; };
-    wrap('tick', () => hf.selectionChanged());
-    wrap('crash', () => hf.notificationOccurred('error'));
-    wrap('light', (green) => hf.impactOccurred(green ? 'heavy' : 'light'));
-    wrap('line', () => hf.impactOccurred('medium'));
-    wrap('win', () => hf.notificationOccurred('success'));
-  }
 }
 
 let toastT = 0;
@@ -115,10 +90,10 @@ let step = 1;
 const widthTxt = () => String(R.minWidth(draft.players)).replace('.', ',');
 
 const HELP = {
-  1: () => 'Per una pista grande allontana prima la vista (−). Poi disegna col dito il bordo esterno e finisci vicino al punto di partenza.',
+  1: () => `Per una pista grande allontana prima la vista (−${touchUI ? '' : ' o la rotellina'}). Poi disegna ${touchUI ? 'col dito' : 'col mouse'} il bordo esterno e finisci vicino al punto di partenza.`,
   2: () => `Ora disegna il bordo interno, tutto dentro quello esterno. Lascia almeno ${widthTxt()} caselle di asfalto.`,
   3: () => `Traccia la linea di partenza da un bordo all'altro: deve avere posto per ${draft.players} auto affiancate. Verde va bene, rossa no.`,
-  4: () => 'Tocca la freccia del verso di gara e scegli quanti giri.'
+  4: () => `${Tap} la freccia del verso di gara e scegli quanti giri.`
 };
 
 // ---------- scelta iniziale: quante auto ----------
@@ -193,6 +168,9 @@ ed.onStroke = (pts) => {
     if (r.error) return fail(r);
     const c = R.checkInner(draft.outer, r.poly, R.minWidth(draft.players));
     if (c.error) return fail(c);
+    // pista troppo grande: il pilota automatico non ci sta in memoria, e il server la rifiuterebbe (analisi 10.10)
+    const big = R.checkTrackSize(draft.outer, r.poly);
+    if (big) return fail({ error: big, at: r.poly[0] });
     draft.inner = r.poly; toast('Bordo interno ok', true); setStep(3);
   } else if (step === 3) {
     const r = R.makeFinish(pts, draft.outer, draft.inner);
@@ -255,8 +233,10 @@ const isAi = () => race && race.mode === 'ai';
 function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
 
 // qualità grafica, ricordata dal browser
-let quality = 'alta';
-try { quality = localStorage.getItem('gara.qualita') || 'alta'; } catch (e) { /* niente memoria: alta */ }
+// partenza «Media» sui telefoni, «Alta» sul computer; la scelta del giocatore resta ricordata (analisi 10.8)
+const defaultQuality = touchUI ? 'media' : 'alta';
+let quality = defaultQuality;
+try { quality = localStorage.getItem('gara.qualita') || defaultQuality; } catch (e) { /* niente memoria */ }
 const qButtons = () => { for (const b of document.querySelectorAll('[data-q]')) b.classList.toggle('on', b.dataset.q === quality); };
 for (const b of document.querySelectorAll('[data-q]')) b.onclick = () => {
   quality = b.dataset.q; qButtons();
@@ -265,11 +245,27 @@ for (const b of document.querySelectorAll('[data-q]')) b.onclick = () => {
 };
 qButtons();
 
+// la scena 3D nasce alla prima gara; se la grafica 3D non parte si dice perché, invece di lasciare la schermata
+// vuota (analisi 10.13). L'errore arriva anche al registro di Debug (frame-errors.js).
+function makeScene() {
+  if (scene) return true;
+  try {
+    scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk'));
+    return true;
+  } catch (e) {
+    scene = null;
+    console.error(e);
+    $('rcHelp').textContent = 'Grafica 3D non disponibile su questo dispositivo: la gara non può partire.';
+    toast('Grafica 3D non disponibile su questo dispositivo.');
+    return false;
+  }
+}
+
 async function startRace(track, laps, n, mode = 'local') {
   lastTrack = track; lastLaps = laps; lastN = n; lastMode = mode;
   if (mode === 'ai') n = 2;
   show('rc');
-  if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk')); }
+  if (!makeScene()) return;
   scene.resize();
   scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
   scene.build(track, draft.time);
@@ -318,9 +314,9 @@ function refresh() {
     return;
   }
   if (race.phase === 'place') {
-    $('rcHelp').textContent = net ? 'Tocca a te: tocca una casella bianca sulla linea per mettere la tua auto.' : isAi()
-      ? 'Tocca una casella bianca sulla linea per mettere la tua auto: poi l’IA mette la sua.'
-      : `${col.num} ${col.name} (${col.role}): tocca una casella bianca sulla linea per mettere l'auto.`;
+    $('rcHelp').textContent = net ? `Tocca a te: ${tap} una casella bianca sulla linea per mettere la tua auto.` : isAi()
+      ? `${Tap} una casella bianca sulla linea per mettere la tua auto: poi l’IA mette la sua.`
+      : `${col.num} ${col.name} (${col.role}): ${tap} una casella bianca sulla linea per mettere l'auto.`;
     scene.showMarks(R.placeable(race).map((s) => ({ ...s, kind: 'slot' })));
     tut.show('place');
     if (!refresh.placed) {
@@ -520,7 +516,8 @@ function win(i) {
 $('grid').onclick = (e) => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); scene.setGrid(on); };
 $('view').onclick = (e) => { const top = scene.view !== 'top'; scene.setView(top ? 'top' : 'tilt'); e.target.textContent = top ? 'Vista inclinata' : 'Vista alta'; };
 // "Centra" riporta la vista sulla tua auto (o sulla linea) e da lì la vista torna a seguire il gioco
-$('center').onclick = () => { const c = race && race.cars[race.turn]; if (c && c.pos) scene.focus(c.pos, true, true); else if (race) scene.focus(race.track.startSlots[0], true, true); };
+$('center').onclick = () => { const c = race && race.cars[net && net.mine >= 0 ? net.mine : race.turn]; // online: la tua auto (analisi 10.11)
+ if (c && c.pos) scene.focus(c.pos, true, true); else if (race) scene.focus(race.track.startSlots[0], true, true); };
 $('menuB').onclick = () => { $('menu').hidden = false; };
 $('snd').onclick = () => { sfx.unlock(); sfx.setOn(!sfx.on); sndLabel(); if (sfx.on) sfx.tick(true); };
 sndLabel();
@@ -537,20 +534,6 @@ $('newT').onclick = newTrack; $('newT2').onclick = () => (net ? toApp('exit') : 
 $('tutAgain').onclick = () => { tut.restart(); tut.show('setup'); };
 $('tutAgain2').onclick = () => { tut.restart(); newTrack(); tut.show('setup'); };
 
-// Telegram: tasto Indietro (chiude il menu, in gara apre il menu) e conferma prima di chiudere durante la gara
-if (tg && tg.isVersionAtLeast && tg.isVersionAtLeast('6.1')) {
-  const inRace = () => $('rc').classList.contains('on');
-  const sync = () => {
-    const open = !$('menu').hidden;
-    if (open || inRace()) tg.BackButton.show(); else tg.BackButton.hide();
-    if (inRace() && race && race.phase !== 'over') tg.enableClosingConfirmation(); else tg.disableClosingConfirmation();
-  };
-  tg.BackButton.onClick(() => { if (!$('menu').hidden) $('menu').hidden = true; else if (inRace()) $('menu').hidden = false; sync(); });
-  const mo = new MutationObserver(sync);
-  mo.observe($('menu'), { attributes: true, attributeFilter: ['hidden'] });
-  mo.observe($('over'), { attributes: true, attributeFilter: ['hidden'] });
-  mo.observe($('rc'), { attributes: true, attributeFilter: ['class'] });
-}
 
 // ---------- gara online (Multiplayer) ----------
 // Binottoland tiene la gara sul server e manda qui lo stato ("f1:state"): la pista, i piloti, l'elenco delle mosse.
@@ -643,7 +626,7 @@ async function netOpen(s, track) {
   tut.hide();
   $('setup').hidden = true; $('menu').hidden = true; $('over').hidden = true;
   show('rc');
-  if (!scene) { scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk')); }
+  if (!makeScene()) return;
   scene.resize();
   scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
   scene.build(track, s.time);
@@ -724,6 +707,13 @@ async function netSync() {
 }
 function netState(d) {
   if (!d.state || !d.track) return;
+  // gara aperta con regole diverse da quelle di questa pagina (rilascio a gara in corso): si dice cosa fare invece di
+  // rifare le mosse con regole sbagliate (analisi 10.14)
+  if (d.state.rules && d.state.rules !== R.RULES_VERSION) {
+    $('rcHelp').textContent = 'Il gioco è stato aggiornato: chiudi e riapri Binottoland dal bot.';
+    toast('Il gioco è stato aggiornato: chiudi e riapri Binottoland dal bot.');
+    return;
+  }
   if (typeof d.skew === 'number') { if (net) net.skew = d.skew; }
   netChain = netChain.then(async () => {
     if (!net || net.room !== d.state.room) await netOpen(d.state, d.track);

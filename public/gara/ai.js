@@ -1,50 +1,66 @@
 // IA della gara: cerca la sequenza di mosse più corta fino al traguardo, con le stesse regole del giocatore
 // (inerzia, marce che salgono o scendono di una, partenza in prima). Non ha livelli: gioca sempre al meglio che trova.
-import { goodCell, crossesBorder, finishCross, dir8, MAX_GEAR } from './rules.js?v=b5d4680e25';
+import { goodCell, crossesBorder, finishCross, dir8, MAX_GEAR } from './rules.js?v=227a503e49';
 
 const key = (x, y) => x + ',' + y;
 const FIELD = new WeakMap();
 
 // Mappa delle distanze: da ogni casella buona, quanti passi di una casella servono per passare la linea in avanti.
 // Si calcola all'indietro partendo dalle caselle subito dietro la linea, senza mai attraversarla.
+// Le caselle stanno in tabelle di numeri grandi quanto il riquadro della pista (analisi 10.10): prima erano elenchi con
+// chiavi di testo e una pista larga costava 9 secondi e circa 110 MB. F.dist(x, y) dà la distanza; F.D.get('x,y')
+// resta per chi la chiedeva così.
 export function distField(t) {
   const cached = FIELD.get(t);
   if (cached) return cached;
-  const D = new Map(), q = [], b = t.bbox;
-  const good = new Map();
-  const isGood = (x, y) => { const k = key(x, y); if (!good.has(k)) good.set(k, goodCell(t, { x, y })); return good.get(k); };
+  const b = t.bbox, ox = Math.floor(b.minX) - 3, oy = Math.floor(b.minY) - 3;
+  const W = Math.ceil(b.maxX) - ox + 4, H = Math.ceil(b.maxY) - oy + 4;
+  const dist = new Int32Array(W * H), good = new Int8Array(W * H).fill(-1);
+  const at = (x, y) => (x < ox || y < oy || x >= ox + W || y >= oy + H ? -1 : x - ox + (y - oy) * W);
+  const isGood = (x, y) => {
+    const i = at(x, y);
+    if (i < 0) return goodCell(t, { x, y });
+    if (good[i] < 0) good[i] = goodCell(t, { x, y }) ? 1 : 0;
+    return good[i] === 1;
+  };
+  const getD = (x, y) => { const i = at(x, y); return i < 0 || !dist[i] ? undefined : dist[i]; };
+  const q = [];
   const f = t.finish;
   const x0 = Math.floor(Math.min(f.a.x, f.b.x)) - 3, x1 = Math.ceil(Math.max(f.a.x, f.b.x)) + 3;
   const y0 = Math.floor(Math.min(f.a.y, f.b.y)) - 3, y1 = Math.ceil(Math.max(f.a.y, f.b.y)) + 3;
   for (let x = x0; x <= x1; x++)
     for (let y = y0; y <= y1; y++) {
       if (!isGood(x, y)) continue;
+      const i = at(x, y);
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
         if (!dx && !dy) continue;
         const p = { x, y }, n = { x: x + dx, y: y + dy };
-        if (isGood(n.x, n.y) && !crossesBorder(t, p, n) && finishCross(t, p, n) === 1 && !D.has(key(x, y))) { D.set(key(x, y), 1); q.push(p); }
+        if (i >= 0 && !dist[i] && isGood(n.x, n.y) && !crossesBorder(t, p, n) && finishCross(t, p, n) === 1) { dist[i] = 1; q.push(i); }
       }
     }
   for (let h = 0; h < q.length; h++) {
-    const c = q[h], d = D.get(key(c.x, c.y));
+    const ci = q[h], c = { x: (ci % W) + ox, y: Math.floor(ci / W) + oy }, d = dist[ci];
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       if (!dx && !dy) continue;
-      const p = { x: c.x + dx, y: c.y + dy }, k = key(p.x, p.y);
-      if (D.has(k) || p.x < b.minX - 1 || p.x > b.maxX + 1 || p.y < b.minY - 1 || p.y > b.maxY + 1) continue;
+      const p = { x: c.x + dx, y: c.y + dy };
+      if (p.x < b.minX - 1 || p.x > b.maxX + 1 || p.y < b.minY - 1 || p.y > b.maxY + 1) continue;
+      const i = at(p.x, p.y);
+      if (i < 0 || dist[i]) continue;
       if (!isGood(p.x, p.y) || crossesBorder(t, p, c) || finishCross(t, p, c) !== 0) continue;
-      D.set(k, d + 1); q.push(p);
+      dist[i] = d + 1; q.push(i);
     }
   }
   // lunghezza di un giro: dalle caselle subito oltre la linea fino a ripassarla
   // (solo le caselle accanto al tratto di linea, non quelle lontane allineate con lei)
   let L = Infinity;
   const fl = Math.hypot(f.b.x - f.a.x, f.b.y - f.a.y), ux = (f.b.x - f.a.x) / fl, uy = (f.b.y - f.a.y) / fl;
-  for (const [k, d] of D) {
-    const [x, y] = k.split(',').map(Number);
+  for (const i of q) {
+    const x = (i % W) + ox, y = Math.floor(i / W) + oy;
     const s = (x - f.a.x) * t.normal.x + (y - f.a.y) * t.normal.y, along = (x - f.a.x) * ux + (y - f.a.y) * uy;
-    if (s >= 0 && s < 1.5 && along >= -0.5 && along <= fl + 0.5) L = Math.min(L, d);
+    if (s >= 0 && s < 1.5 && along >= -0.5 && along <= fl + 0.5) L = Math.min(L, dist[i]);
   }
-  const out = { D, L: isFinite(L) ? L : 1, isGood };
+  const D = { get: (k) => { const c = k.indexOf(','); return getD(+k.slice(0, c), +k.slice(c + 1)); }, size: q.length };
+  const out = { D, dist: getD, L: isFinite(L) ? L : 1, isGood };
   FIELD.set(t, out);
   return out;
 }
@@ -52,7 +68,7 @@ export function distField(t) {
 // strada che manca alla fine della gara, in caselle
 function remaining(F, x, y, prog, laps) {
   if (prog > laps) return 0;
-  const d = F.D.get(key(x, y));
+  const d = F.dist(x, y);
   if (d === undefined) return Infinity;
   return d + (laps - Math.max(0, prog)) * F.L;
 }

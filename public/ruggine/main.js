@@ -5,37 +5,37 @@ import { RenderPass } from '../vendor/three/addons/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
 import { N, HALF, frame, at, buildWorld, drawTrack, rnd } from './world.js?v=63baabd3ac';
-import { Car, drive, aiInput, bump, Shots } from './cars.js?v=d925ed95d3';
+import { Car, drive, aiInput, bump, Shots } from './cars.js?v=98748d8e80';
 import { FX } from './fx.js?v=71299909a6';
-import { Sfx } from './sound.js?v=b410393548';
+import { Sfx } from './sound.js?v=8029b10059';
+import { isTouchDevice } from '../touch-device.js';
 
 const $ = (id) => document.getElementById(id);
 const LAPS = 3;
-const touch = matchMedia('(any-pointer: coarse)').matches || navigator.maxTouchPoints > 0;
+// telefono o computer: deciso in un solo punto per tutta l'app (touch-device.js, analisi 10.12)
+const touch = isTouchDevice();
 document.body.classList.toggle('touch', touch);
 
-// ---------- Telegram / Binottoland: margini del telefono ----------
-const embedded = window.parent !== window;
-const tg = !embedded && window.Telegram && window.Telegram.WebApp;
+// ---------- margini del telefono: li manda Binottoland (arcade-link.js); il gioco non parla più con Telegram ----------
 const px = (v) => (Number.isFinite(+v) ? Math.max(0, Math.min(200, +v)) : 0);
 function setInsets(ins) {
   const s = document.documentElement.style;
   for (const k of ['top', 'bottom', 'left', 'right']) { const o = ins[k]; s.setProperty('--s' + k[0], (typeof o === 'object' && o ? px(o.system) + px(o.content) : px(o)) + 'px'); }
-}
-if (tg && tg.initData) {
-  try {
-    tg.ready(); tg.expand(); if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
-    const upd = () => { const a = tg.safeAreaInset || {}, b = tg.contentSafeAreaInset || {}; setInsets(Object.fromEntries(['top', 'bottom', 'left', 'right'].map((k) => [k, { system: a[k], content: b[k] }]))); };
-    if (tg.onEvent) ['safeAreaChanged', 'contentSafeAreaChanged', 'viewportChanged', 'fullscreenChanged'].forEach((e) => tg.onEvent(e, upd));
-    upd();
-  } catch (e) { /* vecchie versioni */ }
 }
 addEventListener('message', (e) => { if (e.source === window.parent && e.data && e.data.insets) setInsets(e.data.insets); });
 
 // ---------- grafica ----------
 const quality = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) ? 'media' : 'alta';
 const host = $('gl');
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+// se la grafica 3D non parte si dice perché, invece di lasciare il tasto fermo su «Caricamento» (analisi 10.13);
+// l'errore arriva anche al registro di Debug (frame-errors.js)
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  $('action').textContent = 'Grafica 3D non disponibile su questo dispositivo';
+  throw e;
+}
 renderer.setPixelRatio(Math.min(devicePixelRatio || 1, quality === 'alta' ? 2 : 1.5));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -51,7 +51,8 @@ const sfx = new Sfx();
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.5, 0.92);
-composer.addPass(bloom);
+// bagliori solo con la grafica alta: sui telefoni pesano molto (analisi 10.8)
+if (quality === 'alta') composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
 function resize() {
@@ -299,4 +300,5 @@ function loop(now) {
 requestAnimationFrame(loop);
 
 // per provare dalla console
-window.ruggine = { cars, player, get mode() { return mode; }, reset, scene, camera, renderer, keys, at, HALF, rnd };
+// aggancio per le prove a mano, solo con ?dev (come nella Gara)
+if (new URLSearchParams(location.search).has('dev')) window.ruggine = { cars, player, get mode() { return mode; }, reset, scene, camera, renderer, keys, at, HALF, rnd };

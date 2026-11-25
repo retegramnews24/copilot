@@ -452,7 +452,7 @@ export class LobbyHub {
       const user = userOf(req);
       if (!user) return json({ error: MSG.login }, 401);
       const playerName = name(user.name);
-      // freno: al massimo 5 tavoli o sale nuovi ogni 10 minuti per persona (le sale arcade non hanno la regola
+      // freno: al massimo CREATE_LIMIT (20) tavoli o sale nuovi ogni 10 minuti per persona (le sale arcade non hanno la regola
       // "un tavolo per gioco", e ognuna aggiunge un avviso alla campanella)
       if (createTooFast(this, user.player))
         return json({ error: 'Hai aperto troppi tavoli di fila: riprova tra qualche minuto.' }, 429);

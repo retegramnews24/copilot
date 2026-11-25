@@ -11,6 +11,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 6: staging contro main**, fatta il 25 novembre 2026 confrontando `staging` al commit `a7a56b9` con `main` al commit `a615b09` (versione 1.0.60).
 - **Area 7: prove** e **Area 8: esperienza d'uso**, fatte il 25 novembre 2026 su `staging` al commit `ed88d2a` (versione 1.0.61, Labyrinth e Sprint già tolti).
 - **Area 9: verifica delle correzioni**, fatta il 25 novembre 2026 su `staging` al commit `5e6e881` (versione 1.0.63). I commit con «analisi» nel messaggio sono 24, da `e253adc` a `7d04052`. I primi 16 (aree 1-6) li avevo già riletti man mano, perché ogni area è stata letta dopo le correzioni della precedente: qui li ho solo ricontrollati a campione. Ho letto riga per riga gli ultimi 8 (da `fa79eab` a `7d04052`, aree 7 e 8) e `5e6e881` (filtro della pagina Giochi), che nessuno aveva ancora riletto.
+- **Area 10: Ruggine 89 e Gara a quadretti (F1 on paper!)**, fatta il 25 novembre 2026 su `staging` al commit `ebbb26f` (versione 1.0.64, dopo le correzioni dell'Area 9).
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -31,6 +32,33 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 10 (Ruggine 89 e Gara a quadretti)
+
+**Come leggere quest'area.** I due giochi sono arrivati dopo le prime analisi. **Ruggine 89** (`public/ruggine`) gira tutto sul telefono: non usa il server, non ha multigiocatore e non entra in classifica. La **Gara a quadretti** (`public/gara`, sullo schermo «F1 on paper!») usa `f1-server.js`, `public/f1-link.js`, la Lobby e `api.js`. **[V]** = verificato leggendo il codice, **[P]** = provato eseguendo (programmi di misura fuori dal repo e server vero in locale), **[S]** = sospetto. **Non ho guardato i giochi su un telefono né su Telegram Desktop.**
+
+**Produzione.** Su `main` (commit `0ba3a23`, versione 1.0.64) i file dei due giochi, `f1-server.js`, `public/f1-link.js`, `api.js` e `lobby-hub.js` sono identici a quelli di `staging`: tutto quello che segue vale anche in produzione.
+
+| # | Problema | Gioco | Dove si sente | Gravità | Stato |
+|---|---|---|---|---|---|
+| N1 | «Abbandona la gara» non arriva al server: in `api.js` manca il percorso. Il telefono legge «Gara chiusa.» e chiude, il server non segna l'abbandono. Lo stesso percorso manca per il Biliardo | Gara (e Biliardo) | telefono e computer | media-alta | [P] |
+| N2 | A ogni scelta di ogni pilota il server rispedisce a tutti lo stato intero, con tutte le mosse e tutti i percorsi dall'inizio. Pista piccola a 2: 2,4 MB a telefono per gara. Pista grande a 8 auto e 3 giri: fino a 408 MB a telefono | Gara | telefono (dati) e server | media-alta | [P] |
+| N3 | Il controllo della pista sul server non mette limiti a coordinate, estremi della linea di partenza e distanza tra i punti. Una richiesta fatta apposta lo tiene occupato per decine di secondi o gli finisce la memoria, e per tutto quel tempo la Lobby è ferma per tutti | Gara | server | media-alta | [P] i tempi, [V] il blocco |
+| N4 | Un avversario si ferma per sempre prima di una curva (punti 430-433 del tracciato): succede al 15% delle auto per corsa | Ruggine | telefono e computer | media | [P] |
+| N5 | Aperta dal cabinato della Lobby 3D: dopo un secondo e mezzo la Lobby 3D si riapre da sola sotto il gioco (due scene 3D insieme, radio del club accesa). Niente margini di Telegram e niente tasto Indietro | Ruggine | telefono | media | [V], l'effetto [S] |
+| N6 | Grafica «Alta» come partenza su ogni telefono, nessun limite ai fotogrammi, e la scena 3D continua a disegnare anche quando si torna a disegnare la pista | Gara | telefono | media | [V], l'effetto [S] |
+| N7 | Mini app ridotta a icona in Telegram: il telefono continua a chiedere lo stato, il pilota risulta presente e gli altri aspettano fino a 60 secondi a ogni giro di mosse | Gara | telefono | media-bassa | [V] |
+| N8 | Pista regolare ma molto larga (626 mila caselle, dentro i limiti): la mappa del pilota automatico costa 9 secondi e circa 110 MB. Sul server supera la memoria, sul telefono blocca la partita contro l'IA | Gara | telefono e server | media-bassa | [P] |
+| N9 | Online il tasto «Centra» porta sull'auto numero 1 e non sulla tua | Gara | telefono e computer | bassa | [V] |
+| N10 | L'impostazione generale «Suoni» non vale: i due giochi hanno solo il loro tasto | tutti e due | telefono e computer | bassa | [V] |
+| N11 | «È un telefono?» deciso per conto proprio: Ruggine mostra pad e scritte del telefono su un portatile a schermo tattile; la Gara scrive «col dito» e «Tocca» anche su computer | tutti e due | computer | bassa | [V] |
+| N12 | Se la grafica 3D non parte non compare nessun messaggio. Ruggine non registra gli errori nel registro di Debug | tutti e due | telefono | bassa | [V] |
+| N13 | Prove: Ruggine non ne ha nessuna. Per la Gara non sono provati sul server vero «Abbandona» e i limiti della pista. Nessuno dei due è nei controlli a mano né ha un documento | tutti e due | prove | media | [V] |
+| N14 | Cose piccole: sala rimasta in memoria se la pista non si carica, commento «5» con il limite a 20, aggancio di prova sempre acceso in Ruggine, codice di Telegram che non gira più | tutti e due | — | bassa | [V] |
+
+Il dettaglio è nella sezione «Area 10: Ruggine 89 e Gara a quadretti», più sotto.
 
 ---
 
@@ -1354,6 +1382,174 @@ Per il confronto con `main` ho aggiornato i riferimenti remoti con `git fetch` (
 
 ---
 
+## Area 10: Ruggine 89 e Gara a quadretti
+
+**Cosa ho letto per intero:** `public/ruggine/index.html`, `main.js`, `cars.js`, `sound.js`, `ruggine.css`; `public/gara/index.html`, `main.js`, `rules.js`, `ai.js`, `gara.css`; `f1-server.js`, `public/f1-link.js`; `tests/f1-runtime.test.js`. **Solo in parte** (ricerche mirate): `public/ruggine/world.js` e `fx.js`, `public/gara/scene3d.js` (2.107 righe: avvio, qualità, ciclo di disegno, comandi), `editor.js`, `tutorial.js`, `sound.js`; `lobby-hub.js` (creazione delle sale), `api.js` (percorsi), `worker.js` (blocco della Lobby), `public/lobby3d/lobby3d.js` (cabinati), `public/arcade-link.js`, `public/biliardo-link.js` (solo «Abbandona»). **Non fatto:** nessuna prova a occhio su telefono; le regole della Gara le ho lette per i limiti del server, non le ho ricontrollate una per una contro quelle concordate.
+
+### 10.1 Server della Gara: sicurezza e limiti
+
+**N1. «Abbandona la gara» non arriva al server (gravità media-alta, [P]).**
+
+- **Causa.** `api.js:203` lascia passare verso la gara solo `state`, `track`, `join`, `leave`, `start`, `play`, `close`. `abandon` non c'è, quindi la richiesta finisce su «indirizzo sconosciuto».
+- **Prova.** Sul server vero in locale, con una gara a due appena partita: `POST /api/f1/<sala>/abandon` risponde 404 «Indirizzo sconosciuto: chiudi e riapri Binottoland dal bot.», e la gara non segna nessuno come andato via.
+- **Cosa succede al giocatore.** Il telefono tratta ogni 404 come «la gara non c'è più» (`public/f1-link.js:189-192`, `:119-123`): chiude il gioco, toglie la gara dal suo elenco e scrive «Gara chiusa.». La gara invece continua.
+- **Cosa non funziona più sul server.**
+  - Chi ha abbandonato può ancora vincere con il pilota automatico: la regola «chi ha abbandonato non vince» (`f1-server.js:236`) non scatta mai.
+  - Gli altri aspettano 20 secondi prima che guidi il pilota automatico (`AWAY`), invece di subito.
+  - Se abbandona chi ha creato la gara, gli altri non possono chiuderla subito (`f1-server.js:401`, `public/gara/main.js:611`).
+- **Biliardo.** `api.js:196-198` ha lo stesso elenco senza `abandon`, e il telefono fa la stessa cosa (`public/biliardo-link.js:170-192`). Provato: 404 «Indirizzo sconosciuto», mentre `join` sulla stessa sala arriva al gioco. La vittoria a tavolino per abbandono (`biliardo-server.js:177-182`) dal telefono non si può ottenere.
+- **Perché le prove non l'hanno visto.** `tests/absent-players.test.mjs` e `tests/f1.test.js` chiamano le funzioni direttamente, senza passare da `api.js`.
+- **Correzione proposta.** Aggiungere `abandon` ai due elenchi di `api.js` e una riga nelle due prove sul server vero.
+
+**N2. Lo stato intero viene rispedito a ogni cambio (gravità media-alta, [P]).**
+
+- **Meccanismo.** Lo stato della gara contiene l'elenco di tutti i giri di mosse (`moves`) e, per ogni auto, tutto il percorso fatto (`race.cars[].path`). Ogni scelta di un pilota aumenta la revisione (`f1-server.js:239`), e alla richiesta successiva ogni telefono riceve tutto da capo (`:389-392`). Il telefono chiede ogni 0,9 secondi (`public/f1-link.js:51`). A ogni cambio il server riscrive anche tutto lo stato nel suo archivio (`:339`).
+- **Misure.** Gare complete simulate con le funzioni del server, piloti che scelgono la mossa del pilota automatico:
+
+| Pista | Auto e giri | Giri di mosse | Stato alla fine | Scaricato da un telefono | Da tutti |
+|---|---|---|---|---|---|
+| piccola (giro di circa 130 caselle) | 2 auto, 3 giri | 115 | 24 kB | 2,4 MB | 4,9 MB |
+| piccola | 4 auto, 3 giri | 101 | 38 kB | 7,1 MB | 28 MB |
+| grande (quella delle prove, giro di circa 600 caselle) | 2 auto, 3 giri | 424 | 95 kB | 39 MB | 78 MB |
+| grande | 8 auto, 3 giri | 364 | 285 kB | 408 MB | 3,3 GB |
+| grande | 8 auto, 9 giri | 1.072 | 849 kB | 3,6 GB | 29 GB |
+
+- **Come leggere i numeri.** Sono un tetto: valgono se il telefono scarica lo stato a ogni scelta. Con otto piloti che scelgono in momenti diversi è il caso normale; se due scelgono nello stesso secondo il telefono ne scarica una sola. Il pilota automatico guida prudente e fa più giri di mosse di una persona.
+- **Cosa succede al giocatore.** Su rete mobile una gara lunga consuma centinaia di megabyte. Verso la fine ogni telefono rilegge 300-800 kB a ogni scelta altrui.
+- **Rischio sul server ([S]).** Il limite è di 3.000 giri di mosse (`MAX_MOVES`); a 1.072 lo stato pesa già 849 kB. Lo spazio di un oggetto ha un tetto per ogni valore salvato (2 MB secondo la documentazione di Cloudflare, da verificare): una gara a 8 che arriva vicino al limite non si salverebbe più.
+- **Correzione proposta.** Il telefono dice quante mosse ha già (`state?after=…&moves=N`) e il server manda solo quelle nuove; i percorsi non si mandano, perché il telefono li ricostruisce rifacendo le mosse come fa già (`public/gara/main.js:672-710`).
+
+**N3. Controllo della pista senza limiti (gravità media-alta, [P] i tempi, [V] il blocco della Lobby).**
+
+- **Cosa controlla il server.** `makeTrack` (`f1-server.js:33-67`) accetta fino a 12.000 punti con coordinate tra −100.000 e +100.000, e chiede almeno 12 punti per bordo. Non controlla che i punti stiano nella griglia del gioco (2.000 caselle, `public/gara/rules.js:10`), né quanto sono vicini o lontani tra loro, né che gli estremi della linea di partenza stiano sui bordi. Il gioco disegna sempre punti a mezza casella l'uno dall'altro: il server non lo pretende.
+- **Tre richieste che lo mettono in crisi**, tutte sotto i 400 kB ammessi:
+
+| Richiesta | Misura | Al massimo ammesso |
+|---|---|---|
+| Linea di partenza con gli estremi lontani (pista normale) | estremi a ±4.000: 320 ms; a ±3.000 sul server vero: 285 ms. Cresce col quadrato (`rules.js:305-318`) | a ±99.999: circa 200 secondi |
+| Bordo interno fittissimo e liscio (cerchio di raggio 1,2) | 600 punti 0,6 s · 1.200 punti 4,2 s · 2.400 punti (137 kB) 26 s, e la pista viene **accettata** (`rules.js:178-196`) | 6.000 punti: diversi minuti |
+| Rombo grande con 12 punti per bordo | vertici a ±2.000 caselle: +87 MB · a ±4.000: +571 MB di memoria (`rules.js:55-67`) | a ±99.999: non misurabile |
+
+- **Perché conta.** Un oggetto del server ha 128 MB di memoria e circa 30 secondi di calcolo per richiesta (limiti di Cloudflare, non provati qui). Oltre, la richiesta viene interrotta.
+- **La Lobby resta ferma.** La creazione di una sala gira dentro il blocco della Lobby (`worker.js:369-372`) e aspetta la risposta della gara (`lobby-hub.js:514`). Finché il controllo della pista non finisce, la Lobby non serve nessun altro: presenze, chat, elenco delle partite. Se il blocco dura più di 30 secondi Cloudflare riavvia l'oggetto e cadono tutti i collegamenti ([S], è il comportamento documentato).
+- **Il freno non basta.** Il freno sulle creazioni conta anche quelle rifiutate, ma è di 20 ogni 10 minuti (`lobby-hub.js:72`; il commento a `:455` dice 5). Venti richieste da 30 secondi coprono i 10 minuti. Provato: sette creazioni sbagliate di fila passano tutte.
+- **Chi può farlo.** Solo un iscritto al gruppo, con una richiesta scritta a mano: dal gioco non succede.
+- **Correzione proposta.** In `makeTrack`, prima di ogni calcolo: coordinate dentro la griglia, distanza tra due punti vicini tra 0,1 e 2 caselle, estremi della linea sui due segmenti dichiarati, riquadro della pista sotto un tetto di caselle. E fare il controllo della pista prima di entrare nel blocco della Lobby.
+
+**N8. Pista regolare ma molto larga (gravità media-bassa, [P]).**
+
+- **Misura.** Bordo esterno di raggio 450 e isola di raggio 50: 6.283 punti, richiesta di 152 kB, dentro tutti i limiti. Il controllo del server dura 250 ms. La mappa delle distanze del pilota automatico (`public/gara/ai.js:10-50`) dura 9 secondi e occupa circa 110 MB, per 626 mila caselle. Con raggio 200 e isola 30 (122 mila caselle): 0,9 secondi e circa 30 MB. La misura della memoria è grossolana.
+- **Cosa succede.** Sul server la mappa si calcola la prima volta che guida il pilota automatico: con una pista così supera la memoria e la gara si ferma. Sul telefono, contro l'IA, è lo stesso calcolo nella pagina: resta bloccata per molti secondi sulla scritta «L'IA studia la pista…» e può chiudersi.
+- **Quanto è probabile.** Serve una pista disegnata con la vista molto allontanata e un'isola piccola. Il gioco lo suggerisce («Per una pista grande allontana prima la vista»).
+- **Correzione proposta.** Tetto alle caselle della pista (per esempio 150 mila), detto al giocatore mentre disegna; mappa in una tabella di numeri invece che in un elenco con chiavi di testo.
+
+**Controllato e a posto ([P] sul server vero).**
+
+- Mossa di chi guarda: 409 «Non sei in questa gara.». Chi guarda legge lo stato ma non le scelte in attesa degli altri.
+- Mossa troppo lunga: 413. Mossa illeggibile: 400 con la frase di `messages.js`. Senza accesso: 401. 99 giri o 99 piloti: rifiutati.
+- I nomi dei piloti passano sempre da `esc` prima di finire nella pagina (`public/gara/main.js:559-565`); i messaggi tra gioco e app controllano origine e mittente (`:761`).
+
+### 10.2 Multigiocatore della Gara
+
+| Caso | Cosa succede | Stato |
+|---|---|---|
+| Il collegamento cade | Dopo tre richieste fallite «Collegamento perso, riprovo…», poi «Collegamento ripreso.»; con sessione scaduta la frase di `messages.js`. Dopo 20 secondi guida il pilota automatico | a posto, coperto da `tests/game-links-network.test.mjs` |
+| Ritorno nell'app | Con l'app nascosta il telefono non chiede lo stato (`public/f1-link.js:55`). Al ritorno riparte entro 0,9 secondi; fino a 4 giri persi vengono rifatti animati, di più messi subito (`public/gara/main.js:671`) | a posto [V] |
+| Stessa persona da due dispositivi | Tutti e due vedono la gara e guidano la stessa auto. Vale la prima scelta; la seconda riceve 409 «Hai già scelto: aspettiamo gli altri.» | a posto [P] |
+| Mini app ridotta a icona in Telegram | **N7** | [V] |
+| Abbandono | **N1** | [P] |
+| Rilascio a metà gara | Il telefono rifà le mosse con le sue regole, il server con le sue. Se un rilascio cambia `rules.js` a gara aperta, i telefoni rimasti aperti hanno le regole vecchie: la gara sul loro schermo si rompe senza messaggio (`public/gara/main.js:734` scrive solo nella console) | [S] |
+
+**N7 in dettaglio (gravità media-bassa, [V]).** L'app sa quando Telegram riduce la mini app a icona (`public/app.js:76`, `:587-588`) e lo usa per la Lobby 3D, ma non lo dice a `f1-link.js`, che guarda solo `document.hidden`. Su alcuni telefoni la pagina ridotta a icona non risulta nascosta: le richieste continuano, il pilota risulta presente, e gli altri aspettano il minuto intero a ogni giro di mosse. Vale anche per `biliardo-link.js`. Correzione: fermare le richieste anche quando la mini app è ridotta a icona.
+
+**N9 in dettaglio (gravità bassa, [V]).** `public/gara/main.js:523` centra sull'auto `race.turn`. Online, in gara, `race.turn` resta 0 (`rules.js:451`; i giri di mosse insieme non lo cambiano, `:523-548`). Chi non è il primo pilota tocca «Centra» e la vista va sull'auto di un altro. Correzione: usare la propria auto (`net.mine`) come fa già `refresh` a `:310`.
+
+### 10.3 Ruggine 89: il gioco
+
+**N4. Un avversario resta fermo per sempre (gravità media, [P]).**
+
+- **Causa.** Il pilota automatico dà gas solo sotto una velocità obiettivo: `(24 − curva × 16) × bravura` (`public/ruggine/cars.js:143`). Da fermo, in quattro punti del tracciato (430-433) la curva che vede davanti supera 1,5 radianti e l'obiettivo diventa zero o negativo: niente gas, per sempre.
+- **Quando succede.** Quando l'auto arriva lì lenta, cioè dopo un colpo o un urto. In quel punto c'è anche un bidone di nitro (`main.js:83`), quindi ci si passa vicini.
+- **Misure.** Corse simulate con le funzioni vere del gioco, senza grafica. Su 150 corse a tre auto, 70 auto su 450 (15%) ferme da più di 30 secondi a fine corsa: tutte ai punti 430-433, tutte senza gas con obiettivo zero. Su 200 corse, 85 hanno almeno un'auto che non finisce in 10 minuti.
+- **Cosa vede il giocatore.** Un avversario fermo in pista dopo una curva; se dietro ce n'è un altro allineato, gli spara senza sosta (fino a 49 secondi di stordimento di fila nelle misure). Nei risultati resta «in gara».
+- **Correzione proposta.** Una velocità obiettivo minima (per esempio 6) e una prova con seme fisso: tre auto guidate dal gioco finiscono sempre.
+
+**Altre cose del gioco.**
+
+- **Colpi a ripetizione ([V], bassa).** Un'auto stordita può essere colpita di nuovo subito: lo stordimento dura 0,9 secondi e chi spara ricarica in 0,7 (`cars.js:174-175`, `:187-188`). Con un avversario allineato dietro si resta fermi a lungo. Proposta: un secondo senza colpi dopo lo stordimento.
+- **Numeri.** Nelle 280 corse simulate nessuna posizione o velocità è diventata un numero non valido.
+- **Aggancio di prova sempre acceso ([V], bassa).** `main.js:302` espone `window.ruggine`; nella Gara lo stesso aggancio c'è solo con `?dev` (`public/gara/main.js:792`).
+
+### 10.4 Uso da telefono
+
+**N5. Ruggine aperta dalla Lobby 3D (gravità media, [V] il meccanismo).**
+
+- **Cosa fa il codice.** Il cabinato chiude la 3D e apre il gioco in un riquadro sopra tutto (`public/lobby3d/lobby3d.js:1151-1159`). Per Ruggine, e solo per lei, non viene chiamato `launched` (`:2033`), che è quello che dice all'app «sto giocando, non riaprire la 3D». Il controllo dell'app guarda solo i riquadri con il nome che finisce per `-overlay` (`public/app.js:78`), e questo riquadro non ce l'ha: dopo due giri del controllo, circa un secondo e mezzo, la 3D si riapre (`:123`) sotto il gioco.
+- **Cosa succede.** Sul telefono girano due scene 3D insieme, con la radio del club accesa sotto i suoni del gioco, per tutta la partita.
+- **In più.** Da questo ingresso il gioco non riceve i margini di Telegram (dalla pagina Giochi li manda `public/arcade-link.js:255-259`): a tutto schermo l'intestazione può finire sotto i tasti di Telegram ([S]). E non compare il tasto Indietro di Telegram: si esce solo con «Esci».
+- **Correzione proposta.** Aprire Ruggine dal cabinato come tutti gli altri giochi (`app.open('ruggine-89')`, che passa da `arcade-link.js`) e togliere `openRuggine`.
+
+**N6. Grafica della Gara sul telefono (gravità media, [V], l'effetto [S]).**
+
+- La qualità parte da «Alta» su qualsiasi dispositivo (`public/gara/main.js:258-259`): bagliori, ombre da 2.048, risoluzione doppia, levigatura a 4 campioni (`scene3d.js:15-18`, `:354-356`, `:378`). Il menu dice di abbassarla a mano se va a scatti.
+- La scena si ridisegna a ogni fotogramma senza limite (`scene3d.js:389`, `:2078-2106`), anche mentre si aspetta la mossa: è un gioco a turni, quasi sempre fermo.
+- Dopo la prima gara la scena continua a disegnare anche quando si torna a disegnare una pista nuova: la schermata è nascosta ma il ciclo non si ferma.
+- Ruggine sceglie «media» sui telefoni (`public/ruggine/main.js:36`), ma i bagliori restano sempre accesi (`:51-55`) e non c'è una scelta per il giocatore.
+- **Correzione proposta.** Partenza «Media» sui telefoni, ciclo fermo con la schermata nascosta, 30 fotogrammi al secondo quando niente si muove (come la proposta 3.3 per la Lobby 3D).
+
+**Comandi, scritte e caratteri.**
+
+- **Caratteri ([V]).** In `gara.css` e `ruggine.css` il carattere più piccolo è 12 px; le scritte disegnate sulla tela dell'editor sono a 14 px.
+- **N11, «è un telefono?» ([V], bassa).** Ruggine usa una regola sua (`main.js:14`: qualsiasi puntatore a tocco, o schermo che accetta il tocco) e non `public/touch-device.js` nato con la 9.8: su un portatile a schermo tattile mostra i pad e le istruzioni del telefono. La Gara non distingue: «disegna col dito», «Tocca la freccia», «Tocca una casella» anche su computer (`public/gara/main.js:118-121`, `:321-323`); la rotellina per lo zoom c'è ma non è scritta.
+- **N10, suoni ([V], bassa).** `public/sound-pref.js` è l'impostazione «Suoni» di tutta l'app; Golf e Moto Trial la rispettano. Ruggine (`sound.js:6`, chiave `ruggine.snd`) e la Gara (`sound.js:4`, chiave `gara.audio`) guardano solo il loro tasto: con i suoni spenti in Impostazioni suonano lo stesso.
+- **N12, grafica che non parte ([V], bassa).** In Ruggine la scena nasce senza protezione (`main.js:38`): se fallisce, il tasto resta «Caricamento» e non compare niente. Nella Gara nasce quando parte la gara (`public/gara/main.js:272`, `scene3d.js:354`), dopo che la schermata è già cambiata: resta vuota. Ruggine non carica `frame-errors.js` (la Gara sì, `index.html:10`), quindi i suoi errori non arrivano al registro di Debug.
+- **Zoom bloccato.** Tutte e due le pagine hanno `user-scalable=no`, come gli altri giochi.
+
+### 10.5 Frasi d'errore e nomi
+
+- **Frasi ([V]).** `f1-server.js` prende da `messages.js` le frasi comuni (accesso, non tocca a te, mossa non valida, richiesta troppo grande, azione sconosciuta) e tiene nel suo file quelle della gara, tutte in italiano e con il motivo. «Gara chiusa.» è scritta due volte (`f1-server.js:380`, `public/f1-link.js:122`). Ruggine non ha frasi d'errore: non parla con il server.
+- **Nomi tra pagina Giochi e Lobby 3D ([P]).** Le chiavi `f1-on-paper` e `ruggine-89` coincidono tra schede e cabinati; `tests/game-keys.test.mjs` passa.
+- **Il nome del gioco.** Nel codice e nei commenti è «Gara a quadretti»; sullo schermo, nella scheda, sul cabinato e negli avvisi è «F1 on paper!». È l'unico titolo in inglese tra i giochi nuovi: da decidere.
+- **Sala e gara.** L'avviso della campanella dice «sala» (come deciso con la 8.7 per i giochi arcade), il gioco dice sempre «gara». Non crea confusione.
+
+### 10.6 Prove che mancano
+
+| Cosa | Oggi | Cosa manca |
+|---|---|---|
+| Ruggine 89 | nessuna prova | guida, avversari, urti e colpi sono funzioni senza grafica (`cars.js`): si provano con una pagina finta, come ho fatto per le misure. Almeno: tre auto guidate dal gioco finiscono la corsa (oggi fallirebbe, N4) |
+| Gara, percorsi | `f1-runtime` prova creare, entrare, muovere, chiudere | `abandon` attraverso `api.js` (N1); lo stesso in `biliardo-runtime` |
+| Gara, limiti della pista | `f1.test.js` prova piste valide e alcuni rifiuti | linea con estremi fuori dai bordi, punti fuori griglia, bordi troppo fitti o troppo radi, pista troppo larga (N3, N8) |
+| Gara, peso dello stato | niente | una gara intera simulata con un tetto alla grandezza di ogni risposta (N2) |
+| Gara, assenti | `absent-players` prova le funzioni | pilota automatico dopo 20 secondi attraverso il server vero |
+| Gara, due dispositivi | niente | seconda scelta rifiutata con la frase giusta (oggi funziona) |
+| Controlli a mano | `docs/controlli-prima-del-rilascio.md` non nomina nessuno dei due giochi | una corsa di Ruggine da telefono, da cabinato e da pagina Giochi; una gara online a due con abbandono |
+| Documenti | nessun documento per i due giochi (gli altri giochi lo hanno in `docs/`) | regole concordate della Gara, comandi e limiti di Ruggine |
+| Formattazione | `format:check` non guarda `f1-server.js`, `public/f1-link.js`, `public/gara`, `public/ruggine` | aggiungerli (in `scene3d.js` ci sono 35 righe oltre i 200 caratteri) |
+
+### 10.7 Cose piccole (N14)
+
+- **Sala rimasta in memoria ([V]).** In `public/f1-link.js:83-104`, se lo stato arriva ma la pista no, `room` resta impostata con il gioco chiuso. Da lì in poi creare una gara online dallo stesso telefono non fa niente, senza messaggio (`:149`), finché non si riapre l'app.
+- **Commento sbagliato ([V]).** `lobby-hub.js:455` dice «al massimo 5 tavoli o sale nuovi ogni 10 minuti»; il limite è 20 (`:72`).
+- **Codice che non gira più ([V]).** `public/gara/main.js:24`, `:34-63` e `:540-553` gestiscono Telegram per quando il gioco era una mini app a sé; la pagina non carica più la libreria di Telegram, quindi non si eseguono mai. Lo stesso in `public/ruggine/main.js:19`, `:25-32`.
+- **Indirizzo della pagina.** `public/f1-link.js:44` apre il gioco con `?v=2` scritto a mano, fuori dai timbri del rilascio.
+
+### 10.8 Le misure eseguite
+
+Tutto al commit `ebbb26f`, cartella senza modifiche in sospeso. I programmi di misura stanno fuori dal repo.
+
+| Misura | Come | Esito |
+|---|---|---|
+| Percorsi di `api.js` | espressione di `api.js:203` sulle otto azioni | `abandon` rifiutata |
+| Gara sul server vero (Miniflare, come le prove del repo) | creare, entrare, abbandonare, due dispositivi, chi guarda, richieste sbagliate, linea lunga, sette creazioni sbagliate | vedi 10.1 e 10.2 |
+| Controllo della pista | `makeTrack` con piste fatte apposta | vedi tabella di N3 |
+| Peso dello stato | cinque gare complete con le funzioni del server | vedi tabella di N2 |
+| Ruggine | 200 + 40 + 40 corse senza grafica, più 150 per cercare il punto | vedi N4 |
+| Prove del repo | `release:check`, `npm test` (42 file), `test:table-runtime`, `test:multiplayer-runtime` | passano tutte |
+
+Non eseguiti: `format:check`, `test:ui`, `test:simulator`, `test:access`.
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -1536,3 +1732,24 @@ Per il confronto con `main` ho aggiornato i riferimenti remoti con `git fetch` (
 | 9.12 | Aggiungere ai controlli a mano prima del rilascio: la Lavagna dell'atrio si vede e si apre; «Entra» dalla bacheca; un giro con un portatile a schermo tattile. Aggiungere i quattro file nuovi a `format:check` | V1, V2, V3 | prove | piccolo |
 
 **Ordine consigliato per l'Area 9:** 9.1 subito, perché è in produzione (staging e poi `main` con versione +1), insieme alla 9.3 che impedisce che torni. Poi 9.4 e 9.5, che sono righe singole. Poi 9.2, 9.6 e 9.7. Il resto quando capita.
+
+### Proposte per l'Area 10
+
+| # | Proposta | Risolve | Gioco | Sforzo |
+|---|---|---|---|---|
+| 10.1 | Aggiungere `abandon` ai percorsi di F1 e del Biliardo in `api.js`. Una riga in `f1-runtime` e in `biliardo-runtime` che abbandona attraverso il server vero | N1 | Gara, Biliardo | piccolo |
+| 10.2 | Limiti in `makeTrack` prima di ogni calcolo: punti dentro la griglia, distanza tra punti vicini tra 0,1 e 2 caselle, estremi della linea sui due segmenti dichiarati, tetto alle caselle della pista. Prove dei quattro rifiuti | N3, N8 | Gara | piccolo |
+| 10.3 | Controllare la pista prima di entrare nel blocco della Lobby (in `api.js`, o con la Lobby che chiama la gara senza tenere il blocco). Freno più stretto per le creazioni rifiutate e commento corretto | N3 | Gara | medio |
+| 10.4 | Stato a pezzi: il telefono dice quante mosse ha, il server manda solo le nuove e non manda i percorsi. Sul server salvare le mosse a blocchi invece di riscrivere tutto a ogni scelta | N2 | Gara | medio |
+| 10.5 | Avversari: velocità obiettivo minima, così ripartono sempre. Un secondo senza colpi dopo lo stordimento | N4 | Ruggine | piccolo |
+| 10.6 | Prova di Ruggine senza grafica: tre auto guidate dal gioco finiscono la corsa. Serve un generatore con seme al posto di `Math.random` in `cars.js`, per avere sempre la stessa corsa | N4, N13 | Ruggine | piccolo |
+| 10.7 | Aprire Ruggine dal cabinato come gli altri giochi (`app.open`, quindi margini, tasto Indietro e 3D ferma) e togliere `openRuggine` | N5 | Ruggine | piccolo |
+| 10.8 | Gara: partenza «Media» sui telefoni; ciclo di disegno fermo quando la schermata è nascosta; 30 fotogrammi al secondo quando niente si muove. Ruggine: una scelta di qualità, o bagliori spenti sui telefoni | N6 | tutti e due | piccolo |
+| 10.9 | Fermare le richieste di stato anche con la mini app ridotta a icona, in `f1-link.js` e `biliardo-link.js` | N7 | Gara, Biliardo | piccolo |
+| 10.10 | Tetto alle caselle della pista detto mentre si disegna («Pista troppo grande»). Mappa del pilota automatico in una tabella di numeri | N8 | Gara | piccolo il tetto, medio la mappa |
+| 10.11 | «Centra» sulla propria auto. Liberare la sala in memoria se la pista non si carica, e dire perché una gara online non si crea | N9, N14 | Gara | piccolo |
+| 10.12 | Rispettare l'impostazione generale «Suoni». Ruggine usa `touch-device.js`; la Gara scrive «col dito» o «col mouse» secondo il dispositivo e nomina la rotellina | N10, N11 | tutti e due | piccolo |
+| 10.13 | Messaggio chiaro se la grafica 3D non parte. `frame-errors.js` in Ruggine. `window.ruggine` solo con `?dev`. Togliere il codice di Telegram che non gira più | N12, N14 | tutti e due | piccolo |
+| 10.14 | Aggiungere i due giochi ai controlli a mano e a `format:check`; un documento per ciascuno in `docs/` con regole, comandi e limiti; le prove della tabella 10.6; un numero di versione delle regole nello stato, così un telefono rimasto indietro dice «chiudi e riapri» | N13 | tutti e due | piccolo ognuno |
+
+**Ordine consigliato per l'Area 10:** 10.1 subito (un tasto che non funziona, in produzione, una riga). Poi 10.2 e 10.5, piccole e ognuna chiude un difetto provato. Poi 10.4, che è la più utile per chi gioca con la rete del telefono, e 10.7. Poi 10.3. Il resto quando capita.
