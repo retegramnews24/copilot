@@ -3,7 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=6dbfbe9612';
-import {buildBalilla} from './balilla.js?v=675a40fb58';
+import {buildBalilla} from './balilla.js?v=a1a2bd7ad7';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {soundAllowed} from '../sound-pref.js';
 import * as THREE from 'three';
@@ -873,6 +873,19 @@ export function createLobby3D(app) {
   const cinemaVolume=volumeControl('Cinema','club3d-cinema-volume',.85,v=>{cinemaLevel=v;unlockCinemaSound()});
   const radioVolume=volumeControl('Radio','club3d-radio-volume',.7,v=>window.binottolandClubRadio?.setClubVolume(v));
   cinemaLevel=cinemaVolume.read();mixPanel.append(cinemaVolume.wrap,radioVolume.wrap);el.append(mixPanel);
+  // Avvisi dentro la 3D (prima gli errori finivano nella pagina sotto, coperta): un messaggio che resta qualche secondo
+  // e, finché il collegamento della Lobby è caduto, «Riconnessione…» (gli altri si fermano: ora si capisce perché)
+  const alerts=document.createElement('div');
+  alerts.setAttribute('role','alert');
+  alerts.style.cssText='position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + '+(touch?118:104)+'px);display:grid;gap:6px;justify-items:center;max-width:88vw;pointer-events:none;z-index:6';
+  const noticeBox=document.createElement('div'),linkBox=document.createElement('div');
+  const chip='padding:8px 14px;border-radius:12px;font:600 14px/1.35 system-ui,sans-serif;text-align:center;color:#fff;box-shadow:0 4px 18px rgba(0,0,0,.35)';
+  noticeBox.style.cssText=chip+';background:rgba(150,28,40,.92)';linkBox.style.cssText=chip+';background:rgba(20,16,30,.85)';
+  noticeBox.hidden=linkBox.hidden=true;linkBox.textContent='Riconnessione…';
+  alerts.append(noticeBox,linkBox);el.append(alerts);
+  let noticeTimer=0;
+  function notice(text){noticeBox.textContent=String(text||'');noticeBox.hidden=!text;clearTimeout(noticeTimer);if(text)noticeTimer=setTimeout(()=>{noticeBox.hidden=true},5000)}
+  function connection(on){linkBox.hidden=!!on}
   window.addEventListener('club-volume-change',radioVolume.sync);
   // Keep direct sound in stereo; short, asymmetric reflections widen the room.
   function cinemaMix(video){
@@ -2070,7 +2083,7 @@ export function createLobby3D(app) {
     const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
     return { progress, ready: loading.idle && lights && film };
   }
-  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, notice, connection, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

@@ -96,7 +96,7 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=b0bb310847');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=86bc08bcc8');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
@@ -104,8 +104,10 @@ async function buildLobby3D(){
 }
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
+ const recent=Date.now()-errAt<10000?$('error').textContent:'';
  await makeLobby3D();
  lobby3d.show();
+ if(recent)lobby3d.notice?.(recent);
  document.documentElement.classList.remove('boot');
 }
 // splash: legge quanto manca al caricamento della Lobby 3D (null se non si usa la 3D)
@@ -120,7 +122,8 @@ setTimeout(()=>document.documentElement.classList.remove('boot'),26000);
 $('lobby3d-open').onclick=()=>{lobby3dFailed=false;try{sessionStorage.removeItem('binottoland-3d-failed')}catch{}openLobby3D().catch(e=>err('Lobby 3D: '+e.message))};
 // In 3D: ogni volta che la Lobby è libera (all'avvio dopo lo splash, uscendo da un gioco, tornando da Settings o
 // da Giochi) dopo due controlli tranquilli la 3D si riapre da sola. Appena aperto un gioco si aspetta un attimo.
-setInterval(()=>{if(!want3D()||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
+// la 3D non si riapre da sola sopra un errore appena mostrato: prima lo copriva dopo un secondo e mezzo
+setInterval(()=>{if(!want3D()||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500||Date.now()-errAt<4000)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
 let simSummary=null,simSummaryAt=0;
 // Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
 async function loadSimSummary(force=false){
@@ -138,7 +141,9 @@ let replayFrames=[],replayPly=null,replayTimer=null,replayRevision=null,replayLo
 let room=null,state=null,ws=null,retry=null,busy=false,credentials={},games=[],lobbyWS=null,lobbyRetry=null,roomEpoch=0;
 $('name').textContent='Accesso Telegram…';
 history.replaceState(null,'',location.pathname);
-function err(s){$('error').textContent=s;if(s)trace('ERROR',s)}
+// gli errori si vedono anche dentro la Lobby 3D (prima finivano nella pagina sotto, coperta dalla 3D)
+let errAt=0;
+function err(s){$('error').textContent=s;if(s){trace('ERROR',s);errAt=Date.now();if(lobby3d?.active)lobby3d.notice?.(s)}}
 async function request(path,data,keepalive=false){
  if(!sessionToken)throw Error('Apri Binottoland da Telegram per accedere.');
  await refreshSession();
@@ -426,10 +431,10 @@ function connectLobby(){
  // il server dimentica sgabello e posto al balilla del collegamento vecchio: il telefono si rimette d'accordo
  if(lobbyWS){lobbyWS.onclose=null;lobbyWS.close();lobby3d?.stoolDisconnected()}
  const socket=new WebSocket(location.origin.replace(/^http/,'ws')+'/api/lobby/ws',['checkmate',sessionToken]);lobbyWS=socket;
- socket.onopen=()=>{lobbyHeard=Date.now();$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();pinballFlush(socket);lobby3d?.lobbyReconnected?.();renderSocial()};
+ socket.onopen=()=>{lobbyHeard=Date.now();$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();pinballFlush(socket);lobby3d?.lobbyReconnected?.();lobby3d?.connection?.(true);renderSocial()};
  socket.onmessage=e=>{lobbyHeard=Date.now();if(e.data==='pong')return;try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}};
  socket.onerror=()=>trace('ERROR','Connessione sala partite');
- socket.onclose=()=>{lobby3d?.stoolDisconnected();clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
+ socket.onclose=()=>{lobby3d?.stoolDisconnected();lobby3d?.connection?.(false);clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial();lobbyRetry=setTimeout(connectLobby,4000)};
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>{show3DStats();selectPage('debug')};

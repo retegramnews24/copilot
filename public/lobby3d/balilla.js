@@ -231,6 +231,16 @@ export function buildBalilla(scene, el, send, playSound) {
     'position:absolute;right:calc(var(--ui-safe-right,0px) + 14px);bottom:calc(var(--ui-safe-bottom,0px) + 18px);width:46px!important;min-width:0!important;height:46px;min-height:0!important;padding:0!important;margin:0!important;border-radius:50%;font-size:20px!important;background:rgba(18,14,28,.6)!important;z-index:4';
   exitChip.hidden = true;
   el.append(exitChip);
+  // riga di stato sempre visibile al tavolo (telefono e computer): punteggio, lato e coppia, pausa, chi fa uscire la
+  // pallina. Prima non c'era niente: chi arrivava a un lato pieno non capiva perché le aste non rispondevano.
+  const statusBar = document.createElement('div');
+  statusBar.setAttribute('role', 'status');
+  statusBar.style.cssText =
+    'position:absolute;left:50%;transform:translateX(-50%);top:calc(var(--ui-safe-top,0px) + ' +
+    (touchUI ? 12 : 58) +
+    'px);max-width:92vw;padding:6px 12px;border-radius:10px;background:rgba(10,8,16,.72);color:#fff;font:600 13px/1.35 system-ui,sans-serif;text-align:center;pointer-events:none;z-index:4;white-space:pre-line';
+  statusBar.hidden = true;
+  el.append(statusBar);
   // telefono: tasto per cambiare coppia (a sinistra, simmetrico alla X), pad di gioco sotto il tavolo
   // e, alla sua sinistra, un pad verticale stretto per inclinare la visuale sul campo
   const chipCss =
@@ -407,6 +417,34 @@ export function buildBalilla(scene, el, send, playSound) {
       g.material = active && rows[i].team === team && rows[i].attack === pair ? brass : rubber;
     });
     padLabel.textContent = pair ? 'ATTACCO' : 'DIFESA';
+    renderStatus();
+  }
+  function renderStatus() {
+    if (!active) {
+      statusBar.hidden = true;
+      return;
+    }
+    statusBar.hidden = false;
+    if (!net) {
+      statusBar.textContent = 'Collegamento al tavolo…';
+      return;
+    }
+    const f = net.field,
+      side = team ? 'Blu' : 'Rossi',
+      score = 'Rossi ' + f.score[0] + ' – ' + f.score[1] + ' Blu';
+    const out = touchUI ? 'tocca il centro del campo' : 'premi Spazio';
+    let line;
+    if (!seated())
+      line =
+        net.occupied.includes(team * 2) && net.occupied.includes(team * 2 + 1)
+          ? 'Lato pieno: stai guardando'
+          : 'Aspetto il posto…';
+    else if (net.paused) line = 'In pausa: aspettiamo chi si è allontanato';
+    else if (f.finished) line = 'Partita finita: ' + out + ' per una nuova partita';
+    else if (alone()) line = side + ' · allenamento, i gol non contano' + (f.phase === 'throw' ? ' · ' + out : '');
+    else if (f.phase === 'throw') line = side + ' · pallina nel buco: ' + out;
+    else line = side + ' · ' + (pair ? 'attacco' : 'difesa') + (mate() ? '' : touchUI ? '' : ' (Q cambia)');
+    statusBar.textContent = score + '\n' + line;
   }
   function serve() {
     if (!seated()) return;
@@ -419,6 +457,7 @@ export function buildBalilla(scene, el, send, playSound) {
     if (watching) post('leave');
     active = watching = dirty = false;
     exitChip.hidden = true;
+    statusBar.hidden = true;
     showTouch(false);
     net = netBall = finger = tap = null;
     grips.forEach(g => (g.material = rubber));
@@ -664,6 +703,7 @@ export function buildBalilla(scene, el, send, playSound) {
       selectPair(pairIndex);
       exitChip.hidden = !touchUI;
       showTouch(touchUI);
+      renderStatus();
       lastWatch = performance.now();
       post('watch');
       join();
@@ -693,6 +733,7 @@ export function buildBalilla(scene, el, send, playSound) {
       netBall = { ...data.field.ball, t: performance.now() };
       if (!active) return;
       if ((!wasSeated && seated()) || (mate() && pair !== net.slot % 2)) selectPair(pair);
+      renderStatus();
     },
     update(camera, dt, nearby) {
       if (!active && !nearby) {
