@@ -227,9 +227,9 @@ export function buildBalilla(scene, el, send, playSound) {
     'position:absolute;left:50%;bottom:8%;transform:translateX(-50%);width:max-content;max-width:94%;background:#142026eb;color:white;padding:6px 10px;border-radius:8px;text-align:center;z-index:4;font-size:13px';
   ui.hidden = true;
   ui.innerHTML =
-    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <button data-reset>Azzera</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
+    '<span></span><br><button data-pair="0">1 Difesa</button> <button data-pair="1">2 Attacco</button> <button data-serve>Butta la pallina</button> <label title="Usa + e - mentre giochi">Sensibilità <input type="range" min="0.3" max="2.5" step="0.1" style="width:65px"></label> <button data-exit>Esci</button>';
   el.append(ui);
-  // niente pannello, né sul computer (tasti Spazio, Q, E, R, + e -) né sul telefono (gesti sul tavolo):
+  // niente pannello, né sul computer (tasti Spazio, Q, E, + e -) né sul telefono (gesti sul tavolo):
   // col dito si trascina per giocare, un tocco veloce butta la pallina, l'asta più vicina al dito sceglie difesa o attacco
   const noPanel = true;
   const touchUI = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
@@ -502,7 +502,6 @@ export function buildBalilla(scene, el, send, playSound) {
   sidePad(zoomPad, dy => {
     tune.zoom = Math.max(0.5, Math.min(1.5, tune.zoom + dy * 0.004));
   });
-  ui.querySelector('[data-reset]').onclick = () => seated() && post('reset');
   const clamp = (v, limit) => Math.max(-limit, Math.min(limit, v));
   function move(e) {
     if (!seated() || (e.type === 'pointermove' && e.pointerType === 'mouse')) return;
@@ -570,8 +569,6 @@ export function buildBalilla(scene, el, send, playSound) {
     if (e.type !== 'keydown' || e.repeat) return false;
     if (e.code === 'KeyE' || e.code === 'Escape') close();
     else if (e.code === 'KeyQ' && seated()) selectPair(1 - pair);
-    else if (e.code === 'KeyR' && seated())
-      post('reset'); // contapunti a zero
     else if (e.code === 'Digit1' || e.code === 'Digit2') selectPair(Number(e.code.slice(-1)) - 1);
     else if (e.key === '+' || e.key === '-') {
       if (e.key === '+') sensitivity.stepUp();
@@ -729,7 +726,7 @@ export function buildBalilla(scene, el, send, playSound) {
         !(
           net.field.finished ||
           net.occupied.length === 1 ||
-          (net.field.phase === 'throw' && (net.occupied.length === 1 || net.field.thrower === team))
+          net.field.phase === 'throw' // pallina nel buco: la fa uscire chiunque sia seduto
         );
       serveButton.textContent = net.field.finished
         ? 'Nuova partita'

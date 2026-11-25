@@ -284,8 +284,10 @@ export class BalillaHub {
         this.field.thrower = member.slot / 2;
         this.field.phase = 'throw';
       }
+      // al tavolo del bar la pallina la fa uscire dal buco chiunque sia seduto (Spazio o tocco al centro), anche dopo
+      // un gol: prima solo chi doveva rimettere, e gli altri premevano senza che succedesse niente
       if (
-        (this.field.practice || Math.floor(member.slot / 2) === this.field.thrower) &&
+        (this.field.practice || this.field.bar || Math.floor(member.slot / 2) === this.field.thrower) &&
         throwIn(this.field, Math.random, b.pair === 0 ? 0 : 1)
       )
         this.broadcast(true);
@@ -306,8 +308,8 @@ export class BalillaHub {
         });
       }
       control(this.field, team, pair, b.slide, b.angle);
-    } else if (member.slot >= 0 && ((b.action === 'again' && this.field.finished) || b.action === 'reset')) {
-      // nuova partita, oppure contapunti azzerati da chi è al tavolo
+    } else if (member.slot >= 0 && b.action === 'again' && this.field.finished) {
+      // nuova partita a partita finita (il punteggio non si azzera più a metà: niente comando «reset»)
       this.field = newField({
         bar: this.field.bar,
         target: this.field.target,
