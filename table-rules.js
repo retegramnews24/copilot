@@ -13,6 +13,7 @@ import { tutorial } from './table-ai.js';
 import { limits, createSeries, activeTable } from './match-series.js';
 import { TURN_LIMIT, isLongTurn, LONG_LIMIT } from './turn-notices.js';
 import { id, name } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 // What a viewer may see of a table (own hand only); limit is the time to move, for the clock deadline.
 export function publicTable(s, viewer = null, limit = TURN_LIMIT) {
@@ -126,7 +127,7 @@ export function newTable(room, b, token) {
       s.chess = chessSnapshot(new Chess());
       break;
     default:
-      throw Error('Gioco non disponibile.');
+      throw Error(MSG.noGame);
   }
   if (!['people', 'ai', 'tutorial'].includes(s.mode)) throw Error('Modalità di gioco non valida.');
   if (s.mode !== 'people') {
@@ -235,7 +236,7 @@ export function applyMove(s, who, b) {
     });
     if (next.result) s.phase = 'finished';
   } else if (s.connect4) {
-    if (who !== s.turn) throw Error('Non tocca a te.');
+    if (who !== s.turn) throw Error(MSG.notYourTurn);
     const next = playConnect4(s.connect4, b.column);
     s.connect4 = next;
     s.turn = next.turn;
@@ -249,7 +250,7 @@ export function applyMove(s, who, b) {
     });
     if (next.result) s.phase = 'finished';
   } else if (s.checkers) {
-    if (who !== s.turn) throw Error('Non tocca a te.');
+    if (who !== s.turn) throw Error(MSG.notYourTurn);
     const played = playCheckers(s.checkers, b.path),
       key = checkersKey(played.game);
     s.positions = s.positions || {};
@@ -262,7 +263,7 @@ export function applyMove(s, who, b) {
   } else {
     if (!s.chess)
       throw Error('Questo è un tavolo di prova precedente. Crea una nuova partita per giocare a scacchi.');
-    if (who !== s.turn) throw Error('Non tocca a te.');
+    if (who !== s.turn) throw Error(MSG.notYourTurn);
     const game = new Chess();
     for (const move of s.moves) game.move(move.san);
     if (b.kind === 'claim-draw') {
@@ -277,7 +278,7 @@ export function applyMove(s, who, b) {
       s.drawOffer = null;
       return;
     }
-    if (typeof b.from !== 'string' || typeof b.to !== 'string') throw Error('Mossa non valida.');
+    if (typeof b.from !== 'string' || typeof b.to !== 'string') throw Error(MSG.badMove);
     let moved;
     try {
       moved = game.move({ from: b.from, to: b.to, promotion: b.promotion || 'q' });

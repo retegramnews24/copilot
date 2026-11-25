@@ -1,5 +1,6 @@
 import {MEDIA_LIMIT,MEDIA_TTL,storeCinemaMedia} from './cinema-media.js';
 import { userOf } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 const GROUPS='cinema-groups', ID=/^[a-f0-9-]{36}$/;
 const HOME='binotto corsa competizione';
@@ -73,7 +74,7 @@ export class TelegramCinema {
     const group=groups.find(entry=>entry.id===url.searchParams.get('group'));
     if(!group||!homeTitle(group.title))return reply({error:'Gruppo non trovato.'},404);
     if(!isMember(await this.member(group.chatId,user.id)))return denied();
-    if(op!=='asset')return reply({error:'Operazione non disponibile.'},404);
+    if(op!=='asset')return reply({error:MSG.unknownAction},404);
     const id=url.searchParams.get('item');
     if(!ID.test(id??''))return reply({error:'Media non disponibile.'},404);
     const imported=(await this.ctx.storage.get('forwards:'+group.id)??[]).find(item=>item.id===id);

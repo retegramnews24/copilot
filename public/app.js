@@ -17,7 +17,7 @@ import {initThemes} from './themes.js?v=b6682dff0c';
 import {initSettings} from './settings.js?v=1635e1bcff';
 import {createLobbyLink} from './lobby-link.js?v=6048d01790';
 import {renderLeaders,createLeaderboardLoader} from './leaderboard.js?v=e0418faadc';
-import {createCinemaLobby} from './cinema-lobby.js?v=2ff4a1cf51';
+import {createCinemaLobby} from './cinema-lobby.js?v=ba68bb1ccf';
 import {makeAvatar} from './avatar.js?v=7a059821b4';
 import {createChat} from './chat.js?v=f139a08339';
 import {createLobbyChips} from './lobby-chips.js?v=34f547ad4a';
@@ -25,12 +25,13 @@ import {createNotices} from './notices.js?v=2da209359f';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
-import {createMotoLink} from './moto-link.js?v=10973e489d';
+import {createMotoLink} from './moto-link.js?v=371136c2a0';
 import {createGolfLink} from './golf-link.js?v=907761b1e9';
-import {createArcadeLink} from './arcade-link.js?v=0d0f6103eb';
-import {createF1Link} from './f1-link.js?v=ddd42671dd';
-import {createBiliardoLink} from './biliardo-link.js?v=bad852c408';
+import {createArcadeLink} from './arcade-link.js?v=56c520feb7';
+import {createF1Link} from './f1-link.js?v=2673c1f0cb';
+import {createBiliardoLink} from './biliardo-link.js?v=f6a32f5d65';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
+import { MSG } from './messages.js?v=a4f8bd3c10';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
@@ -139,7 +140,7 @@ history.replaceState(null,'',location.pathname);
 let errAt=0;
 function err(s){$('error').textContent=s;if(s){trace('ERROR',s);errAt=Date.now();if(lobby3d?.active)lobby3d.notice?.(s)}}
 async function request(path,data,keepalive=false){
- if(!sessionToken)throw Error('Apri Binottoland da Telegram per accedere.');
+ if(!sessionToken)throw Error(MSG.openFromTelegram);
  await refreshSession();
  const started=performance.now();trace('HTTP',(data?'POST ':'GET ')+path);
  try{

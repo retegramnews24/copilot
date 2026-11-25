@@ -7,6 +7,7 @@
 import * as R from './public/gara/rules.js';
 import { distField } from './public/gara/ai.js';
 import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 export const F1_MAX = 8;
 const WAIT = 1800000, // a race nobody joins closes after 30 minutes
@@ -185,7 +186,7 @@ export function playRace(m, player, action, now, track, auto = false) {
     before = m.moves.length;
   let entry;
   if (m.phase === 'place') {
-    if (!auto && seatOf(m, player) !== race.turn) throw Error('Non tocca a te.');
+    if (!auto && seatOf(m, player) !== race.turn) throw Error(MSG.notYourTurn);
     const p = auto ? autoPlace(race) : point(action);
     if (!p) throw Error('Casella non valida.');
     const car = race.turn,
@@ -213,7 +214,7 @@ export function playRace(m, player, action, now, track, auto = false) {
       if (m.pending[i]) throw Error('Hai già scelto: aspettiamo gli altri.');
       const p = point(action),
         opt = p && roundOpts(race, i).find(o => o.x === p.x && o.y === p.y);
-      if (!opt) throw Error('Mossa non valida.');
+      if (!opt) throw Error(MSG.badMove);
       m.pending[i] = opt;
       m.picked[i] = 'me';
     }
@@ -361,7 +362,7 @@ export class F1Room {
   fetch(req) {
     return this.ctx.blockConcurrencyWhile(async () => {
       const user = userOf(req);
-      if (!user?.player) return json({ error: 'Accesso richiesto.' }, 401);
+      if (!user?.player) return json({ error: MSG.login }, 401);
       const now = Date.now(),
         url = new URL(req.url),
         action = url.pathname.split('/').at(-1);
@@ -389,9 +390,9 @@ export class F1Room {
           return json(
             url.searchParams.get('after') === String(m.revision) ? { now } : { state: publicRace(m), now }
           );
-        if (req.method !== 'POST') return json({ error: 'Operazione non disponibile.' }, 405);
+        if (req.method !== 'POST') return json({ error: MSG.unknownAction }, 405);
         const raw = await req.text();
-        if (raw.length > 512) return json({ error: 'Richiesta troppo grande.' }, 413);
+        if (raw.length > 512) return json({ error: MSG.tooBig }, 413);
         const body = raw ? JSON.parse(raw) : {};
         if (action === 'close') {
           if (!m.players.some(p => p.id === user.player))
@@ -419,7 +420,7 @@ export class F1Room {
         else if (action === 'start') startRace(m, user.player, now, track);
         else if (action === 'play') playRace(m, user.player, body, now, track);
         else if (action === 'abandon') changed = abandonRace(m, user.player);
-        else return json({ error: 'Operazione non disponibile.' }, 404);
+        else return json({ error: MSG.unknownAction }, 404);
         if (changed) {
           await this.save(m);
           await this.update(m);

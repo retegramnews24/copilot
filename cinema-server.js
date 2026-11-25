@@ -11,6 +11,7 @@ export function cinemaTooFast(socket,type,now=Date.now()){
 }
 import {youtubeId,youtubeChannelId,positionAt} from './public/cinema/media.js';
 import { userOf } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 const ROOMS='cinema-rooms', FAVORITES='cinema-favorites';
 const MAX_ROOMS=24, MAX_FAVORITES=120, METADATA_TTL=28*86400000;
 // La Sala 1 resta sempre. Le altre con la proiezione accesa (o una coda) restano anche vuote,
@@ -209,9 +210,9 @@ export class Cinema {
       const path=new URL(req.url).pathname;
       
       if(path.startsWith('/cinema/group-'))return this.groupForward(req,path.slice('/cinema/group-'.length));
-      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response('WebSocket richiesto.',426);
+      if(req.headers.get('Upgrade')?.toLowerCase()!=='websocket')return response(MSG.live,426);
       const user=userOf(req);
-      if(!user)return response('Accesso richiesto.',401);
+      if(!user)return response(MSG.login,401);
       makeRoomFor(this.ctx,user.id,'cinema'); // al massimo 3 collegamenti al Cinema per persona
       if(this.ctx.getWebSockets().length>=120)return response('Cinema pieno.',429);
       const [client,socket]=Object.values(new WebSocketPair());
@@ -225,7 +226,7 @@ export class Cinema {
   }
   async groupForward(req,op){
     const user=userOf(req);
-    if(!user?.player)return response('Accesso richiesto.',401);
+    if(!user?.player)return response(MSG.login,401);
     const input=await req.json(),key='forward:'+user.player;
     const joined=room=>this.connections().some(c=>c.info.room===room&&c.info.user.player===user.player);
     if(op==='arm'){

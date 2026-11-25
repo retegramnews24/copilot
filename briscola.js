@@ -1,5 +1,6 @@
 import {random,shuffled} from './table-random.js';
 import {makeDeck,ORDER,POINTS,trickWinner,cardName} from './public/briscola-data.js';
+import { MSG } from './public/messages.js';
 export function initialBriscola(n=0,rng=random,dealer=null){if(n!==0&&![2,3,4,5].includes(n))throw Error('Numero di giocatori non valido.');const called=n===5,g={variant:called?'called':'classic',dealer:dealer??(n?Math.floor(rng()*n):0),hands:Array.from({length:n},()=>[]),deck:[],bottom:null,trumpCard:null,trump:null,trick:[],lastTrick:null,captured:Array.from({length:n},()=>[]),points:Array(n).fill(0),tricks:Array(n).fill(0),phase:called?'auction':'play',turn:0,leader:0,passed:Array(n).fill(false),bid:null,caller:null,called:null,partner:null,publicPartner:null,target:61,deltas:null,result:null,winners:[],reason:'',lastEvent:'Carte distribuite',redeals:0};if(!n)return g;
  g.leader=g.turn=(g.dealer+1)%n;g.deck=shuffled(makeDeck().filter(c=>n!==3||c.id!==1),rng);for(let round=0;round<(called?8:3);round++)for(let d=0;d<n;d++)g.hands[(g.leader+d)%n].push(g.deck.pop());if(!called){g.bottom=g.deck.pop();g.trumpCard=g.bottom;g.trump=g.bottom.suit}return g;}
 function callOptions(g,seat){if(g.phase!=='call'||seat!==g.caller)return [];return Array.from({length:4},(_,suit)=>{const ranks=[g.bid.rank];if(g.bid.rank===2&&g.hands[seat].some(c=>c.suit===suit&&c.rank===2)){const missing=[...ORDER].reverse().find(rank=>!g.hands[seat].some(c=>c.suit===suit&&c.rank===rank));if(missing!==undefined)ranks.push(missing)}return {suit,ranks}})}
@@ -9,7 +10,7 @@ function finish(g){const n=g.hands.length;
  else if(n===4){const totals=[g.points[0]+g.points[2],g.points[1]+g.points[3]];g.winners=totals[0]===totals[1]?[]:totals[0]>totals[1]?[0,2]:[1,3];g.reason='Coppie · '+totals[0]+' a '+totals[1];}
  else {const best=Math.max(...g.points),leaders=g.points.flatMap((p,i)=>p===best?[i]:[]);g.winners=leaders.length===1?leaders:[];g.reason=n===2?'Punti · '+g.points.join(' a '):'Punteggio più alto · '+best;}
  g.result=g.winners.length?'win':'draw';g.phase='finished';}
-export function playBriscola(state,seat,a,rng=random){if(state.result||seat!==state.turn||!state.hands[seat])throw Error('Non tocca a te.');const g=structuredClone(state),n=g.hands.length;
+export function playBriscola(state,seat,a,rng=random){if(state.result||seat!==state.turn||!state.hands[seat])throw Error(MSG.notYourTurn);const g=structuredClone(state),n=g.hands.length;
  if(g.phase==='auction'){
   if(a.kind==='bid'){const rank=a.rank,target=a.target??61;if(!ORDER.includes(rank)||!Number.isInteger(target)||target<61||target>120||rank!==2&&target!==61)throw Error('Offerta non valida.');if(g.bid&&(ORDER.indexOf(rank)<ORDER.indexOf(g.bid.rank)||rank===g.bid.rank&&(rank!==2||target<=g.bid.target)))throw Error('Chiama una carta più bassa o alza i punti del due.');g.bid={seat,rank,target};g.lastEvent='Asta · '+cardName({rank,suit:0}).split(' di ')[0]+(rank===2?' a '+target+' punti':'');}
   else if(a.kind==='bid-pass'){g.passed[seat]=true;g.lastEvent='Passa all’asta'}else throw Error('Devi chiamare o passare.');

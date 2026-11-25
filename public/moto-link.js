@@ -1,5 +1,6 @@
 // Moto Trial seen from the app: solo or online races in their iframe. The race WebSocket (authenticated) stays
 // here, never in the iframe; the iframe receives state, poses and safe-area insets by postMessage.
+import { REOPEN } from './messages.js?v=a4f8bd3c10';
 const $ = id => document.getElementById(id);
 
 export function createMotoLink({
@@ -101,9 +102,7 @@ export function createMotoLink({
       motoPost('connection', { connected: false });
       if (event.code === 4000 || event.code === 4001) {
         closeMotoTrial();
-        onError(
-          event.code === 4000 ? 'Corsa aperta in un’altra finestra.' : 'Chiudi e riapri Binottoland dal bot.'
-        );
+        onError(event.code === 4000 ? 'Corsa aperta in un’altra finestra.' : REOPEN);
         return;
       }
       try {

@@ -4,6 +4,7 @@
 // joins, keeps the race in sync by polling and sends the moves; the iframe only shows and asks.
 // Telegram stays here too: safe-area insets, Back, haptics, closing confirmation while racing.
 import { telegramHaptic } from './haptic.js?v=c280753040';
+import { MSG } from './messages.js?v=a4f8bd3c10';
 const $ = id => document.getElementById(id);
 
 export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {
@@ -71,7 +72,7 @@ export function createF1Link({ tg, me, request, onError, enterFullscreen, sendPr
           lost: true,
           message:
             error.status === 401 || error.status === 403
-              ? 'Sessione scaduta: chiudi e riapri Binottoland dal bot.'
+              ? MSG.expired
               : 'Collegamento perso, riprovo…'
         });
     } finally {

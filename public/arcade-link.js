@@ -3,6 +3,7 @@
 import { blackboardLink } from './blackboard/link.js?v=bb859dccee';
 import { telegramHaptic } from './haptic.js?v=c280753040';
 import { renderNumberLeaders } from './leaderboard.js?v=e0418faadc';
+import { REOPEN } from './messages.js?v=a4f8bd3c10';
 const $ = id => document.getElementById(id);
 const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
 
@@ -52,7 +53,7 @@ export function createArcadeLink({
     status.textContent = online
       ? 'Nessuna sala aperta.'
       : state === 'expired'
-        ? 'Chiudi e riapri Binottoland dal bot.'
+        ? REOPEN
         : 'Collegamento alle lavagne…';
     list.replaceChildren(
       ...rooms.map(entry => {
@@ -192,8 +193,7 @@ export function createArcadeLink({
         stopPong();
         pongPost('status', {
           online: false,
-          error:
-            event.code === 4000 ? 'Pong aperto in un’altra finestra.' : 'Chiudi e riapri Binottoland dal bot.'
+          error: event.code === 4000 ? 'Pong aperto in un’altra finestra.' : REOPEN
         });
         return;
       }
@@ -271,7 +271,7 @@ export function createArcadeLink({
           if (source === arcadeFrame.contentWindow && !arcadeOverlay.hidden)
             source.postMessage({ type: 'simulator:session', token: token() }, location.origin);
         } catch (e) {
-          onError(e.message || 'Chiudi e riapri Binottoland dal bot.');
+          onError(e.message || REOPEN);
         }
       })();
     } else if (event.data?.type === 'arcade:ready') {

@@ -1,6 +1,7 @@
 import { coursesFor } from './public/golf/courses.js';
 import { makeMatch, joinMatch, startMatch, takeShot, advanceMatch, CAPACITY } from './public/golf/match.js';
 import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 const WAIT=900000, KEEP=300000;
 
 export class GolfRoom {
@@ -39,7 +40,7 @@ export class GolfRoom {
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
       const user=userOf(req);
-      if(!user?.player)return json({error:'Accesso richiesto.'},401);
+      if(!user?.player)return json({error:MSG.login},401);
       const now=Date.now(), url=new URL(req.url), action=url.pathname.split('/').at(-1);
       let match=await this.ctx.storage.get('golf');
       try {
@@ -52,9 +53,9 @@ export class GolfRoom {
         if(!match)return json({error:'Sala chiusa.'},404);
         if(advanceMatch(match,now)){await this.save(match);await this.update(match);}
         if(action==='state' && req.method==='GET')return json(url.searchParams.get('after')===String(match.revision)?{now}:{state:match,now});
-        if(req.method!=='POST')return json({error:'Operazione non disponibile.'},405);
+        if(req.method!=='POST')return json({error:MSG.unknownAction},405);
         const raw=await req.text();
-        if(raw.length>512)return json({error:'Richiesta troppo grande.'},413);
+        if(raw.length>512)return json({error:MSG.tooBig},413);
         if(action==='close'){
           if(!match.players.some(p=>p.id===user.player))return json({error:'Solo i partecipanti possono chiudere la partita.'},403);
           await this.remove(match);
@@ -63,7 +64,7 @@ export class GolfRoom {
         if(action==='join')joinMatch(match,user,raw ? JSON.parse(raw)?.appearance : null);
         else if(action==='start')startMatch(match,user.player,now,2,raw ? JSON.parse(raw)?.campaign : undefined);
         else if(action==='shot')takeShot(match,user.player,JSON.parse(raw),now);
-        else return json({error:'Operazione non disponibile.'},404);
+        else return json({error:MSG.unknownAction},404);
         await this.save(match);
         if(action!=='shot')await this.update(match);
         return json({state:match,now});

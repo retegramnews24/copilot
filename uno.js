@@ -1,4 +1,5 @@
 import {random,shuffled} from './table-random.js';
+import { MSG } from './public/messages.js';
 
 export const UNO_COLORS=['red','yellow','green','blue'];
 const TARGET=500;
@@ -59,7 +60,7 @@ export function unoView(g,seat=-1){
   shownHand:g.reveal?.to===seat?g.reveal.hand:[]};
 }
 export function playUno(state,seat,action,rng=random){
- if(state.result||!state.hands[seat])throw Error('Partita non attiva.');
+ if(state.result||!state.hands[seat])throw Error(MSG.notActive);
  const g=structuredClone(state),n=g.hands.length;
  g.scores??=Array(n).fill(0);g.round??=1;g.dealer??=n-1;
  if(action.kind==='uno'||action.kind==='catch-uno'){
@@ -68,7 +69,7 @@ export function playUno(state,seat,action,rng=random){
   if(action.kind==='catch-uno')take(g,called,2,rng);
   g.callout=null;g.lastEvent=action.kind==='uno'?'UNO!':'UNO dimenticato · +2 carte';return g;
  }
- if(seat!==g.turn)throw Error('Non tocca a te.');
+ if(seat!==g.turn)throw Error(MSG.notYourTurn);
  g.callout=null;g.reveal=null;
  if(g.openingWild){
   if(action.kind!=='color'||!UNO_COLORS.includes(action.color))throw Error('Scegli il colore iniziale.');

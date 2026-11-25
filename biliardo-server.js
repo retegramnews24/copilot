@@ -8,6 +8,7 @@
 // Chi non tira in tempo fa tirare il pilota automatico, così la partita non si ferma mai.
 import * as E from './public/biliardo/engine.js';
 import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 const WAIT = 1800000, // una partita in cui non entra nessuno si chiude dopo 30 minuti
   KEEP = 300000, // una partita finita resta 5 minuti
@@ -146,7 +147,7 @@ export function playMatch(m, player, body, now, auto = false) {
   const g = m.match;
   m.ptr = m.ptr || [0, 0];
   if (!auto && !m.seats.includes(player)) throw Error('Stai guardando: non sei in questa partita.');
-  if (!auto && shooter(m) !== player) throw Error('Non tocca a te.');
+  if (!auto && shooter(m) !== player) throw Error(MSG.notYourTurn);
   let input;
   if (auto) input = E.autoShot(g);
   else {
@@ -289,7 +290,7 @@ export class BiliardoRoom {
   fetch(req) {
     return this.ctx.blockConcurrencyWhile(async () => {
       const user = userOf(req);
-      if (!user?.player) return json({ error: 'Accesso richiesto.' }, 401);
+      if (!user?.player) return json({ error: MSG.login }, 401);
       const now = Date.now(),
         url = new URL(req.url),
         action = url.pathname.split('/').at(-1);
@@ -310,9 +311,9 @@ export class BiliardoRoom {
         }
         if (action === 'state' && req.method === 'GET')
           return json(url.searchParams.get('after') === String(m.revision) ? { now } : { state: m, now });
-        if (req.method !== 'POST') return json({ error: 'Operazione non disponibile.' }, 405);
+        if (req.method !== 'POST') return json({ error: MSG.unknownAction }, 405);
         const raw = await req.text();
-        if (raw.length > 512) return json({ error: 'Richiesta troppo grande.' }, 413);
+        if (raw.length > 512) return json({ error: MSG.tooBig }, 413);
         const body = raw ? JSON.parse(raw) : {};
         if (action === 'close') {
           if (!m.players.some((p) => p.id === user.player)) return json({ error: 'Solo i giocatori possono chiudere la partita.' }, 403);
@@ -335,7 +336,7 @@ export class BiliardoRoom {
         else if (action === 'start') startMatch(m, user.player, now);
         else if (action === 'play') playMatch(m, user.player, body, now);
         else if (action === 'abandon') abandonMatch(m, user.player, now);
-        else return json({ error: 'Operazione non disponibile.' }, 404);
+        else return json({ error: MSG.unknownAction }, 404);
         if (changed) {
           await this.save(m);
           await this.update(m);

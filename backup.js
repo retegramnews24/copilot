@@ -5,6 +5,7 @@
 // Started by the weekly cron (worker.js `scheduled`) or by the admin API (api.js, needs ADMIN_TOKEN).
 
 import { internalHeaders, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 const SINGLETONS = [
   'checkmate-lobby-v1',
@@ -181,6 +182,6 @@ export class BackupHub {
       const result = await this.restore(restore[1], body.objects);
       return result ? json(result) : json({ error: 'Backup non trovato.' }, 404);
     }
-    return json({ error: 'Percorso non trovato.' }, 404);
+    return json({ error: MSG.notFound }, 404);
   }
 }

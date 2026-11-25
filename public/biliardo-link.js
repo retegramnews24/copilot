@@ -3,6 +3,7 @@
 // apre la partita (il server mette l'avviso con la specialità), entra, tiene lo stato aggiornato e manda i colpi;
 // l'iframe mostra e chiede. Anche Telegram resta qui: margini, Indietro, vibrazione, conferma di chiusura.
 import { telegramHaptic } from './haptic.js?v=c280753040';
+import { MSG } from './messages.js?v=a4f8bd3c10';
 const $ = id => document.getElementById(id);
 
 export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, sendPresence, safeInsets, games, roomClosed }) {
@@ -64,7 +65,7 @@ export function createBiliardoLink({ tg, me, request, onError, enterFullscreen, 
           lost: true,
           message:
             error.status === 401 || error.status === 403
-              ? 'Sessione scaduta: chiudi e riapri Binottoland dal bot.'
+              ? MSG.expired
               : 'Collegamento perso, riprovo…'
         });
     } finally {

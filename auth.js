@@ -1,4 +1,5 @@
 import { json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 // Accesso a Binottoland: identità Telegram firmata, sessioni e appartenenza al gruppo.
 // Tutte le richieste /api/ passano da qui (vedi worker.js) prima di raggiungere giochi e servizi.
 export function secureEqual(a, b) {
@@ -113,10 +114,7 @@ export async function login(req, env) {
     };
     return issueSession(user, env);
   } catch {
-    return json(
-      { error: 'Accesso Telegram non valido o scaduto. Chiudi e riapri Binottoland dal bot.' },
-      401
-    );
+    return json({ error: MSG.badAccess }, 401);
   }
 }
 // Sessione: 12 ore, rinnovabile, ma al massimo 7 giorni dall'ultimo accesso vero da Telegram (since): poi si
@@ -129,8 +127,7 @@ export async function issueSession(user, env) {
   if (denied) return denied;
   const now = Date.now(),
     since = Number.isFinite(user.since) && user.since <= now ? user.since : now;
-  if (now - since > SESSION_MAX)
-    return json({ error: 'Sessione scaduta: chiudi e riapri Binottoland dal bot.' }, 401);
+  if (now - since > SESSION_MAX) return json({ error: MSG.expired }, 401);
   const { id, player, name, username, photo } = user;
   user = { id, player, name, username, photo };
   const accessTag = await telegramAccessTag(env);

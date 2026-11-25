@@ -1,5 +1,6 @@
 import {height,modes,validMode,newMatch,movePaddle,stepMatch} from './public/arcade/pong-physics.js';
 import { userOf, lobbyHub, json } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 
 const KEY='pong', EMPTY_GRACE=60_000, STEP=1/120;
 export class PongRoom {
@@ -42,7 +43,7 @@ export class PongRoom {
   fetch(req){
     return this.ctx.blockConcurrencyWhile(async()=>{
       const user=userOf(req);
-      if(!user?.player)return json({error:'Accesso richiesto.'},401);
+      if(!user?.player)return json({error:MSG.login},401);
       const path=new URL(req.url).pathname;
       let room=await this.load();
       if(path==='/pong/init'&&req.method==='POST'&&!room){
@@ -57,7 +58,7 @@ export class PongRoom {
       const peers=this.peers(),old=peers.find(({member})=>member.id===user.player);
       if(path==='/pong/state')return json({state:this.state(room,peers)});
       if(path!=='/pong/ws'||req.headers.get('Upgrade')?.toLowerCase()!=='websocket'){
-        return json({error:'WebSocket richiesto.'},426);
+        return json({error:MSG.live},426);
       }
       if(!old&&peers.length===2)return json({error:'La sala Pong è al completo.'},409);
       const free=[0,1].filter(seat=>!peers.some(({member})=>member.seat===seat));

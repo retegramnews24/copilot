@@ -6,6 +6,7 @@ import { json, noticeHub, internalHeaders, INTERNAL_HEADER, lobbyHub } from './w
 import { setupTelegram, telegramWebhook } from './telegram-bot.js';
 import { cinemaHub, groupCinema } from './cinema-routes.js';
 import { seatLimit, longLimitText } from './table-rules.js';
+import { MSG } from './public/messages.js';
 
 // Unexpected server errors are logged (Workers Logs) instead of disappearing; the player gets a short message.
 // Grandezza delle richieste: il contenuto si legge a pezzi e la lettura si ferma appena supera il limite, anche se
@@ -37,9 +38,9 @@ export async function handleRequest(req, env) {
   try {
     if (req.body && !['GET', 'HEAD'].includes(req.method)) {
       if (Number(req.headers.get('Content-Length') || 0) > BODY_LIMIT)
-        return json({ error: 'Richiesta troppo grande.' }, 413);
+        return json({ error: MSG.tooBig }, 413);
       const body = await readLimited(req);
-      if (body === false) return json({ error: 'Richiesta troppo grande.' }, 413);
+      if (body === false) return json({ error: MSG.tooBig }, 413);
       req = new Request(req, { body });
     }
     // la chiave interna non arriva mai dai telefoni (vedi worker-shared.js)
@@ -66,7 +67,7 @@ export async function handleRequest(req, env) {
 const reports = new Map();
 async function clientError(req, user) {
   const raw = await req.text();
-  if (raw.length > 4096) return json({ error: 'Richiesta troppo grande.' }, 413);
+  if (raw.length > 4096) return json({ error: MSG.tooBig }, 413);
   const now = Date.now(),
     seen = (reports.get(user.id) || []).filter(at => now - at < 60000);
   if (seen.length >= 10) return new Response(null, { status: 429 });
@@ -76,7 +77,7 @@ async function clientError(req, user) {
   try {
     data = JSON.parse(raw);
   } catch {
-    return json({ error: 'Richiesta non valida.' }, 400);
+    return json({ error: MSG.unreadable }, 400);
   }
   const text = (v, n) => (typeof v === 'string' ? v.slice(0, n) : '');
   console.error(
@@ -98,7 +99,7 @@ async function clientError(req, user) {
 async function admin(req, env, u) {
   const supplied = (req.headers.get('Authorization') || '').replace(/^Bearer /, '');
   if (!env.ADMIN_TOKEN || env.ADMIN_TOKEN.length < 24 || !secureEqual(supplied, env.ADMIN_TOKEN))
-    return json({ error: 'Percorso non trovato.' }, 404);
+    return json({ error: MSG.notFound }, 404);
   const hub = env.ROOMS.get(env.ROOMS.idFromName('backup-v1'));
   const one = u.pathname.match(/^\/api\/admin\/backups\/([\w-]{10,40})(\/restore)?$/);
   if (u.pathname === '/api/admin/backups')
@@ -109,7 +110,7 @@ async function admin(req, env, u) {
   // togliere un punteggio dalla classifica di un flipper: POST {"table":"gp"|"gt","id":"<numero Telegram>"}
   if (u.pathname === '/api/admin/pinball' && req.method === 'POST') {
     const body = await req.text();
-    if (body.length > 256) return json({ error: 'Richiesta troppo grande.' }, 413);
+    if (body.length > 256) return json({ error: MSG.tooBig }, 413);
     return lobbyHub(env).fetch('https://internal/pinball/remove', {
       method: 'POST',
       headers: await internalHeaders(env),
@@ -118,13 +119,13 @@ async function admin(req, env, u) {
   }
   if (one && one[2] && req.method === 'POST') {
     const body = await req.text();
-    if (body.length > 65536) return json({ error: 'Richiesta troppo grande.' }, 413);
+    if (body.length > 65536) return json({ error: MSG.tooBig }, 413);
     return hub.fetch('https://internal/backups/' + one[1] + '/restore', {
       method: 'POST',
       body: body || '{}'
     });
   }
-  return json({ error: 'Percorso non trovato.' }, 404);
+  return json({ error: MSG.notFound }, 404);
 }
 
 async function route(req, env) {
@@ -150,7 +151,7 @@ async function route(req, env) {
     if (cookie) authRequest = new Request(req, { headers: { Authorization: 'Bearer ' + cookie } });
   }
   const user = await sessionUser(authRequest, env);
-  if (!user) return json({ error: 'Apri Binottoland da Telegram per accedere.' }, 401);
+  if (!user) return json({ error: MSG.openFromTelegram }, 401);
   const denied = await requireMember(user, env);
   if (denied) return denied;
   if (u.pathname === '/api/session/refresh' && req.method === 'POST') return issueSession(user, env);
@@ -224,7 +225,7 @@ async function route(req, env) {
     return lobby.fetch(new Request(u.origin + '/lobby/chat', req));
   if (u.pathname === '/api/notices' && ['GET', 'POST'].includes(req.method)) {
     const raw = req.method === 'POST' ? await req.text() : undefined;
-    if (raw && raw.length > 256) return json({ error: 'Richiesta troppo grande.' }, 413);
+    if (raw && raw.length > 256) return json({ error: MSG.tooBig }, 413);
     return noticeHub(env).fetch(
       new Request(u.origin + '/notices/status', {
         method: req.method,
@@ -255,8 +256,7 @@ async function route(req, env) {
   if (req.method === 'POST' && u.pathname === '/api/create') {
     const raw = await req.text();
     // F1 on paper! sends the drawn track with the race (up to 400 kB); every other game a few settings.
-    if (raw.length > (/^\{"game":"f1"/.test(raw) ? 400000 : 4096))
-      return json({ error: 'Richiesta troppo grande.' }, 413);
+    if (raw.length > (/^\{"game":"f1"/.test(raw) ? 400000 : 4096)) return json({ error: MSG.tooBig }, 413);
     return lobby.fetch(
       new Request(u.origin + '/lobby/create', {
         method: 'POST',
@@ -268,7 +268,7 @@ async function route(req, env) {
   const match = u.pathname.match(
     /^\/api\/room\/([a-f0-9-]{36})\/(state|claim|start|rematch|next-round|move|pass|finish|archive|dismiss|delete|replay|offer-draw|accept-draw|reject-draw|ws)$/
   );
-  if (!match) return json({ error: 'Percorso non trovato.' }, 404);
+  if (!match) return json({ error: MSG.notFound }, 404);
 
   if (match[2] === 'claim' && req.method === 'POST')
     return lobby.fetch(

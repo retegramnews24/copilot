@@ -1,6 +1,7 @@
 // Cinema routes handled by the Worker: Telegram group media and inbox files, arming a room to receive group media.
 import { telegramCinemaId } from './cinema-telegram.js';
 import { json, BOT_USERNAME } from './worker-shared.js';
+import { MSG } from './public/messages.js';
 export const cinemaHub = env => env.ROOMS.get(env.ROOMS.idFromName('cinema-streamer-v1'));
 function telegramCinemaDirectory(env, origin, op, params = {}, user = null, body) {
   const query = new URLSearchParams({ op, ...params });
@@ -68,5 +69,5 @@ export async function groupCinema(req, env, u, user) {
     if (!armed.ok) return armed;
     return json({ bot: BOT_USERNAME });
   }
-  return json({ error: 'Percorso non trovato.' }, 404);
+  return json({ error: MSG.notFound }, 404);
 }
