@@ -19,7 +19,8 @@ export const IDLE_STOP = 5 * 60000; // tavolo fermo dopo 5 minuti senza comandi
 // rete caduta) e nessuno segna contro chi non c'è; se tace da SEAT_GRACE il posto si libera (prima restava
 // occupato da un collegamento morto). Chi si alza e torna entro SEAT_GRACE ritrova il punteggio.
 export const PAUSE = 6000,
-  SEAT_GRACE = 30000;
+  SEAT_GRACE = 30000,
+  TAKEOVER = 4000; // la connessione vecchia della stessa persona cede il posto solo se tace da tanto
 const SOUNDS = ['kick', 'rail', 'goal', 'stop', 'throw', 'post'];
 const round = v => Math.round(v * 1000) / 1000;
 // Solo quello che serve per disegnare il tavolo, con i numeri arrotondati (messaggi più leggeri).
@@ -165,6 +166,27 @@ export class BalillaHub {
     }
     if (b.action === 'join') {
       if (member.slot >= 0) return;
+      // Ricollegato con una connessione nuova (rete caduta un attimo): la vecchia, ormai morta, teneva ancora il
+      // posto e da qui si era solo spettatori (aste ferme, rilancio ignorato). La persona riprende il suo posto.
+      // Solo se la connessione vecchia tace da TAKEOVER: con la stessa persona al tavolo da due dispositivi vivi
+      // (telefono e computer) i due non si rubano il posto a vicenda. Se la vecchia era dall'altro lato, esce come si
+      // deve (aste ferme, avviso agli altri).
+      if (id != null)
+        for (const [peer, other] of [...this.viewers])
+          if (peer !== ws && other.id === id && Date.now() - (other.seenAt || 0) > TAKEOVER) {
+            const slot = other.slot;
+            if (slot >= 0 && (b.slot === slot || (this.field.bar && (b.slot & 2) === (slot & 2)))) {
+              this.viewers.delete(peer);
+              this.remember(peer, null);
+              member.slot = slot;
+              this.remember(ws, member);
+              if (this.field.bar) this.updateBar();
+              else this.start();
+              this.broadcast(true);
+              return;
+            }
+            this.leave(peer);
+          }
       const occupied = this.seated();
       // tavolo del bar: da soli ci si allena, poi 1 contro 1, 2 contro 1, 2 contro 2. Chi arriva prende il posto libero del
       // suo lato (il primo comanda tutte le aste del lato, con un compagno ognuno ha la sua coppia)

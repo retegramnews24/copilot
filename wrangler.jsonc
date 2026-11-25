@@ -15,6 +15,7 @@
   // Test environment: a separate Worker with its own data (its own Durable Objects), published from the
   // "staging" branch with `npx wrangler deploy --env staging` (see docs/ambiente-di-prova.md).
   // Same bot (opened through a second Mini App link), but it never writes to anyone and makes no backups.
+  // It runs the whole app (worker.js) like main; scripts/deploy-gate.mjs skips the tests on staging.
   "env": {
     "staging": {
       "name": "binottoland-motore-staging",

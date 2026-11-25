@@ -19,3 +19,6 @@ Thumbs.db
 desktop.ini
 
 backups/
+
+# Copie di sicurezza di Blender (le fa Blender a ogni salvataggio)
+*.blend1

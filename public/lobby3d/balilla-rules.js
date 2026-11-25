@@ -136,7 +136,7 @@ export function control(f, team, attack, slide, angle) {
   });
 }
 // Una figura può arrivare alla palla?
-// team: solo le aste di quella squadra (null: tutte)
+// team: solo le aste di quella squadra (da soli al tavolo le aste dell'altra squadra stanno ferme e non contano)
 function reachable(f, team = null) {
   const b = f.ball;
   return rows.some(row => {
@@ -438,7 +438,7 @@ export function simulate(f, dt, random = Math.random) {
     const speed = Math.hypot(f.ball.vx, f.ball.vz),
       still = speed < 0.03;
     f.dead = still ? f.dead + h : 0;
-    if (f.dead > 1.5 && !reachable(f)) {
+    if (f.dead > 1.5 && !reachable(f, f.practice ? f.thrower : null)) {
       startThrow(f, f.lastThrower);
       continue;
     }

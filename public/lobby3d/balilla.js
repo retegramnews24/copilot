@@ -17,7 +17,7 @@ import {
   cornerHeight,
   CORNER_RUN,
   CORNER_RISE
-} from './balilla-rules.js?v=eb1be44081';
+} from './balilla-rules.js?v=704daa16f5';
 
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo

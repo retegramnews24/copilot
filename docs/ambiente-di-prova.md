@@ -5,13 +5,15 @@ Serve a provare una modifica dentro Telegram prima di pubblicarla per tutti.
 
 ## Come si usa
 1. In GitHub Desktop crea il ramo `staging` (o passaci sopra), fai le modifiche, commit e **Push origin**.
-2. Cloudflare pubblica il ramo `staging` sul Worker di prova (dopo i test, come per main).
+2. Cloudflare pubblica il ramo `staging` sul Worker di prova, **senza test** (l'app è completa come main: stesso `worker.js`).
 
-**Test e pubblicazione.** I test girano su GitHub a ogni push (azione "Test"). Cloudflare non li rifà: prima di pubblicare, `scripts/deploy-gate.mjs` chiede a GitHub il risultato per lo stesso commit. Se i test sono verdi pubblica, se sono rossi non pubblica, se sono ancora in corso aspetta fino a 12 minuti. Solo se GitHub non risponde, o non trova i test, li esegue lui come prima.
+**Test e pubblicazione.** Su `main` i test girano su GitHub a ogni push (azione "Test") e `scripts/deploy-gate.mjs` pubblica solo se sono verdi (se sono ancora in corso aspetta fino a 12 minuti; se GitHub non risponde li esegue lui). Su `staging` l'azione "Test" non parte e `deploy-gate` pubblica subito: è un posto per provare, i test si fanno quando la modifica si riporta su main.
+
+**Differenze con main:** dopo ogni rilascio i due rami sono uguali, tranne i file dell'ambiente di prova. Per vedere cosa resta da portare: `node scripts/branch-diff.mjs` (lascia fuori numero di versione e timbri `?v=`).
 3. Apri l'app di prova da Telegram: `https://t.me/checkmategame_bot/prova`. In cima c'è una riga rossa e accanto al nome la scritta **PROVA**.
 4. Se va bene, la modifica si riporta a mano su `main`, con un commit a parte. **`staging` non si unisce mai in `main`**: la riga rossa e la scritta PROVA non devono finire nell'app vera.
 
-I due rami hanno numeri di versione separati: `staging` può essere più avanti di `main`.
+Dopo ogni rilascio su `main`, `staging` prende lo stesso numero di versione (`npm run release -- 1.0.xx` su staging): così il confronto tra i rami resta pulito.
 
 Se il Worker di prova mostra la versione di `main`, in Cloudflare → binottoland-motore-staging → Deployments i build hanno accanto la scritta **main**: in Settings → Build → Branch control il ramo di produzione deve essere `staging`. Dopo la correzione serve un nuovo push su `staging`.
 

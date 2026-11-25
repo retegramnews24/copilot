@@ -11,6 +11,11 @@ const WORKFLOW = 'Test';
 const WAIT_MS = 12 * 60 * 1000;
 const POLL_MS = 20 * 1000;
 
+// Staging (test environment) publishes without tests.
+if (process.env.WORKERS_CI_BRANCH === 'staging') {
+  console.log('deploy-gate: prova (staging), niente test.');
+  process.exit(0);
+}
 if (!process.env.WORKERS_CI) {
   console.log('deploy-gate: locale, controllo saltato (i test girano su GitHub).');
   process.exit(0);
