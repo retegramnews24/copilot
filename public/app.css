@@ -3796,8 +3796,39 @@ html[data-env='staging'] body::before {
   color: var(--muted);
   font-size: 14px;
 }
-#report-result:empty {
+#report-result:empty,
+#backup-result:empty {
   display: none;
+}
+/* Impostazioni → Backup (solo per il proprietario): una riga per copia, con «Manda» e «Ripristina» */
+.backup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 14px;
+}
+.backup-item > span:first-child {
+  min-width: 0;
+  color: var(--ink);
+}
+.backup-buttons {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.backup-buttons button {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.backup-buttons .danger {
+  color: #d9534f;
+}
+#backup-list > .hint {
+  margin: 0;
+  padding: 10px 14px;
 }
 .settings-version {
   display: block;

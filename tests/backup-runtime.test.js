@@ -42,7 +42,9 @@ const mf = new Miniflare(
         return Response.json({ ok: true, result: {} });
       }
       assert(path.endsWith('/getChatMember'), 'unexpected call ' + path);
-      return Response.json({ ok: true, result: { status: 'member' } });
+      // 8888 ha creato il gruppo: è il proprietario (Impostazioni → Backup)
+      const { user_id } = await req.json();
+      return Response.json({ ok: true, result: { status: user_id === 8888 ? 'creator' : 'member' } });
     }
   })
 );
@@ -119,9 +121,34 @@ try {
   await worker.scheduled({ cron: '0 3 * * 1' });
   await wait(500);
   assert.equal(JSON.parse((await admin('')).text).length, 2);
+  assert.equal(documents.at(-1).chat, '424242', 'the weekly copy still goes to BACKUP_CHAT_ID');
   console.log(
     'PASS runtime backup: admin key required, snapshot stored/listed/downloaded/sent, delete then restore (all or some), weekly cron'
   );
+
+  // From the app (Impostazioni → Backup): only the owner (the group creator, no OWNER_ID here).
+  assert.equal((await call(7000, '/api/backup')).status, 404, 'a member does not see it');
+  assert.equal((await call(7000, '/api/backup/run', {})).status, 404);
+  assert.equal((await call(7000, '/api/backup/' + run.id + '/restore', {})).status, 404);
+  const mine = await call(8888, '/api/backup');
+  assert.equal(mine.status, 200);
+  assert.equal(mine.data.length, 2);
+  const now = await call(8888, '/api/backup/run', {});
+  assert.equal(now.data.sent, true);
+  assert.equal(documents.at(-1).chat, '8888', 'the bot sends it to the owner');
+  assert.equal(JSON.parse(documents.at(-1).file).format, 'binottoland-backup-1');
+  const again = await call(8888, '/api/backup/' + run.id + '/send', {});
+  assert.deepEqual(again.data, { id: run.id, sent: true });
+  assert.equal(documents.at(-1).chat, '8888');
+  assert.equal((await call(8888, '/api/backup/nonexistent-id-123/send', {})).status, 404);
+  // restore from the app: the table deleted again comes back
+  s = (await call(7000, '/api/room/' + room + '/state')).data;
+  assert.equal((await call(7000, '/api/room/' + room + '/delete', { revision: s.revision })).status, 200);
+  const fromApp = await call(8888, '/api/backup/' + run.id + '/restore', {});
+  assert.ok(fromApp.data.restored.includes(room));
+  await wait(300);
+  assert.equal((await call(7000, '/api/room/' + room + '/state')).status, 200);
+  console.log('PASS runtime backup from the app: owner only, copy sent to the owner, send again, restore');
 
   // Errors reported by the app: logged, at most 10 a minute per person, only when signed in.
   assert.equal((await call(null, '/api/client-error', { message: 'x' })).status, 401);

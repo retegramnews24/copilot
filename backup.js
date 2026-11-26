@@ -2,7 +2,8 @@
 // Every Durable Object (class Room) can export and import its whole storage (/backup/export, /backup/import).
 // The backup hub ('backup-v1') collects the singletons and every table listed in the Lobby into one snapshot,
 // keeps the last KEEP snapshots (in chunks), and if BACKUP_CHAT_ID is set the bot also sends the file privately.
-// Started by the weekly cron (worker.js `scheduled`) or by the admin API (api.js, needs ADMIN_TOKEN).
+// Started by the weekly cron (worker.js `scheduled`), by the admin API (api.js, needs ADMIN_TOKEN) or by the owner
+// from the app (Impostazioni → Backup, api.js): then the bot sends the file to the owner's private chat.
 
 import { internalHeaders, json } from './worker-shared.js';
 import { MSG } from './public/messages.js';
@@ -71,7 +72,7 @@ export async function importStorage(storage, data) {
 }
 
 export class BackupHub {
-  // deps (tests): now(), object(name) -> stub with fetch, telegram(file, caption)
+  // deps (tests): now(), object(name) -> stub with fetch, telegram(chat, file, filename, caption)
   constructor(ctx, env, deps = {}) {
     this.ctx = ctx;
     this.env = env;
@@ -79,9 +80,9 @@ export class BackupHub {
     this.object = deps.object || (name => env.ROOMS.get(env.ROOMS.idFromName(name)));
     this.telegram =
       deps.telegram ||
-      (async (text, filename, caption) => {
+      (async (chat, text, filename, caption) => {
         const form = new FormData();
-        form.append('chat_id', String(env.BACKUP_CHAT_ID));
+        form.append('chat_id', String(chat));
         form.append('caption', caption);
         form.append('document', new Blob([text], { type: 'application/json' }), filename);
         const r = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/sendDocument', {
@@ -102,7 +103,21 @@ export class BackupHub {
     for (let i = 0; i < item.chunks; i++) text += await this.ctx.storage.get('snap:' + id + ':' + i);
     return text;
   }
-  async run() {
+  // the file goes to `chat` (the owner, from the app) or else to BACKUP_CHAT_ID, if set
+  async send(chat, text, id, objects) {
+    if (!/^-?\d+$/.test(String(chat || ''))) return false;
+    try {
+      return await this.telegram(
+        chat,
+        text,
+        'binottoland-backup-' + id + '.json',
+        '🗄 Backup Binottoland · ' + objects + ' archivi · ' + Math.round(text.length / 1024) + ' KB'
+      );
+    } catch {
+      return false;
+    }
+  }
+  async run(chat) {
     const at = this.now(),
       id = new Date(at).toISOString().replace(/[:.]/g, '-');
     const lobby = await (
@@ -131,20 +146,7 @@ export class BackupHub {
     for (const old of index.slice(KEEP))
       for (let i = 0; i < old.chunks; i++) await this.ctx.storage.delete('snap:' + old.id + ':' + i);
     await this.ctx.storage.put('index', index.slice(0, KEEP));
-    let sent = false;
-    if (this.env.BACKUP_CHAT_ID && /^-?\d+$/.test(String(this.env.BACKUP_CHAT_ID))) {
-      try {
-        sent = await this.telegram(
-          text,
-          'binottoland-backup-' + id + '.json',
-          '🗄 Backup Binottoland · ' +
-            Object.keys(objects).length +
-            ' archivi · ' +
-            Math.round(text.length / 1024) +
-            ' KB'
-        );
-      } catch {}
-    }
+    const sent = await this.send(chat || this.env.BACKUP_CHAT_ID, text, id, Object.keys(objects).length);
     return { ...index[0], sent };
   }
   async restore(id, only) {
@@ -168,7 +170,19 @@ export class BackupHub {
   async fetch(req) {
     const path = new URL(req.url).pathname;
     if (path === '/backups/list') return json(await this.index());
-    if (path === '/backups/run' && req.method === 'POST') return json(await this.run());
+    if (path === '/backups/run' && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      return json(await this.run(body.chat));
+    }
+    // a saved copy sent again by the bot (Impostazioni → Backup)
+    const send = path.match(/^\/backups\/([\w-]{10,40})\/send$/);
+    if (send && req.method === 'POST') {
+      const body = await req.json().catch(() => ({}));
+      const item = (await this.index()).find(s => s.id === send[1]);
+      const text = item && (await this.read(item.id));
+      if (!text) return json({ error: 'Backup non trovato.' }, 404);
+      return json({ id: item.id, sent: await this.send(body.chat, text, item.id, item.objects) });
+    }
     const one = path.match(/^\/backups\/([\w-]{10,40})$/);
     if (one && req.method === 'GET') {
       const text = await this.read(one[1]);

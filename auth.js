@@ -52,6 +52,33 @@ export async function memberAccess(user, env) {
   membershipPending.set(key, ask);
   return ask;
 }
+// Proprietario (Impostazioni → Backup): l'utente scritto in OWNER_ID nelle variabili del Worker; se non c'è, chi
+// ha creato il gruppo Telegram. Se Telegram non risponde: no. Cache di 60 secondi.
+const ownerCache = new Map();
+export async function isOwner(user, env) {
+  const fixed = String(env.OWNER_ID || '').trim();
+  if (fixed) return fixed === user.id;
+  const group = String(env.TELEGRAM_ALLOWED_GROUP_ID || '-1001803941686'),
+    key = group + ':' + user.id;
+  const cached = ownerCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.owner;
+  try {
+    const response = await fetch('https://api.telegram.org/bot' + env.BOT_TOKEN + '/getChatMember', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: group, user_id: Number(user.id) }),
+      signal: AbortSignal.timeout(5000)
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) return false;
+    const owner = data.result?.status === 'creator';
+    if (ownerCache.size > 100) ownerCache.clear();
+    ownerCache.set(key, { owner, expires: Date.now() + 60000 });
+    return owner;
+  } catch {
+    return false;
+  }
+}
 export async function requireMember(user, env) {
   const allowed = await memberAccess(user, env);
   return allowed === true

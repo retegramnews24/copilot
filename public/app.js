@@ -32,13 +32,14 @@ import {createArcadeLink} from './arcade-link.js?v=a4ce33c363';
 import {createF1Link} from './f1-link.js?v=8cf05cfcd5';
 import {createBiliardoLink} from './biliardo-link.js?v=2b2c975586';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
+import {initBackupPanel} from './backup-panel.js?v=916a596819';
 import { MSG } from './messages.js?v=3be0dc6ab5';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.68',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.69',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -444,6 +445,9 @@ document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selec
 $('open-archive').onclick=()=>{renderArchive();selectPage('archive')};
 $('open-info').onclick=()=>selectPage('info');
 const {renderThemePreview}=initSettings({appName:APP_NAME,tg,trace,events});
+// Impostazioni → Backup: compare solo al proprietario (il server dice chi è); si aggiorna aprendo Impostazioni
+const backupPanel=initBackupPanel({tg,request:(path,data)=>request(path,data)});
+$('tab-settings')?.addEventListener('click',()=>{if(sessionToken)backupPanel.refresh()});
 initGamesFilter(); // pagina Giochi: ricerca e filtri
 async function createTable(game,target,mode,seats){
  const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});
