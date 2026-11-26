@@ -248,14 +248,10 @@ export function createLobby3D(app) {
   wallZ(-6.3, 6.3, 19.15, billiardWall); wallZ(-6.3, 6.3, -19.15, arcadeWall);
   doorWall(7, atriumWall, billiardWall); doorWall(-7, arcadeWall, atriumWall);
   point('#ffe0b3',7,-3.5,2.85,0,12);point('#ffe1ba',7,3.5,2.85,0,12);point('#ffd39b',4,0,2.85,-4,9);
-  const sconceBrass=std('#a58052',.32,.72),sconceGlass=glow('#ffd2a0',1.28);
-  for(const x of [-4.9,4.9])for(const end of [-1,1]){
-    const z=end*5.89;
-    // applique d'ottone a tulipano di Blender (finishPiece); queste scatole finché non arriva
-    const parts=[box(.20,.53,.07,sconceBrass,x,2.12,z),box(.115,.36,.13,sconceGlass,x,2.12,z-end*.05)];
-    for(const y of [1.92,2.32])parts.push(box(.17,.035,.16,sconceBrass,x,y,z-end*.05));
-    finishPiece('applique',x,2.05,end*6.0,end>0?Math.PI:0,parts);
-  }
+  // applique d'ottone a tulipano di Blender (finishPiece), mai sopra quadri o lavagna: a nord tra la cassa e la
+  // lavagna e a destra del cartellone, a sud a destra dei divani, e sulla parete della sala giochi (al posto di quella
+  // che cadeva sul panorama)
+  for(const [x,z,angle] of [[-5.6,-6.0,0],[4.9,-6.0,0],[4.9,6.0,Math.PI],[-6.84,3.3,Math.PI/2]])finishPiece('applique',x,2.05,z,angle);
   const shadeMap = canvasTex(128,128,(g)=>{
     const shade=g.createRadialGradient(64,64,7,64,64,62);
     shade.addColorStop(0,'rgba(255,255,255,.85)');shade.addColorStop(.58,'rgba(255,255,255,.38)');shade.addColorStop(1,'rgba(255,255,255,0)');
@@ -733,11 +729,15 @@ export function createLobby3D(app) {
     const set=new THREE.InstancedMesh(geometry,material,locations.length),matrix=new THREE.Matrix4();
     locations.forEach(([x,y,z],index)=>set.setMatrixAt(index,matrix.makeTranslation(x,y,z)));scene.add(set);
   };
+  // tavoli e sedie moderni di Blender (blender/sala_tavoli.blend → models/sala_tavoli.glb), più sotto: queste liste
+  // dicono dove vanno; i blocchi di prima (cardStandIns) restano finché il modello non arriva
+  const cardTables=[],cardChairs=[],cardStandIns=[];
   BOARD.forEach(([key,title],i)=>{
     if(!avail.has(key))return;
     const x=(i%3-1)*4.1,z=-8.8-Math.floor(i/3)*3.55;
     groundTint(x,z,2.75,2.35,contact);
-    box(.48,.63,.48,darkWood,x,.34,z);box(1.98,.13,1.4,walnut,x,.74,z);
+    cardStandIns.push(box(.48,.63,.48,darkWood,x,.34,z),box(1.98,.13,1.4,walnut,x,.74,z));
+    cardTables.push([x,z,0]);
     box(1.91,.022,1.33,brassTrim,x,.816,z);
     plane(1.84,1.27,new THREE.MeshStandardMaterial({map:tabletop(key,title),roughness:.86}),x,.834,z,0,-Math.PI/2);
     if(key==='checkmate'||key==='dama-italiana'){
@@ -751,13 +751,28 @@ export function createLobby3D(app) {
       }
     }
     for(const side of [-1,1]){
-      box(.46,.39,.4,walnut,x+side*1.24,.2,z);
-      box(.52,.09,.49,chairLeather,x+side*1.24,.44,z);
-      box(.07,.39,.49,chairLeather,x+side*1.47,.63,z);
+      cardStandIns.push(box(.46,.39,.4,walnut,x+side*1.24,.2,z),box(.52,.09,.49,chairLeather,x+side*1.24,.44,z),box(.07,.39,.49,chairLeather,x+side*1.47,.63,z));
+      cardChairs.push([x+side*1.24,z,-side*Math.PI/2]); // la sedia guarda il tavolo
       spots.push({x:x+side*1.24,z:z+.62,hx:.2,hz:.12,pad:.5,label:'Siediti',where:'Sala tavoli',seat:true,px:x+side*1.24,pz:z,yaw:side*Math.PI/2});
     }
     solid(x-1.51,x+1.51,z-.72,z+.72);
     spots.push({x,z,hx:1.50,hz:.72,pad:.81,label:title,key,where:'Sala tavoli',act:()=>app.open(key)});
+  });
+  // tavolo su colonna centrale e sedia a guscio girevole: tutti a istanze, un oggetto per materiale (pochi da disegnare)
+  new GLTFLoader().load(new URL('models/sala_tavoli.glb',import.meta.url).href,gltf=>{
+    gltf.scene.updateMatrixWorld(true);
+    const up=new THREE.Vector3(0,1,0),one=new THREE.Vector3(1,1,1),q=new THREE.Quaternion(),m=new THREE.Matrix4();
+    const place=(name,list)=>{
+      const src=gltf.scene.getObjectByName(name);if(!src||!list.length)return;
+      src.traverse(o=>{
+        if(!o.isMesh)return;
+        const set=new THREE.InstancedMesh(o.geometry,o.material,list.length);
+        list.forEach(([x,z,a],i)=>set.setMatrixAt(i,m.compose(new THREE.Vector3(x,0,z),q.setFromAxisAngle(up,a),one).multiply(o.matrixWorld)));
+        set.castShadow=true;set.receiveShadow=true;scene.add(set);
+      });
+    };
+    place('tavolo_carte',cardTables);place('sedia_carte',cardChairs);
+    for(const o of cardStandIns)scene.remove(o);
   });
   // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
   // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)
