@@ -7,8 +7,8 @@ Aggiornato il 26 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.68**, con tutta la Lobby 3D nuova. Le 8 prove passate, push fatto: pubblicata.
-- `staging`: 1.0.68, uguale a `main` (`branch-diff`: nessuna differenza).
+- `main`: **1.0.69**: Lobby 3D nuova (dalla 1.0.68) e backup dall'app per il proprietario. Le 8 prove passate.
+- `staging`: 1.0.69, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
 
@@ -19,9 +19,9 @@ davanti.
 
 ## Da provare
 
-- Backup dall'app (Impostazioni → Backup, solo per il proprietario), su `staging`, non ancora su `main`. Provato
-  il 26 novembre sull'app di prova: il proprietario è riconosciuto (creatore del gruppo), il bot manda il file in
-  chat, una X disegnata sulla lavagna dopo il backup sparisce col ripristino. Resta da portare su `main`.
+- Backup dall'app (Impostazioni → Backup, solo per il proprietario), nella 1.0.69. Provato il 26 novembre
+  sull'app di prova: il proprietario è riconosciuto (creatore del gruppo), il bot manda il file in chat, una X
+  disegnata sulla lavagna dopo il backup sparisce col ripristino.
 
 - La Lobby 3D nuova (stile «Circolo», arredi di Blender, tavoli e sedie moderni, pezzi veri su tutti i tavoli) è
   già su `main` ma non è ancora stata vista dentro Telegram: guardarla nell'app vera e fare i controlli a mano di
