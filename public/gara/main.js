@@ -1,24 +1,31 @@
 // Gara a quadretti: collega disegno, regole e scena 3D.
 // Per ora si gioca sullo stesso telefono: Giallo è l'ospite (mette l'auto e muove per primo), Rosso chi crea la pista.
-import { Editor } from './editor.js?v=bca0c74f62';
-import * as R from './rules.js?v=227a503e49';
-import { Race3D } from './scene3d.js?v=eb44a87fdd';
-import { Sfx } from './sound.js?v=cca82ba0d6';
-import { AiDriver, distField } from './ai.js?v=3e6daa39f8';
-import { Tutorial } from './tutorial.js?v=633df7e600';
+import { Editor } from './editor.js?v=705d6b5b21';
+import * as R from './rules.js?v=fc2a02bb4a';
+import { Race3D } from './scene3d.js?v=f375754296';
+import { Sfx } from './sound.js?v=324cbca251';
+import { AiDriver, distField } from './ai.js?v=f1fb243954';
+import { Tutorial } from './tutorial.js?v=bbcc8d0516';
 import { isTouchDevice } from '../touch-device.js';
 
 // scritte giuste per il dispositivo (analisi 10.12): «col dito» e «tocca» sul telefono, «col mouse» e «clicca» sul computer
 const touchUI = isTouchDevice();
-const tap = touchUI ? 'tocca' : 'clicca', Tap = touchUI ? 'Tocca' : 'Clicca';
+const tap = touchUI ? 'tocca' : 'clicca',
+  Tap = touchUI ? 'Tocca' : 'Clicca';
 
 // suoni: il browser li accende solo dopo un tocco
 const sfx = new Sfx();
 document.addEventListener('pointerdown', () => sfx.unlock(), { capture: true });
-const sndLabel = () => { const b = document.getElementById('snd'); if (b) { b.textContent = sfx.on ? '🔊' : '🔇'; b.setAttribute('aria-label', sfx.on ? 'Togli audio' : 'Metti audio'); } };
+const sndLabel = () => {
+  const b = document.getElementById('snd');
+  if (b) {
+    b.textContent = sfx.on ? '🔊' : '🔇';
+    b.setAttribute('aria-label', sfx.on ? 'Togli audio' : 'Metti audio');
+  }
+};
 addEventListener('DOMContentLoaded', sndLabel);
 
-const $ = (id) => document.getElementById(id);
+const $ = id => document.getElementById(id);
 // tutorial a fumetti (la prima volta, poi si può rifare)
 const tut = new Tutorial($('tut'));
 
@@ -27,12 +34,20 @@ const tut = new Tutorial($('tut'));
 // vibrazione, conferma di chiusura) e parla con il gioco con postMessage (messaggi "f1:...").
 const embedded = window.parent !== window;
 // (il codice per Telegram di quando il gioco era una mini app a sé è stato tolto: non girava più, analisi 10.13)
-const toApp = (type, data = {}) => { if (embedded) window.parent.postMessage({ type: 'f1:' + type, ...data }, location.origin); };
+const toApp = (type, data = {}) => {
+  if (embedded) window.parent.postMessage({ type: 'f1:' + type, ...data }, location.origin);
+};
 if (embedded) {
-  const wrap = (name, fn) => { const o = sfx[name].bind(sfx); sfx[name] = (...a) => { fn(...a); return o(...a); }; };
+  const wrap = (name, fn) => {
+    const o = sfx[name].bind(sfx);
+    sfx[name] = (...a) => {
+      fn(...a);
+      return o(...a);
+    };
+  };
   wrap('tick', () => toApp('haptic', { kind: 'selection' }));
   wrap('crash', () => toApp('haptic', { kind: 'notification', style: 'error' }));
-  wrap('light', (green) => toApp('haptic', { kind: 'impact', style: green ? 'heavy' : 'light' }));
+  wrap('light', green => toApp('haptic', { kind: 'impact', style: green ? 'heavy' : 'light' }));
   wrap('line', () => toApp('haptic', { kind: 'impact', style: 'medium' }));
   wrap('win', () => toApp('haptic', { kind: 'notification', style: 'success' }));
 }
@@ -40,13 +55,25 @@ if (embedded) {
 let toastT = 0;
 function toast(msg, ok) {
   const t = $('toast');
-  t.textContent = msg; t.classList.toggle('ok', !!ok); t.classList.add('show');
-  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ok ? 1600 : 3200);
+  t.textContent = msg;
+  t.classList.toggle('ok', !!ok);
+  t.classList.add('show');
+  clearTimeout(toastT);
+  toastT = setTimeout(() => t.classList.remove('show'), ok ? 1600 : 3200);
 }
 
 // ---------- disegno ----------
 const ed = new Editor($('c2'));
-const draft = { outer: null, inner: null, finish: null, normal: -1, laps: 3, players: 2, time: 'day', mode: 'ai' };
+const draft = {
+  outer: null,
+  inner: null,
+  finish: null,
+  normal: -1,
+  laps: 3,
+  players: 2,
+  time: 'day',
+  mode: 'ai'
+};
 const NET_MAX = 8; // online: fino a 8 piloti
 const maxCars = () => (draft.mode === 'net' ? NET_MAX : R.MAX_CARS);
 
@@ -54,11 +81,22 @@ const maxCars = () => (draft.mode === 'net' ? NET_MAX : R.MAX_CARS);
 let me = null;
 const SETUP_KEY = 'binotto-f1-setup';
 function saveSetup() {
-  try { localStorage.setItem(SETUP_KEY, JSON.stringify({ mode: draft.mode, players: draft.players, time: draft.time, laps: draft.laps })); } catch (e) { /* niente memoria */ }
+  try {
+    localStorage.setItem(
+      SETUP_KEY,
+      JSON.stringify({ mode: draft.mode, players: draft.players, time: draft.time, laps: draft.laps })
+    );
+  } catch (e) {
+    /* niente memoria */
+  }
 }
 function loadSetup() {
   let s = null;
-  try { s = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null'); } catch (e) { /* niente memoria */ }
+  try {
+    s = JSON.parse(localStorage.getItem(SETUP_KEY) || 'null');
+  } catch (e) {
+    /* niente memoria */
+  }
   if (!s) return;
   if (['ai', 'local'].includes(s.mode) || (s.mode === 'net' && embedded)) draft.mode = s.mode;
   if (['day', 'sunset', 'night'].includes(s.time)) draft.time = s.time;
@@ -74,31 +112,40 @@ function syncSetupButtons() {
   for (const o of document.querySelectorAll('[data-t]')) o.classList.toggle('on', o.dataset.t === draft.time);
   $('lapN').textContent = draft.laps;
 }
-for (const b of document.querySelectorAll('[data-m]')) b.onclick = () => {
-  draft.mode = b.dataset.m;
-  if (draft.mode === 'ai') draft.players = 2;
-  draft.players = Math.min(draft.players, maxCars());
-  syncSetupButtons(); setupInfo(); saveSetup();
-};
+for (const b of document.querySelectorAll('[data-m]'))
+  b.onclick = () => {
+    draft.mode = b.dataset.m;
+    if (draft.mode === 'ai') draft.players = 2;
+    draft.players = Math.min(draft.players, maxCars());
+    syncSetupButtons();
+    setupInfo();
+    saveSetup();
+  };
 
 // ora della gara: giorno, tramonto, notte
-for (const b of document.querySelectorAll('[data-t]')) b.onclick = () => {
-  draft.time = b.dataset.t;
-  syncSetupButtons(); saveSetup();
-};
+for (const b of document.querySelectorAll('[data-t]'))
+  b.onclick = () => {
+    draft.time = b.dataset.t;
+    syncSetupButtons();
+    saveSetup();
+  };
 let step = 1;
 const widthTxt = () => String(R.minWidth(draft.players)).replace('.', ',');
 
 const HELP = {
-  1: () => `Per una pista grande allontana prima la vista (−${touchUI ? '' : ' o la rotellina'}). Poi disegna ${touchUI ? 'col dito' : 'col mouse'} il bordo esterno e finisci vicino al punto di partenza.`,
-  2: () => `Ora disegna il bordo interno, tutto dentro quello esterno. Lascia almeno ${widthTxt()} caselle di asfalto.`,
-  3: () => `Traccia la linea di partenza da un bordo all'altro: deve avere posto per ${draft.players} auto affiancate. Verde va bene, rossa no.`,
+  1: () =>
+    `Per una pista grande allontana prima la vista (−${touchUI ? '' : ' o la rotellina'}). Poi disegna ${touchUI ? 'col dito' : 'col mouse'} il bordo esterno e finisci vicino al punto di partenza.`,
+  2: () =>
+    `Ora disegna il bordo interno, tutto dentro quello esterno. Lascia almeno ${widthTxt()} caselle di asfalto.`,
+  3: () =>
+    `Traccia la linea di partenza da un bordo all'altro: deve avere posto per ${draft.players} auto affiancate. Verde va bene, rossa no.`,
   4: () => `${Tap} la freccia del verso di gara e scegli quanti giri.`
 };
 
 // ---------- scelta iniziale: quante auto ----------
 function setupInfo() {
-  const n = draft.players, ai = draft.mode === 'ai';
+  const n = draft.players,
+    ai = draft.mode === 'ai';
   $('carRow').hidden = ai;
   $('modeInfo').textContent = ai
     ? 'Una tua auto contro una dell’IA. Muovete nello stesso momento: tu scegli, l’IA sceglie, e le auto partono insieme.'
@@ -106,21 +153,34 @@ function setupInfo() {
       ? `Gara online: disegni la pista, poi la gara compare negli avvisi di Binottoland e aspetta ${n === 2 ? 'un altro pilota' : `altri ${n - 1} piloti`}. Ognuno sceglie la sua mossa dal suo telefono, tutti nello stesso momento: quando ha scelto anche l’ultimo, le auto si muovono insieme. 1 minuto per scegliere, poi guida il pilota automatico.`
       : 'Giocate tutti sullo stesso telefono, a turno.';
   $('carN').textContent = n;
-  $('carDots').innerHTML = R.carColors(n).map((c) => `<span style="--c:${c.hex}">${c.num}</span>`).join('');
-  $('setupInfo').textContent = `Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
+  $('carDots').innerHTML = R.carColors(n)
+    .map(c => `<span style="--c:${c.hex}">${c.num}</span>`)
+    .join('');
+  $('setupInfo').textContent =
+    `Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
 }
-$('carM').onclick = () => { draft.players = Math.max(2, draft.players - 1); setupInfo(); saveSetup(); };
-$('carP').onclick = () => { draft.players = Math.min(maxCars(), draft.players + 1); setupInfo(); saveSetup(); };
+$('carM').onclick = () => {
+  draft.players = Math.max(2, draft.players - 1);
+  setupInfo();
+  saveSetup();
+};
+$('carP').onclick = () => {
+  draft.players = Math.min(maxCars(), draft.players + 1);
+  setupInfo();
+  saveSetup();
+};
 $('startDraw').onclick = () => {
   $('setup').hidden = true;
   ed.setBoard(R.boardSize());
   ed.setZoom(R.startCells(draft.players));
-  setStep(1); syncZoom();
+  setStep(1);
+  syncZoom();
 };
 // Multiplayer solo dentro Binottoland (serve sapere chi sei); aperto da una gara online si salta la scelta
 const onlineRoom = embedded && new URLSearchParams(location.search).has('online');
 if (embedded) document.querySelector('[data-m="net"]').hidden = false;
-loadSetup(); syncSetupButtons();
+loadSetup();
+syncSetupButtons();
 setupInfo();
 if (onlineRoom) $('setup').hidden = true;
 else tut.show('setup');
@@ -133,76 +193,137 @@ function setStep(n) {
   if ($('setup').hidden) tut.show('draw' + n);
   $('laps').hidden = n !== 4;
   $('go').hidden = n !== 4;
-  ed.outer = draft.outer; ed.inner = draft.inner; ed.finish = draft.finish; ed.normalIdx = draft.normal;
+  ed.outer = draft.outer;
+  ed.inner = draft.inner;
+  ed.finish = draft.finish;
+  ed.normalIdx = draft.normal;
   ed.draw();
 }
 
 // cursore dello zoom a scala: a sinistra poche caselle, a destra tutta la griglia
 const ZMIN = 10;
-const zoomToCells = (v) => ZMIN * Math.pow(ed.board / ZMIN, v / 1000);
-const cellsToZoom = (c) => Math.round((1000 * Math.log(c / ZMIN)) / Math.log(ed.board / ZMIN));
+const zoomToCells = v => ZMIN * Math.pow(ed.board / ZMIN, v / 1000);
+const cellsToZoom = c => Math.round((1000 * Math.log(c / ZMIN)) / Math.log(ed.board / ZMIN));
 function syncZoom() {
   $('zoom').value = Math.max(0, Math.min(1000, cellsToZoom(Math.max(ZMIN, ed.cellsAcross()))));
   $('edCells').textContent = `${ed.cellsAcross()} × ${Math.round(ed.h / ed.s)} caselle`;
 }
 ed.onZoom = syncZoom;
-$('zoom').addEventListener('input', (e) => { ed.setZoom(zoomToCells(+e.target.value)); syncZoom(); });
-$('zOut').onclick = () => { ed.zoomAt(ed.w / 2, ed.h / 2, 0.8); };
-$('zIn').onclick = () => { ed.zoomAt(ed.w / 2, ed.h / 2, 1.25); };
-$('fit').onclick = () => { if (draft.outer) ed.fit(); else { ed.cx = ed.cy = ed.board / 2; ed.draw(); } syncZoom(); };
+$('zoom').addEventListener('input', e => {
+  ed.setZoom(zoomToCells(+e.target.value));
+  syncZoom();
+});
+$('zOut').onclick = () => {
+  ed.zoomAt(ed.w / 2, ed.h / 2, 0.8);
+};
+$('zIn').onclick = () => {
+  ed.zoomAt(ed.w / 2, ed.h / 2, 1.25);
+};
+$('fit').onclick = () => {
+  if (draft.outer) ed.fit();
+  else {
+    ed.cx = ed.cy = ed.board / 2;
+    ed.draw();
+  }
+  syncZoom();
+};
 
-ed.finishCheck = (pts) => {
+ed.finishCheck = pts => {
   const r = R.makeFinish(pts, draft.outer, draft.inner);
   if (r.error) return null;
   return { finish: r.finish, cap: R.finishCapacity(draft.outer, draft.inner, r.finish), need: draft.players };
 };
 
-ed.onStroke = (pts) => {
+ed.onStroke = pts => {
   ed.error = null;
   if (step === 1) {
     const r = R.closeBorder(pts);
     if (r.error) return fail(r);
-    draft.outer = r.poly; toast('Bordo esterno ok', true); setStep(2);
+    // gli stessi controlli del server, subito (analisi 11.2): prima li faceva solo il server, alla creazione online
+    const shape = R.checkBorderShape(r.poly);
+    if (shape) return fail({ error: shape, at: r.poly[0] });
+    draft.outer = r.poly;
+    // pista molto grande: si dice già qui, non dopo il secondo bordo (analisi 11.1)
+    if (R.polyArea(r.poly) > R.MAX_TRACK_CELLS)
+      toast(
+        'Bordo esterno ok, ma è enorme: l’isola dovrà essere grande, al massimo un milione di caselle di asfalto.'
+      );
+    else toast('Bordo esterno ok', true);
+    setStep(2);
   } else if (step === 2) {
     const r = R.closeBorder(pts);
     if (r.error) return fail(r);
+    const shape = R.checkBorderShape(r.poly);
+    if (shape) return fail({ error: shape, at: r.poly[0] });
     const c = R.checkInner(draft.outer, r.poly, R.minWidth(draft.players));
     if (c.error) return fail(c);
-    // pista troppo grande: il pilota automatico non ci sta in memoria, e il server la rifiuterebbe (analisi 10.10)
+    // pista troppo grande: il controllo e il pilota automatico diventano lenti, e il server la rifiuterebbe
     const big = R.checkTrackSize(draft.outer, r.poly);
     if (big) return fail({ error: big, at: r.poly[0] });
-    draft.inner = r.poly; toast('Bordo interno ok', true); setStep(3);
+    draft.inner = r.poly;
+    toast('Bordo interno ok', true);
+    setStep(3);
   } else if (step === 3) {
     const r = R.makeFinish(pts, draft.outer, draft.inner);
     if (r.error) return fail(r);
     const cap = R.finishCapacity(draft.outer, draft.inner, r.finish);
-    if (cap < draft.players) return fail({ error: `Sulla linea ci stanno ${cap} auto, ne servono ${draft.players}. Tracciala dove la pista è più larga.`, at: { x: (r.finish.a.x + r.finish.b.x) / 2, y: (r.finish.a.y + r.finish.b.y) / 2 } });
-    draft.finish = r.finish; draft.normal = -1; setStep(4);
+    if (cap < draft.players)
+      return fail({
+        error: `Sulla linea ci stanno ${cap} auto, ne servono ${draft.players}. Tracciala dove la pista è più larga.`,
+        at: { x: (r.finish.a.x + r.finish.b.x) / 2, y: (r.finish.a.y + r.finish.b.y) / 2 }
+      });
+    draft.finish = r.finish;
+    draft.normal = -1;
+    setStep(4);
   }
 };
-function fail(r) { ed.error = r; ed.draw(); toast(r.error); }
+function fail(r) {
+  ed.error = r;
+  ed.draw();
+  toast(r.error);
+}
 
-ed.onArrow = (i) => {
+ed.onArrow = i => {
   const cap = R.capacityFor(draft.outer, draft.inner, draft.finish, R.finishNormals(draft.finish)[i]);
-  if (cap < draft.players) { toast(`In questo verso sulla linea ci stanno ${cap} auto, ne servono ${draft.players}.`); return false; }
+  if (cap < draft.players) {
+    toast(`In questo verso sulla linea ci stanno ${cap} auto, ne servono ${draft.players}.`);
+    return false;
+  }
   draft.normal = i;
   tut.show('create3d');
 };
 
 $('undo').onclick = () => {
   ed.error = null;
-  if (step === 4) { draft.finish = null; draft.normal = -1; setStep(3); }
-  else if (step === 3) { draft.inner = null; setStep(2); }
-  else if (step === 2) { draft.outer = null; setStep(1); }
-  else ed.draw();
+  if (step === 4) {
+    draft.finish = null;
+    draft.normal = -1;
+    setStep(3);
+  } else if (step === 3) {
+    draft.inner = null;
+    setStep(2);
+  } else if (step === 2) {
+    draft.outer = null;
+    setStep(1);
+  } else ed.draw();
 };
-const showLaps = () => { $('lapN').textContent = draft.laps; };
-$('lapM').onclick = () => { draft.laps = Math.max(1, draft.laps - 1); showLaps(); saveSetup(); };
-$('lapP').onclick = () => { draft.laps = Math.min(9, draft.laps + 1); showLaps(); saveSetup(); };
+const showLaps = () => {
+  $('lapN').textContent = draft.laps;
+};
+$('lapM').onclick = () => {
+  draft.laps = Math.max(1, draft.laps - 1);
+  showLaps();
+  saveSetup();
+};
+$('lapP').onclick = () => {
+  draft.laps = Math.min(9, draft.laps + 1);
+  showLaps();
+  saveSetup();
+};
 
 $('go').onclick = () => {
   tut.hide();
-  if (draft.normal < 0) return toast('Prima tocca una delle due frecce: è il verso di gara.');
+  if (draft.normal < 0) return toast(`Prima ${tap} una delle due frecce: è il verso di gara.`);
   // controllo finale di tutta la pista prima del 3D
   const c = R.checkInner(draft.outer, draft.inner, R.minWidth(draft.players));
   if (c.error) return fail(c);
@@ -214,35 +335,71 @@ $('go').onclick = () => {
     if (!me) return toast('Apri il gioco da Binottoland per correre online.');
     $('go').disabled = true;
     toast('Apro la gara online…', true);
-    const r2 = (p) => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 });
-    toApp('create', {
-      track: { outer: draft.outer.map(r2), inner: draft.inner.map(r2), finish: { a: r2(draft.finish.a), b: r2(draft.finish.b), outerSeg: draft.finish.outerSeg, innerSeg: draft.finish.innerSeg }, normal: n, players: draft.players },
-      laps: draft.laps, time: draft.time
-    });
+    const r2 = p => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 });
+    const track = {
+      outer: draft.outer.map(r2),
+      inner: draft.inner.map(r2),
+      finish: {
+        a: r2(draft.finish.a),
+        b: r2(draft.finish.b),
+        outerSeg: draft.finish.outerSeg,
+        innerSeg: draft.finish.innerSeg
+      },
+      normal: n,
+      players: draft.players
+    };
+    // la pista arrotondata come la vedrà il server, con i suoi stessi controlli (analisi 11.10): se il server la
+    // rifiuterebbe, lo si dice qui con il punto segnato invece che dopo la richiesta
+    const why = R.onlineTrackError(track);
+    if (why) {
+      $('go').disabled = false;
+      return fail({ error: why, at: track.outer[0] });
+    }
+    toApp('create', { track, laps: draft.laps, time: draft.time });
     return;
   }
   startRace(b.track, draft.laps, draft.players, draft.mode);
 };
 
 // ---------- gara ----------
-let scene = null, race = null, busy = false, lastTrack = null, lastLaps = 3, lastN = 2, lastMode = 'ai';
+let scene = null,
+  race = null,
+  busy = false,
+  lastTrack = null,
+  lastLaps = 3,
+  lastN = 2,
+  lastMode = 'ai';
 let COL = R.carColors(2);
 let driver = null; // pilota dell'IA
 const isAi = () => race && race.mode === 'ai';
 
-function show(id) { for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id); }
+function show(id) {
+  for (const s of document.querySelectorAll('.screen')) s.classList.toggle('on', s.id === id);
+}
 
 // qualità grafica, ricordata dal browser
 // partenza «Media» sui telefoni, «Alta» sul computer; la scelta del giocatore resta ricordata (analisi 10.8)
 const defaultQuality = touchUI ? 'media' : 'alta';
 let quality = defaultQuality;
-try { quality = localStorage.getItem('gara.qualita') || defaultQuality; } catch (e) { /* niente memoria */ }
-const qButtons = () => { for (const b of document.querySelectorAll('[data-q]')) b.classList.toggle('on', b.dataset.q === quality); };
-for (const b of document.querySelectorAll('[data-q]')) b.onclick = () => {
-  quality = b.dataset.q; qButtons();
-  try { localStorage.setItem('gara.qualita', quality); } catch (e) { /* niente */ }
-  if (scene) scene.setQuality(quality);
+try {
+  quality = localStorage.getItem('gara.qualita') || defaultQuality;
+} catch (e) {
+  /* niente memoria */
+}
+const qButtons = () => {
+  for (const b of document.querySelectorAll('[data-q]')) b.classList.toggle('on', b.dataset.q === quality);
 };
+for (const b of document.querySelectorAll('[data-q]'))
+  b.onclick = () => {
+    quality = b.dataset.q;
+    qButtons();
+    try {
+      localStorage.setItem('gara.qualita', quality);
+    } catch (e) {
+      /* niente */
+    }
+    if (scene) scene.setQuality(quality);
+  };
 qButtons();
 
 // la scena 3D nasce alla prima gara; se la grafica 3D non parte si dice perché, invece di lasciare la schermata
@@ -250,7 +407,10 @@ qButtons();
 function makeScene() {
   if (scene) return true;
   try {
-    scene = new Race3D($('gl')); scene.onPick = pick; scene.setQuality(quality); scene.setTalkElement($('talk'));
+    scene = new Race3D($('gl'));
+    scene.onPick = pick;
+    scene.setQuality(quality);
+    scene.setTalkElement($('talk'));
     return true;
   } catch (e) {
     scene = null;
@@ -262,19 +422,27 @@ function makeScene() {
 }
 
 async function startRace(track, laps, n, mode = 'local') {
-  lastTrack = track; lastLaps = laps; lastN = n; lastMode = mode;
+  lastTrack = track;
+  lastLaps = laps;
+  lastN = n;
+  lastMode = mode;
   if (mode === 'ai') n = 2;
   show('rc');
   if (!makeScene()) return;
   scene.resize();
-  scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
+  scene.onViewChange = () => {
+    $('view').textContent = 'Vista alta';
+  };
   scene.build(track, draft.time);
   await scene.ready;
   race = R.newRace(track, laps, n);
   race.mode = mode;
   COL = race.colors;
   if (mode === 'ai') {
-    COL = race.colors = [{ ...COL[0], name: 'Tu', role: 'tu' }, { ...COL[1], name: 'IA', role: 'IA' }];
+    COL = race.colors = [
+      { ...COL[0], name: 'Tu', role: 'tu' },
+      { ...COL[1], name: 'IA', role: 'IA' }
+    ];
     driver = new AiDriver(track, laps);
   } else driver = null;
   scene.setCars(race, COL);
@@ -285,17 +453,27 @@ async function startRace(track, laps, n, mode = 'local') {
 
 // barra in alto: l'auto di turno per esteso, le altre compatte (numero, marcia, fermo)
 function chips() {
-  $('chips').innerHTML = race.cars.map((c, i) => {
-    // online in gara si sceglie tutti insieme: evidenziate le auto che devono ancora scegliere
-    const together = netRacing(), chosen = together && netChosen(i);
-    const col = COL[i], lap = Math.min(race.laps, R.currentLap(c)), turn = together ? !c.crash && !chosen : i === race.turn && race.phase !== 'over';
-    const st = (c.crash ? ` · fermo ${c.crash}` : '') + (chosen ? ' · ✓ scelto' : '') + (net && net.auto[i] ? ' · auto' : '');
-    // con una mossa scelta al primo tocco, la marcia mostrata è già quella nuova
-    const gv = c.gear;
-    if (!turn && !isAi() && !net) return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${gv ? gv : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
-    return `<div class="chip ${turn ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${gv ? gv : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
-  }).join('');
-  const box = $('chips'), t = box.querySelector('.turn');
+  $('chips').innerHTML = race.cars
+    .map((c, i) => {
+      // online in gara si sceglie tutti insieme: evidenziate le auto che devono ancora scegliere
+      const together = netRacing(),
+        chosen = together && netChosen(i);
+      const col = COL[i],
+        lap = Math.min(race.laps, R.currentLap(c)),
+        turn = together ? !c.crash && !chosen : i === race.turn && race.phase !== 'over';
+      const st =
+        (c.crash ? ` · fermo ${c.crash}` : '') +
+        (chosen ? ' · ✓ scelto' : '') +
+        (net && net.auto[i] ? ' · auto' : '');
+      // con una mossa scelta al primo tocco, la marcia mostrata è già quella nuova
+      const gv = c.gear;
+      if (!turn && !isAi() && !net)
+        return `<div class="chip" style="--c:${col.hex}"><span class="dot"></span>${col.num} <span class="g">${gv ? gv : 'N'}</span>${c.crash ? ' <span class="muted">✕' + c.crash + '</span>' : ''}</div>`;
+      return `<div class="chip ${turn ? 'turn' : ''}" style="--c:${col.hex}"><span class="dot"></span>${col.num} ${col.name} <span class="g">${gv ? gv : 'N'}</span> <span class="muted">giro ${lap}/${race.laps}${st}</span></div>`;
+    })
+    .join('');
+  const box = $('chips'),
+    t = box.querySelector('.turn');
   if (t) box.scrollLeft = t.offsetLeft - box.clientWidth / 2 + t.offsetWidth / 2;
   setTopH();
 }
@@ -304,20 +482,26 @@ function refresh() {
   chips();
   // online in gara: l'auto da guidare è sempre la tua (si sceglie tutti insieme)
   const ci = netRacing() && net.mine >= 0 ? net.mine : race.turn;
-  const car = race.cars[ci], col = COL[ci];
+  const car = race.cars[ci],
+    col = COL[ci];
   // online: sulla linea si mette l'auto a turno; in gara scegli quando non hai ancora scelto, altrimenti guardi
   if (net && race.phase !== 'over' && (race.phase === 'place' ? race.turn !== net.mine : !netCanChoose())) {
     scene.clearMarks();
     netHelp();
-    if (race.phase === 'place' && !refresh.placed) { const f = race.track.finish; scene.focus({ x: (f.a.x + f.b.x) / 2, y: (f.a.y + f.b.y) / 2 }, true); refresh.placed = true; }
-    else if (car.pos) scene.focus(car.pos);
+    if (race.phase === 'place' && !refresh.placed) {
+      const f = race.track.finish;
+      scene.focus({ x: (f.a.x + f.b.x) / 2, y: (f.a.y + f.b.y) / 2 }, true);
+      refresh.placed = true;
+    } else if (car.pos) scene.focus(car.pos);
     return;
   }
   if (race.phase === 'place') {
-    $('rcHelp').textContent = net ? `Tocca a te: ${tap} una casella bianca sulla linea per mettere la tua auto.` : isAi()
-      ? `${Tap} una casella bianca sulla linea per mettere la tua auto: poi l’IA mette la sua.`
-      : `${col.num} ${col.name} (${col.role}): ${tap} una casella bianca sulla linea per mettere l'auto.`;
-    scene.showMarks(R.placeable(race).map((s) => ({ ...s, kind: 'slot' })));
+    $('rcHelp').textContent = net
+      ? `Tocca a te: ${tap} una casella bianca sulla linea per mettere la tua auto.`
+      : isAi()
+        ? `${Tap} una casella bianca sulla linea per mettere la tua auto: poi l’IA mette la sua.`
+        : `${col.num} ${col.name} (${col.role}): ${tap} una casella bianca sulla linea per mettere l'auto.`;
+    scene.showMarks(R.placeable(race).map(s => ({ ...s, kind: 'slot' })));
     tut.show('place');
     if (!refresh.placed) {
       const f = race.track.finish;
@@ -336,36 +520,51 @@ function refresh() {
   }
   helpTurn();
   let opts = isAi() ? R.roundOptions(race, 0) : net ? R.roundOptions(race, ci) : R.options(race);
-  if (!opts.length) opts = [{ x: car.pos.x + car.dir.x, y: car.pos.y + car.dir.y, gear: 1, crash: true, stop: { ...car.pos } }];
+  if (!opts.length)
+    opts = [
+      { x: car.pos.x + car.dir.x, y: car.pos.y + car.dir.y, gear: 1, crash: true, stop: { ...car.pos } }
+    ];
   race.opts = opts;
-  scene.showMarks(opts.map((o) => ({
-    ...o,
-    kind: o.crash ? 'crash' : car.gear === 0 || o.gear === car.gear ? 'same' : o.gear < car.gear ? 'down' : 'up',
-    txt: String(o.gear)
-  })));
+  scene.showMarks(
+    opts.map(o => ({
+      ...o,
+      kind: o.crash
+        ? 'crash'
+        : car.gear === 0 || o.gear === car.gear
+          ? 'same'
+          : o.gear < car.gear
+            ? 'down'
+            : 'up',
+      txt: String(o.gear)
+    }))
+  );
   // telecamera a metà tra l'auto e i dischi, così si vede tutto
-  const cx = opts.reduce((s, o) => s + o.x, 0) / opts.length, cy = opts.reduce((s, o) => s + o.y, 0) / opts.length;
+  const cx = opts.reduce((s, o) => s + o.x, 0) / opts.length,
+    cy = opts.reduce((s, o) => s + o.y, 0) / opts.length;
   scene.focus({ x: (car.pos.x + cx) / 2, y: (car.pos.y + cy) / 2 }, race.moves === 0);
 }
 
 // gli avvisi stanno sempre sotto la barra in alto, anche quando il testo va su due righe
 // (vale per la barra visibile: quella della gara o quella dell'editor; serve anche ai fumetti del tutorial)
 const topBars = [$('rcTop'), document.querySelector('#ed .bar.top')];
-const setTopH = () => document.documentElement.style.setProperty('--topH', Math.max(...topBars.map((b) => b.offsetHeight)) + 'px');
+const setTopH = () =>
+  document.documentElement.style.setProperty('--topH', Math.max(...topBars.map(b => b.offsetHeight)) + 'px');
 const topObs = new ResizeObserver(setTopH);
-topBars.forEach((b) => topObs.observe(b));
-
+topBars.forEach(b => topObs.observe(b));
 
 function helpTurn() {
   const col = COL[race.turn];
   if (net) return netHelp();
-  $('rcHelp').textContent = isAi() ? 'Scegli la tua mossa: l’IA muove insieme a te.' : `Tocca a ${col.num} ${col.name}: scegli dove andare.`;
+  $('rcHelp').textContent = isAi()
+    ? 'Scegli la tua mossa: l’IA muove insieme a te.'
+    : `Tocca a ${col.num} ${col.name}: scegli dove andare.`;
 }
 
 // l'IA mette la sua auto: la casella della linea più vicina alla strada più corta
 function aiPlace() {
-  const F = distField(race.track), slots = R.placeable(race);
-  const d = (s) => F.D.get(s.x + ',' + s.y) ?? 1e9;
+  const F = distField(race.track),
+    slots = R.placeable(race);
+  const d = s => F.D.get(s.x + ',' + s.y) ?? 1e9;
   const s = slots.slice().sort((a, b) => d(a) - d(b))[0];
   R.placeCar(race, s);
   const car = race.cars[1];
@@ -374,37 +573,67 @@ function aiPlace() {
 
 // anima una o più mosse insieme e poi mostra cosa è successo
 async function play(list, ev) {
-  await Promise.all(list.map(({ i, from, opt, prevGear }) => {
-    const car = race.cars[i];
-    if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
-    // suoni: motore, gomme se si scala, botto all'arrivo se si sbatte, bip se si passa la linea (solo per la tua auto contro l'IA)
-    const ms = 260 + Math.max(1, Math.hypot(car.pos.x - from.x, car.pos.y - from.y)) * 70;
-    if (myCar(i)) {
-      sfx.engine(opt.crash ? Math.max(1, prevGear) : opt.gear, ms);
-      if (opt.crash || opt.gear < prevGear) sfx.skid(ms);
-    }
-    if (opt.crash) setTimeout(() => sfx.crash(), ms);
-    if (ev.some((e) => e.type === 'line' && e.car === i)) setTimeout(() => sfx.line(), ms * 0.6);
-    // contro l'IA e online (auto che si muovono insieme) la telecamera segue sempre e solo la tua auto
-    return scene.moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash, myCar(i)).then(() => {
-      scene.addTrail(i, from, car.pos, car.path[car.path.length - 1].lap);
-      scene.setGear(i, car.gear);
-      scene.trailFade(i, R.currentLap(car));
-    });
-  }));
+  await Promise.all(
+    list.map(({ i, from, opt, prevGear }) => {
+      const car = race.cars[i];
+      if (opt.crash || opt.gear < prevGear) scene.skid(from, car.pos);
+      // suoni: motore, gomme se si scala, botto all'arrivo se si sbatte, bip se si passa la linea (solo per la tua auto contro l'IA)
+      const ms = 260 + Math.max(1, Math.hypot(car.pos.x - from.x, car.pos.y - from.y)) * 70;
+      if (myCar(i)) {
+        sfx.engine(opt.crash ? Math.max(1, prevGear) : opt.gear, ms);
+        if (opt.crash || opt.gear < prevGear) sfx.skid(ms);
+      }
+      if (opt.crash) setTimeout(() => sfx.crash(), ms);
+      if (ev.some(e => e.type === 'line' && e.car === i)) setTimeout(() => sfx.line(), ms * 0.6);
+      // contro l'IA e online (auto che si muovono insieme) la telecamera segue sempre e solo la tua auto
+      return scene
+        .moveCar(i, from, car.pos, { x: opt.x - from.x, y: opt.y - from.y }, opt.crash, myCar(i))
+        .then(() => {
+          scene.addTrail(i, from, car.pos, car.path[car.path.length - 1].lap);
+          scene.setGear(i, car.gear);
+          scene.trailFade(i, R.currentLap(car));
+        });
+    })
+  );
   chips();
   for (const e of ev) {
-    const c = COL[e.car], me = (isAi() && e.car === 0) || (!!net && e.car === net.mine);
-    if (e.type === 'crash') { await banner(`<div class="t" style="color:#fca5a5">Urto!</div>${me ? 'Sei fermo' : c.name + ' fermo'} per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`, 1700); if (!isAi() || me) tut.show('crash'); }
-    else if (e.type === 'line' && race.cars[e.car].progress > 1) { await banner(`<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`, 1100); if (!isAi() || me) tut.show('lap'); }
-    else if (e.type === 'lineBack') await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
+    const c = COL[e.car],
+      me = (isAi() && e.car === 0) || (!!net && e.car === net.mine);
+    if (e.type === 'crash') {
+      await banner(
+        `<div class="t" style="color:#fca5a5">Urto!</div>${me ? 'Sei fermo' : c.name + ' fermo'} per 2 turni<div class="pips" style="color:${c.hex}">● ●</div>`,
+        1700
+      );
+      if (!isAi() || me) tut.show('crash');
+    } else if (e.type === 'line' && race.cars[e.car].progress > 1) {
+      await banner(
+        `<div class="t">Giro ${Math.min(race.laps, race.cars[e.car].progress)} di ${race.laps}</div>${c.name}`,
+        1100
+      );
+      if (!isAi() || me) tut.show('lap');
+    } else if (e.type === 'lineBack')
+      await banner(`${c.name} ha passato la linea al contrario: il giro non conta.`, 1500);
     else if (e.type === 'skip') {
       sfx.skip();
       if (!isAi()) scene.focus(race.cars[e.car].pos);
-      if (e.turned) { await Promise.all([scene.turnCar(e.car, race.cars[e.car].dir), banner(`${me ? 'Salti' : c.name + ' salta'} il turno<br>e ${me ? 'ti giri' : 'si gira'} verso la pista`, 1400)]); }
-      else await banner(`${me ? 'Salti' : c.name + ' salta'} il turno<div class="pips" style="color:${c.hex}">○ ●</div>`, 1300);
+      if (e.turned) {
+        await Promise.all([
+          scene.turnCar(e.car, race.cars[e.car].dir),
+          banner(
+            `${me ? 'Salti' : c.name + ' salta'} il turno<br>e ${me ? 'ti giri' : 'si gira'} verso la pista`,
+            1400
+          )
+        ]);
+      } else
+        await banner(
+          `${me ? 'Salti' : c.name + ' salta'} il turno<div class="pips" style="color:${c.hex}">○ ●</div>`,
+          1300
+        );
       chips();
-    } else if (e.type === 'win') { win(e.car); return true; }
+    } else if (e.type === 'win') {
+      win(e.car);
+      return true;
+    }
   }
   return false;
 }
@@ -419,14 +648,22 @@ async function runRound(myOpt) {
   if (!ai.crash) {
     // l'IA non si ferma dove hai deciso di andare tu
     const avoid = myOpt ? [myOpt.stop] : race.cars[0].crash ? [race.cars[0].pos] : [];
-    if (!driver.planned) { $('rcHelp').textContent = 'L’IA studia la pista…'; await new Promise((r) => setTimeout(r, 60)); driver.planned = true; }
+    if (!driver.planned) {
+      $('rcHelp').textContent = 'L’IA studia la pista…';
+      await new Promise(r => setTimeout(r, 60));
+      driver.planned = true;
+    }
     aiOpt = driver.choose(race, 1, avoid, R.roundOptions(race, 1, avoid));
   }
   $('rcHelp').textContent = '';
   const list = [];
-  const from = race.cars.map((c) => ({ ...c.pos })), gears = race.cars.map((c) => c.gear), still = race.cars.map((c) => c.crash);
+  const from = race.cars.map(c => ({ ...c.pos })),
+    gears = race.cars.map(c => c.gear),
+    still = race.cars.map(c => c.crash);
   const ev = R.applyRound(race, [myOpt, aiOpt]);
-  [myOpt, aiOpt].forEach((opt, i) => { if (opt && !still[i]) list.push({ i, from: from[i], opt, prevGear: gears[i] }); });
+  [myOpt, aiOpt].forEach((opt, i) => {
+    if (opt && !still[i]) list.push({ i, from: from[i], opt, prevGear: gears[i] });
+  });
   const done = await play(list, ev);
   busy = false;
   if (!done) refresh();
@@ -440,21 +677,27 @@ async function pick(mark) {
     if (race.phase === 'race') {
       // in gara: scegli la tua mossa; le auto partono quando hanno scelto tutti
       if (!netCanChoose()) return;
-      const opt = race.opts && race.opts.find((o) => o.x === mark.x && o.y === mark.y);
+      const opt = race.opts && race.opts.find(o => o.x === mark.x && o.y === mark.y);
       if (!opt) return;
       scene.setGear(net.mine, opt.crash ? 0 : opt.gear);
-    } else if (race.phase !== 'place' || race.turn !== net.mine || !R.placeable(race).some((s) => s.x === mark.x && s.y === mark.y)) return;
+    } else if (
+      race.phase !== 'place' ||
+      race.turn !== net.mine ||
+      !R.placeable(race).some(s => s.x === mark.x && s.y === mark.y)
+    )
+      return;
     busy = true;
     scene.clearMarks();
     sfx.tick(true);
-    $('rcHelp').textContent = race.phase === 'race' ? 'Mossa scelta: aspettiamo gli altri…' : 'Mossa inviata…';
+    $('rcHelp').textContent =
+      race.phase === 'race' ? 'Mossa scelta: aspettiamo gli altri…' : 'Mossa inviata…';
     toApp('action', { kind: 'play', payload: { x: mark.x, y: mark.y } });
     return;
   }
   if (race.phase === 'place') {
     const r = R.placeCar(race, mark);
     if (r.error) return banner(r.error);
-    const car = race.cars.find((c) => c.pos && c.pos.x === mark.x && c.pos.y === mark.y);
+    const car = race.cars.find(c => c.pos && c.pos.x === mark.x && c.pos.y === mark.y);
     scene.placeCar(car.id, car.pos, race.track.normal);
     sfx.tick(true);
     if (isAi() && race.phase === 'place') aiPlace();
@@ -476,7 +719,7 @@ async function pick(mark) {
     return;
   }
   if (race.phase !== 'race') return;
-  const opt = race.opts.find((o) => o.x === mark.x && o.y === mark.y);
+  const opt = race.opts.find(o => o.x === mark.x && o.y === mark.y);
   if (!opt) return;
   // un tocco: la marcia cambia subito e l'auto parte
   scene.setGear(race.turn, opt.crash ? 0 : opt.gear);
@@ -484,7 +727,10 @@ async function pick(mark) {
   busy = true;
   scene.clearMarks();
   $('rcHelp').textContent = '';
-  const i = race.turn, car = race.cars[i], from = { ...car.pos }, prevGear = car.gear;
+  const i = race.turn,
+    car = race.cars[i],
+    from = { ...car.pos },
+    prevGear = car.gear;
   const ev = R.applyMove(race, opt);
   const done = await play([{ i, from, opt, prevGear }], ev);
   busy = false;
@@ -494,9 +740,15 @@ async function pick(mark) {
 let bannerT = 0;
 function banner(html, ms = 1600) {
   const b = $('banner');
-  b.innerHTML = html; b.classList.add('show');
+  b.innerHTML = html;
+  b.classList.add('show');
   clearTimeout(bannerT);
-  return new Promise((res) => { bannerT = setTimeout(() => { b.classList.remove('show'); setTimeout(res, 200); }, ms); });
+  return new Promise(res => {
+    bannerT = setTimeout(() => {
+      b.classList.remove('show');
+      setTimeout(res, 200);
+    }, ms);
+  });
 }
 
 function win(i) {
@@ -505,44 +757,99 @@ function win(i) {
   chips();
   scene.clearMarks();
   const c = COL[i];
-  $('winT').textContent = net ? (i === net.mine ? 'Hai vinto!' : `Vince ${c.raw}`) : isAi() ? (i === 0 ? 'Hai vinto!' : 'Vince l’IA') : `Vince l'auto ${c.num} · ${c.name}`;
+  $('winT').textContent = net
+    ? i === net.mine
+      ? 'Hai vinto!'
+      : `Vince ${c.raw}`
+    : isAi()
+      ? i === 0
+        ? 'Hai vinto!'
+        : 'Vince l’IA'
+      : `Vince l'auto ${c.num} · ${c.name}`;
   netOverButtons();
   $('winT').style.color = c.hex;
   $('winS').textContent = `${race.laps} ${race.laps === 1 ? 'giro' : 'giri'} · ${race.cars[i].moves} mosse`;
   scene.focus(race.cars[i].pos, true);
-  setTimeout(() => { $('over').hidden = false; }, 700);
+  setTimeout(() => {
+    $('over').hidden = false;
+  }, 700);
 }
 
-$('grid').onclick = (e) => { const on = !e.target.classList.contains('on'); e.target.classList.toggle('on', on); scene.setGrid(on); };
-$('view').onclick = (e) => { const top = scene.view !== 'top'; scene.setView(top ? 'top' : 'tilt'); e.target.textContent = top ? 'Vista inclinata' : 'Vista alta'; };
-// "Centra" riporta la vista sulla tua auto (o sulla linea) e da lì la vista torna a seguire il gioco
-$('center').onclick = () => { const c = race && race.cars[net && net.mine >= 0 ? net.mine : race.turn]; // online: la tua auto (analisi 10.11)
- if (c && c.pos) scene.focus(c.pos, true, true); else if (race) scene.focus(race.track.startSlots[0], true, true); };
-$('menuB').onclick = () => { $('menu').hidden = false; };
-$('snd').onclick = () => { sfx.unlock(); sfx.setOn(!sfx.on); sndLabel(); if (sfx.on) sfx.tick(true); };
-sndLabel();
-$('close').onclick = () => { $('menu').hidden = true; };
-const again = () => { $('menu').hidden = true; refresh.placed = false; startRace(lastTrack, lastLaps, lastN, lastMode); };
-$('again').onclick = again; $('again2').onclick = again;
-const newTrack = () => {
-  $('menu').hidden = true; $('over').hidden = true;
-  draft.outer = draft.inner = draft.finish = null; draft.normal = -1; ed.error = null;
-  show('ed'); ed.resize(); setStep(1); setupInfo(); $('setup').hidden = false;
+$('grid').onclick = e => {
+  const on = !e.target.classList.contains('on');
+  e.target.classList.toggle('on', on);
+  scene.setGrid(on);
 };
-$('newT').onclick = newTrack; $('newT2').onclick = () => (net ? toApp('exit') : newTrack());
+$('view').onclick = e => {
+  const top = scene.view !== 'top';
+  scene.setView(top ? 'top' : 'tilt');
+  e.target.textContent = top ? 'Vista inclinata' : 'Vista alta';
+};
+// "Centra" riporta la vista sulla tua auto (o sulla linea) e da lì la vista torna a seguire il gioco
+$('center').onclick = () => {
+  const c = race && race.cars[net && net.mine >= 0 ? net.mine : race.turn]; // online: la tua auto (analisi 10.11)
+  if (c && c.pos) scene.focus(c.pos, true, true);
+  else if (race) scene.focus(race.track.startSlots[0], true, true);
+};
+$('menuB').onclick = () => {
+  $('menu').hidden = false;
+};
+$('snd').onclick = () => {
+  sfx.unlock();
+  sfx.setOn(!sfx.on);
+  sndLabel();
+  if (sfx.on) sfx.tick(true);
+};
+sndLabel();
+$('close').onclick = () => {
+  $('menu').hidden = true;
+};
+const again = () => {
+  $('menu').hidden = true;
+  refresh.placed = false;
+  startRace(lastTrack, lastLaps, lastN, lastMode);
+};
+$('again').onclick = again;
+$('again2').onclick = again;
+const newTrack = () => {
+  $('menu').hidden = true;
+  $('over').hidden = true;
+  draft.outer = draft.inner = draft.finish = null;
+  draft.normal = -1;
+  ed.error = null;
+  show('ed');
+  ed.resize();
+  setStep(1);
+  setupInfo();
+  $('setup').hidden = false;
+};
+$('newT').onclick = newTrack;
+$('newT2').onclick = () => (net ? toApp('exit') : newTrack());
 // rifare il tutorial: dalla schermata Nuova gara, oppure dal menu (si riparte da una pista nuova)
-$('tutAgain').onclick = () => { tut.restart(); tut.show('setup'); };
-$('tutAgain2').onclick = () => { tut.restart(); newTrack(); tut.show('setup'); };
-
+$('tutAgain').onclick = () => {
+  tut.restart();
+  tut.show('setup');
+};
+$('tutAgain2').onclick = () => {
+  tut.restart();
+  newTrack();
+  tut.show('setup');
+};
 
 // ---------- gara online (Multiplayer) ----------
 // Binottoland tiene la gara sul server e manda qui lo stato ("f1:state"): la pista, i piloti, l'elenco delle mosse.
 // Il gioco rifà le mosse nuove con le stesse regole, una alla volta e animate (entrando tardi: tutte subito).
-let net = null, netChain = Promise.resolve();
-const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+let net = null,
+  netChain = Promise.resolve();
+const esc = s =>
+  String(s).replace(
+    /[&<>"']/g,
+    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+  );
 function netColors(s) {
   return R.carColors(s.seats.length).map((c, i) => {
-    const p = s.players.find((q) => q.id === s.seats[i]), mine = !!(me && p && p.id === me.player);
+    const p = s.players.find(q => q.id === s.seats[i]),
+      mine = !!(me && p && p.id === me.player);
     const raw = mine ? 'Tu' : p ? p.name : c.name;
     return { ...c, name: esc(raw), raw, role: mine ? 'tu' : 'pilota' };
   });
@@ -554,13 +861,20 @@ function netLeft() {
 }
 function netHelp() {
   if (!net || !race || race.phase === 'over' || busy) return;
-  const left = netLeft(), t = left === null ? '' : ` · ${left} s`, i = race.turn;
+  const left = netLeft(),
+    t = left === null ? '' : ` · ${left} s`,
+    i = race.turn;
   if (race.phase === 'race') {
     // si sceglie tutti insieme: chi manca ancora
-    const missing = race.cars.map((c, k) => k).filter((k) => !race.cars[k].crash && !netChosen(k)).map((k) => (k === net.mine ? 'tu' : COL[k].raw));
+    const missing = race.cars
+      .map((c, k) => k)
+      .filter(k => !race.cars[k].crash && !netChosen(k))
+      .map(k => (k === net.mine ? 'tu' : COL[k].raw));
     const who = missing.join(', ');
     if (netCanChoose()) $('rcHelp').textContent = 'Scegli dove andare: le auto si muovono tutte insieme' + t;
-    else if (net.mine >= 0 && race.cars[net.mine].crash) $('rcHelp').textContent = 'Sei fermo per l’urto: questo giro lo salti' + (who ? ` · scelgono ${who}` : '') + t;
+    else if (net.mine >= 0 && race.cars[net.mine].crash)
+      $('rcHelp').textContent =
+        'Sei fermo per l’urto: questo giro lo salti' + (who ? ` · scelgono ${who}` : '') + t;
     else if (net.mine >= 0) $('rcHelp').textContent = `Hai scelto: aspettiamo ${who || 'gli altri'}` + t;
     else $('rcHelp').textContent = `Scelgono: ${who}${t} · stai guardando`;
     return;
@@ -570,27 +884,35 @@ function netHelp() {
 }
 // online in gara: le auto scelgono tutte insieme (il server dice solo chi ha già scelto, non cosa)
 const netRacing = () => !!(net && race && race.phase === 'race');
-const netChosen = (i) => !!(net && net.state.chosen && net.state.chosen[i]);
+const netChosen = i => !!(net && net.state.chosen && net.state.chosen[i]);
 const netCanChoose = () => netRacing() && net.mine >= 0 && !race.cars[net.mine].crash && !netChosen(net.mine);
 // la "tua" auto: contro l'IA la prima, online la tua (se guardi, la prima); sullo stesso telefono tutte
-const myCar = (i) => (isAi() ? i === 0 : net ? i === (net.mine >= 0 ? net.mine : 0) : true);
-setInterval(() => { if (net && race && !busy) netHelp(); }, 1000);
+const myCar = i => (isAi() ? i === 0 : net ? i === (net.mine >= 0 ? net.mine : 0) : true);
+setInterval(() => {
+  if (net && race && !busy) netHelp();
+}, 1000);
 function netOverButtons() {
   $('again2').hidden = !!net;
   $('newT2').textContent = net ? 'Torna a Binottoland' : 'Nuova pista';
 }
 function netMenu() {
-  const on = !!net, owner = on && me && net.state.owner === me.player;
+  const on = !!net,
+    owner = on && me && net.state.owner === me.player;
   for (const id of ['again', 'newT', 'tutAgain2']) $(id).hidden = on;
-  const seated = on && me && net.state.players.some((p) => p.id === me.player);
+  const seated = on && me && net.state.players.some(p => p.id === me.player);
   // in gara chi non l'ha creata può abbandonare (la sua auto la guida il pilota automatico)
-  $('netClose').hidden = !(on && seated && netCloseKind()); $('netClose').dataset.sure = '';
-  $('netClose').textContent = { leave: 'Esci da questa gara', abandon: 'Abbandona la gara', close: 'Chiudi la gara online' }[netCloseKind()] || '';
+  $('netClose').hidden = !(on && seated && netCloseKind());
+  $('netClose').dataset.sure = '';
+  $('netClose').textContent =
+    { leave: 'Esci da questa gara', abandon: 'Abbandona la gara', close: 'Chiudi la gara online' }[
+      netCloseKind()
+    ] || '';
 }
 function netCloseKind() {
   const s = net && net.state;
   if (!s || !me) return null;
-  const owner = s.owner === me.player, gone = (s.gone || []).includes(me.player);
+  const owner = s.owner === me.player,
+    gone = (s.gone || []).includes(me.player);
   if (owner || s.phase === 'finished' || (s.gone || []).includes(s.owner)) return 'close';
   if (s.phase === 'waiting') return 'leave';
   return gone ? null : 'abandon';
@@ -600,48 +922,69 @@ function netWaiting(s) {
   const box = $('chips');
   box.replaceChildren();
   for (let i = 0; i < s.capacity; i++) {
-    const p = s.players[i], chip = document.createElement('div');
-    chip.className = 'chip'; chip.style.setProperty('--c', p ? '#22c55e' : '#475569');
-    const dot = document.createElement('span'); dot.className = 'dot';
+    const p = s.players[i],
+      chip = document.createElement('div');
+    chip.className = 'chip';
+    chip.style.setProperty('--c', p ? '#22c55e' : '#475569');
+    const dot = document.createElement('span');
+    dot.className = 'dot';
     chip.append(dot, p ? (me && p.id === me.player ? 'Tu' : p.name) : 'posto libero');
     box.append(chip);
   }
   setTopH();
-  const owner = !!(me && s.owner === me.player), missing = s.capacity - s.players.length;
-  const seated = !!(me && s.players.some((p) => p.id === me.player));
+  const owner = !!(me && s.owner === me.player),
+    missing = s.capacity - s.players.length;
+  const seated = !!(me && s.players.some(p => p.id === me.player));
   // chi l'ha aperta dalla Lobby guarda: entra solo se tocca «Entra in gara»
   if (!seated) {
-    $('rcHelp').textContent = missing > 0 ? `Stai guardando: ${missing === 1 ? 'manca un pilota' : `mancano ${missing} piloti`}. Tocca «Entra in gara» per correre.` : 'Stai guardando: la gara è al completo.';
+    $('rcHelp').textContent =
+      missing > 0
+        ? `Stai guardando: ${missing === 1 ? 'manca un pilota' : `mancano ${missing} piloti`}. ${Tap} «Entra in gara» per correre.`
+        : 'Stai guardando: la gara è al completo.';
     $('netGo').hidden = missing <= 0;
     $('netGo').textContent = 'Entra in gara';
     $('netGo').dataset.kind = 'join';
     return;
   }
-  $('rcHelp').textContent = `Aspettiamo ${missing} ${missing === 1 ? 'pilota' : 'piloti'}: gli altri entrano dalla campanella o dalla Lobby di Binottoland.` + (owner && s.players.length >= 2 ? ' Puoi anche partire ora.' : '');
+  $('rcHelp').textContent =
+    `Aspettiamo ${missing} ${missing === 1 ? 'pilota' : 'piloti'}: gli altri entrano dalla campanella o dalla Lobby di Binottoland.` +
+    (owner && s.players.length >= 2 ? ' Puoi anche partire ora.' : '');
   $('netGo').hidden = !owner || s.players.length < 2;
   $('netGo').textContent = `Parti ora (${s.players.length})`;
   $('netGo').dataset.kind = 'start';
 }
 async function netOpen(s, track) {
   tut.hide();
-  $('setup').hidden = true; $('menu').hidden = true; $('over').hidden = true;
+  $('setup').hidden = true;
+  $('menu').hidden = true;
+  $('over').hidden = true;
   show('rc');
   if (!makeScene()) return;
   scene.resize();
-  scene.onViewChange = () => { $('view').textContent = 'Vista alta'; };
+  scene.onViewChange = () => {
+    $('view').textContent = 'Vista alta';
+  };
   scene.build(track, s.time);
   await scene.ready;
   net = { room: s.room, state: s, track, seq: 0, mine: -1, skew: net ? net.skew : 0, auto: [] };
   $('go').disabled = false;
-  race = null; driver = null; busy = false; refresh.placed = false; lastMode = 'net';
+  race = null;
+  driver = null;
+  busy = false;
+  refresh.placed = false;
+  lastMode = 'net';
   const f = track.finish;
   scene.focus({ x: (f.a.x + f.b.x) / 2, y: (f.a.y + f.b.y) / 2 }, true, true);
 }
 async function netSync() {
   if (!net) return;
-  const s = net.state, track = net.track;
+  const s = net.state,
+    track = net.track;
   netMenu();
-  if (s.phase === 'waiting') { netWaiting(s); return; }
+  if (s.phase === 'waiting') {
+    netWaiting(s);
+    return;
+  }
   $('netGo').hidden = true;
   if (!race) {
     race = R.newRace(track, s.laps, s.seats.length);
@@ -651,9 +994,11 @@ async function netSync() {
     net.auto = s.seats.map(() => false);
     scene.setCars(race, COL);
   }
-  const fresh = s.moves.length - net.seq, instant = fresh > 4; // entrando tardi le mosse vecchie si mettono subito
+  const fresh = s.moves.length - net.seq,
+    instant = fresh > 4; // entrando tardi le mosse vecchie si mettono subito
   while (net.seq < s.moves.length) {
-    const e = s.moves[net.seq++], i = e.car;
+    const e = s.moves[net.seq++],
+      i = e.car;
     if (e.kind !== 'round') net.auto[i] = !!e.auto;
     if (e.kind === 'place') {
       R.placeCar(race, { x: e.x, y: e.y });
@@ -662,7 +1007,9 @@ async function netSync() {
       sfx.tick(true);
       if (race.phase === 'race') {
         // tutte le auto sulla linea: semaforo per tutti
-        busy = true; scene.clearMarks(); chips();
+        busy = true;
+        scene.clearMarks();
+        chips();
         $('rcHelp').textContent = 'Pronti…';
         await tut.show('race');
         await scene.startLights(() => sfx.light(false));
@@ -673,8 +1020,12 @@ async function netSync() {
     }
     if (e.kind === 'round') {
       // un giro di mosse insieme: tutte le auto partono nello stesso momento
-      const from = race.cars.map((c) => ({ ...c.pos })), gears = race.cars.map((c) => c.gear), still = race.cars.map((c) => c.crash);
-      e.moves.forEach((o, k) => { if (o) net.auto[k] = !!(e.auto && e.auto[k]); });
+      const from = race.cars.map(c => ({ ...c.pos })),
+        gears = race.cars.map(c => c.gear),
+        still = race.cars.map(c => c.crash);
+      e.moves.forEach((o, k) => {
+        if (o) net.auto[k] = !!(e.auto && e.auto[k]);
+      });
       const ev = R.applyRound(race, e.moves);
       if (instant) continue;
       busy = true;
@@ -687,19 +1038,25 @@ async function netSync() {
       });
       const autos = e.moves.map((o, k) => (o && e.auto && e.auto[k] ? COL[k].name : null)).filter(Boolean);
       if (autos.length) banner(`Guida il pilota automatico: ${autos.join(', ')}`, 900);
-      if (await play(list, ev)) { busy = false; return; }
+      if (await play(list, ev)) {
+        busy = false;
+        return;
+      }
       continue;
     }
   }
   if (instant) race.cars.forEach((c, i) => scene.jumpCar(i, c));
   busy = false;
   if (s.phase === 'finished') {
-    if (race.phase === 'over') { if (instant) win(race.winner); }
-    else {
+    if (race.phase === 'over') {
+      if (instant) win(race.winner);
+    } else {
       scene.clearMarks();
-      $('winT').textContent = 'Gara finita'; $('winT').style.color = '#fff';
+      $('winT').textContent = 'Gara finita';
+      $('winT').style.color = '#fff';
       $('winS').textContent = 'Nessuno muoveva più: la gara si è chiusa da sola.';
-      netOverButtons(); $('over').hidden = false;
+      netOverButtons();
+      $('over').hidden = false;
     }
     return;
   }
@@ -714,61 +1071,101 @@ function netState(d) {
     toast('Il gioco è stato aggiornato: chiudi e riapri Binottoland dal bot.');
     return;
   }
-  if (typeof d.skew === 'number') { if (net) net.skew = d.skew; }
-  netChain = netChain.then(async () => {
-    if (!net || net.room !== d.state.room) await netOpen(d.state, d.track);
-    if (typeof d.skew === 'number') net.skew = d.skew;
-    if (d.state.revision < net.state.revision) return;
-    net.state = d.state;
-    await netSync();
-  }).catch((err) => { console.error(err); busy = false; });
+  if (typeof d.skew === 'number') {
+    if (net) net.skew = d.skew;
+  }
+  netChain = netChain
+    .then(async () => {
+      if (!net || net.room !== d.state.room) await netOpen(d.state, d.track);
+      if (typeof d.skew === 'number') net.skew = d.skew;
+      if (d.state.revision < net.state.revision) return;
+      net.state = d.state;
+      await netSync();
+    })
+    .catch(err => {
+      console.error(err);
+      busy = false;
+    });
 }
-$('netGo').onclick = () => { $('netGo').hidden = true; toApp('action', { kind: $('netGo').dataset.kind === 'join' ? 'join' : 'start' }); };
+$('netGo').onclick = () => {
+  $('netGo').hidden = true;
+  toApp('action', { kind: $('netGo').dataset.kind === 'join' ? 'join' : 'start' });
+};
 $('netClose').onclick = () => {
-  const kind = netCloseKind(), b = $('netClose');
+  const kind = netCloseKind(),
+    b = $('netClose');
   if (!kind) return;
   // abbandonare chiede conferma: la gara continua senza di te
-  if (kind === 'abandon' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sicuro? Tocca di nuovo per abbandonare'; return; }
+  if (kind === 'abandon' && !b.dataset.sure) {
+    b.dataset.sure = '1';
+    b.textContent = `Sicuro? ${Tap} di nuovo per abbandonare`;
+    return;
+  }
   b.dataset.sure = '';
   $('menu').hidden = true;
   toApp('action', { kind });
 };
 // avvisi: nel disegno in basso, in gara in alto
-const say = (m) => ($('rc').classList.contains('on') ? banner(esc(m), 2400) : toast(m));
+const say = m => ($('rc').classList.contains('on') ? banner(esc(m), 2400) : toast(m));
 
 // Dentro Binottoland Playground: margini e tasto Indietro arrivano dall'app; «Esci» torna al Playground
 if (embedded) {
-  for (const id of ['exitB', 'exitB2']) { const b = $(id); if (b) { b.hidden = false; b.onclick = () => toApp('exit'); } }
+  for (const id of ['exitB', 'exitB2']) {
+    const b = $(id);
+    if (b) {
+      b.hidden = false;
+      b.onclick = () => toApp('exit');
+    }
+  }
   const inRace = () => $('rc').classList.contains('on');
   const back = () => {
     if (!$('menu').hidden) $('menu').hidden = true;
-    else if (!$('over').hidden) { if (net) toApp('exit'); else newTrack(); }
-    else if (inRace()) $('menu').hidden = false;
-    else if ($('setup').hidden) $('setup').hidden = false; // dal disegno torna a «Nuova gara»
+    else if (!$('over').hidden) {
+      if (net) toApp('exit');
+      else newTrack();
+    } else if (inRace()) $('menu').hidden = false;
+    else if ($('setup').hidden)
+      $('setup').hidden = false; // dal disegno torna a «Nuova gara»
     else toApp('exit');
   };
-  window.addEventListener('message', (e) => {
+  window.addEventListener('message', e => {
     if (e.source !== window.parent || e.origin !== location.origin) return;
     const d = e.data || {};
     if (d.type === 'f1:insets' && d.insets) {
-      const s = document.documentElement.style, v = (k) => { const o = d.insets[k] || {}; return (Number(o.system) || 0) + (Number(o.content) || 0); };
-      s.setProperty('--st', v('top') + 'px'); s.setProperty('--sb', v('bottom') + 'px'); s.setProperty('--sl', v('left') + 'px'); s.setProperty('--sr', v('right') + 'px');
+      const s = document.documentElement.style,
+        v = k => {
+          const o = d.insets[k] || {};
+          return (Number(o.system) || 0) + (Number(o.content) || 0);
+        };
+      s.setProperty('--st', v('top') + 'px');
+      s.setProperty('--sb', v('bottom') + 'px');
+      s.setProperty('--sl', v('left') + 'px');
+      s.setProperty('--sr', v('right') + 'px');
     } else if (d.type === 'f1:back') back();
     else if (d.type === 'f1:identity' && typeof d.player === 'string') {
       me = { player: d.player, name: String(d.name || '') };
-      $('who').textContent = 'Pilota: ' + me.name; $('who').hidden = !me.name;
+      $('who').textContent = 'Pilota: ' + me.name;
+      $('who').hidden = !me.name;
     } else if (d.type === 'f1:state') netState(d);
     // rete persa o sessione scaduta: l'app lo ripete a ogni tentativo fallito, poi dice quando è tornata
     else if (d.type === 'f1:net') say(String(d.message || ''));
     else if (d.type === 'f1:error') {
-      busy = false; $('go').disabled = false;
+      busy = false;
+      $('go').disabled = false;
       say(String(d.message || 'Errore'));
-      if (net && race) refresh(); else if (net) netSync();
+      if (net && race) refresh();
+      else if (net) netSync();
     }
   });
   // l'app chiede conferma prima di chiudere Telegram solo mentre si corre
   let racing = null;
-  const sync = () => { const on = inRace() && !!race && race.phase !== 'over'; if (on !== racing) { racing = on; toApp('racing', { on }); } };
+  const sync = () => {
+    const on = inRace() && !!race && race.phase !== 'over';
+    if (on !== racing) {
+      racing = on;
+      toApp('racing', { on });
+    }
+  };
   const mo = new MutationObserver(sync);
   mo.observe($('over'), { attributes: true, attributeFilter: ['hidden'] });
   mo.observe($('rc'), { attributes: true, attributeFilter: ['class'] });
@@ -777,6 +1174,22 @@ if (embedded) {
 
 // avvio
 setStep(1);
-ed.setBoard(R.boardSize()); ed.resize(); ed.setZoom(R.startCells(draft.players)); syncZoom();
+ed.setBoard(R.boardSize());
+ed.resize();
+ed.setZoom(R.startCells(draft.players));
+syncZoom();
 // solo per le prove (?dev), come in Acquedotto: prima era sempre a disposizione della pagina
-if (new URLSearchParams(location.search).has('dev')) window.__gara = { draft, ed, R, startRace, get race() { return race; }, get scene() { return scene; }, pick };
+if (new URLSearchParams(location.search).has('dev'))
+  window.__gara = {
+    draft,
+    ed,
+    R,
+    startRace,
+    get race() {
+      return race;
+    },
+    get scene() {
+      return scene;
+    },
+    pick
+  };

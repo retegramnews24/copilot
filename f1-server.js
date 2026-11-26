@@ -54,22 +54,15 @@ export function makeTrack(body) {
     finish.innerSeg >= inner.length
   )
     throw Error('Linea di partenza non valida.');
-  // limiti prima di ogni calcolo pesante (analisi 10.2): punti nella griglia e a mezza casella, linea sui bordi
-  // dichiarati, pista non enorme
-  const limit = R.checkBorderShape(outer) || R.checkBorderShape(inner) || R.checkTrackSize(outer, inner);
-  if (limit) throw Error(limit);
   const players = body.players;
   if (!Number.isInteger(players) || players < 2 || players > F1_MAX)
     throw Error('Da 2 a ' + F1_MAX + ' piloti.');
-  const nl = Math.hypot(normal.x, normal.y);
-  if (nl < 0.5) throw Error('Verso di gara non valido.');
-  const inside = R.checkInner(outer, inner, R.MIN_WIDTH);
-  if (inside.error) throw Error(inside.error);
-  const ends = R.checkFinishEnds(outer, inner, finish);
-  if (ends) throw Error(ends);
-  const built = R.buildTrack(outer, inner, finish, { x: normal.x / nl, y: normal.y / nl }, players);
-  if (built.error) throw Error(built.error);
-  return built.track;
+  if (Math.hypot(normal.x, normal.y) < 0.5) throw Error('Verso di gara non valido.');
+  // limiti prima di ogni calcolo pesante (analisi 10.2), poi bordi, linea e giro: gli stessi controlli che il gioco
+  // fa prima di mandare la pista (rules.js, checkOnlineTrack, analisi 11.10)
+  const checked = R.checkOnlineTrack({ outer, inner, finish, normal, players });
+  if (checked.error) throw Error(checked.error);
+  return checked.track;
 }
 
 // Moves of car i in a round played together (as against the AI): it cannot stop where a car stands still after a crash.

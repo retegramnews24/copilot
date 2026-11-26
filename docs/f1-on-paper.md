@@ -28,8 +28,9 @@ Controllati dal server prima di ogni calcolo pesante, in `api.js` prima di entra
 - punti dentro la griglia (2.000 × 2.000 caselle) e a distanza tra 0,1 e 2 caselle l'uno dall'altro (il gioco li mette
   a mezza casella);
 - estremi della linea di partenza sui due segmenti di bordo dichiarati;
-- al massimo 150 mila caselle tra i due bordi: oltre, la mappa del pilota automatico non sta in memoria. Il gioco lo
-  dice già mentre si disegna («Pista troppo grande»).
+- al massimo un milione di caselle tra i due bordi, per il tempo di calcolo (circa 1,2 s di controllo e 0,3 s di
+  mappa del pilota automatico su un PC). Il gioco avvisa già alla fine del bordo esterno se è enorme, e fa gli stessi
+  controlli del server alla fine di ogni bordo e sulla pista arrotondata prima di mandarla (`checkOnlineTrack`).
 
 ## Rete
 

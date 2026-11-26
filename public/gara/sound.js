@@ -10,7 +10,11 @@ export class Sfx {
   constructor() {
     this.ctx = null;
     let on = true;
-    try { on = localStorage.getItem(KEY) !== 'off'; } catch (e) { /* senza memoria del browser: audio acceso */ }
+    try {
+      on = localStorage.getItem(KEY) !== 'off';
+    } catch (e) {
+      /* senza memoria del browser: audio acceso */
+    }
     this.on = on && soundAllowed();
   }
 
@@ -28,15 +32,23 @@ export class Sfx {
 
   setOn(v) {
     this.on = v;
-    try { localStorage.setItem(KEY, v ? 'on' : 'off'); } catch (e) { /* niente */ }
+    try {
+      localStorage.setItem(KEY, v ? 'on' : 'off');
+    } catch (e) {
+      /* niente */
+    }
     if (this.master) this.master.gain.setTargetAtTime(v ? 0.7 : 0, this.ctx.currentTime, 0.05);
   }
 
-  ready() { return this.ctx && this.on && this.ctx.state === 'running'; }
+  ready() {
+    return this.ctx && this.on && this.ctx.state === 'running';
+  }
 
   noiseBuf() {
     if (!this.nb) {
-      const n = this.ctx.sampleRate * 2, b = this.ctx.createBuffer(1, n, this.ctx.sampleRate), d = b.getChannelData(0);
+      const n = this.ctx.sampleRate * 2,
+        b = this.ctx.createBuffer(1, n, this.ctx.sampleRate),
+        d = b.getChannelData(0);
       for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
       this.nb = b;
     }
@@ -45,8 +57,10 @@ export class Sfx {
 
   noise(t0, dur) {
     const s = this.ctx.createBufferSource();
-    s.buffer = this.noiseBuf(); s.loop = true;
-    s.start(t0, Math.random()); s.stop(t0 + dur);
+    s.buffer = this.noiseBuf();
+    s.loop = true;
+    s.start(t0, Math.random());
+    s.stop(t0 + dur);
     return s;
   }
 
@@ -60,68 +74,122 @@ export class Sfx {
   // motore: due onde a dente di sega filtrate; sale di giri durante la mossa, più acuto con le marce alte
   engine(gear, ms) {
     if (!this.ready()) return;
-    const c = this.ctx, t0 = c.currentTime, dur = ms / 1000 + 0.15, g = Math.max(1, gear);
-    const base = 48 + g * 16, out = c.createGain(), lp = c.createBiquadFilter();
-    lp.type = 'lowpass'; lp.frequency.value = 700 + g * 180; lp.Q.value = 3;
+    const c = this.ctx,
+      t0 = c.currentTime,
+      dur = ms / 1000 + 0.15,
+      g = Math.max(1, gear);
+    const base = 48 + g * 16,
+      out = c.createGain(),
+      lp = c.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 700 + g * 180;
+    lp.Q.value = 3;
     this.env(out, t0, 0.05, 0.22, 0.25, dur);
-    lp.connect(out); out.connect(this.master);
-    for (const [mul, det] of [[1, 0], [1.5, 7], [0.5, -5]]) {
+    lp.connect(out);
+    out.connect(this.master);
+    for (const [mul, det] of [
+      [1, 0],
+      [1.5, 7],
+      [0.5, -5]
+    ]) {
       const o = c.createOscillator();
-      o.type = mul === 1.5 ? 'square' : 'sawtooth'; o.detune.value = det;
+      o.type = mul === 1.5 ? 'square' : 'sawtooth';
+      o.detune.value = det;
       o.frequency.setValueAtTime(base * mul, t0);
       o.frequency.exponentialRampToValueAtTime(base * mul * (1.45 + g * 0.04), t0 + dur * 0.55);
       o.frequency.exponentialRampToValueAtTime(base * mul * 1.15, t0 + dur);
-      const og = c.createGain(); og.gain.value = mul === 1 ? 0.6 : 0.25;
-      o.connect(og); og.connect(lp); o.start(t0); o.stop(t0 + dur + 0.05);
+      const og = c.createGain();
+      og.gain.value = mul === 1 ? 0.6 : 0.25;
+      o.connect(og);
+      og.connect(lp);
+      o.start(t0);
+      o.stop(t0 + dur + 0.05);
     }
     // vibrazione dei pistoni
-    const lfo = c.createOscillator(), lg = c.createGain();
-    lfo.frequency.value = 18 + g * 4; lg.gain.value = 0.08;
-    lfo.connect(lg); lg.connect(out.gain); lfo.start(t0); lfo.stop(t0 + dur);
+    const lfo = c.createOscillator(),
+      lg = c.createGain();
+    lfo.frequency.value = 18 + g * 4;
+    lg.gain.value = 0.08;
+    lfo.connect(lg);
+    lg.connect(out.gain);
+    lfo.start(t0);
+    lfo.stop(t0 + dur);
   }
 
   // stridio delle gomme quando si scala
   skid(ms) {
     if (!this.ready()) return;
-    const c = this.ctx, t0 = c.currentTime + (ms / 1000) * 0.35, dur = (ms / 1000) * 0.6;
-    const bp = c.createBiquadFilter(), g = c.createGain();
-    bp.type = 'bandpass'; bp.frequency.setValueAtTime(2300, t0); bp.frequency.linearRampToValueAtTime(1600, t0 + dur); bp.Q.value = 6;
+    const c = this.ctx,
+      t0 = c.currentTime + (ms / 1000) * 0.35,
+      dur = (ms / 1000) * 0.6;
+    const bp = c.createBiquadFilter(),
+      g = c.createGain();
+    bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(2300, t0);
+    bp.frequency.linearRampToValueAtTime(1600, t0 + dur);
+    bp.Q.value = 6;
     this.env(g, t0, 0.04, 0.14, 0.2, dur);
-    this.noise(t0, dur).connect(bp); bp.connect(g); g.connect(this.master);
+    this.noise(t0, dur).connect(bp);
+    bp.connect(g);
+    g.connect(this.master);
   }
 
   // urto: botto sordo, rumore che si spegne e un colpo metallico
   crash() {
     if (!this.ready()) return;
-    const c = this.ctx, t0 = c.currentTime;
-    const lp = c.createBiquadFilter(), g = c.createGain();
-    lp.type = 'lowpass'; lp.frequency.setValueAtTime(2500, t0); lp.frequency.exponentialRampToValueAtTime(300, t0 + 0.7);
+    const c = this.ctx,
+      t0 = c.currentTime;
+    const lp = c.createBiquadFilter(),
+      g = c.createGain();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(2500, t0);
+    lp.frequency.exponentialRampToValueAtTime(300, t0 + 0.7);
     this.env(g, t0, 0.005, 0.8, 0.6, 0.75);
-    this.noise(t0, 0.8).connect(lp); lp.connect(g); g.connect(this.master);
-    const th = c.createOscillator(), tg = c.createGain();
-    th.frequency.setValueAtTime(120, t0); th.frequency.exponentialRampToValueAtTime(40, t0 + 0.3);
+    this.noise(t0, 0.8).connect(lp);
+    lp.connect(g);
+    g.connect(this.master);
+    const th = c.createOscillator(),
+      tg = c.createGain();
+    th.frequency.setValueAtTime(120, t0);
+    th.frequency.exponentialRampToValueAtTime(40, t0 + 0.3);
     this.env(tg, t0, 0.005, 0.9, 0.25, 0.35);
-    th.connect(tg); tg.connect(this.master); th.start(t0); th.stop(t0 + 0.4);
+    th.connect(tg);
+    tg.connect(this.master);
+    th.start(t0);
+    th.stop(t0 + 0.4);
     for (const f of [420, 610, 890]) {
-      const o = c.createOscillator(), og = c.createGain();
-      o.type = 'square'; o.frequency.setValueAtTime(f, t0 + 0.02); o.frequency.exponentialRampToValueAtTime(f * 0.6, t0 + 0.35);
+      const o = c.createOscillator(),
+        og = c.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(f, t0 + 0.02);
+      o.frequency.exponentialRampToValueAtTime(f * 0.6, t0 + 0.35);
       this.env(og, t0 + 0.02, 0.003, 0.05, 0.3, 0.4);
-      o.connect(og); og.connect(this.master); o.start(t0 + 0.02); o.stop(t0 + 0.45);
+      o.connect(og);
+      og.connect(this.master);
+      o.start(t0 + 0.02);
+      o.stop(t0 + 0.45);
     }
   }
 
   tone(f, t0, dur, type = 'triangle', vol = 0.18) {
-    const c = this.ctx, o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.value = f;
+    const c = this.ctx,
+      o = c.createOscillator(),
+      g = c.createGain();
+    o.type = type;
+    o.frequency.value = f;
     this.env(g, t0, 0.01, vol, Math.min(0.15, dur * 0.6), dur);
-    o.connect(g); g.connect(this.master); o.start(t0); o.stop(t0 + dur + 0.02);
+    o.connect(g);
+    g.connect(this.master);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
   }
 
   // passaggio sulla linea: doppio bip
   line() {
     if (!this.ready()) return;
     const t0 = this.ctx.currentTime;
-    this.tone(880, t0, 0.1, 'sine', 0.2); this.tone(1320, t0 + 0.12, 0.16, 'sine', 0.2);
+    this.tone(880, t0, 0.1, 'sine', 0.2);
+    this.tone(1320, t0 + 0.12, 0.16, 'sine', 0.2);
   }
 
   // semaforo: bip basso per ogni luce rossa, bip alto e lungo quando diventa verde
@@ -134,7 +202,8 @@ export class Sfx {
   skip() {
     if (!this.ready()) return;
     const t0 = this.ctx.currentTime;
-    this.tone(330, t0, 0.14, 'triangle', 0.14); this.tone(247, t0 + 0.16, 0.2, 'triangle', 0.14);
+    this.tone(330, t0, 0.14, 'triangle', 0.14);
+    this.tone(247, t0 + 0.16, 0.2, 'triangle', 0.14);
   }
 
   // tocco sui dischi e sulle caselle
@@ -146,17 +215,33 @@ export class Sfx {
   // vittoria: fanfara, pubblico che esulta e applausi
   win() {
     if (!this.ready()) return;
-    const c = this.ctx, t0 = c.currentTime;
-    [523, 659, 784, 1047].forEach((f, i) => this.tone(f, t0 + i * 0.14, i === 3 ? 0.6 : 0.13, 'triangle', 0.2));
-    const bp = c.createBiquadFilter(), g = c.createGain();
-    bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.6;
-    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.6); g.gain.setValueAtTime(0.25, t0 + 1.8); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 3.2);
-    this.noise(t0, 3.3).connect(bp); bp.connect(g); g.connect(this.master);
+    const c = this.ctx,
+      t0 = c.currentTime;
+    [523, 659, 784, 1047].forEach((f, i) =>
+      this.tone(f, t0 + i * 0.14, i === 3 ? 0.6 : 0.13, 'triangle', 0.2)
+    );
+    const bp = c.createBiquadFilter(),
+      g = c.createGain();
+    bp.type = 'bandpass';
+    bp.frequency.value = 900;
+    bp.Q.value = 0.6;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.6);
+    g.gain.setValueAtTime(0.25, t0 + 1.8);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 3.2);
+    this.noise(t0, 3.3).connect(bp);
+    bp.connect(g);
+    g.connect(this.master);
     for (let k = 0; k < 40; k++) {
-      const tk = t0 + 0.3 + Math.random() * 2.6, hp = c.createBiquadFilter(), cg = c.createGain();
-      hp.type = 'highpass'; hp.frequency.value = 1500 + Math.random() * 1500;
+      const tk = t0 + 0.3 + Math.random() * 2.6,
+        hp = c.createBiquadFilter(),
+        cg = c.createGain();
+      hp.type = 'highpass';
+      hp.frequency.value = 1500 + Math.random() * 1500;
       this.env(cg, tk, 0.002, 0.12 + Math.random() * 0.1, 0.03, 0.05);
-      this.noise(tk, 0.06).connect(hp); hp.connect(cg); cg.connect(this.master);
+      this.noise(tk, 0.06).connect(hp);
+      hp.connect(cg);
+      cg.connect(this.master);
     }
   }
 }
