@@ -1,10 +1,10 @@
 // Gara a quadretti: collega disegno, regole e scena 3D.
 // Per ora si gioca sullo stesso telefono: Giallo è l'ospite (mette l'auto e muove per primo), Rosso chi crea la pista.
-import { Editor } from './editor.js?v=bca0c74f62';
-import * as R from './rules.js?v=227a503e49';
-import { Race3D } from './scene3d.js?v=eb44a87fdd';
+import { Editor } from './editor.js?v=dadfc8c433';
+import * as R from './rules.js?v=2b5af737d6';
+import { Race3D } from './scene3d.js?v=33f0142d5f';
 import { Sfx } from './sound.js?v=cca82ba0d6';
-import { AiDriver, distField } from './ai.js?v=3e6daa39f8';
+import { AiDriver, distField } from './ai.js?v=88b6b7a525';
 import { Tutorial } from './tutorial.js?v=633df7e600';
 import { isTouchDevice } from '../touch-device.js';
 
@@ -162,13 +162,22 @@ ed.onStroke = (pts) => {
   if (step === 1) {
     const r = R.closeBorder(pts);
     if (r.error) return fail(r);
-    draft.outer = r.poly; toast('Bordo esterno ok', true); setStep(2);
+    // gli stessi controlli del server, subito (analisi 11.2): prima li faceva solo il server, alla creazione online
+    const shape = R.checkBorderShape(r.poly);
+    if (shape) return fail({ error: shape, at: r.poly[0] });
+    draft.outer = r.poly;
+    // pista molto grande: si dice già qui, non dopo il secondo bordo (analisi 11.1)
+    if (R.polyArea(r.poly) > R.MAX_TRACK_CELLS) toast('Bordo esterno ok, ma è enorme: l’isola dovrà essere grande, al massimo un milione di caselle di asfalto.');
+    else toast('Bordo esterno ok', true);
+    setStep(2);
   } else if (step === 2) {
     const r = R.closeBorder(pts);
     if (r.error) return fail(r);
+    const shape = R.checkBorderShape(r.poly);
+    if (shape) return fail({ error: shape, at: r.poly[0] });
     const c = R.checkInner(draft.outer, r.poly, R.minWidth(draft.players));
     if (c.error) return fail(c);
-    // pista troppo grande: il pilota automatico non ci sta in memoria, e il server la rifiuterebbe (analisi 10.10)
+    // pista troppo grande: il controllo e il pilota automatico diventano lenti, e il server la rifiuterebbe
     const big = R.checkTrackSize(draft.outer, r.poly);
     if (big) return fail({ error: big, at: r.poly[0] });
     draft.inner = r.poly; toast('Bordo interno ok', true); setStep(3);
@@ -215,10 +224,12 @@ $('go').onclick = () => {
     $('go').disabled = true;
     toast('Apro la gara online…', true);
     const r2 = (p) => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 });
-    toApp('create', {
-      track: { outer: draft.outer.map(r2), inner: draft.inner.map(r2), finish: { a: r2(draft.finish.a), b: r2(draft.finish.b), outerSeg: draft.finish.outerSeg, innerSeg: draft.finish.innerSeg }, normal: n, players: draft.players },
-      laps: draft.laps, time: draft.time
-    });
+    const track = { outer: draft.outer.map(r2), inner: draft.inner.map(r2), finish: { a: r2(draft.finish.a), b: r2(draft.finish.b), outerSeg: draft.finish.outerSeg, innerSeg: draft.finish.innerSeg }, normal: n, players: draft.players };
+    // la pista arrotondata come la vedrà il server, con i suoi stessi controlli (analisi 11.10): se il server la
+    // rifiuterebbe, lo si dice qui con il punto segnato invece che dopo la richiesta
+    const why = R.onlineTrackError(track);
+    if (why) { $('go').disabled = false; return fail({ error: why, at: track.outer[0] }); }
+    toApp('create', { track, laps: draft.laps, time: draft.time });
     return;
   }
   startRace(b.track, draft.laps, draft.players, draft.mode);

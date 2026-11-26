@@ -17,7 +17,7 @@ export const QUALITY = {
   media: { post: false, ratio: 1.5, shadow: 1024, grass: 0.45, water: false, flare: false },
   bassa: { post: false, ratio: 1, shadow: 512, grass: 0, water: false, flare: false }
 };
-import { inTrack, clearance, pointInPoly } from './rules.js?v=227a503e49';
+import { inTrack, clearance, pointInPoly } from './rules.js?v=2b5af737d6';
 
 const GEAR_COL = { down: '#ef4444', same: '#22c55e', up: '#3b82f6' };
 

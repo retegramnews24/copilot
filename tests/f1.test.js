@@ -61,23 +61,31 @@ assert.throws(
   /disegnato male/,
   'points too far apart'
 );
-const big = ring(450, 450, 3000),
-  island = ring(50, 50, 400);
+// pista enorme (oltre il milione di caselle, centrata al centro della griglia): troppo lenta da controllare
+const ringAt = (cx, r, n) =>
+  Array.from({ length: n }, (_, i) => {
+    const a = ((i - 0.5) / n) * Math.PI * 2;
+    return { x: cx + Math.cos(a) * r, y: cx + Math.sin(a) * r };
+  });
 assert.throws(
   () =>
     makeTrack({
       ...drawn(2),
-      outer: big,
-      inner: island,
-      finish: { a: { x: C + 50, y: C }, b: { x: C + 450, y: C }, outerSeg: 0, innerSeg: 0 }
+      outer: ringAt(1000, 700, 9000),
+      inner: ringAt(1000, 100, 1300),
+      finish: { a: { x: 1100, y: 1000 }, b: { x: 1700, y: 1000 }, outerSeg: 0, innerSeg: 0 }
     }),
   /troppo grande/,
-  'huge track: the autopilot map would not fit in memory'
+  'huge track: too slow to check'
 );
-assert.ok(
-  R.trackCells(ring(200, 200, 1400), ring(30, 30, 200)) < R.MAX_TRACK_CELLS,
-  'a large normal track fits'
-);
+// analisi 11.1: con il vecchio tetto (150 mila) questa pista, disegnata con la vista a circa 900 caselle, era rifiutata
+const wide = makeTrack({
+  ...drawn(2),
+  outer: ringAt(1000, 450, 6000),
+  inner: ringAt(1000, 50, 700),
+  finish: { a: { x: 1050, y: 1000 }, b: { x: 1450, y: 1000 }, outerSeg: 0, innerSeg: 0 }
+});
+assert.ok(wide.startSlots.length >= 2, 'a wide track (about 630 thousand cells) is accepted');
 
 const anna = { player: 'p-anna', name: 'Anna' },
   bruno = { player: 'p-bruno', name: 'Bruno' },

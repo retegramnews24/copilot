@@ -12,6 +12,7 @@ Analisi in sola lettura, fatta il 24 novembre 2026 sul ramo `staging`.
 - **Area 7: prove** e **Area 8: esperienza d'uso**, fatte il 25 novembre 2026 su `staging` al commit `ed88d2a` (versione 1.0.61, Labyrinth e Sprint già tolti).
 - **Area 9: verifica delle correzioni**, fatta il 25 novembre 2026 su `staging` al commit `5e6e881` (versione 1.0.63). I commit con «analisi» nel messaggio sono 24, da `e253adc` a `7d04052`. I primi 16 (aree 1-6) li avevo già riletti man mano, perché ogni area è stata letta dopo le correzioni della precedente: qui li ho solo ricontrollati a campione. Ho letto riga per riga gli ultimi 8 (da `fa79eab` a `7d04052`, aree 7 e 8) e `5e6e881` (filtro della pagina Giochi), che nessuno aveva ancora riletto.
 - **Area 10: Ruggine 89 e Gara a quadretti (F1 on paper!)**, fatta il 25 novembre 2026 su `staging` al commit `ebbb26f` (versione 1.0.64, dopo le correzioni dell'Area 9).
+- **Area 11: verifica delle correzioni dell'Area 10**, fatta il 26 novembre 2026 su `staging` al commit `dcc85a3` (versione 1.0.65): ho riletto riga per riga le modifiche tra `ebbb26f` e `dcc85a3` (31 file, il commit `c8183a2`).
 
 Le altre aree verranno aggiunte allo stesso modo.
 
@@ -32,6 +33,30 @@ Le altre aree verranno aggiunte allo stesso modo.
 **Cosa non ho letto:** `simulator/engine.js` e il resto del simulatore, `expedition-model.js`, `table-ai.js`, `table-strategy.js`.
 
 **Area 2, cosa ho letto per intero:** `balilla-hub.js`, `biliardo-server.js`, `f1-server.js`, `pong-server.js`, `worker.js`, `lobby-hub.js`, `worker-shared.js`, `socket-limits.js`, `club-stools.js`, `club-pinball.js`, `public/lobby3d/balilla.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/arcade-link.js`. **Solo in parte:** `public/app.js` (collegamenti e presenze), `public/lobby3d/lobby3d.js` (sgabelli, pose, cabinati, altri giocatori), `public/lobby3d/flipper3d.js`, `public/gara/main.js` e `public/biliardo/main.js` (la parte online), `public/arcade/pong.js`, `golf-server.js` (solo l'invio del risultato). **Non letti:** la fisica e le regole dei giochi (`public/biliardo/engine.js`, `public/gara/rules.js`, `balilla-rules.js`), Moto Trial e Labyrinth online.
+
+---
+
+## I problemi più importanti dell'Area 11 (verifica delle correzioni dell'Area 10)
+
+**Come leggere quest'area.** Ho riletto le correzioni dell'Area 10 cercando cosa hanno rotto, cosa le prove nuove non coprono e cosa è fatto a metà. **[V]** = verificato leggendo il codice, **[P]** = provato eseguendo (programmi di misura fuori dal repo, con le funzioni vere del gioco e del server), **[S]** = sospetto. **Non ho guardato i giochi su un telefono né su Telegram Desktop.**
+
+**In breve.** Le correzioni tengono: nessuna rompe qualcosa di grave. Le mosse nuove con `?moves=N` reggono anche con le risposte fuori ordine, la mappa nuova del pilota automatico dà gli stessi numeri della vecchia, gli avversari di Ruggine non si fermano più, «Abbandona» arriva al server. I problemi trovati sono ai margini dei limiti nuovi della pista. Gli 8 passi della CI passano al commit `dcc85a3`.
+
+**Produzione.** Su `main` (commit `22b27a6`, versione 1.0.65) i file toccati sono identici a quelli di `staging`.
+
+| # | Problema | Gioco | Dove si sente | Gravità | Stato |
+|---|---|---|---|---|---|
+| W1 | Il tetto di 150 mila caselle rifiuta quasi ogni pista disegnata con la vista oltre le 650 caselle circa, e lo dice solo dopo il secondo bordo. Il gioco invita ancora ad allontanare la vista e lascia arrivare a 2.000 | Gara | telefono e computer | media | [P] |
+| W2 | Tre limiti nuovi li controlla solo il server: una pista accettata dal gioco, giocabile contro l'IA, viene rifiutata alla fine quando si crea la gara online. Con uno spigolo vivo succede in circa 1 pista su 400, con la frase «Bordo disegnato male: chiudi e riapri il gioco», che non aiuta | Gara | telefono e computer | media-bassa | [P] |
+| W3 | Una pista disegnata vicino all'angolo della griglia (punti oltre 5 caselle fuori) è accettata dal gioco e rifiutata dal server: «Bordo fuori dalla griglia.» | Gara | telefono e computer | bassa | [P] |
+| W4 | Proposta 10.4 a metà: i telefoni scaricano poco (da 421 MB a 6,7 MB nella gara grande a 8), ma il server riscrive ancora tutto lo stato nel suo archivio a ogni scelta, e lo stato cresce fino a 875 kB | Gara | server | bassa | [P] |
+| W5 | La mappa in tabelle ha tolto il problema della memoria (da +45 MB a +1 MB) ma non quello del tempo: 0,8 secondi al tetto, uguale a prima. Commento e documento dicono ancora che il tetto serve «per la memoria» | Gara | telefono | bassa | [P] |
+| W6 | Proposta 10.12 a metà: le scritte per dispositivo sono cambiate in quattro punti; il tutorial e tre frasi dicono ancora «tocca» e «col dito» su computer | Gara | computer | bassa | [V] |
+| W7 | Bordo fitto al minimo ammesso (un punto ogni 0,1): il controllo dura ancora 3 secondi con 5.900 punti, due volte (una in `api.js`, una dentro il blocco della Lobby). Le creazioni rifiutate ora non passano più dal freno | Gara | server | bassa | [P] |
+| W8 | Nessuna prova per l'unione delle mosse sul telefono (`merge` in `f1-link.js`), né per una pista passata davvero da `closeBorder` e poi dal server | Gara | prove | media-bassa | [V] |
+| W9 | Cose piccole: la prova di Ruggine gira a 30 passi al secondo e il gioco a 60; «30 fotogrammi da fermi» è in realtà metà di quelli dello schermo; `public/gara` e `public/ruggine` restano fuori da `format:check` | tutti e due | — | bassa | [V] |
+
+Il dettaglio è nella sezione «Area 11: verifica delle correzioni dell'Area 10», più sotto.
 
 ---
 
@@ -1550,6 +1575,138 @@ Non eseguiti: `format:check`, `test:ui`, `test:simulator`, `test:access`.
 
 ---
 
+## Area 11: verifica delle correzioni dell'Area 10
+
+**Cosa ho letto per intero:** le differenze tra `ebbb26f` e `dcc85a3` di `api.js`, `f1-server.js`, `lobby-hub.js`, `public/f1-link.js`, `public/biliardo-link.js`, `public/app.js`, `public/gara/main.js`, `rules.js`, `ai.js`, `sound.js`, `scene3d.js`, `public/lobby3d/lobby3d.js`, `public/ruggine/main.js`, `cars.js`, `sound.js`, `index.html`; le prove nuove o cambiate (`tests/ruggine.test.mjs`, `f1.test.js`, `f1-runtime.test.js`, `biliardo-runtime.test.js`); `public/gara/editor.js` nella parte che cattura il tratto. **Solo in parte:** `docs/f1-on-paper.md`, `docs/ruggine-89.md`, `docs/controlli-prima-del-rilascio.md`. **Non fatto:** nessuna prova a occhio; tutto quello che riguarda come appare è [S].
+
+### 11.1 Mosse nuove con `?moves=N`
+
+**Come funziona ora.** Il telefono dice quante mosse ha (`public/f1-link.js:48`, `known`). Il server manda solo quelle dalla N in poi e le auto senza il percorso (`f1-server.js:277-288`, `stateFor`). Il telefono le attacca a quelle che ha (`f1-link.js:49-55`, `merge`). Senza `moves`, o con un numero che non torna, il server manda tutto come prima.
+
+**Risposte fuori ordine: regge ([P]).**
+
+- **Perché regge, leggendo.** Ogni risposta porta la revisione e la coda completa delle mosse da N a quella revisione. Il telefono scarta le risposte con revisione più vecchia della sua (`f1-link.js:87`, `:223`). Una risposta accettata ha quindi una coda almeno lunga quanto serve, e `merge` taglia le mosse a N prima di attaccarla: non può né doppiarle né saltarle, in qualunque ordine arrivino una richiesta di stato e una mossa partite insieme.
+- **Prova.** `f1-link.js` vero in Node, con una rete finta in cui ogni richiesta arriva al server dopo un ritardo a caso e la risposta torna dopo un altro (fino a 15, 60 e 250 ms), mentre altri due piloti muovono sul server. Il server usa `stateFor` e `playRace` veri. 12 gare complete (4 semi per 3 ritardi), circa 1.300 stati passati al gioco: **nessuno con mosse doppie, mancanti o fuori posto, nessuna revisione che torna indietro**, e alla fine il gioco ha tutte le 71 mosse del server.
+- **Compatibilità.** Un telefono rimasto aperto con il codice vecchio non manda `moves` e riceve tutto: funziona. Il gioco non legge mai `state.race` (ho cercato in `public/gara/main.js`), quindi le auto senza percorso non gli mancano.
+
+**Quanto si risparmia ([P]).** Stesse gare simulate dell'Area 10:
+
+| Pista | Auto e giri | Prima | Ora | Risposta più grande |
+|---|---|---|---|---|
+| piccola | 2 auto, 3 giri | 2,5 MB | 0,2 MB | 1 kB |
+| piccola | 4 auto, 3 giri | 7,5 MB | 0,5 MB | 2 kB |
+| grande | 8 auto, 3 giri | 421 MB | 6,7 MB | 3 kB |
+| grande | 8 auto, 9 giri | 3,7 GB | 20 MB | 3 kB |
+
+**W4. La metà non fatta (gravità bassa, [P]).** La proposta 10.4 chiedeva anche di salvare le mosse a blocchi. `save` è rimasto com'è (`f1-server.js:360-365`): a ogni scelta il server riscrive tutto lo stato, percorsi compresi. Nella gara grande a 8 e 3 giri lo stato arriva a 294 kB e in tutta la gara vengono scritti 422 MB; a 9 giri 875 kB e 3,7 GB. Con 7-8 persone il costo non conta; resta il tetto di grandezza di un valore salvato ([S], 2 MB secondo la documentazione di Cloudflare), a cui una gara lunghissima a 8 si avvicina.
+
+**Cosa le prove non coprono (parte di W8, [V]).**
+
+- `merge` non ha nessuna prova: `tests/game-links-network.test.mjs` usa stati finti senza mosse. La mia prova con la rete finta sta fuori dal repo.
+- La strada di riserva (se manca un pezzo, il telefono riscarica tutto, `f1-link.js:54`) non è mai scattata nelle mie 12 gare: resta letta e non provata.
+- `f1.test.js` e `f1-runtime.test.js` provano bene `stateFor` (pezzo giusto, niente percorsi, numeri sbagliati).
+
+### 11.2 Limiti della pista contro piste disegnate davvero
+
+**Come ho provato ([P]).** Tratti generati come li cattura l'editor (un punto ogni 4 pixel di schermo, `public/gara/editor.js:96-99`, con un tremolio lento della mano), passati dai controlli del gioco nell'ordine vero (`closeBorder`, `checkInner`, `checkTrackSize`, `makeFinish`, `buildTrack`), poi arrotondati a due decimali come fa il gioco (`public/gara/main.js:217`) e dati a `makeTrack` del server. Circa 4.200 piste: ovali a sette viste diverse, piste piccole e strette, isole a punta, piste squadrate, chicane, piste nell'angolo della griglia.
+
+**Cosa va bene.**
+
+- **Piste normali, viste da 40 a 600 caselle:** accettate dal gioco e dal server in 578 casi su 600. Dei 22 rifiuti, 21 sono del gioco per strettoie (il tremolio simulato pesa di più con la vista larga) e 1 del server per un caso al limite, descritto più sotto. La distanza tra punti vicini va da 0,21 a 0,76: dentro i limiti nuovi (0,1 e 2) con margine.
+- **Linea di partenza:** nessun rifiuto «Linea di partenza non valida» in nessuna pista. Il controllo degli estremi (`rules.js:84-90`) sopporta l'arrotondamento a due decimali.
+- **Piste piccole e strette:** nessun rifiuto dovuto ai limiti nuovi. Quelle troppo piccole le ferma già il gioco, come prima.
+- **Richieste fatte apposta:** linea con gli estremi lontani, punti fuori griglia, bordo radio, rombo grande, otto incrociato: tutte rifiutate in pochi millisecondi.
+
+**W1. Il tetto di 150 mila caselle e la vista allontanata (gravità media, [P]).**
+
+- **Misura.** Una pista di proporzioni normali (anello spesso il 12% della vista) disegnata con la vista a 600 caselle occupa in media 123 mila caselle: passa. A 1.000 e a 2.000 caselle viene rifiutata sempre: «Pista troppo grande». La soglia è intorno a 650 caselle di vista.
+- **Cosa succede al giocatore.** Il controllo arriva solo alla fine del bordo interno (`public/gara/main.js:171-173`): prima disegna tutto il bordo esterno, poi tutto l'interno, e solo allora scopre che deve rifare tutti e due. Vale anche contro l'IA e sullo stesso telefono.
+- **Cosa dice il gioco, invece.** La prima istruzione è ancora «Per una pista grande allontana prima la vista» (`main.js:93`), il cursore dello zoom arriva a tutta la griglia da 2.000 caselle (`editor.js:46`, `:54`), e non c'è un numero che dica quanto è grande la pista che si sta disegnando.
+- **Con la vista al massimo.** Per stare sotto il tetto l'anello dovrebbe essere spesso meno di 40 caselle su un giro di 4.000: sullo schermo di un telefono sono circa 7 pixel. In pratica oltre le 1.000 caselle di vista non si riesce a disegnare una pista valida.
+- **Correzione proposta.** Fermare lo zoom dove una pista normale ci sta ancora (circa 700 caselle), oppure mostrare le caselle mentre si disegna e avvisare già alla fine del bordo esterno. Togliere l'invito dalla prima istruzione o dirgli il limite.
+
+**W2. Limiti controllati solo dal server (gravità media-bassa, [P]).**
+
+- **Cosa manca.** `checkBorderShape` (griglia e distanza tra i punti) e `checkFinishEnds` girano solo in `makeTrack` sul server (`f1-server.js:59-60`, `:68-69`). Il gioco chiama solo `checkTrackSize`. Il commento di `rules.js:57` dice «le stesse regole valgono mentre si disegna»: non è così.
+- **Dove sbatte una pista vera.** `closeBorder` mette un punto ogni mezza casella **lungo il tratto**; a uno spigolo vivo due punti vicini lungo il tratto possono essere quasi sovrapposti in linea d'aria. Nelle piste con spigoli (isola a punta, chicane) ho misurato distanze fino a 0,06: sotto il minimo di 0,1.
+- **Quanto spesso.** 3 piste su 1.120 con spigoli vivi (1 su 120 con un'isola a punta di 90°, 2 su 400 con una chicane); nessuna su 1.200 rettangolari e nessuna tra gli ovali.
+- **Cosa succede al giocatore.** La pista è accettata, si può correre contro l'IA, e quando si crea la gara online arriva «Bordo disegnato male: chiudi e riapri il gioco.». Chiudere e riaprire non serve: quella pista verrà rifiutata sempre, e il gioco non mostra dove.
+- **Correzione proposta.** Chiamare `checkBorderShape` nel gioco alla fine di ogni bordo, con il punto segnato come per gli altri errori. Abbassare il minimo (per esempio 0,02: il tetto di 12.000 punti basta a limitare il costo) o far togliere a `closeBorder` i punti troppo vicini. Cambiare la frase.
+
+**W3. Pista nell'angolo della griglia (gravità bassa, [P]).** Il centro della vista si può portare fino al bordo della griglia (`editor.js:55-56`), quindi mezza schermata mostra caselle fuori. Una pista con il centro a 8 caselle dall'angolo è accettata dal gioco 40 volte su 40 e rifiutata dal server 40 su 40 con «Bordo fuori dalla griglia.» (`rules.js:71`, margine di 5 caselle). Per arrivarci bisogna spostare la vista di mille caselle: è raro. Correzione: lo stesso controllo nel gioco (va con W2).
+
+**W7. Bordo fitto al minimo ammesso (gravità bassa, [P]).**
+
+- Un bordo interno liscio con un punto ogni 0,1 passa i limiti nuovi. Con 3.000 punti il controllo dura 0,7 secondi, con 5.900 (richiesta di 309 kB) 3,2 secondi, e la pista viene accettata. Prima erano 26 secondi con 2.400 punti: il caso peggiore è sceso di molte volte, non a zero.
+- Il controllo ora gira due volte: in `api.js:262-271` fuori dalla Lobby, e di nuovo nella gara dentro il blocco della Lobby (`lobby-hub.js:514`). Una pista così tiene ferma la Lobby circa 3 secondi invece di minuti.
+- Le creazioni rifiutate in `api.js` non arrivano più alla Lobby, quindi non passano più dal freno delle 20 ogni 10 minuti (`lobby-hub.js:457`): la proposta 10.3 chiedeva un freno più stretto, ora per quelle non c'è. Non bloccano più nessuno, consumano solo calcolo.
+- Correzione proposta: nel controllo delle strettoie saltare i vicini per distanza lungo il bordo e non per numero di punti (`rules.js:229`), così un bordo fitto costa come uno normale.
+
+**Già presente prima, emerso dalle misure ([P], bassa).** In 8 piste su circa 4.200 il gioco accetta e il server rifiuta con «Pista troppo stretta» o «Sulla linea ci stanno 1 auto»: il server rifà i conti sui punti arrotondati a due decimali e un caso al limite cambia esito. Non nasce dalle correzioni; ora la risposta è 400 invece di 409, con la stessa frase.
+
+### 11.3 Mappa del pilota automatico in tabelle di numeri
+
+**Stessi risultati della vecchia ([P]).** Ho preso `ai.js` del commit `ebbb26f` e l'ho confrontato con quello nuovo su quattro piste (anello piccolo, ovale grande, pista con coordinate vicine a zero nell'angolo della griglia, anello largo da 122 mila caselle): **zero differenze** su ogni casella del riquadro più quattro di margine, stessa lunghezza del giro, stesso piano dell'IA e stessa prima mossa. `F.D.get('x,y')`, usato ancora dal server (`f1-server.js:91`, `:104`) e dal gioco (`main.js:368`, `ai.js:173`), dà gli stessi valori di `F.dist(x, y)`.
+
+**W5. Memoria sì, tempo no (gravità bassa, [P]).**
+
+| Pista | Caselle | Mappa vecchia | Mappa nuova |
+|---|---|---|---|
+| anello 200/30 | 122 mila | 0,9 s, +45 MB | 0,7 s, +1 MB |
+| anello 219/20, al tetto | 149 mila | 1,0 s, +41 MB | 0,8 s, +2 MB |
+| anello 450/50, oltre il tetto | 626 mila | 10,4 s, +129 MB | 8,4 s, memoria trascurabile |
+
+- La memoria non è più un problema. Il tempo è quello di prima: al tetto 0,8 secondi su un computer, qualche secondo su un telefono, la prima volta che l'IA o il pilota automatico guardano la pista.
+- Il tetto di 150 mila caselle ora serve per il tempo, non per la memoria. Il commento in `rules.js:58` e `docs/f1-on-paper.md:31` dicono ancora «non sta in memoria».
+- Le tabelle sono grandi quanto il riquadro della pista, non quanto la pista: una pista sottile che attraversa tutta la griglia occupa circa 20 MB anche con poche caselle ([V], `ai.js:17-19`). Con una o due gare aperte non conta.
+
+### 11.4 Ruggine 89
+
+**Aperta dal cabinato della Lobby 3D: a posto ([V]).**
+
+- `openRuggine` è stata tolta; il cabinato chiama `app.open('ruggine-89')` come tutti gli altri (`public/lobby3d/lobby3d.js:1235`) e `launched` scatta anche per lei (`:2025`).
+- Il gioco si apre nel riquadro dei giochi arcade (`public/arcade-link.js:102-128`), che ha il nome che finisce per `-overlay`: il controllo dell'app lo vede e non riapre la 3D sotto (`public/app.js:78`, `:123`). Arrivano margini di Telegram e tasto Indietro; «Esci» manda `ruggine:exit`, che `arcade-link.js:282` già ascoltava.
+- La scheda `ruggine-89` esiste con la sua chiave scritta nella pagina, e `tests/game-keys.test.mjs` passa.
+- Non provato: non c'è una prova che apra il gioco dal cabinato; è nei controlli a mano (`docs/controlli-prima-del-rilascio.md`).
+
+**Avversari e colpi: a posto ([P]).** Ho rifatto le misure dell'Area 10 con il codice nuovo. Su 450 auto in 150 corse nessuna ferma (prima 70). Su 280 corse tutte finite entro 10 minuti (prima 85 su 200 no). Lo stordimento più lungo di fila è 0,9 secondi (prima 49). Il primo avversario finisce in 85 secondi (valore mediano).
+
+**Cose piccole ([V]).**
+
+- `tests/ruggine.test.mjs:35` fa avanzare il gioco a 30 passi al secondo; il gioco ne fa 60 (`public/ruggine/main.js`, ciclo). A 30 un colpo avanza di 1,7 metri a passo, più del raggio in cui colpisce (1,6): la prova può dare esiti che nel gioco non ci sono.
+- La protezione dai colpi (`guard`) non viene azzerata quando la corsa ricomincia (`cars.js`, `place`) e non scende durante il conto alla rovescia: chi è stato colpito alla fine parte con fino a 1,9 secondi senza colpi. Non si nota.
+
+### 11.5 Il resto delle correzioni
+
+| Proposta | Esito | Stato |
+|---|---|---|
+| 10.1 «Abbandona» | Percorsi aggiunti per F1 e Biliardo (`api.js:198`, `:205`); provato sul server vero nelle due prove del repo | a posto [P] |
+| 10.3 pista controllata prima della Lobby | Fatto in `api.js:262-271`. Manca il freno per le creazioni rifiutate (vedi W7) | quasi [V] |
+| 10.8 grafica | «Media» sui telefoni; scena ferma con la schermata nascosta (`scene3d.js:2080`); bagliori di Ruggine solo con grafica alta. «30 fotogrammi da fermi» è un fotogramma su due (`:2084`): 30 su uno schermo a 60, 60 su uno a 120 | a posto, con la nota [V] |
+| 10.9 mini app ridotta a icona | `away` passato ai due collegamenti (`public/app.js:56`); le richieste si fermano e ripartono | a posto [V] |
+| 10.11 «Centra», sala in memoria | Fatti; ora creare con una gara già aperta dice perché non si può | a posto [V] |
+| 10.12 suoni e scritte | Suoni: partono spenti se «Suoni» è spento. Scritte: **W6** | a metà [V] |
+| 10.13 grafica che non parte, errori, aggancio, codice morto | Fatti. Nessun riferimento rimasto a `tg` o `insets` nei due giochi (cercato) | a posto [V] |
+| 10.14 controlli, documenti, formattazione, versione delle regole | Controlli a mano e documenti aggiunti; `RULES_VERSION` nello stato. `format:check` copre `f1-server.js` e i due collegamenti ma non `public/gara` e `public/ruggine` | quasi [V] |
+
+**W6 in dettaglio (gravità bassa, [V]).** `public/gara/main.js` ora sceglie «tocca» o «clicca» e «col dito» o «col mouse» in quattro frasi. Restano fisse sul telefono: `main.js:205` («Prima tocca una delle due frecce»), `:614` («Tocca «Entra in gara»»), `:731` («Tocca di nuovo per abbandonare»), e tutto `tutorial.js` (`:10`, `:11`, `:14`, `:16`, `:21`, `:25`: «con il dito», «Un dito sposta la vista; due dita ingrandiscono»). Su computer il tutorial spiega comandi che non ci sono.
+
+### 11.6 Le misure eseguite
+
+Tutto al commit `dcc85a3`, cartella senza modifiche in sospeso. I programmi di misura stanno fuori dal repo.
+
+| Misura | Esito |
+|---|---|
+| Risposte fuori ordine: 12 gare con `f1-link.js` vero e rete finta | nessuno stato sbagliato |
+| Peso delle risposte: 4 gare simulate | vedi 11.1 |
+| Piste disegnate: circa 4.200 | vedi 11.2 |
+| Mappa vecchia contro nuova: 4 piste, tempi e memoria su 3 | uguale; vedi 11.3 |
+| Bordo fitto a 0,1 e otto incrociato | vedi W7 |
+| Ruggine: 150 + 280 corse senza grafica | nessuna auto ferma |
+| Gli 8 passi della CI | passano tutti (43 file in `npm test`) |
+
+---
+
 ## Proposte di miglioramento
 
 | # | Proposta | Risolve | Sforzo |
@@ -1753,3 +1910,20 @@ Non eseguiti: `format:check`, `test:ui`, `test:simulator`, `test:access`.
 | 10.14 | Aggiungere i due giochi ai controlli a mano e a `format:check`; un documento per ciascuno in `docs/` con regole, comandi e limiti; le prove della tabella 10.6; un numero di versione delle regole nello stato, così un telefono rimasto indietro dice «chiudi e riapri» | N13 | tutti e due | piccolo ognuno |
 
 **Ordine consigliato per l'Area 10:** 10.1 subito (un tasto che non funziona, in produzione, una riga). Poi 10.2 e 10.5, piccole e ognuna chiude un difetto provato. Poi 10.4, che è la più utile per chi gioca con la rete del telefono, e 10.7. Poi 10.3. Il resto quando capita.
+
+### Proposte per l'Area 11
+
+| # | Proposta | Risolve | Gioco | Sforzo |
+|---|---|---|---|---|
+| 11.1 | Fermare lo zoom dell'editor a circa 700 caselle di vista, oppure mostrare le caselle della pista mentre si disegna e avvisare già alla fine del bordo esterno. Togliere dalla prima istruzione l'invito ad allontanare la vista, o dirgli il limite | W1 | Gara | piccolo |
+| 11.2 | Chiamare `checkBorderShape` nel gioco alla fine di ogni bordo, con il punto segnato come gli altri errori. Minimo tra due punti a 0,02, oppure `closeBorder` toglie i punti quasi sovrapposti. Frase nuova al posto di «chiudi e riapri il gioco» | W2, W3 | Gara | piccolo |
+| 11.3 | Prova nuova: tratti finti (ovale, isola a punta, chicane) passati da `closeBorder`, arrotondati come fa il gioco e dati a `makeTrack`: devono passare tutti | W8, W2 | Gara | piccolo |
+| 11.4 | Prova di `merge` in `tests/game-links-network.test.mjs`: risposte con `movesFrom` in ordine e fuori ordine, e la strada di riserva che riscarica tutto | W8 | Gara | piccolo |
+| 11.5 | Controllo delle strettoie: saltare i vicini per distanza lungo il bordo e non per numero di punti, così un bordo fitto costa come uno normale | W7 | Gara | piccolo |
+| 11.6 | Correggere commento e documento del tetto delle caselle («per il tempo», non «per la memoria»); decidere il tetto insieme alla 11.1 | W5 | Gara | piccolo |
+| 11.7 | Tutorial e le tre frasi rimaste scritti per dispositivo, come le altre quattro | W6 | Gara | piccolo |
+| 11.8 | Salvare le mosse a blocchi sul server (il resto della 10.4). Serve solo se le gare lunghe a 8 diventano normali | W4 | Gara | medio |
+| 11.9 | Prova di Ruggine a 60 passi al secondo come il gioco. `public/gara` e `public/ruggine` in `format:check`. Per la scena ferma: un limite vero a 30 fotogrammi, o correggere il commento | W9 | tutti e due | piccolo |
+| 11.10 | Casi al limite tra gioco e server: il gioco controlla la pista già arrotondata a due decimali prima di mandarla, così vede lo stesso esito del server | già presente | Gara | piccolo |
+
+**Ordine consigliato per l'Area 11:** 11.1 e 11.2 insieme, perché toccano lo stesso punto del gioco e sono le due cose che un giocatore può incontrare. Con loro la 11.3, che le tiene a posto. Poi 11.4. Il resto quando capita; la 11.8 si può non fare.

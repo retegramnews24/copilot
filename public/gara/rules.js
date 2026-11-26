@@ -54,8 +54,12 @@ const segsOf = (poly) => poly.map((p, i) => [p, poly[(i + 1) % poly.length]]);
 // ---------- limiti della pista (analisi 10.2 e 10.10) ----------
 // Il gioco disegna i bordi con un punto ogni mezza casella dentro la griglia. Il server li ricontrolla prima di ogni
 // calcolo pesante: una pista fatta apposta (punti lontanissimi, bordo fittissimo, pista enorme) lo terrebbe occupato
-// per decine di secondi. Le stesse regole valgono mentre si disegna, così il giocatore lo sa subito.
-export const MAX_TRACK_CELLS = 150000; // caselle tra i due bordi; oltre, il pilota automatico non sta in memoria
+// per decine di secondi. Le stesse regole valgono mentre si disegna, alla fine di ogni bordo, così il giocatore lo
+// sa subito (analisi 11.2).
+// Tetto per il tempo di calcolo, non per la memoria (analisi 11.6). Con inTrack per righe (11.1) una pista da 1 milione
+// di caselle si controlla in circa 1,2 s e la mappa del pilota automatico costa 0,3 s su un PC; il vecchio tetto da
+// 150 mila rifiutava quasi ogni pista disegnata con la vista oltre le 650 caselle.
+export const MAX_TRACK_CELLS = 1000000; // caselle tra i due bordi
 export const MIN_GAP = 0.1, MAX_GAP = 2; // distanza tra due punti vicini dello stesso bordo
 const MARGIN = 5;
 export const polyArea = (poly) => {
@@ -68,17 +72,33 @@ export function trackCells(outer, inner) {
 }
 export function checkBorderShape(poly) {
   for (const [a, b] of segsOf(poly)) {
-    if (a.x < -MARGIN || a.y < -MARGIN || a.x > BOARD + MARGIN || a.y > BOARD + MARGIN) return 'Bordo fuori dalla griglia.';
+    if (a.x < -MARGIN || a.y < -MARGIN || a.x > BOARD + MARGIN || a.y > BOARD + MARGIN)
+      return 'Bordo fuori dalla griglia: ridisegnalo più verso il centro.';
     const d = dist(a, b);
-    if (d < MIN_GAP || d > MAX_GAP) return 'Bordo disegnato male: chiudi e riapri il gioco.';
+    if (d < MIN_GAP || d > MAX_GAP) return 'Bordo disegnato male: ridisegnalo con un tratto più morbido.';
   }
   return null;
 }
 export function checkTrackSize(outer, inner) {
   return trackCells(outer, inner) > MAX_TRACK_CELLS
-    ? 'Pista troppo grande: disegnala più piccola (al massimo ' + MAX_TRACK_CELLS / 1000 + ' mila caselle).'
+    ? 'Pista troppo grande: disegnala più piccola (al massimo un milione di caselle tra i due bordi).'
     : null;
 }
+// Tutti i controlli di una pista online, nello stesso ordine, usati dal server (f1-server.js, makeTrack) e dal gioco
+// sulla pista già arrotondata prima di mandarla (analisi 11.10): i due non possono più dare esiti diversi.
+// Restituisce {track} oppure {error}. buildTrack è dichiarata più sotto (le funzioni si possono usare prima).
+export function checkOnlineTrack({ outer, inner, finish, normal, players }) {
+  const limit = checkBorderShape(outer) || checkBorderShape(inner) || checkTrackSize(outer, inner);
+  if (limit) return { error: limit };
+  const inside = checkInner(outer, inner, MIN_WIDTH);
+  if (inside.error) return { error: inside.error };
+  const ends = checkFinishEnds(outer, inner, finish);
+  if (ends) return { error: ends };
+  const nl = Math.hypot(normal.x, normal.y);
+  const built = buildTrack(outer, inner, finish, { x: normal.x / nl, y: normal.y / nl }, players);
+  return built.error ? { error: built.error } : { track: built.track };
+}
+export const onlineTrackError = (t) => checkOnlineTrack(t).error || null;
 // la linea di partenza va da un bordo all'altro: un estremo sul segmento dichiarato del bordo esterno, l'altro
 // su quello del bordo interno
 export function checkFinishEnds(outer, inner, finish) {
@@ -164,6 +184,16 @@ function chaikin(poly) {
   return out;
 }
 
+// In uno spigolo vivo due punti presi a mezza casella lungo il tratto possono finire quasi uno sopra l'altro: il
+// server li rifiutava (punti a meno di MIN_GAP) dopo che il gioco aveva accettato la pista (analisi 11.2). Si tolgono
+// qui, con margine per l'arrotondamento a due decimali che si fa prima di mandarli.
+function dropClose(poly) {
+  const out = [];
+  for (const p of poly) if (!out.length || dist(out[out.length - 1], p) >= MIN_GAP * 2) out.push(p);
+  while (out.length > 2 && dist(out[out.length - 1], out[0]) < MIN_GAP * 2) out.pop();
+  return out;
+}
+
 // Chiude un bordo disegnato col dito. Restituisce {poly} oppure {error, at}.
 export function closeBorder(raw) {
   if (raw.length < 8) return { error: 'Tratto troppo corto.' };
@@ -174,7 +204,7 @@ export function closeBorder(raw) {
   if (dist(first, last) > Math.max(3, len * 0.08))
     return { error: 'Bordo non chiuso: finisci vicino al punto di partenza.', at: last };
   let poly = resample(raw, 0.5, true);
-  poly = resample(chaikin(chaikin(poly)), 0.5, true);
+  poly = dropClose(resample(chaikin(chaikin(poly)), 0.5, true));
   if (poly.length < 12) return { error: 'Bordo troppo piccolo.', at: first };
   const x = selfCross(poly);
   if (x) return { error: 'Il bordo si incrocia da solo.', at: x };
@@ -301,8 +331,31 @@ export function bbox(poly) {
   return { minX, minY, maxX, maxY };
 }
 
+// Dentro la pista? Le caselle hanno y intera: per ogni riga si calcola una volta sola dove incrocia i due bordi
+// (stessa formula di pointInPoly, quindi stesso risultato) e poi basta una ricerca. Prima ogni casella scorreva tutti
+// i punti dei bordi: su una pista grande la mappa del pilota automatico passava lì quasi tutto il tempo (analisi 11.1).
+const ROWS = new WeakMap();
+function rowCrossings(poly, y) {
+  const xs = [];
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if (a.y > y !== b.y > y) xs.push(((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x);
+  }
+  return xs.sort((m, n) => m - n);
+}
+// quanti incroci stanno a destra di x (come il conteggio di pointInPoly: p.x < incrocio)
+function rightOf(xs, x) {
+  let lo = 0, hi = xs.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (xs[mid] > x) hi = mid; else lo = mid + 1; }
+  return xs.length - lo;
+}
 export function inTrack(t, p) {
-  return pointInPoly(p, t.outer) && !pointInPoly(p, t.inner);
+  if (!Number.isInteger(p.y)) return pointInPoly(p, t.outer) && !pointInPoly(p, t.inner);
+  let rows = ROWS.get(t);
+  if (!rows) ROWS.set(t, (rows = new Map()));
+  let r = rows.get(p.y);
+  if (!r) rows.set(p.y, (r = { o: rowCrossings(t.outer, p.y), i: rowCrossings(t.inner, p.y) }));
+  return rightOf(r.o, p.x) % 2 === 1 && rightOf(r.i, p.x) % 2 === 0;
 }
 
 // distanza dal bordo più vicino, guardando fino a maxR caselle (oltre restituisce maxR)
