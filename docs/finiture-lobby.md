@@ -25,8 +25,8 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 ## Fatto in Blender
 
 - Mobile della radio: credenza di noce anni '60, ante a doghe, pomelli e filo d'ottone, gambe affusolate con i puntali (`blender/credenza_radio.blend` → `public/lobby3d/models/credenza_radio.glb`, circa 4.100 triangoli). Stesse misure del bancone di prima: la radio resta alla stessa altezza.
+- Cornici dei quadri (`blender/cornici.blend` → `public/lobby3d/models/cornici.glb`, una per misura): cassetta dorata a gradini con la perla per il panorama dell'atrio e il poster del biliardo (alzato a 2,15 m, sopra il battisedia a 1,2 m), ottone sottile per sala tavoli e cinema, neon magenta per la sala giochi. `frameFor` in `lobby3d.js` le mette al posto della cornice semplice quando sono arrivate.
 
 ## Da fare in Blender
 
-Pannello di boiserie con il bordo a cornice, tre cornici per i quadri (cassetta dorata, ottone sottile, neon), la
-rastrelliera delle stecche per il biliardo, le applique d'ottone.
+Pannello di boiserie con il bordo a cornice, la rastrelliera delle stecche per il biliardo, le applique d'ottone.

@@ -126,6 +126,21 @@ export function createLobby3D(app) {
   // come box, ma con gli spigoli arrotondati (raggio r)
   const rbox = (sx, sy, sz, r, m, x, y, z, parent = scene) => { const o = new THREE.Mesh(roundBoxGeometry(sx, sy, sz, r), m); o.position.set(x, y, z); parent.add(o); return o; };
   const box = (sx, sy, sz, m, x, y, z, parent = scene) => { const o = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); o.position.set(x, y, z); parent.add(o); return o; };
+  // Cornici dei quadri fatte in Blender (blender/cornici.blend → models/cornici.glb, stile «Circolo»): cassetta dorata,
+  // ottone sottile e neon, ognuna alla misura del suo quadro. Si caricano una volta; finché non arrivano resta la
+  // cornice semplice (standIn), poi la si sostituisce.
+  const frameKit = new Promise((done) => new GLTFLoader().load(new URL('models/cornici.glb', import.meta.url).href, (g) => done(g.scene), undefined, () => done(null)));
+  // name: cornice_panorama, _dorata, _ottone, _neon; x, y, z: centro della cornice semplice, spessa depth; angle: dove guarda
+  const frameFor = (name, standIn, x, y, z, angle, depth) => frameKit.then((kit) => {
+    const src = kit?.getObjectByName(name);
+    if (!src) return;
+    const f = src.clone();
+    f.position.set(x - (depth / 2) * Math.sin(angle), y, z - (depth / 2) * Math.cos(angle));
+    f.rotation.y = angle;
+    f.traverse((o) => { if (o.isMesh && o.material.name === 'cf_neon') o.material = glow('#ff4fd8', 1.6); });
+    scene.add(f);
+    scene.remove(standIn);
+  });
   const solid = (x0, x1, z0, z1) => colliders.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
   const plane = (w, h, m, x, y, z, ry = 0, rx = 0) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.set(rx, ry, 0); scene.add(o); return o; };
   // muro lungo x (nord/sud) o lungo z (est/ovest), con la collisione
@@ -239,7 +254,7 @@ export function createLobby3D(app) {
       g.beginPath();g.moveTo(0,h);for(let x=0;x<=w;x+=8)g.lineTo(x,112+i*29+28*Math.sin(x*.011+i)+16*Math.sin(x*.027+i*4)+8*Math.cos(x*.059+i));g.lineTo(w,h);g.fillStyle=c;g.fill();
     });
   });
-  box(4.15,1.55,.07,std('#84663e',.38,.55),-4,2.12,5.94);
+  frameFor('cornice_panorama',box(4.15,1.55,.07,std('#84663e',.38,.55),-4,2.12,5.94),-4,2.12,5.94,Math.PI,.07);
   plane(4.04,1.43,new THREE.MeshStandardMaterial({map:panorama,roughness:.92}),-4,2.12,5.895,Math.PI);
   // lampadari
   for (const x of [-3.5, 3.5]) {
@@ -719,7 +734,9 @@ export function createLobby3D(app) {
     solid(x-1.51,x+1.51,z-.72,z+.72);
     spots.push({x,z,hx:1.50,hz:.72,pad:.81,label:title,key,where:'Sala tavoli',act:()=>app.open(key)});
   });
-  function poster(x,z,angle,title,subtitle,palette,motif){
+  // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
+  // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)
+  function poster(x,z,angle,title,subtitle,palette,motif,frameName='cornice_ottone',y=1.92){
     const map=canvasTex(384,512,(g,w,h)=>{
       g.fillStyle=palette[0];g.fillRect(0,0,w,h);g.strokeStyle=palette[1];g.lineWidth=3;g.strokeRect(14,14,w-28,h-28);
       g.save();g.translate(192,210);g.rotate(-.17);
@@ -732,8 +749,9 @@ export function createLobby3D(app) {
       else {g.strokeStyle=palette[2];g.lineWidth=6;for(let i=0;i<6;i++)g.strokeRect(-95+i*9,-105+i*9,185-i*18,185-i*18)}
       g.restore();g.fillStyle=palette[1];g.textAlign='center';g.font='900 44px Arial';g.fillText(title,192,378,338);g.font='bold 21px monospace';g.fillText(subtitle,192,430,338);
     });
-    const frame=box(1.25,1.66,.055,brassTrim,x,1.92,z);frame.rotation.y=angle;
-    plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),1.92,z+.033*Math.cos(angle),angle);
+    const frame=box(1.25,1.66,.055,brassTrim,x,y,z);frame.rotation.y=angle;
+    frameFor(frameName,frame,x,y,z,angle,.055);
+    plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),y,z+.033*Math.cos(angle),angle);
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
   doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.92,-5.96);
@@ -767,8 +785,8 @@ export function createLobby3D(app) {
     plane(1.91,1.433,new THREE.MeshBasicMaterial({map:artwork}),6.73,1.75,3.6,-Math.PI/2);
     spots.push({x:6.65,z:3.6,hx:.12,hz:.95,pad:1,label:'Lavagna',act:()=>app.enterGallery?app.enterGallery(boardRoom):app.open('lavagna-spazio-libero')});
   }
-  poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
-  poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
+  poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector','cornice_neon');
+  poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool','cornice_dorata',2.15);
   // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
   const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#1b1e2a',.98);
   plane(14,12.4,std('#4c2935',.98),0,0,12.26,0,-Math.PI/2);
