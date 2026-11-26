@@ -41,7 +41,8 @@ export function wallFinish(room) {
   return canvasTex(2048, 512, (g,w,h) => {
     const atrium=room==='atrium', pool=room==='pool';
     const wash=g.createLinearGradient(0,0,0,h);
-    const colors=atrium?['#c3af91','#f1e1c4','#b79e80']:pool?['#102a28','#315550','#142f2d']:['#10132b','#31214a','#16132a'];
+    // stile «Circolo»: atrio crema, biliardo rosso pompeiano; la boiserie non è più dipinta qui ma vera (trimWall)
+    const colors=atrium?['#dccbae','#ecdfc6','#d6c4a4']:pool?['#5e2420','#74302b','#5a221f']:['#10132b','#31214a','#16132a'];
     colors.forEach((c,i)=>wash.addColorStop(i/2,c));g.fillStyle=wash;g.fillRect(0,0,w,h);
     if(!atrium&&!pool){
       // A sunset and layered vector mountains behind the cabinets.
@@ -56,14 +57,6 @@ export function wallFinish(room) {
       g.fillStyle='#c7b3d0';for(let i=0;i<100;i++)g.fillRect((i*349)%w,(i*83)%123,2,2);
       return;
     }
-    const base=atrium?370:325;
-    g.fillStyle=atrium?'#614636':'#483025';g.fillRect(0,base,w,h-base);
-    for(let x=0;x<w;x+=128){
-      g.fillStyle=atrium?'#775640':'#51392b';g.fillRect(x+6,base+11,116,h-base-20);
-      g.strokeStyle='#281e18';g.lineWidth=3;g.strokeRect(x+12,base+18,104,h-base-36);
-      g.strokeStyle='#a17a50';g.lineWidth=1;g.strokeRect(x+15,base+21,98,h-base-42);
-    }
-    g.fillStyle='#392b21';g.fillRect(0,base-7,w,8);g.fillStyle='#c69b60';g.fillRect(0,base-9,w,3);
     for(let i=0;i<16000;i++){g.fillStyle=i%2?'#fff4db12':'#30201812';g.fillRect((i*499)%w,(i*73+Math.floor(i/512)*37)%h,2,1)}
   });
 }

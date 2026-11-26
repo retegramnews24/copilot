@@ -13,10 +13,11 @@ import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard
 import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
-import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=743855ba47';
+import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=6d79d0e827';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
@@ -163,12 +164,41 @@ export function createLobby3D(app) {
     }
     if(x0===-7){wallX(-7,-1.65,6.15,finish);wallX(1.65,7,6.15,finish);wallMeshes.push(box(3.3,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,6.15))}
     else wallX(x0,x1,6.15,finish);
-    // zoccolo
-    const sk = std('#2a1a12', 0.6);
-    // cornice sotto il soffitto, arrotondata
-    const crown = x0 === -7 ? std('#efe4cf', 0.7) : std('#241c2a', 0.6);
-    for (const zz of [-5.97, 5.97]) rbox(x1 - x0, 0.1, 0.07, 0.025, crown, (x0 + x1) / 2, H - 0.05, zz);
-    box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, -5.98); box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, 5.98);
+    // zoccolo, boiserie, battisedia e cornice sotto il soffitto: trimWall più sotto, per tutte le stanze
+  };
+
+  // ---------- rifiniture delle pareti: stile «Circolo italiano anni '60» (docs/finiture-lobby.md) ----------
+  // Lungo ogni parete, saltando le porte: zoccoletto, parte bassa (boiserie di noce, velluto nel cinema, una riga di
+  // neon nella sala giochi), battisedia e cornice sotto il soffitto. I pezzi con lo stesso materiale si uniscono alla
+  // fine in un solo oggetto (mergeTrim): poche cose da disegnare anche sul telefono.
+  const trimGeo = new Map();
+  const trimPiece = (m, sx, sy, sz, x, y, z) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    g.translate(x, y, z);
+    if (!trimGeo.has(m)) trimGeo.set(m, []);
+    trimGeo.get(m).push(g);
+  };
+  // axis 'x': parete lungo x, con la faccia verso la stanza a z = face; 'z': parete lungo z, faccia a x = face.
+  // n: verso la stanza (+1 o -1). gaps: porte, come [centro, mezza larghezza].
+  const trimWall = (T, axis, a, b, face, n, gaps = []) => {
+    let cuts = [[a, b]];
+    for (const [c, w] of gaps)
+      cuts = cuts.flatMap(([s, e]) => (c + w <= s || c - w >= e ? [[s, e]] : [[s, c - w], [c + w, e]].filter(([p, q]) => q - p > 0.05)));
+    const put = (m, len, h, depth, y, at, out) =>
+      axis === 'x' ? trimPiece(m, len, h, depth, at, y, face + n * out) : trimPiece(m, depth, h, len, face + n * out, y, at);
+    for (const [s, e] of cuts) {
+      const len = e - s, mid = (s + e) / 2, low = (T.railH - 0.14) / 2 + 0.14;
+      put(T.skirt, len, 0.14, 0.035, 0.07, mid, 0.0175);
+      put(T.crown, len, 0.1, 0.07, H - 0.05, mid, 0.035);
+      if (T.neon) { put(T.neon, len, 0.035, 0.02, T.railH, mid, 0.01); continue; }
+      put(T.lower, len, T.railH - 0.14, 0.02, low, mid, 0.01);
+      put(T.rail, len, 0.05, 0.045, T.railH, mid, 0.0225);
+      // montanti della boiserie: un riquadro ogni 0,9 m circa
+      const panels = Math.max(1, Math.round(len / 0.9));
+      for (let k = 0; k <= panels; k++) put(T.lower, 0.045, T.railH - 0.2, 0.03, low, s + (len * k) / panels, 0.02);
+      // lucine di cortesia nello zoccolo (cinema)
+      if (T.lights) for (let p = s + 0.6; p < e - 0.3; p += 1.2) put(T.lights, 0.06, 0.03, 0.012, 0.1, p, 0.04);
+    }
   };
 
   // --- luci di base
@@ -176,9 +206,10 @@ export function createLobby3D(app) {
   const point = (c, i, x, y, z, d = 12) => { const l = new THREE.PointLight(c, i, d, 1.5); l.position.set(x, y, z); scene.add(l); return l; };
 
   // ========== ATRIO (x -7…7) ==========
-  const atriumWall = new THREE.MeshStandardMaterial({ color: '#d9ccb4', roughness: 0.9 });
-  const billiardWall = new THREE.MeshStandardMaterial({ color: '#2a1c26', roughness: 0.85 });
-  const arcadeWall = new THREE.MeshStandardMaterial({ color: '#16112a', roughness: 0.85 });
+  // colori dello stile «Circolo»: atrio crema, biliardo rosso pompeiano, giochi blu notte (la boiserie è in trimWall)
+  const atriumWall = new THREE.MeshStandardMaterial({ color: '#e6d7bc', roughness: 0.9 });
+  const billiardWall = new THREE.MeshStandardMaterial({ color: '#6e2a26', roughness: 0.85 });
+  const arcadeWall = new THREE.MeshStandardMaterial({ color: '#141634', roughness: 0.85 });
   room(-7, 7, parquet(), [3.5, 3], atriumWall, '#efe6d6');
   room(7, 19, tiles(158, 19, 21), [3, 3], billiardWall, '#0b070d');
   room(-19, -7, neonGrid(), [3, 3], arcadeWall, '#07050c');
@@ -623,7 +654,7 @@ export function createLobby3D(app) {
   }
   const darkWood=std('#2b211d',.55);
   box(2.89,.04,.45,brassTrim,0,.002,-6.16);
-  const cardWall=std('#8d7665',.92);
+  const cardWall=std('#2f4a3a',.92); // verde bottiglia, come il panno dei tavoli
   const carpet=tiles(157,23,24);carpet.wrapS=carpet.wrapT=THREE.RepeatWrapping;carpet.repeat.set(3,3);
   plane(14,11.85,new THREE.MeshStandardMaterial({map:carpet,roughness:.96}),0,0,-12.2,0,-Math.PI/2);
   plane(14,12,std('#d0bfa6',1),0,H,-12.2,0,Math.PI/2);
@@ -739,7 +770,7 @@ export function createLobby3D(app) {
   poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
   // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
-  const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#16131c',.98);
+  const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#1b1e2a',.98);
   plane(14,12.4,std('#4c2935',.98),0,0,12.26,0,-Math.PI/2);
   plane(14,12.4,std('#101118',1),0,H,12.26,0,Math.PI/2);
   wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
@@ -1264,6 +1295,52 @@ export function createLobby3D(app) {
   plane(3.4, 0.85, new THREE.MeshBasicMaterial({ map: neonText('ARCADE', '#3ee7ff'), transparent: true, depthWrite: false, color: new THREE.Color(2, 2, 2) }), -18.98, 2.75, 0, Math.PI / 2);
   point('#a855f7', 7, -13, 2.8, 0, 11); point('#22d3ee', 5, -17, 2.4, -4, 8); point('#ff2bd6', 5, -17, 2.4, 4, 8); point('#ffb347', 4, -9, 2.4, 0, 8);
   for (const [c, z] of [['#22d3ee', -5.96], ['#ff2bd6', 5.96]]) box(11.8, 0.03, 0.03, glow(c, 3), -13, H - 0.12, z);
+
+  // ========== rifiniture delle pareti, stanza per stanza (trimWall, stile «Circolo») ==========
+  const TRIM = {
+    // atrio: crema sopra, boiserie di noce sotto, battisedia d'ottone, cornice avorio
+    atrium: { lower: std('#5a3a28', 0.5), rail: std('#b8925a', 0.32, 0.7), skirt: std('#2e1d14', 0.55), crown: std('#f2e8d5', 0.7), railH: 1.0 },
+    // sala tavoli: verde bottiglia, boiserie di noce, filo d'ottone
+    cards: { lower: std('#583828', 0.5), rail: std('#c3a064', 0.32, 0.64), skirt: std('#2e1d14', 0.55), crown: std('#5a3a28', 0.5), railH: 1.0 },
+    // biliardo: rosso pompeiano, boiserie scura più alta (le stecche ci si appoggiano), oro brunito
+    pool: { lower: std('#3e2519', 0.5), rail: std('#8a6a3a', 0.35, 0.6), skirt: std('#22140d', 0.55), crown: std('#8a6a3a', 0.4, 0.5), railH: 1.2 },
+    // sala giochi: niente legno, una riga di neon azzurro a metà parete e lo zoccolo che brilla
+    arcade: { neon: glow('#33e1ff', 1.6), skirt: glow('#ff4fd8', 1.3), crown: std('#0b0a18', 0.6), railH: 1.0 },
+    // cinema: pannelli in velluto come le poltrone, lucine di cortesia nello zoccolo
+    cinema: { lower: std('#6f2033', 0.97), rail: std('#a5535f', 0.89), skirt: std('#14161f', 0.8), crown: std('#14161f', 0.8), railH: 1.0, lights: glow('#e7b866', 1.4) }
+  };
+  // atrio (x -7…7): porte a nord (sala tavoli), a sud (cinema), a est (biliardo) e a ovest (giochi)
+  trimWall(TRIM.atrium, 'x', -6.84, 6.84, -6.0, 1, [[0, DOOR]]);
+  trimWall(TRIM.atrium, 'x', -6.84, 6.84, 6.0, -1, [[0, 1.65]]);
+  trimWall(TRIM.atrium, 'z', -6.0, 6.0, 6.84, -1, [[0, DOOR]]);
+  trimWall(TRIM.atrium, 'z', -6.0, 6.0, -6.84, 1, [[0, DOOR]]);
+  // sala biliardo (x 7…19)
+  trimWall(TRIM.pool, 'x', 7.16, 19, -6.0, 1);
+  trimWall(TRIM.pool, 'x', 7.16, 19, 6.0, -1);
+  trimWall(TRIM.pool, 'z', -6.0, 6.0, 19.0, -1);
+  trimWall(TRIM.pool, 'z', -6.0, 6.0, 7.16, 1, [[0, DOOR]]);
+  // sala giochi (x -19…-7)
+  trimWall(TRIM.arcade, 'x', -19, -7.16, -6.0, 1);
+  trimWall(TRIM.arcade, 'x', -19, -7.16, 6.0, -1);
+  trimWall(TRIM.arcade, 'z', -6.0, 6.0, -19.0, 1);
+  trimWall(TRIM.arcade, 'z', -6.0, 6.0, -7.16, -1, [[0, DOOR]]);
+  // sala tavoli (z -18…-6)
+  trimWall(TRIM.cards, 'z', -18.13, -6.3, -7.0, 1);
+  trimWall(TRIM.cards, 'z', -18.13, -6.3, 7.0, -1);
+  trimWall(TRIM.cards, 'x', -7.0, 7.0, -18.13, 1);
+  trimWall(TRIM.cards, 'x', -7.0, 7.0, -6.3, -1, [[0, DOOR]]);
+  // cinema (z 6…18): pareti laterali e quella d'ingresso; la parete dello schermo resta libera
+  trimWall(TRIM.cinema, 'z', 6.375, 18.4, -7.0, 1);
+  trimWall(TRIM.cinema, 'z', 6.375, 18.4, 7.0, -1);
+  trimWall(TRIM.cinema, 'x', -7.0, 7.0, 6.375, 1, [[0, 1.65]]);
+  // un oggetto per materiale
+  for (const [m, list] of trimGeo) {
+    const mesh = new THREE.Mesh(mergeGeometries(list), m);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    for (const g of list) g.dispose();
+  }
+  trimGeo.clear();
 
   // ========== il personaggio ==========
   const me = makeCharacter(readLook());
