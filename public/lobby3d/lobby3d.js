@@ -23,6 +23,8 @@ import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea7100a3a8';
 import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
+import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
+import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
 
 const H = 3.4; // altezza delle stanze
 const DOOR = 1.3, DOOR_H = 2.5; // mezza larghezza e altezza delle porte
@@ -707,34 +709,16 @@ export function createLobby3D(app) {
   const tabletop=(key,title)=>canvasTex(512,384,(g,w,h)=>{
     g.fillStyle='#255348';g.fillRect(0,0,w,h);
     g.fillStyle='#e1c995';g.textAlign='center';g.font='bold 26px Georgia';g.fillText(title,w/2,360);
-    const disc=(x,y,r,c)=>{g.fillStyle=c;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill()};
-    if(['checkmate','dama-italiana','battaglia-navale'].includes(key)){
-      const n=key==='battaglia-navale'?10:8, tile=260/n;
-      for(let row=0;row<n;row++)for(let col=0;col<n;col++){
-        const x=126+col*tile,y=26+row*tile;
-        g.fillStyle=key==='battaglia-navale'?'#507b93':(row+col)%2?'#715138':'#dfcba7';
-        g.fillRect(x,y,tile-.8,tile-.8);
-      }
-      if(key==='battaglia-navale'){g.fillStyle='#354854';g.fillRect(152,80,101,19);g.fillRect(263,134,19,75);disc(220,90,6,'#f66b41')}
-    }else if(key==='forza-4'){
-      // niente griglia stampata: c'è quella vera in piedi sul tavolo (models/forza4.glb, più sotto)
-    }else{
-      // giochi di carte e Scarabeo: niente stampato, ci sono i pezzi veri sul panno (models/carte.glb e
-      // models/scarabeo.glb, più sotto)
-    }
+    // sul panno solo il nome del gioco: su ogni tavolo ci sono i pezzi veri (modelli di Blender, più sotto)
   });
-  const draughtGeometry=new THREE.CylinderGeometry(.036,.04,.022,12);
-  const pawnGeometry=new THREE.LatheGeometry([[.047,0],[.047,.014],[.026,.034],[.018,.064],[.031,.075],[.036,.092],[.021,.115],[.001,.121]].map(([r,y])=>new THREE.Vector2(r,y)),12);
-  const pieces=(geometry,material,locations)=>{
-    const set=new THREE.InstancedMesh(geometry,material,locations.length),matrix=new THREE.Matrix4();
-    locations.forEach(([x,y,z],index)=>set.setMatrixAt(index,matrix.makeTranslation(x,y,z)));scene.add(set);
-  };
   // tavoli e sedie moderni di Blender (blender/sala_tavoli.blend → models/sala_tavoli.glb), più sotto: queste liste
   // dicono dove vanno; i blocchi di prima (cardStandIns) restano finché il modello non arriva
   const cardTables=[],cardChairs=[],cardStandIns=[];
   let connectFour=null; // [x, z] del tavolo di Forza 4, se c'è
   const cardGames=[]; // [gioco, x, z] dei tavoli di carte
   let wordTable=null; // [x, z] del tavolo di Scarabeo, se c'è
+  let navalTable=null; // [x, z] del tavolo di Battaglia navale, se c'è
+  let chessTable=null,damaTable=null; // [x, z] dei tavoli di Scacchi e Dama, se ci sono
   BOARD.forEach(([key,title],i)=>{
     if(!avail.has(key))return;
     const x=(i%3-1)*4.1,z=-8.8-Math.floor(i/3)*3.55;
@@ -744,18 +728,11 @@ export function createLobby3D(app) {
     if(key==='forza-4')connectFour=[x,z];
     if(CARD_LAYOUTS[key])cardGames.push([key,x,z]);
     if(key==='scarabeo')wordTable=[x,z];
+    if(key==='battaglia-navale')navalTable=[x,z];
+    if(key==='checkmate')chessTable=[x,z];
+    if(key==='dama-italiana')damaTable=[x,z];
     box(1.91,.022,1.33,brassTrim,x,.816,z);
     plane(1.84,1.27,new THREE.MeshStandardMaterial({map:tabletop(key,title),roughness:.86}),x,.834,z,0,-Math.PI/2);
-    if(key==='checkmate'||key==='dama-italiana'){
-      for(let side=0;side<2;side++){
-        const locations=[];
-        for(let row=0;row<(key==='checkmate'?2:3);row++)for(let col=0;col<8;col++){
-          const rank=side?7-row:row;if(key==='dama-italiana'&&(rank+col)%2===0)continue;
-          locations.push([x+((126+(col+.5)*32.5)/512-.5)*1.84,.85,z+((26+(rank+.5)*32.5)/384-.5)*1.27]);
-        }
-        pieces(key==='checkmate'?pawnGeometry:draughtGeometry,side?brassTrim:darkWood,locations);
-      }
-    }
     for(const side of [-1,1]){
       cardStandIns.push(box(.46,.39,.4,walnut,x+side*1.24,.2,z),box(.52,.09,.49,chairLeather,x+side*1.24,.44,z),box(.07,.39,.49,chairLeather,x+side*1.47,.63,z));
       cardChairs.push([x+side*1.24,z,-side*Math.PI/2]); // la sedia guarda il tavolo
@@ -813,6 +790,17 @@ export function createLobby3D(app) {
   // davanti a ciascun giocatore, sacchetto in un angolo; le tessere sono dati in table-scarabeo.js
   if(wordTable)new GLTFLoader().load(new URL('models/scarabeo.glb',import.meta.url).href,gltf=>{
     for(const o of buildScarabeoTable(gltf,SCARABEO_LAYOUT,...wordTable))scene.add(o);
+  });
+  // Battaglia navale (blender/navale.blend → models/navale.glb): una valigetta aperta davanti a ciascun giocatore,
+  // blu e rossa, con i coperchi in piedi schiena contro schiena; flotte e colpi sono dati in table-navale.js
+  if(navalTable)new GLTFLoader().load(new URL('models/navale.glb',import.meta.url).href,gltf=>{
+    for(const o of buildNavaleTable(gltf,NAVALE_LAYOUT,...navalTable))scene.add(o);
+  });
+  // Scacchi e Dama (blender/scacchi.blend → models/scacchi.glb): scacchiera di legno intarsiato, pezzi Staunton e
+  // pedine bianche e nere; due partite a metà, come dati in table-scacchi.js. Il Bianco siede a x positivo
+  if(chessTable||damaTable)new GLTFLoader().load(new URL('models/scacchi.glb',import.meta.url).href,gltf=>{
+    if(chessTable)for(const o of buildChessTable(gltf,CHESS_LAYOUT,...chessTable))scene.add(o);
+    if(damaTable)for(const o of buildDamaTable(gltf,DAMA_LAYOUT,...damaTable))scene.add(o);
   });
   // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
   // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)

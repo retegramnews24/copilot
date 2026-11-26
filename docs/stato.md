@@ -15,10 +15,13 @@ Aggiornato il 26 novembre 2026.
 **Lobby 3D, sala tavoli: gli oggetti di ogni gioco sul suo tavolo.** Un gioco per volta: schizzo, poi Blender se
 serve, poi sul tavolo.
 
-- Fatti: Forza 4, carte (UNO, Scopa, Briscola, Briscola in cinque), Scarabeo.
-- Prossimo: Battaglia navale (valigette). Poi gli scacchi veri (oggi ci sono solo pedoni).
+- Fatti tutti: Forza 4, carte (UNO, Scopa, Briscola, Briscola in cinque), Scarabeo, Battaglia navale (valigette di
+  plastica classica, blu e rossa, partita a metà con i pioli), Scacchi e Dama (scacchiera di legno intarsiato,
+  pezzi Staunton in bosso ed ebano, pedine bianche e nere, partite a metà).
+- Resta da guardare tutto insieme nella Lobby 3D vera, sull'app di prova.
 - Come sono fatti: pezzi a istanze, posizioni decise dal codice (`public/lobby3d/table-cards.js`,
-  `table-scarabeo.js`, `connectFour` in `lobby3d.js`), così più avanti il tavolo potrà mostrare la partita vera.
+  `table-scarabeo.js`, `table-navale.js`, `table-scacchi.js`, `connectFour` in `lobby3d.js`), così più avanti il
+  tavolo potrà mostrare la partita vera.
   Sedie ai lati corti, ogni giocatore ha i suoi pezzi davanti.
 
 ## Su staging, in attesa di prova e dell'ok per main
@@ -30,6 +33,7 @@ Commit da `b98eb2a` a `4ab939b`:
 - Arredi fatti in Blender: credenza della radio, cornici dei quadri, rastrelliera delle stecche, applique.
 - Tavoli e sedie moderni nella sala tavoli.
 - Forza 4, carte e Scarabeo sui tavoli.
+- Battaglia navale, Scacchi e Dama sui loro tavoli.
 
 Prima di portarli su `main`: i controlli a mano di `docs/controlli-prima-del-rilascio.md`.
 
