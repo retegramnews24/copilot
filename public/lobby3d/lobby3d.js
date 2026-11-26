@@ -21,6 +21,7 @@ import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, 
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
+import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
 
 const H = 3.4; // altezza delle stanze
 const DOOR = 1.3, DOOR_H = 2.5; // mezza larghezza e altezza delle porte
@@ -718,8 +719,7 @@ export function createLobby3D(app) {
     }else if(key==='forza-4'){
       // niente griglia stampata: c'è quella vera in piedi sul tavolo (models/forza4.glb, più sotto)
     }else{
-      for(let i=0;i<5;i++){g.save();g.translate(150+i*52,164+Math.abs(i-2)*11);g.rotate((i-2)*.14);g.fillStyle='#182f29';g.fillRect(-35,-61,86,130);g.fillStyle=key==='uno'?['#ca4b41','#d9aa37','#43855b','#407ca2','#bb4740'][i]:'#f3e1bc';g.fillRect(-38,-65,84,127);
-        g.fillStyle=key==='uno'?'#fff1d8':i%2?'#a84035':'#39332d';g.font='bold 42px Georgia';g.fillText(key==='uno'?String(i+3):['♦','♣','♥','♠','♦'][i],4,13);g.restore()}
+      // giochi di carte: niente carte stampate, ci sono quelle vere sul panno (models/carte.glb, più sotto)
     }
   });
   const draughtGeometry=new THREE.CylinderGeometry(.036,.04,.022,12);
@@ -732,6 +732,7 @@ export function createLobby3D(app) {
   // dicono dove vanno; i blocchi di prima (cardStandIns) restano finché il modello non arriva
   const cardTables=[],cardChairs=[],cardStandIns=[];
   let connectFour=null; // [x, z] del tavolo di Forza 4, se c'è
+  const cardGames=[]; // [gioco, x, z] dei tavoli di carte
   BOARD.forEach(([key,title],i)=>{
     if(!avail.has(key))return;
     const x=(i%3-1)*4.1,z=-8.8-Math.floor(i/3)*3.55;
@@ -739,6 +740,7 @@ export function createLobby3D(app) {
     cardStandIns.push(box(.48,.63,.48,darkWood,x,.34,z),box(1.98,.13,1.4,walnut,x,.74,z));
     cardTables.push([x,z,0]);
     if(key==='forza-4')connectFour=[x,z];
+    if(CARD_LAYOUTS[key])cardGames.push([key,x,z]);
     box(1.91,.022,1.33,brassTrim,x,.816,z);
     plane(1.84,1.27,new THREE.MeshStandardMaterial({map:tabletop(key,title),roughness:.86}),x,.834,z,0,-Math.PI/2);
     if(key==='checkmate'||key==='dama-italiana'){
@@ -797,6 +799,12 @@ export function createLobby3D(app) {
     q.setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
     spare.forEach(([side,k,c],i)=>{set.setMatrixAt(game.length+i,m.compose(new THREE.Vector3(tx+side*.62,top+.012,tz-.11+k*.044),q,one));set.setColorAt(game.length+i,new THREE.Color(c))});
     set.castShadow=true;scene.add(set);
+  });
+  // carte sui tavoli di UNO, Scopa, Briscola e Briscola in cinque (blender/carte.blend → models/carte.glb): le
+  // posizioni sono dati in table-cards.js; per tavolo un atlante delle facce e tre oggetti soltanto
+  if(cardGames.length)new GLTFLoader().load(new URL('models/carte.glb',import.meta.url).href,gltf=>{
+    const parts=cardParts(gltf);
+    for(const [key,x,z] of cardGames)for(const mesh of buildCardTable(parts,CARD_LAYOUTS[key],x,z))scene.add(mesh);
   });
   // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
   // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)
