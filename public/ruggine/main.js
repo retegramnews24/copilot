@@ -4,14 +4,28 @@ import { EffectComposer } from '../vendor/three/addons/postprocessing/EffectComp
 import { RenderPass } from '../vendor/three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from '../vendor/three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from '../vendor/three/addons/postprocessing/OutputPass.js';
-import { N, HALF, frame, at, buildWorld, drawTrack, rnd } from './world.js?v=895535b332';
-import { Car, drive, aiInput, bump, Shots } from './cars.js?v=11936ea927';
+import {
+  N,
+  HALF,
+  frame,
+  at,
+  buildWorld,
+  drawTrack,
+  rnd,
+  LEVEL,
+  MAX_LEVEL,
+  LEVEL_KEY
+} from './world.js?v=ef9bc19a2d';
+import { Car, drive, aiInput, bump, Shots, levelSetup, PLAYER_START } from './cars.js?v=7b1562fbc6';
 import { FX } from './fx.js?v=c05c5dd7b1';
 import { Sfx } from './sound.js?v=3b89da4c4e';
 import { isTouchDevice } from '../touch-device.js';
 
 const $ = id => document.getElementById(id);
 const LAPS = 3;
+// livello: pista e avversari cambiano a ogni livello (world.js, cars.js); il livello 1 è il GP della Raffineria
+const RACE_NAME = LEVEL === 1 ? 'GP della Raffineria' : 'Raffineria · livello ' + LEVEL;
+const rivals = levelSetup(LEVEL);
 // telefono o computer: deciso in un solo punto per tutta l'app (touch-device.js, analisi 10.12)
 const touch = isTouchDevice();
 document.body.classList.toggle('touch', touch);
@@ -82,8 +96,7 @@ const toMini = drawTrack(trackImg.getContext('2d'), mini.width, mini.height);
 // ---------- auto ----------
 const cars = [
   new Car(scene, 0xffbd20, 89, 'Tu', false),
-  new Car(scene, 0x23a7ae, 7, 'Scorpione', true),
-  new Car(scene, 0xdd5244, 13, 'Avvoltoio', true)
+  ...rivals.map(r => new Car(scene, r.color, r.num, r.name, true))
 ];
 const player = cars[0];
 const shots = new Shots(scene);
@@ -129,13 +142,11 @@ let mode = 'grid',
   finishOrder = [];
 function reset() {
   shots.clear();
-  [
-    [0, -14, 1.8],
-    [1, -6, -1.8],
-    [2, -22, -1.8]
-  ].forEach(([j, prog, lane]) => cars[j].place(prog, lane));
+  cars[0].place(...PLAYER_START);
+  rivals.forEach((r, k) => cars[k + 1].place(...r.start));
   cars.forEach((c, j) => {
-    c.skill = j === 0 ? 1 : 0.97 + j * 0.02;
+    c.skill = j === 0 ? 1 : rivals[j - 1].skill;
+    c.aggr = j === 0 ? 1 : rivals[j - 1].aggr;
     c.finishTime = 0;
     c.lapStart = 0;
   });
@@ -229,9 +240,25 @@ function action() {
   else reset();
 }
 $('action').onclick = action;
+let nextLevel = false;
 $('sheetGo').onclick = () => {
   sfx.unlock();
+  if (nextLevel) return goToLevel(LEVEL + 1);
   reset();
+};
+// cambia livello ricaricando la pagina con ?livello=N: strada, muri e minimappa si costruiscono sulla pista nuova
+function goToLevel(level) {
+  const u = new URL(location.href);
+  u.searchParams.set('livello', String(level));
+  location.replace(u.href);
+}
+$('levelOne').onclick = () => {
+  try {
+    localStorage.setItem(LEVEL_KEY, '1');
+  } catch {
+    /* niente memoria: basta l'indirizzo */
+  }
+  goToLevel(1);
 };
 function toggleView() {
   view = view === 'follow' ? 'top' : 'follow';
@@ -382,14 +409,23 @@ function showResults() {
     .sort((a, b) => (a.finishTime || 1e9) - (b.finishTime || 1e9) || b.progress - a.progress);
   $('sheetT').textContent =
     order[0] === player ? 'Hai vinto il GP!' : `Sei arrivato ${order.indexOf(player) + 1}º`;
-  $('sheetS').textContent = 'GP della Raffineria · ' + LAPS + ' giri';
+  $('sheetS').textContent = RACE_NAME + ' · ' + LAPS + ' giri · ' + (cars.length - 1) + ' avversari';
   $('results').innerHTML = order
     .map(
       c =>
         `<li class="${c === player ? 'me' : ''}">${c.name} · ${c.finishTime ? Math.floor(c.finishTime / 60) + ':' + (c.finishTime % 60).toFixed(1).padStart(4, '0') : 'in gara'}</li>`
     )
     .join('');
-  $('sheetGo').textContent = 'Rivincita';
+  // vinto: si sblocca il livello dopo (salvato sul telefono); perso: si riprova lo stesso
+  const won = order[0] === player && LEVEL < MAX_LEVEL;
+  if (won)
+    try {
+      localStorage.setItem(LEVEL_KEY, String(LEVEL + 1));
+    } catch {
+      /* senza memoria si passa lo stesso, con l'indirizzo */
+    }
+  nextLevel = won;
+  $('sheetGo').textContent = won ? 'Livello ' + (LEVEL + 1) : 'Riprova';
   $('sheet').hidden = false;
 }
 
@@ -469,10 +505,13 @@ reset();
 mode = 'grid';
 $('action').textContent = 'Parti';
 $('signal').textContent = '';
-$('sheetT').textContent = 'GP della Raffineria';
-$('sheetS').textContent = touch
-  ? 'Sei la gialla n. 89. Gas e sterzo insieme per partire; Colpo stordisce chi hai davanti; i bidoni rossi danno il nitro (tocca Gas due volte per usarlo).'
-  : 'Sei la gialla n. 89. WASD o frecce per guidare, Spazio per sparare, Shift per il nitro (prendi i bidoni rossi), V per la vista.';
+$('sheetT').textContent = RACE_NAME;
+$('levelOne').hidden = LEVEL === 1;
+$('sheetS').textContent =
+  (LEVEL > 1 ? 'Livello ' + LEVEL + ': ' + (cars.length - 1) + ' avversari, più veloci. ' : '') +
+  (touch
+    ? 'Sei la gialla n. 89. Gas e sterzo insieme per partire; Colpo stordisce chi hai davanti; i bidoni rossi danno il nitro (tocca Gas due volte per usarlo).'
+    : 'Sei la gialla n. 89. WASD o frecce per guidare, Spazio per sparare, Shift per il nitro (prendi i bidoni rossi), V per la vista.');
 $('results').innerHTML = '';
 $('sheetGo').textContent = 'Corri';
 $('sheet').hidden = false;

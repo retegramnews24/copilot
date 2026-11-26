@@ -14,7 +14,9 @@ register(
 );
 const { Car, drive, aiInput, bump, Shots, setRandom, MIN_TARGET, STUN, GUARD } =
   await import('../public/ruggine/cars.js');
-const { N } = await import('../public/ruggine/world.js');
+const W = await import('../public/ruggine/world.js');
+const { N } = W;
+const { levelSetup, PLAYER_START } = await import('../public/ruggine/cars.js');
 
 // generatore con seme (mulberry32)
 const seeded = seed => () => {
@@ -60,6 +62,41 @@ for (const seed of SEEDS) {
   for (const c of cars)
     assert.ok(c.finish, `corsa ${seed}: l'auto ${c.name} non finisce (ferma al punto ${c.idx})`);
 }
+
+// 1b. livelli: ogni pista generata rispetta le regole (curve non più strette del minimo, le parti lontane non si
+// toccano, la raffineria resta nel prato) e tutte le auto, con gli avversari e la bravura del livello, finiscono
+const LEVELS = 20;
+for (let level = 1; level <= LEVELS; level++) {
+  W.useLevel(level);
+  const P = W.track;
+  assert.equal(P.length, N);
+  assert.ok(Math.min(...W.radii(P)) >= W.minRadius(level) - 0.05, `livello ${level}: curva troppo stretta`);
+  assert.ok(W.selfGap(P) >= 2 * W.WALL + 1, `livello ${level}: due parti della pista si toccano`);
+  if (level > 1)
+    assert.ok(
+      P.every(p => Math.abs(p.x) > 46 || Math.abs(p.z) > 22),
+      `livello ${level}: la pista passa nella raffineria`
+    );
+  const rivals = levelSetup(level);
+  assert.equal(rivals.length, Math.min(5, 2 + Math.floor((level - 1) / 3)));
+  setRandom(seeded(level));
+  const cars = [car('Tu', ...PLAYER_START, 1), ...rivals.map(r => car(r.name, ...r.start, r.skill))];
+  rivals.forEach((r, k) => (cars[k + 1].aggr = r.aggr));
+  const shots = new Shots(scene);
+  for (let time = 0; time < 8 * 60 && cars.some(c => !c.finish); time += DT) {
+    for (const c of cars) {
+      const input = aiInput(c, cars, DT);
+      if (input.fire) shots.fire(c);
+      drive(c, input, DT, cars);
+    }
+    bump(cars);
+    shots.update(DT, cars, () => {});
+  }
+  for (const c of cars)
+    assert.ok(c.finish, `livello ${level}: l'auto ${c.name} non finisce (ferma al punto ${c.idx})`);
+}
+setRandom(null);
+W.useLevel(1);
 
 // 2. il punto della curva stretta: da ferma l'auto riparte (prima l'obiettivo era zero e non dava gas)
 setRandom(seeded(99));
