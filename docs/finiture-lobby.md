@@ -22,8 +22,11 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 - `public/lobby3d/textures.js`, `wallFinish`: le pareti lunghe di atrio e biliardo hanno solo il colore; la boiserie non
   è più dipinta sulla texture.
 
+## Fatto in Blender
+
+- Mobile della radio: credenza di noce anni '60, ante a doghe, pomelli e filo d'ottone, gambe affusolate con i puntali (`blender/credenza_radio.blend` → `public/lobby3d/models/credenza_radio.glb`, circa 4.100 triangoli). Stesse misure del bancone di prima: la radio resta alla stessa altezza.
+
 ## Da fare in Blender
 
-Pannello di boiserie con il bordo a cornice, tre cornici per i quadri (cassetta dorata, ottone sottile, neon), il mobile
-della radio (credenza di noce anni '60 con gambe affusolate e piano in ottone, al posto della scatola di oggi), la
+Pannello di boiserie con il bordo a cornice, tre cornici per i quadri (cassetta dorata, ottone sottile, neon), la
 rastrelliera delle stecche per il biliardo, le applique d'ottone.

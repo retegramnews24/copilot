@@ -1056,8 +1056,14 @@ export function createLobby3D(app) {
   poster(-6.94,12,Math.PI/2,'CINEMA','PROIEZIONE IN SALA',['#442333','#ffe2ab','#c58461'],'film');
   // Reception counter and tabletop receiver on the east side of the atrium.
   const counterX=5.95,counterZ=-3.35;
-  box(1.14,.9,2.15,walnut,counterX,.45,counterZ);
-  box(1.25,.09,2.29,brassTrim,counterX,.94,counterZ);
+  // il mobile della radio: credenza di noce anni '60 con ante a doghe, gambe affusolate e filo d'ottone
+  // (blender/credenza_radio.blend → models/credenza_radio.glb, stile «Circolo»); finché non arriva, la scatola di prima
+  const counterStandIn=[box(1.14,.9,2.15,walnut,counterX,.45,counterZ),box(1.25,.09,2.29,brassTrim,counterX,.94,counterZ)];
+  new GLTFLoader().load(new URL('models/credenza_radio.glb',import.meta.url).href,gltf=>{
+    const credenza=gltf.scene;credenza.position.set(counterX,0,counterZ);credenza.rotation.y=-Math.PI/2; // ante verso la stanza
+    credenza.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
+    scene.add(credenza);for(const o of counterStandIn)scene.remove(o);
+  });
   solid(counterX-.63,counterX+.63,counterZ-1.15,counterZ+1.15);
   const receiver=new THREE.Group();receiver.position.set(counterX,1.00,counterZ);receiver.rotation.y=-Math.PI/2;scene.add(receiver);
   // radio vintage fatta in Blender (blender/radio.blend → models/radio.glb): cupola in legno, griglia in stoffa,
