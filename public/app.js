@@ -26,11 +26,11 @@ import {createNotices} from './notices.js?v=2da209359f';
 import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
-import {createMotoLink} from './moto-link.js?v=30bcadda95';
-import {createGolfLink} from './golf-link.js?v=907761b1e9';
-import {createArcadeLink} from './arcade-link.js?v=bb117573ab';
-import {createF1Link} from './f1-link.js?v=f54422310f';
-import {createBiliardoLink} from './biliardo-link.js?v=514051bacd';
+import {createMotoLink} from './moto-link.js?v=7ca29f05f4';
+import {createGolfLink} from './golf-link.js?v=3f3958e0a2';
+import {createArcadeLink} from './arcade-link.js?v=a4ce33c363';
+import {createF1Link} from './f1-link.js?v=8cf05cfcd5';
+import {createBiliardoLink} from './biliardo-link.js?v=2b2c975586';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 import { MSG } from './messages.js?v=3be0dc6ab5';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.

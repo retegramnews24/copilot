@@ -4,6 +4,7 @@
 import { CAMPAIGNS, DEFAULT_CAMPAIGN } from './golf/courses.js?v=d38be2cad9';
 import { golfColors } from './appearance.js?v=784dba932c';
 import { read, save } from './prefs.js?v=bd123656a4';
+import { pageUrl } from './page-version.js';
 const $ = id => document.getElementById(id);
 
 export function createGolfLink({
@@ -51,9 +52,10 @@ export function createGolfLink({
       tg?.disableVerticalSwipes?.();
     } catch {}
     $('golf-overlay').hidden = false;
-    $('golf-frame').src =
-      '/golf/index.html?v=12' +
-      (online ? '&online=1' : '&campaign=' + encodeURIComponent(golfCampaign.value));
+    $('golf-frame').src = pageUrl(
+      '/golf/index.html',
+      online ? { online: 1 } : { campaign: golfCampaign.value }
+    ); // versione dell'app: page-version.js
     tg?.BackButton?.show();
   }
   async function syncGolf() {

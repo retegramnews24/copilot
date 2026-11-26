@@ -1,4 +1,6 @@
 import {build} from 'esbuild';
+// versione dell'app negli indirizzi delle pagine dei giochi (public/page-version.js)
+const V=JSON.parse(await (await import('node:fs/promises')).readFile(new URL('../package.json',import.meta.url),'utf8')).version;
 import {JSDOM,VirtualConsole} from 'jsdom';
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -95,7 +97,7 @@ for(const game of ['number-connect','pong']){
  const launch=get('play-'+game),frame=get('arcade-frame'),overlay=get('arcade-overlay');
  launch.click();
  assert.equal(overlay.hidden,false);
- assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v='+(game==='pong'?3:2));
+ assert.equal(frame.getAttribute('src'),'/arcade/'+game+'.html?v='+V);
  w.dispatchEvent(new w.MessageEvent('message',{origin:'https://wrong.test',source:frame.contentWindow,data:{type:'arcade:exit'}}));
  assert.equal(overlay.hidden,false);
  w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:frame.contentWindow,data:{type:'arcade:exit'}}));
@@ -120,7 +122,7 @@ w.WebSocket=class extends originalArcadeSocket{
 };
 get('create-pong').click();
 await new Promise(resolve=>setTimeout(resolve,0));
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/arcade/pong.html?v=3&online=1');
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/arcade/pong.html?v='+V+'&online=1');
 const arcadeMessage=data=>w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:arcadeOnlineFrame.contentWindow,data}));
 arcadeMessage({type:'pong:ready'});
 assert.ok(pongSocketFixture);
@@ -149,12 +151,12 @@ arcadeMessage({type:'arcade:exit'});
 w.fetch=originalArcadeFetch;
 assert.match(get('blackboard-rooms').textContent,/Sala 1Fausto/);
 get('blackboard-rooms').querySelector('button').click();
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=6');
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v='+V);
 arcadeMessage({type:'arcade:exit'});
 w.fetch=(path,options)=>path==='/api/blackboard/create'?Promise.resolve(Response.json({id:'2',number:2})):originalArcadeFetch(path,options);
 get('open-blackboard').click();
 await new Promise(resolve=>setTimeout(resolve,0));
-assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v=6');
+assert.equal(arcadeOnlineFrame.getAttribute('src'),'/blackboard/index.html?v='+V);
 w.fetch=originalArcadeFetch;
 arcadeMessage({type:'blackboard:ready'});
 assert.deepEqual(blackboardMessages.at(-1),{type:'enter',room:'2',since:0});
@@ -207,7 +209,7 @@ assert.equal(get('moto-course'),null);
 get('play-moto-trial').click();
 const motoFrame=get('moto-trial-frame');
 assert.equal(get('moto-trial-overlay').hidden,false);
-assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?v=9');
+assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?v='+V);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:w,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,false);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
@@ -223,7 +225,7 @@ w.fetch=async(path,opts)=>{
 get('create-moto-trial').click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.equal(get('moto-trial-overlay').hidden,false);
-assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?multiplayer=1&v=9');
+assert.equal(motoFrame.getAttribute('src'),'/moto-trial/index.html?v='+V+'&multiplayer=1');
 assert.equal(requestedCourse,undefined);
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:motoFrame.contentWindow,data:{type:'moto-trial:exit'}}));
 assert.equal(get('moto-trial-overlay').hidden,true);
@@ -237,7 +239,7 @@ assert.equal(get('golf-collision-choice').hidden,true);
 get('golf-setup-confirm').click();
 const golfFrame=get('golf-frame');
 assert.equal(get('golf-overlay').hidden,false);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=12&campaign=coast');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v='+V+'&campaign=coast');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 assert.equal(get('golf-overlay').hidden,true);
 
@@ -256,7 +258,7 @@ w.fetch=async(path,opts)=>{
 golfLobbyButton.click();
 await new Promise(resolve=>setTimeout(resolve,30));
 assert.deepEqual(golfCalls,[['/api/golf/'+lobbyGolf.room+'/state','GET']]);
-assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v=12&online=1');
+assert.equal(golfFrame.getAttribute('src'),'/golf/index.html?v='+V+'&online=1');
 w.dispatchEvent(new w.MessageEvent('message',{origin:w.location.origin,source:golfFrame.contentWindow,data:{type:'golf:exit'}}));
 let golfCreate;
 w.fetch=async(path,opts)=>{

@@ -4,6 +4,7 @@
 // l'iframe mostra e chiede. Anche Telegram resta qui: margini, Indietro, vibrazione, conferma di chiusura.
 import { telegramHaptic } from './haptic.js?v=c280753040';
 import { MSG } from './messages.js?v=3be0dc6ab5';
+import { pageUrl } from './page-version.js';
 const $ = id => document.getElementById(id);
 
 export function createBiliardoLink({
@@ -46,7 +47,7 @@ export function createBiliardoLink({
       tg?.disableVerticalSwipes?.();
     } catch {}
     overlay.hidden = false;
-    frame.src = '/biliardo/index.html?v=2' + (online ? '&online=1' : '');
+    frame.src = pageUrl('/biliardo/index.html', online ? { online: 1 } : {}); // versione dell'app: page-version.js
     tg?.BackButton?.show();
   }
   let failures = 0;
