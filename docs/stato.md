@@ -19,13 +19,10 @@ davanti.
 
 ## Da provare
 
-- Backup dall'app (Impostazioni → Backup, solo per il proprietario), nella 1.0.69. Provato il 26 novembre
-  sull'app di prova: il proprietario è riconosciuto (creatore del gruppo), il bot manda il file in chat, una X
-  disegnata sulla lavagna dopo il backup sparisce col ripristino.
-
-- La Lobby 3D nuova (stile «Circolo», arredi di Blender, tavoli e sedie moderni, pezzi veri su tutti i tavoli) è
-  già su `main` ma non è ancora stata vista dentro Telegram: guardarla nell'app vera e fare i controlli a mano di
-  `docs/controlli-prima-del-rilascio.md`.
+Niente. Il 26 novembre il proprietario ha visto la Lobby 3D nuova nell'app vera e ha fatto le prove del balilla
+(gol contato e fine partita sul server vero, posto tenuto 30 secondi con l'app nascosta): tutto a posto. Il
+ripristino di un backup è stato provato sull'app di prova (Impostazioni → Backup). Lo schermo intero funziona su
+Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web non lo permette.
 
 ## Rimandato
 
@@ -36,8 +33,6 @@ davanti.
 - Dividere `public/lobby3d/lobby3d.js` e `public/app.js` in pezzi, uno per volta, con un piano.
 - F1 on paper!: salvare le mosse a blocchi sul server (analisi 11.8).
 - Punti facoltativi dell'analisi ancora aperti: 4.4, 4.8, 4.11, 4.12, 7.6, 7.9, 7.10, 7.11, 7.13.
-- Prove che mancano (analisi 9.11): gol contato e fine partita del balilla sul server vero; posto tenuto 30
-  secondi con l'app nascosta.
 - Avvisi dei giochi: toglierli dalla chat della Lobby (restano solo nella campanella) e renderli cliccabili sul
   pannello della Lobby 3D.
 
