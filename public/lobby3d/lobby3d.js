@@ -186,7 +186,20 @@ export function createLobby3D(app) {
   // Lungo ogni parete, saltando le porte: zoccoletto, parte bassa (boiserie di noce, velluto nel cinema, una riga di
   // neon nella sala giochi), battisedia e cornice sotto il soffitto. I pezzi con lo stesso materiale si uniscono alla
   // fine in un solo oggetto (mergeTrim): poche cose da disegnare anche sul telefono.
-  const trimGeo = new Map();
+  const trimGeo = new Map(), trimMeshes = new Map(), boiserie = [];
+  // pannello di boiserie, rastrelliera delle stecche e applique (blender/arredi_lobby.blend → models/finiture.glb)
+  const finishKit = new Promise((done) => new GLTFLoader().load(new URL('models/finiture.glb', import.meta.url).href, (g) => done(g.scene), undefined, () => done(null)));
+  // un pezzo di finishKit appoggiato a una parete: x, y, z sul muro, angle dove guarda; standIn sparisce quando arriva
+  const finishPiece = (name, x, y, z, angle, standIn = []) => finishKit.then((kit) => {
+    const src = kit?.getObjectByName(name);
+    if (!src) return;
+    const o = src.clone();
+    o.position.set(x, y, z);
+    o.rotation.y = angle;
+    o.traverse((m) => { if (m.isMesh && m.material.name === 'ap_vetro') m.material = glow('#ffd2a0', 1.28); });
+    scene.add(o);
+    for (const s of standIn) s.parent?.remove(s);
+  });
   const trimPiece = (m, sx, sy, sz, x, y, z) => {
     const g = new THREE.BoxGeometry(sx, sy, sz);
     g.translate(x, y, z);
@@ -211,6 +224,10 @@ export function createLobby3D(app) {
       // montanti della boiserie: un riquadro ogni 0,9 m circa
       const panels = Math.max(1, Math.round(len / 0.9));
       for (let k = 0; k <= panels; k++) put(T.lower, 0.045, T.railH - 0.2, 0.03, low, s + (len * k) / panels, 0.02);
+      // pannelli di Blender (boiserie_pannello) al posto di questi, quando arrivano: uno per riquadro
+      if (T.wood)
+        for (let k = 0; k < panels; k++)
+          boiserie.push({ axis, face, n, at: s + (len * (k + 0.5)) / panels, w: len / panels, h: T.railH - 0.14, color: T.wood, flat: T.lower });
       // lucine di cortesia nello zoccolo (cinema)
       if (T.lights) for (let p = s + 0.6; p < e - 0.3; p += 1.2) put(T.lights, 0.06, 0.03, 0.012, 0.1, p, 0.04);
     }
@@ -234,9 +251,10 @@ export function createLobby3D(app) {
   const sconceBrass=std('#a58052',.32,.72),sconceGlass=glow('#ffd2a0',1.28);
   for(const x of [-4.9,4.9])for(const end of [-1,1]){
     const z=end*5.89;
-    box(.20,.53,.07,sconceBrass,x,2.12,z);
-    box(.115,.36,.13,sconceGlass,x,2.12,z-end*.05);
-    for(const y of [1.92,2.32])box(.17,.035,.16,sconceBrass,x,y,z-end*.05);
+    // applique d'ottone a tulipano di Blender (finishPiece); queste scatole finché non arriva
+    const parts=[box(.20,.53,.07,sconceBrass,x,2.12,z),box(.115,.36,.13,sconceGlass,x,2.12,z-end*.05)];
+    for(const y of [1.92,2.32])parts.push(box(.17,.035,.16,sconceBrass,x,y,z-end*.05));
+    finishPiece('applique',x,2.05,end*6.0,end>0?Math.PI:0,parts);
   }
   const shadeMap = canvasTex(128,128,(g)=>{
     const shade=g.createRadialGradient(64,64,7,64,64,62);
@@ -561,6 +579,11 @@ export function createLobby3D(app) {
   const cueM = std('#d8b77f', 0.4);
   for (let i = 0; i < 7; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.014, 1.45, 8), cueM); c.position.set(-0.05, 0.98, -0.55 + i * 0.18); rack.add(c); }
   rack.position.set(18.95, 0, 0); scene.add(rack);
+  // rastrelliera vera di Blender: noce, mensola a coppette, otto stecche con il manico scuro e l'anello d'ottone
+  finishPiece('rastrelliera', 19.0, 0, 0, -Math.PI / 2, [rack]);
+  // applique anche qui, ai lati della porta (pareti nord e sud)
+  finishPiece('applique', 9.5, 2.05, -6.0, 0);
+  finishPiece('applique', 9.5, 2.05, 6.0, Math.PI);
   const jb = new THREE.Group();
   box(0.9, 1.4, 0.55, std('#3a0d22', 0.4, 0.3), 0, 0.7, 0, jb);
   ['#ff2bd6', '#ffd23f', '#22d3ee'].forEach((c, i) => { const t = new THREE.Mesh(new THREE.TorusGeometry(0.4 - i * 0.06, 0.014, 8, 32, Math.PI), glow(c, 3)); t.position.set(0, 1.4, 0.28); jb.add(t); });
@@ -677,6 +700,8 @@ export function createLobby3D(app) {
   wallX(-7.3,7.3,-18.28,cardWall);
   point('#ffe0af',16,0,2.95,-11.2,14);
   const opal=glow('#ffe6bc',1.45);
+  // applique d'ottone sulle pareti laterali, a metà sala
+  finishPiece('applique',-7.0,2.05,-12.2,Math.PI/2);finishPiece('applique',7.0,2.05,-12.2,-Math.PI/2);
   for(const x of [-4,0,4]){
     box(.025,.23,.025,brassTrim,x,H-.115,-12.1);
     box(1.6,.09,.18,opal,x,H-.27,-12.1);
@@ -1323,11 +1348,11 @@ export function createLobby3D(app) {
   // ========== rifiniture delle pareti, stanza per stanza (trimWall, stile «Circolo») ==========
   const TRIM = {
     // atrio: crema sopra, boiserie di noce sotto, battisedia d'ottone, cornice avorio
-    atrium: { lower: std('#5a3a28', 0.5), rail: std('#b8925a', 0.32, 0.7), skirt: std('#2e1d14', 0.55), crown: std('#f2e8d5', 0.7), railH: 1.0 },
+    atrium: { wood: '#5a3a28', lower: std('#5a3a28', 0.5), rail: std('#b8925a', 0.32, 0.7), skirt: std('#2e1d14', 0.55), crown: std('#f2e8d5', 0.7), railH: 1.0 },
     // sala tavoli: verde bottiglia, boiserie di noce, filo d'ottone
-    cards: { lower: std('#583828', 0.5), rail: std('#c3a064', 0.32, 0.64), skirt: std('#2e1d14', 0.55), crown: std('#5a3a28', 0.5), railH: 1.0 },
+    cards: { wood: '#583828', lower: std('#583828', 0.5), rail: std('#c3a064', 0.32, 0.64), skirt: std('#2e1d14', 0.55), crown: std('#5a3a28', 0.5), railH: 1.0 },
     // biliardo: rosso pompeiano, boiserie scura più alta (le stecche ci si appoggiano), oro brunito
-    pool: { lower: std('#3e2519', 0.5), rail: std('#8a6a3a', 0.35, 0.6), skirt: std('#22140d', 0.55), crown: std('#8a6a3a', 0.4, 0.5), railH: 1.2 },
+    pool: { wood: '#3e2519', lower: std('#3e2519', 0.5), rail: std('#8a6a3a', 0.35, 0.6), skirt: std('#22140d', 0.55), crown: std('#8a6a3a', 0.4, 0.5), railH: 1.2 },
     // sala giochi: niente legno, una riga di neon azzurro a metà parete e lo zoccolo che brilla
     arcade: { neon: glow('#33e1ff', 1.6), skirt: glow('#ff4fd8', 1.3), crown: std('#0b0a18', 0.6), railH: 1.0 },
     // cinema: pannelli in velluto come le poltrone, lucine di cortesia nello zoccolo
@@ -1362,9 +1387,29 @@ export function createLobby3D(app) {
     const mesh = new THREE.Mesh(mergeGeometries(list), m);
     mesh.receiveShadow = true;
     scene.add(mesh);
+    trimMeshes.set(m, mesh);
     for (const g of list) g.dispose();
   }
   trimGeo.clear();
+  // pannelli di boiserie veri: tutti in un oggetto a istanze (uno da disegnare), ognuno alla misura del suo riquadro e
+  // con il legno della sua stanza; i pannelli piatti di trimWall restano finché non arrivano
+  finishKit.then((kit) => {
+    const src = kit?.getObjectByName('boiserie_pannello');
+    const geo = src?.isMesh ? src.geometry : src?.children.find((c) => c.isMesh)?.geometry;
+    if (!geo || !boiserie.length) return;
+    const panels = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 }), boiserie.length);
+    const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4();
+    boiserie.forEach((b, i) => {
+      const angle = b.axis === 'x' ? (b.n > 0 ? 0 : Math.PI) : b.n > 0 ? Math.PI / 2 : -Math.PI / 2;
+      const at = b.axis === 'x' ? new THREE.Vector3(b.at, 0.14, b.face) : new THREE.Vector3(b.face, 0.14, b.at);
+      m4.compose(at, q.setFromAxisAngle(up, angle), new THREE.Vector3(b.w, b.h, 1));
+      panels.setMatrixAt(i, m4);
+      panels.setColorAt(i, new THREE.Color(b.color));
+    });
+    panels.receiveShadow = true;
+    scene.add(panels);
+    for (const b of boiserie) if (trimMeshes.get(b.flat)) trimMeshes.get(b.flat).visible = false;
+  });
 
   // ========== il personaggio ==========
   const me = makeCharacter(readLook());
