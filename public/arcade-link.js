@@ -4,8 +4,8 @@ import { blackboardLink } from './blackboard/link.js?v=bb859dccee';
 import { telegramHaptic } from './haptic.js?v=c280753040';
 import { renderNumberLeaders } from './leaderboard.js?v=e0418faadc';
 import { REOPEN } from './messages.js?v=3be0dc6ab5';
+import { pageUrl } from './page-version.js';
 const $ = id => document.getElementById(id);
-const standalonePages = { blackboard: '/blackboard/index.html?v=6', 'lunar-lander-3d': '/lunar-lander-3d/' };
 
 export function createArcadeLink({
   tg,
@@ -113,17 +113,16 @@ export function createArcadeLink({
       'allow-scripts allow-same-origin' + (game === 'binotto-simulator' ? ' allow-forms' : '')
     );
     arcadeFrame.title = title;
+    // ogni pagina con la versione dell'app nell'indirizzo: dopo un rilascio si carica quella nuova (page-version.js)
     const standalonePages = {
-      blackboard: '/blackboard/index.html?v=6',
+      blackboard: '/blackboard/index.html',
       'lunar-lander-3d': '/lunar-lander-3d/',
       'ruggine-89': '/ruggine/'
     };
-    arcadeFrame.src =
-      standalonePages[game] ??
-      '/arcade/' +
-        game +
-        '.html' +
-        (game === 'pong' ? (cabinet ? '?v=3&cabinet=1' : online ? '?v=3&online=1' : '?v=3') : '?v=2');
+    arcadeFrame.src = pageUrl(
+      standalonePages[game] ?? '/arcade/' + game + '.html',
+      game === 'pong' ? (cabinet ? { cabinet: 1 } : online ? { online: 1 } : {}) : {}
+    );
     tg?.BackButton?.show();
   }
   function closeArcade() {

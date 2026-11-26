@@ -1,6 +1,6 @@
 // Le auto di Ruggine 89: modelli 3D (telaio, roll-bar, ruote che girano e sterzano), guida arcade, avversari, colpi.
 import * as THREE from 'three';
-import { N, HALF, WALL, at, frame, nearest } from './world.js?v=895535b332';
+import { N, HALF, WALL, at, frame, nearest } from './world.js?v=ef9bc19a2d';
 
 // Numeri del gioco provati in tests/ruggine.test.mjs. Il caso (corsie, colpi) passa da random(): la prova mette un
 // generatore con seme, così ogni corsa di prova è sempre la stessa.
@@ -267,6 +267,35 @@ export function drive(c, input, dt, cars) {
   if (c.progress >= 3 * N && !c.finish) c.finish = true;
 }
 
+// Difficoltà per livello: ogni tre livelli un avversario in più (fino a cinque), e a ogni livello avversari un po'
+// più veloci e più pronti a sparare. Al livello 1 è la corsa di sempre: Scorpione e Avvoltoio.
+const RIVALS = [
+  [0x23a7ae, 7, 'Scorpione'],
+  [0xdd5244, 13, 'Avvoltoio'],
+  [0x7cb342, 21, 'Iena'],
+  [0x9c6ade, 33, 'Coyote'],
+  [0xe07b39, 44, 'Sciacallo']
+];
+const GRID = [
+  [-6, -1.8],
+  [-22, -1.8],
+  [-30, 1.8],
+  [-38, -1.8],
+  [-46, 1.8]
+];
+export const PLAYER_START = [-14, 1.8];
+export function levelSetup(level) {
+  const count = Math.min(RIVALS.length, 2 + Math.floor((level - 1) / 3));
+  return RIVALS.slice(0, count).map(([color, num, name], r) => ({
+    color,
+    num,
+    name,
+    start: GRID[r],
+    skill: Math.min(1.15, 0.99 + r * 0.02 + (level - 1) * 0.012),
+    aggr: Math.min(1.8, 1 + (level - 1) * 0.05)
+  }));
+}
+
 // pilota automatico: segue la sua corsia, frena prima delle curve, spara a chi ha davanti
 export function aiInput(c, cars, dt) {
   const look = 9 + Math.abs(c.v) * 0.35;
@@ -291,7 +320,7 @@ export function aiInput(c, cars, dt) {
       rz = o.z - c.z,
       fwd = Math.cos(c.a) * rx + Math.sin(c.a) * rz,
       side = Math.abs(Math.sin(c.a) * rx - Math.cos(c.a) * rz);
-    if (fwd > 2 && fwd < 22 && side < 1.3) fire = random() < 0.08;
+    if (fwd > 2 && fwd < 22 && side < 1.3) fire = random() < 0.08 * (c.aggr || 1);
   }
   return {
     steer: THREE.MathUtils.clamp(delta * 2.2, -1, 1),

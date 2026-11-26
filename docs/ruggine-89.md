@@ -19,6 +19,19 @@ Gira tutto sul telefono: niente server, niente multigiocatore, niente classifica
 
 Telefono o computer lo decide `public/touch-device.js`, come nel resto dell'app.
 
+## Livelli
+
+- Il livello 1 è il GP della Raffineria di sempre, con le curve allargate: quattro curve avevano raggio 4-5 caselle,
+  più strette del muro (6,2), e lì le auto si incagliavano. Ora nessuna curva scende sotto 11.
+- Dal livello 2 la pista la crea il gioco dal numero del livello (`trackFor` in `public/ruggine/world.js`): sempre la
+  stessa per lo stesso livello, diversa da un livello all'altro, sempre intorno alla raffineria. Più si sale, più
+  curve e più strette, ma mai sotto 8 caselle di raggio; le parti lontane della pista non si toccano mai.
+- Avversari (`levelSetup` in `public/ruggine/cars.js`): uno in più ogni tre livelli, fino a cinque; a ogni livello un
+  po' più veloci e più pronti a sparare.
+- Vincere sblocca il livello dopo (salvato sul telefono, chiave `ruggine.livello`); il pulsante «Livello N» ricarica
+  la pagina con `?livello=N`, così strada, muri e minimappa si costruiscono sulla pista nuova. «Ricomincia dal
+  livello 1» torna all'inizio. Livelli fino a 30.
+
 ## Regole
 
 - Il colpo stordisce chi hai davanti per 0,9 secondi; dopo lo stordimento c'è un secondo in cui non si può essere
@@ -37,5 +50,5 @@ Telefono o computer lo decide `public/touch-device.js`, come nel resto dell'app.
 ## Prove
 
 `tests/ruggine.test.mjs`: le funzioni di guida (`public/ruggine/cars.js`) girano senza grafica con un generatore con
-seme. Otto corse con tre auto guidate dal gioco devono finire tutte; un'auto ferma alla curva stretta deve ripartire;
+seme. Otto corse con tre auto guidate dal gioco devono finire tutte; per i livelli da 1 a 20 la pista rispetta le regole e tutte le auto del livello finiscono; un'auto ferma alla curva stretta deve ripartire;
 dopo un colpo serve un secondo prima del successivo. Per le prove a mano: `?dev` espone `window.ruggine`.

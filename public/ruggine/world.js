@@ -31,13 +31,158 @@ const S = 1.25; // il circuito originale, un po' più grande
 let seed = 1989;
 export const rnd = () => (seed = (Math.imul(1664525, seed) + 1013904223) >>> 0) / 4294967296;
 
+// ---------- livelli ----------
+// Ogni livello ha la sua pista, creata qui dal numero del livello (sempre la stessa per lo stesso numero). Il
+// livello 1 è il GP della Raffineria di sempre. Si passa al livello dopo ricaricando la pagina (main.js): così
+// strada, muri, portale e minimappa si costruiscono da capo sulla pista nuova.
+export const MAX_LEVEL = 30;
+export const LEVEL_KEY = 'ruggine.livello';
+function readLevel() {
+  try {
+    const v = Number(
+      new URLSearchParams(location.search).get('livello') ?? localStorage.getItem(LEVEL_KEY) ?? 1
+    );
+    return Number.isInteger(v) && v >= 1 ? Math.min(v, MAX_LEVEL) : 1;
+  } catch {
+    return 1; // senza pagina (prove in Node) o senza memoria del browser
+  }
+}
+export let LEVEL = readLevel();
+
 // ---------- tracciato ----------
-const curve = new THREE.CatmullRomCurve3(
-  CONTROLS.map(([x, z]) => new THREE.Vector3(x * S, 0, z * S)),
-  true,
-  'centripetal'
-);
-export const track = curve.getSpacedPoints(N).slice(0, N);
+// Raggio di curvatura minimo. Nelle curve più strette del muro (WALL) il muro interno si accartocciava e le auto si
+// incagliavano: 4 curve della pista di sempre avevano raggio 4-5. Le curve si allargano da sole (relax) finché
+// stanno sopra il minimo; sui livelli alti il minimo scende, ma mai sotto 8.
+export const minRadius = level => Math.max(8, 11 - (level - 1) * 0.4);
+const wrap = i => ((i % N) + N) % N;
+export function radii(P) {
+  const n = P.length,
+    p = i => P[((i % n) + n) % n],
+    ang = i => Math.atan2(p(i + 1).z - p(i).z, p(i + 1).x - p(i).x);
+  return P.map((_, i) => {
+    const a = ang(i - 4),
+      b = ang(i + 4),
+      da = Math.abs(Math.atan2(Math.sin(b - a), Math.cos(b - a)));
+    let len = 0;
+    for (let k = i - 4; k < i + 4; k++) len += Math.hypot(p(k + 1).x - p(k).x, p(k + 1).z - p(k).z);
+    return da < 1e-4 ? Infinity : len / da;
+  });
+}
+// punti a passo uguale lungo la linea chiusa
+function respace(P, n) {
+  const m = P.length,
+    acc = [0];
+  for (let i = 1; i <= m; i++)
+    acc.push(acc[i - 1] + Math.hypot(P[i % m].x - P[i - 1].x, P[i % m].z - P[i - 1].z));
+  const L = acc[m],
+    out = [];
+  let k = 0;
+  for (let j = 0; j < n; j++) {
+    const s = (j / n) * L;
+    while (acc[k + 1] < s) k++;
+    const t = (s - acc[k]) / (acc[k + 1] - acc[k]),
+      a = P[k],
+      b = P[(k + 1) % m];
+    out.push({ x: a.x + (b.x - a.x) * t, y: 0, z: a.z + (b.z - a.z) * t });
+  }
+  return out;
+}
+// allarga le curve sotto rMin spostando i punti verso la media dei vicini, poco alla volta
+export function relax(P, rMin) {
+  for (let round = 0; round < 400; round++) {
+    const R = radii(P);
+    if (Math.min(...R) >= rMin) return P;
+    const n = P.length,
+      next = P.map(p => ({ ...p }));
+    R.forEach((r, i) => {
+      if (r >= rMin) return;
+      for (let d = -6; d <= 6; d++) {
+        const j = (((i + d) % n) + n) % n,
+          a = P[(j - 1 + n) % n],
+          b = P[(j + 1) % n],
+          w = 0.25 * (1 - Math.abs(d) / 7);
+        next[j].x += ((a.x + b.x) / 2 - P[j].x) * w;
+        next[j].z += ((a.z + b.z) / 2 - P[j].z) * w;
+      }
+    });
+    P = respace(next, n);
+  }
+  return P;
+}
+// distanza minima tra due parti lontane della pista (le due strade e i loro muri non devono toccarsi)
+export function selfGap(P) {
+  let min = Infinity;
+  for (let i = 0; i < P.length; i += 2)
+    for (let j = i + 40; j < P.length; j += 2)
+      if (P.length - (j - i) >= 40) min = Math.min(min, Math.hypot(P[i].x - P[j].x, P[i].z - P[j].z));
+  return min;
+}
+const spline = (ctrl, closed = true) =>
+  new THREE.CatmullRomCurve3(ctrl, closed, 'centripetal').getSpacedPoints(N).slice(0, N);
+// la raffineria (oggetti fissi tra x -40 e 41, z -16 e 10) resta nel prato: le piste generate le girano intorno
+const KEEP = { x: 46, z: 22 },
+  BOUND = { x: 86, z: 48 };
+const outsideKeep = p => Math.abs(p.x) > KEEP.x || Math.abs(p.z) > KEEP.z;
+function generated(level) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    let s = level * 7919 + attempt * 104729;
+    const r = () => {
+      s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+      return s / 4294967296;
+    };
+    // più livello, più punti di controllo e più rientranze: più curve, e più strette. Ogni punto sta su un'ellisse
+    // grande, tirato verso il centro di una parte (le rientranze) ma mai dentro il rettangolo della raffineria
+    const n = Math.min(18, 7 + level),
+      wob = Math.min(0.55, 0.1 + level * 0.03),
+      ctrl = [];
+    for (let i = 0; i < n; i++) {
+      const a = ((i + (r() - 0.5) * 0.6) / n) * Math.PI * 2,
+        rx = 80 - r() * 8,
+        rz = 44 - r() * 5,
+        c = Math.abs(Math.cos(a)) || 1e-6,
+        sn = Math.abs(Math.sin(a)) || 1e-6,
+        exit = Math.min((KEEP.x + 5) / (c * rx), (KEEP.z + 5) / (sn * rz)),
+        k = Math.max(exit, 1 - wob * r());
+      ctrl.push(new THREE.Vector3(Math.cos(a) * rx * k, 0, Math.sin(a) * rz * k));
+    }
+    // scarto subito, prima del passaggio lento che allarga le curve (che sposta i punti di poche caselle)
+    const rough = spline(ctrl),
+      fits = p => outsideKeep(p) && Math.abs(p.x) < BOUND.x && Math.abs(p.z) < BOUND.z;
+    if (!rough.every(fits) || selfGap(rough) < 2 * WALL + 1) continue;
+    let P = relax(rough, minRadius(level));
+    if (!P.every(fits)) continue;
+    if (selfGap(P) < 2 * WALL + 3) continue;
+    // la partenza (punto 0, con il portale) sul tratto più dritto
+    const R = radii(P);
+    let best = 0,
+      straight = -1;
+    for (let i = 0; i < N; i++) {
+      let m = Infinity;
+      for (let d = -30; d <= 10; d++) m = Math.min(m, R[wrap(i + d)]);
+      if (m > straight) [straight, best] = [m, i];
+    }
+    return P.slice(best).concat(P.slice(0, best));
+  }
+  return null; // non dovrebbe succedere: si corre sulla pista di sempre
+}
+export function trackFor(level) {
+  const classic = () =>
+    relax(
+      spline(CONTROLS.map(([x, z]) => new THREE.Vector3(x * S, 0, z * S))).map(p => ({
+        x: p.x,
+        y: 0,
+        z: p.z
+      })),
+      minRadius(1)
+    );
+  return (level > 1 && generated(level)) || classic();
+}
+export let track = trackFor(LEVEL);
+// per le prove: un altro livello senza ricaricare (la grafica non si ricostruisce)
+export function useLevel(level) {
+  LEVEL = level;
+  track = trackFor(level);
+}
 export const at = i => track[((i % N) + N) % N];
 export function frame(i) {
   const p = at(i),

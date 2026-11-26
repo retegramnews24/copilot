@@ -5,6 +5,7 @@
 // Telegram stays here too: safe-area insets, Back, haptics, closing confirmation while racing.
 import { telegramHaptic } from './haptic.js?v=c280753040';
 import { MSG } from './messages.js?v=3be0dc6ab5';
+import { pageUrl } from './page-version.js';
 const $ = id => document.getElementById(id);
 
 export function createF1Link({
@@ -63,7 +64,7 @@ export function createF1Link({
       tg?.disableVerticalSwipes?.();
     } catch {}
     overlay.hidden = false;
-    frame.src = '/gara/index.html?v=2' + (online ? '&online=1' : '');
+    frame.src = pageUrl('/gara/index.html', online ? { online: 1 } : {}); // versione dell'app: page-version.js
     tg?.BackButton?.show();
   }
   let failures = 0;
