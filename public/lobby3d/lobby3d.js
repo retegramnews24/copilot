@@ -716,8 +716,7 @@ export function createLobby3D(app) {
       if(key==='scarabeo'){g.fillStyle='#493527';g.font='bold 19px monospace';[...'PAROLA'].forEach((v,i)=>g.fillText(v,196+i*tile,164))}
       if(key==='battaglia-navale'){g.fillStyle='#354854';g.fillRect(152,80,101,19);g.fillRect(263,134,19,75);disc(220,90,6,'#f66b41')}
     }else if(key==='forza-4'){
-      g.fillStyle='#346998';g.fillRect(100,34,312,246);
-      for(let y=0;y<6;y++)for(let x=0;x<7;x++)disc(130+x*42,58+y*39,15,y>=5-(x%3)?((x+y)%2?'#d95141':'#f5cb62'):'#183d40');
+      // niente griglia stampata: c'è quella vera in piedi sul tavolo (models/forza4.glb, più sotto)
     }else{
       for(let i=0;i<5;i++){g.save();g.translate(150+i*52,164+Math.abs(i-2)*11);g.rotate((i-2)*.14);g.fillStyle='#182f29';g.fillRect(-35,-61,86,130);g.fillStyle=key==='uno'?['#ca4b41','#d9aa37','#43855b','#407ca2','#bb4740'][i]:'#f3e1bc';g.fillRect(-38,-65,84,127);
         g.fillStyle=key==='uno'?'#fff1d8':i%2?'#a84035':'#39332d';g.font='bold 42px Georgia';g.fillText(key==='uno'?String(i+3):['♦','♣','♥','♠','♦'][i],4,13);g.restore()}
@@ -732,12 +731,14 @@ export function createLobby3D(app) {
   // tavoli e sedie moderni di Blender (blender/sala_tavoli.blend → models/sala_tavoli.glb), più sotto: queste liste
   // dicono dove vanno; i blocchi di prima (cardStandIns) restano finché il modello non arriva
   const cardTables=[],cardChairs=[],cardStandIns=[];
+  let connectFour=null; // [x, z] del tavolo di Forza 4, se c'è
   BOARD.forEach(([key,title],i)=>{
     if(!avail.has(key))return;
     const x=(i%3-1)*4.1,z=-8.8-Math.floor(i/3)*3.55;
     groundTint(x,z,2.75,2.35,contact);
     cardStandIns.push(box(.48,.63,.48,darkWood,x,.34,z),box(1.98,.13,1.4,walnut,x,.74,z));
     cardTables.push([x,z,0]);
+    if(key==='forza-4')connectFour=[x,z];
     box(1.91,.022,1.33,brassTrim,x,.816,z);
     plane(1.84,1.27,new THREE.MeshStandardMaterial({map:tabletop(key,title),roughness:.86}),x,.834,z,0,-Math.PI/2);
     if(key==='checkmate'||key==='dama-italiana'){
@@ -773,6 +774,29 @@ export function createLobby3D(app) {
     };
     place('tavolo_carte',cardTables);place('sedia_carte',cardChairs);
     for(const o of cardStandIns)scene.remove(o);
+  });
+  // Forza 4 sul suo tavolo (blender/forza4.blend → models/forza4.glb): la griglia in piedi al centro, di taglio, così
+  // ognuno dei due giocatori la vede dal suo lato; i gettoni della partita nei fori e quelli di riserva nel vassoio
+  // davanti a ciascuno (rossi a sinistra, gialli a destra). Per ora una partita di esempio: le posizioni sono dati
+  // (col, riga, colore), così più avanti si può mostrare la partita vera.
+  if(connectFour)new GLTFLoader().load(new URL('models/forza4.glb',import.meta.url).href,gltf=>{
+    const [tx,tz]=connectFour,top=.834,P=.06,ROW0=.079; // passo dei fori e centro della riga più bassa (forza4.blend)
+    const grid=gltf.scene.getObjectByName('f4_griglia'),disc=gltf.scene.getObjectByName('f4_gettone'),tray=gltf.scene.getObjectByName('f4_vassoio');
+    if(grid){const g=grid.clone();g.position.set(tx,top,tz);g.rotation.y=Math.PI/2;g.traverse(o=>{if(o.isMesh)o.castShadow=true});scene.add(g)}
+    for(const side of [-1,1])if(tray){const t=tray.clone();t.position.set(tx+side*.62,top,tz);scene.add(t)}
+    const discMesh=disc?.isMesh?disc:disc?.children.find(o=>o.isMesh);if(!discMesh)return;
+    const RED='#d9372f',YELLOW='#f2c230';
+    const game=[[3,0,RED],[2,0,YELLOW],[4,0,RED],[3,1,YELLOW],[1,0,YELLOW],[2,1,RED],[4,1,YELLOW],[3,2,RED],[5,0,RED],[5,1,YELLOW],[0,0,YELLOW]];
+    const spare=[];for(const [side,c] of [[-1,RED],[1,YELLOW]])for(let k=0;k<6;k++)spare.push([side,k,c]);
+    const set=new THREE.InstancedMesh(discMesh.geometry,discMesh.material,game.length+spare.length);
+    const m=new THREE.Matrix4(),q=new THREE.Quaternion(),one=new THREE.Vector3(1,1,1);
+    // nella griglia: il disco guarda i giocatori (asse lungo x)
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2);
+    game.forEach(([col,row,c],i)=>{set.setMatrixAt(i,m.compose(new THREE.Vector3(tx,top+ROW0+row*P,tz-(col-3)*P),q,one));set.setColorAt(i,new THREE.Color(c))});
+    // nel vassoio: distesi, in fila
+    q.setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
+    spare.forEach(([side,k,c],i)=>{set.setMatrixAt(game.length+i,m.compose(new THREE.Vector3(tx+side*.62,top+.012,tz-.11+k*.044),q,one));set.setColorAt(game.length+i,new THREE.Color(c))});
+    set.castShadow=true;scene.add(set);
   });
   // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
   // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)
