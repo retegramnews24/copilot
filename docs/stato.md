@@ -19,6 +19,11 @@ davanti.
 
 ## Da provare
 
+- Backup dall'app (Impostazioni → Backup, solo per il proprietario), su `staging`, non ancora su `main`. Prova
+  sull'app di prova: fai un backup (arriva il file in chat), cambia qualcosa (per esempio la lavagna), Ripristina,
+  controlla che sia tornato com'era. Se la sezione non compare, chi ha creato il gruppo è un altro: mettere il
+  proprio numero Telegram nella variabile `OWNER_ID` del Worker.
+
 - La Lobby 3D nuova (stile «Circolo», arredi di Blender, tavoli e sedie moderni, pezzi veri su tutti i tavoli) è
   già su `main` ma non è ancora stata vista dentro Telegram: guardarla nell'app vera e fare i controlli a mano di
   `docs/controlli-prima-del-rilascio.md`.

@@ -1,6 +1,14 @@
 // Every HTTP request reaches this function first (Worker entry): static assets, Telegram webhook, session,
 // then authenticated /api/ routes, forwarded to the right Durable Object.
-import { secureEqual, requireMember, telegramAccessTag, login, issueSession, sessionUser } from './auth.js';
+import {
+  secureEqual,
+  requireMember,
+  isOwner,
+  telegramAccessTag,
+  login,
+  issueSession,
+  sessionUser
+} from './auth.js';
 import { radioNowPlaying } from './radio-metadata.js';
 import { json, noticeHub, internalHeaders, INTERNAL_HEADER, lobbyHub } from './worker-shared.js';
 import { setupTelegram, telegramWebhook } from './telegram-bot.js';
@@ -129,6 +137,27 @@ async function admin(req, env, u) {
   return json({ error: MSG.notFound }, 404);
 }
 
+// Backup dall'app, solo per il proprietario (isOwner): per gli altri queste pagine non esistono.
+// GET /api/backup elenco · POST /api/backup/run copia adesso, il bot la manda in privato al proprietario ·
+// POST /api/backup/<id>/send rimanda quella copia · POST /api/backup/<id>/restore rimette tutto com'era.
+async function ownerBackup(req, env, u, user) {
+  if (!(await isOwner(user, env))) return json({ error: MSG.notFound }, 404);
+  const hub = env.ROOMS.get(env.ROOMS.idFromName('backup-v1'));
+  if (u.pathname === '/api/backup' && req.method === 'GET') return hub.fetch('https://internal/backups/list');
+  if (u.pathname === '/api/backup/run' && req.method === 'POST')
+    return hub.fetch('https://internal/backups/run', {
+      method: 'POST',
+      body: JSON.stringify({ chat: user.id })
+    });
+  const one = u.pathname.match(/^\/api\/backup\/([\w-]{10,40})\/(send|restore)$/);
+  if (one && req.method === 'POST')
+    return hub.fetch('https://internal/backups/' + one[1] + '/' + one[2], {
+      method: 'POST',
+      body: JSON.stringify(one[2] === 'send' ? { chat: user.id } : {})
+    });
+  return json({ error: MSG.notFound }, 404);
+}
+
 async function route(req, env) {
   const u = new URL(req.url);
   if (u.pathname.startsWith('/api/admin/')) return admin(req, env, u);
@@ -157,6 +186,8 @@ async function route(req, env) {
   if (denied) return denied;
   if (u.pathname === '/api/session/refresh' && req.method === 'POST') return issueSession(user, env);
   if (u.pathname === '/api/client-error' && req.method === 'POST') return clientError(req, user);
+  if (u.pathname === '/api/backup' || u.pathname.startsWith('/api/backup/'))
+    return ownerBackup(req, env, u, user);
   if (u.pathname.startsWith('/api/simulator/')) {
     const headers = new Headers({
       'X-Checkmate-User': JSON.stringify(user),

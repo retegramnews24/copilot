@@ -32,6 +32,7 @@ import {createArcadeLink} from './arcade-link.js?v=a4ce33c363';
 import {createF1Link} from './f1-link.js?v=8cf05cfcd5';
 import {createBiliardoLink} from './biliardo-link.js?v=2b2c975586';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
+import {initBackupPanel} from './backup-panel.js?v=916a596819';
 import { MSG } from './messages.js?v=3be0dc6ab5';
 // The test environment (binottoland-motore-staging) shows a label, so it is never mistaken for the real app.
 if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='staging';
@@ -444,6 +445,9 @@ document.querySelectorAll('[data-back-settings]').forEach(b=>b.onclick=()=>selec
 $('open-archive').onclick=()=>{renderArchive();selectPage('archive')};
 $('open-info').onclick=()=>selectPage('info');
 const {renderThemePreview}=initSettings({appName:APP_NAME,tg,trace,events});
+// Impostazioni → Backup: compare solo al proprietario (il server dice chi è); si aggiorna aprendo Impostazioni
+const backupPanel=initBackupPanel({tg,request:(path,data)=>request(path,data)});
+$('tab-settings')?.addEventListener('click',()=>{if(sessionToken)backupPanel.refresh()});
 initGamesFilter(); // pagina Giochi: ricerca e filtri
 async function createTable(game,target,mode,seats){
  const j=await api('create',{game,target,mode,...(mode==='people'?{}:{seats})});

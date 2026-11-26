@@ -6,6 +6,15 @@
 - **Dove:** le ultime 8 copie restano su Cloudflare (Durable Object `backup-v1`). Se è impostato il secret `BACKUP_CHAT_ID`, il bot manda anche il file in privato a quella chat: una copia fuori da Cloudflare.
 - **Come funziona:** ogni Durable Object sa esportare e reimportare tutto il suo archivio (`/backup/export`, `/backup/import`); `backup.js` raccoglie i singoli archivi e quelli di ogni tavolo elencato in Lobby.
 
+### Dall'app (il modo più semplice)
+**Impostazioni → Backup**, visibile solo al proprietario: chi ha creato il gruppo Telegram, oppure l'utente scritto
+nella variabile `OWNER_ID` del Worker (numero Telegram), se c'è. Per tutti gli altri la sezione e le pagine
+`/api/backup` non esistono.
+- **Fai un backup adesso:** una copia nuova; il bot la manda in privato al proprietario come file `.json`.
+- **Ultime copie** (le 8 salvate su Cloudflare): **Manda** la rimanda in chat, **Ripristina** rimette tutto com'era
+  dopo una conferma.
+- Funziona uguale sull'app di prova (dati di staging): è lì che si prova il ripristino senza rischi.
+
 ### Da PC (serve il secret `ADMIN_TOKEN`)
 ```powershell
 $env:ADMIN_TOKEN='la-tua-chiave'
@@ -25,4 +34,4 @@ Senza `ADMIN_TOKEN` (almeno 24 caratteri) le pagine `/api/admin/...` non esiston
 - **Dove leggerli:** Cloudflare → Workers & Pages → binottoland-motore → **Logs** (Workers Logs, attivato con `observability` in `wrangler.jsonc`). Cercare `client-error` o `server-error`.
 
 ## Test
-`tests/backup-runtime.test.js`: nel worker vero salva, elenca, scarica, invia su Telegram (simulato), cancella un tavolo e lo ripristina, ripristino parziale, cron settimanale, chiave obbligatoria, limiti delle segnalazioni di errore.
+`tests/backup-runtime.test.js`: nel worker vero salva, elenca, scarica, invia su Telegram (simulato), cancella un tavolo e lo ripristina, ripristino parziale, cron settimanale, chiave obbligatoria, backup dall'app solo per il proprietario (copia mandata a lui, rimandata, ripristino), limiti delle segnalazioni di errore.
