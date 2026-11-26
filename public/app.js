@@ -38,7 +38,7 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.65',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.66',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
