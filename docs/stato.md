@@ -7,8 +7,7 @@ Aggiornato il 26 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.68**, con tutta la Lobby 3D nuova. Commit fatto, le 8 prove passate; diventa pubblica col Push da
-  GitHub Desktop.
+- `main`: **1.0.68**, con tutta la Lobby 3D nuova. Le 8 prove passate, push fatto: pubblicata.
 - `staging`: 1.0.68, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
@@ -18,11 +17,11 @@ Battaglia navale, Scacchi e Dama), come dati nei file `public/lobby3d/table-*.js
 così più avanti il tavolo potrà mostrare la partita vera. Sedie ai lati corti, ogni giocatore ha i suoi pezzi
 davanti.
 
-## Da provare dopo il Push
+## Da provare
 
-- La Lobby 3D nuova (stile «Circolo», arredi di Blender, tavoli e sedie moderni, pezzi veri su tutti i tavoli) non
-  è ancora stata vista dentro Telegram. Prima sull'app di prova, poi i controlli a mano di
-  `docs/controlli-prima-del-rilascio.md`, poi il Push di `main`.
+- La Lobby 3D nuova (stile «Circolo», arredi di Blender, tavoli e sedie moderni, pezzi veri su tutti i tavoli) è
+  già su `main` ma non è ancora stata vista dentro Telegram: guardarla nell'app vera e fare i controlli a mano di
+  `docs/controlli-prima-del-rilascio.md`.
 
 ## Rimandato
 
@@ -49,7 +48,8 @@ davanti.
 - Niente qualità automatica per i telefoni lenti.
 - Per ora poche analisi nuove.
 - Avvisi dei giochi nella campanella, non nella chat.
-- Commit solo quando lo chiede il proprietario; il push lo fa lui da GitHub Desktop.
+- Commit solo quando lo chiede il proprietario; il push lo fa Claude solo dopo il suo sì in chat, uno per volta
+  (o lui da GitHub Desktop).
 - Le informazioni di lavoro su Binottoland stanno solo qui nel repo (`CLAUDE.md`, questo file, i documenti dei
   giochi), non nelle note di Claude.
 

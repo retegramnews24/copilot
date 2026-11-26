@@ -38,7 +38,11 @@ questo file si carica da solo. Non tenere decisioni solo nelle note di Claude: v
 
 ## Commit e push
 
-- Commit solo quando viene chiesto, pochi e che raggruppano più passi. Mai push: si fa da GitHub Desktop.
+- Commit solo quando viene chiesto, pochi e che raggruppano più passi.
+- Push solo con la conferma del proprietario in chat: prima si scrive cosa si carica e su quale ramo, poi si aspetta
+  il sì. Una conferma vale per un push solo. Su `main` solo dopo la prova su staging e l'ok (vedi sopra). Mai push
+  forzati. L'accesso a GitHub è quello salvato in Windows (Git Credential Manager), il push si fa con il git di
+  GitHub Desktop.
 - Messaggio in italiano, che dice cosa cambia per chi gioca. Se contiene virgolette: `git commit -F file`.
 - Git non è nel PATH. Usa quello di GitHub Desktop, nella cartella `app-*` con il numero più alto:
   `%LOCALAPPDATA%\GitHubDesktop\app-*\resources\app\git\cmd\git.exe`.
