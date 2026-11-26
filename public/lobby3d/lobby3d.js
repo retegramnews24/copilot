@@ -21,6 +21,7 @@ import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, 
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
+import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea7100a3a8';
 import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
 
 const H = 3.4; // altezza delle stanze
@@ -707,19 +708,19 @@ export function createLobby3D(app) {
     g.fillStyle='#255348';g.fillRect(0,0,w,h);
     g.fillStyle='#e1c995';g.textAlign='center';g.font='bold 26px Georgia';g.fillText(title,w/2,360);
     const disc=(x,y,r,c)=>{g.fillStyle=c;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill()};
-    if(['checkmate','dama-italiana','scarabeo','battaglia-navale'].includes(key)){
-      const n=key==='scarabeo'?13:key==='battaglia-navale'?10:8, tile=260/n;
+    if(['checkmate','dama-italiana','battaglia-navale'].includes(key)){
+      const n=key==='battaglia-navale'?10:8, tile=260/n;
       for(let row=0;row<n;row++)for(let col=0;col<n;col++){
         const x=126+col*tile,y=26+row*tile;
-        g.fillStyle=key==='battaglia-navale'?'#507b93':key==='scarabeo'?((row+col)%5?'#bbac88':'#bb7970'):(row+col)%2?'#715138':'#dfcba7';
+        g.fillStyle=key==='battaglia-navale'?'#507b93':(row+col)%2?'#715138':'#dfcba7';
         g.fillRect(x,y,tile-.8,tile-.8);
       }
-      if(key==='scarabeo'){g.fillStyle='#493527';g.font='bold 19px monospace';[...'PAROLA'].forEach((v,i)=>g.fillText(v,196+i*tile,164))}
       if(key==='battaglia-navale'){g.fillStyle='#354854';g.fillRect(152,80,101,19);g.fillRect(263,134,19,75);disc(220,90,6,'#f66b41')}
     }else if(key==='forza-4'){
       // niente griglia stampata: c'è quella vera in piedi sul tavolo (models/forza4.glb, più sotto)
     }else{
-      // giochi di carte: niente carte stampate, ci sono quelle vere sul panno (models/carte.glb, più sotto)
+      // giochi di carte e Scarabeo: niente stampato, ci sono i pezzi veri sul panno (models/carte.glb e
+      // models/scarabeo.glb, più sotto)
     }
   });
   const draughtGeometry=new THREE.CylinderGeometry(.036,.04,.022,12);
@@ -733,6 +734,7 @@ export function createLobby3D(app) {
   const cardTables=[],cardChairs=[],cardStandIns=[];
   let connectFour=null; // [x, z] del tavolo di Forza 4, se c'è
   const cardGames=[]; // [gioco, x, z] dei tavoli di carte
+  let wordTable=null; // [x, z] del tavolo di Scarabeo, se c'è
   BOARD.forEach(([key,title],i)=>{
     if(!avail.has(key))return;
     const x=(i%3-1)*4.1,z=-8.8-Math.floor(i/3)*3.55;
@@ -741,6 +743,7 @@ export function createLobby3D(app) {
     cardTables.push([x,z,0]);
     if(key==='forza-4')connectFour=[x,z];
     if(CARD_LAYOUTS[key])cardGames.push([key,x,z]);
+    if(key==='scarabeo')wordTable=[x,z];
     box(1.91,.022,1.33,brassTrim,x,.816,z);
     plane(1.84,1.27,new THREE.MeshStandardMaterial({map:tabletop(key,title),roughness:.86}),x,.834,z,0,-Math.PI/2);
     if(key==='checkmate'||key==='dama-italiana'){
@@ -805,6 +808,11 @@ export function createLobby3D(app) {
   if(cardGames.length)new GLTFLoader().load(new URL('models/carte.glb',import.meta.url).href,gltf=>{
     const parts=cardParts(gltf);
     for(const [key,x,z] of cardGames)for(const mesh of buildCardTable(parts,CARD_LAYOUTS[key],x,z))scene.add(mesh);
+  });
+  // Scarabeo (blender/scarabeo.blend → models/scarabeo.glb): plancia al centro con le parole, un leggio con le tessere
+  // davanti a ciascun giocatore, sacchetto in un angolo; le tessere sono dati in table-scarabeo.js
+  if(wordTable)new GLTFLoader().load(new URL('models/scarabeo.glb',import.meta.url).href,gltf=>{
+    for(const o of buildScarabeoTable(gltf,SCARABEO_LAYOUT,...wordTable))scene.add(o);
   });
   // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
   // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)
