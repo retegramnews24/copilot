@@ -13,13 +13,18 @@ import {BOARD_WIDTH,BOARD_HEIGHT,CHALKS,ERASER,DEFAULT_SIZE} from '../blackboard
 import {embedYouTube} from '../cinema/youtube.js?v=c237aa9fc5';
 import { RoomEnvironment } from '../vendor/three/addons/environments/RoomEnvironment.js';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
-import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=743855ba47';
+import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=6d79d0e827';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
+import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea7100a3a8';
+import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
+import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
+import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
 
 const H = 3.4; // altezza delle stanze
 const DOOR = 1.3, DOOR_H = 2.5; // mezza larghezza e altezza delle porte
@@ -125,6 +130,21 @@ export function createLobby3D(app) {
   // come box, ma con gli spigoli arrotondati (raggio r)
   const rbox = (sx, sy, sz, r, m, x, y, z, parent = scene) => { const o = new THREE.Mesh(roundBoxGeometry(sx, sy, sz, r), m); o.position.set(x, y, z); parent.add(o); return o; };
   const box = (sx, sy, sz, m, x, y, z, parent = scene) => { const o = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), m); o.position.set(x, y, z); parent.add(o); return o; };
+  // Cornici dei quadri fatte in Blender (blender/cornici.blend → models/cornici.glb, stile «Circolo»): cassetta dorata,
+  // ottone sottile e neon, ognuna alla misura del suo quadro. Si caricano una volta; finché non arrivano resta la
+  // cornice semplice (standIn), poi la si sostituisce.
+  const frameKit = new Promise((done) => new GLTFLoader().load(new URL('models/cornici.glb', import.meta.url).href, (g) => done(g.scene), undefined, () => done(null)));
+  // name: cornice_panorama, _dorata, _ottone, _neon; x, y, z: centro della cornice semplice, spessa depth; angle: dove guarda
+  const frameFor = (name, standIn, x, y, z, angle, depth) => frameKit.then((kit) => {
+    const src = kit?.getObjectByName(name);
+    if (!src) return;
+    const f = src.clone();
+    f.position.set(x - (depth / 2) * Math.sin(angle), y, z - (depth / 2) * Math.cos(angle));
+    f.rotation.y = angle;
+    f.traverse((o) => { if (o.isMesh && o.material.name === 'cf_neon') o.material = glow('#ff4fd8', 1.6); });
+    scene.add(f);
+    scene.remove(standIn);
+  });
   const solid = (x0, x1, z0, z1) => colliders.push({ x0: Math.min(x0, x1), x1: Math.max(x0, x1), z0: Math.min(z0, z1), z1: Math.max(z0, z1) });
   const plane = (w, h, m, x, y, z, ry = 0, rx = 0) => { const o = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); o.position.set(x, y, z); o.rotation.set(rx, ry, 0); scene.add(o); return o; };
   // muro lungo x (nord/sud) o lungo z (est/ovest), con la collisione
@@ -163,12 +183,58 @@ export function createLobby3D(app) {
     }
     if(x0===-7){wallX(-7,-1.65,6.15,finish);wallX(1.65,7,6.15,finish);wallMeshes.push(box(3.3,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,6.15))}
     else wallX(x0,x1,6.15,finish);
-    // zoccolo
-    const sk = std('#2a1a12', 0.6);
-    // cornice sotto il soffitto, arrotondata
-    const crown = x0 === -7 ? std('#efe4cf', 0.7) : std('#241c2a', 0.6);
-    for (const zz of [-5.97, 5.97]) rbox(x1 - x0, 0.1, 0.07, 0.025, crown, (x0 + x1) / 2, H - 0.05, zz);
-    box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, -5.98); box(x1 - x0, 0.14, 0.04, sk, (x0 + x1) / 2, 0.07, 5.98);
+    // zoccolo, boiserie, battisedia e cornice sotto il soffitto: trimWall più sotto, per tutte le stanze
+  };
+
+  // ---------- rifiniture delle pareti: stile «Circolo italiano anni '60» (docs/finiture-lobby.md) ----------
+  // Lungo ogni parete, saltando le porte: zoccoletto, parte bassa (boiserie di noce, velluto nel cinema, una riga di
+  // neon nella sala giochi), battisedia e cornice sotto il soffitto. I pezzi con lo stesso materiale si uniscono alla
+  // fine in un solo oggetto (mergeTrim): poche cose da disegnare anche sul telefono.
+  const trimGeo = new Map(), trimMeshes = new Map(), boiserie = [];
+  // pannello di boiserie, rastrelliera delle stecche e applique (blender/arredi_lobby.blend → models/finiture.glb)
+  const finishKit = new Promise((done) => new GLTFLoader().load(new URL('models/finiture.glb', import.meta.url).href, (g) => done(g.scene), undefined, () => done(null)));
+  // un pezzo di finishKit appoggiato a una parete: x, y, z sul muro, angle dove guarda; standIn sparisce quando arriva
+  const finishPiece = (name, x, y, z, angle, standIn = []) => finishKit.then((kit) => {
+    const src = kit?.getObjectByName(name);
+    if (!src) return;
+    const o = src.clone();
+    o.position.set(x, y, z);
+    o.rotation.y = angle;
+    o.traverse((m) => { if (m.isMesh && m.material.name === 'ap_vetro') m.material = glow('#ffd2a0', 1.28); });
+    scene.add(o);
+    for (const s of standIn) s.parent?.remove(s);
+  });
+  const trimPiece = (m, sx, sy, sz, x, y, z) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    g.translate(x, y, z);
+    if (!trimGeo.has(m)) trimGeo.set(m, []);
+    trimGeo.get(m).push(g);
+  };
+  // axis 'x': parete lungo x, con la faccia verso la stanza a z = face; 'z': parete lungo z, faccia a x = face.
+  // n: verso la stanza (+1 o -1). gaps: porte, come [centro, mezza larghezza].
+  const trimWall = (T, axis, a, b, face, n, gaps = []) => {
+    let cuts = [[a, b]];
+    for (const [c, w] of gaps)
+      cuts = cuts.flatMap(([s, e]) => (c + w <= s || c - w >= e ? [[s, e]] : [[s, c - w], [c + w, e]].filter(([p, q]) => q - p > 0.05)));
+    const put = (m, len, h, depth, y, at, out) =>
+      axis === 'x' ? trimPiece(m, len, h, depth, at, y, face + n * out) : trimPiece(m, depth, h, len, face + n * out, y, at);
+    for (const [s, e] of cuts) {
+      const len = e - s, mid = (s + e) / 2, low = (T.railH - 0.14) / 2 + 0.14;
+      put(T.skirt, len, 0.14, 0.035, 0.07, mid, 0.0175);
+      put(T.crown, len, 0.1, 0.07, H - 0.05, mid, 0.035);
+      if (T.neon) { put(T.neon, len, 0.035, 0.02, T.railH, mid, 0.01); continue; }
+      put(T.lower, len, T.railH - 0.14, 0.02, low, mid, 0.01);
+      put(T.rail, len, 0.05, 0.045, T.railH, mid, 0.0225);
+      // montanti della boiserie: un riquadro ogni 0,9 m circa
+      const panels = Math.max(1, Math.round(len / 0.9));
+      for (let k = 0; k <= panels; k++) put(T.lower, 0.045, T.railH - 0.2, 0.03, low, s + (len * k) / panels, 0.02);
+      // pannelli di Blender (boiserie_pannello) al posto di questi, quando arrivano: uno per riquadro
+      if (T.wood)
+        for (let k = 0; k < panels; k++)
+          boiserie.push({ axis, face, n, at: s + (len * (k + 0.5)) / panels, w: len / panels, h: T.railH - 0.14, color: T.wood, flat: T.lower });
+      // lucine di cortesia nello zoccolo (cinema)
+      if (T.lights) for (let p = s + 0.6; p < e - 0.3; p += 1.2) put(T.lights, 0.06, 0.03, 0.012, 0.1, p, 0.04);
+    }
   };
 
   // --- luci di base
@@ -176,22 +242,20 @@ export function createLobby3D(app) {
   const point = (c, i, x, y, z, d = 12) => { const l = new THREE.PointLight(c, i, d, 1.5); l.position.set(x, y, z); scene.add(l); return l; };
 
   // ========== ATRIO (x -7…7) ==========
-  const atriumWall = new THREE.MeshStandardMaterial({ color: '#d9ccb4', roughness: 0.9 });
-  const billiardWall = new THREE.MeshStandardMaterial({ color: '#2a1c26', roughness: 0.85 });
-  const arcadeWall = new THREE.MeshStandardMaterial({ color: '#16112a', roughness: 0.85 });
+  // colori dello stile «Circolo»: atrio crema, biliardo rosso pompeiano, giochi blu notte (la boiserie è in trimWall)
+  const atriumWall = new THREE.MeshStandardMaterial({ color: '#e6d7bc', roughness: 0.9 });
+  const billiardWall = new THREE.MeshStandardMaterial({ color: '#6e2a26', roughness: 0.85 });
+  const arcadeWall = new THREE.MeshStandardMaterial({ color: '#141634', roughness: 0.85 });
   room(-7, 7, parquet(), [3.5, 3], atriumWall, '#efe6d6');
   room(7, 19, tiles(158, 19, 21), [3, 3], billiardWall, '#0b070d');
   room(-19, -7, neonGrid(), [3, 3], arcadeWall, '#07050c');
   wallZ(-6.3, 6.3, 19.15, billiardWall); wallZ(-6.3, 6.3, -19.15, arcadeWall);
   doorWall(7, atriumWall, billiardWall); doorWall(-7, arcadeWall, atriumWall);
   point('#ffe0b3',7,-3.5,2.85,0,12);point('#ffe1ba',7,3.5,2.85,0,12);point('#ffd39b',4,0,2.85,-4,9);
-  const sconceBrass=std('#a58052',.32,.72),sconceGlass=glow('#ffd2a0',1.28);
-  for(const x of [-4.9,4.9])for(const end of [-1,1]){
-    const z=end*5.89;
-    box(.20,.53,.07,sconceBrass,x,2.12,z);
-    box(.115,.36,.13,sconceGlass,x,2.12,z-end*.05);
-    for(const y of [1.92,2.32])box(.17,.035,.16,sconceBrass,x,y,z-end*.05);
-  }
+  // applique d'ottone a tulipano di Blender (finishPiece), mai sopra quadri o lavagna: a nord tra la cassa e la
+  // lavagna e a destra del cartellone, a sud a destra dei divani, e sulla parete della sala giochi (al posto di quella
+  // che cadeva sul panorama)
+  for(const [x,z,angle] of [[-5.6,-6.0,0],[4.9,-6.0,0],[4.9,6.0,Math.PI],[-6.84,3.3,Math.PI/2]])finishPiece('applique',x,2.05,z,angle);
   const shadeMap = canvasTex(128,128,(g)=>{
     const shade=g.createRadialGradient(64,64,7,64,64,62);
     shade.addColorStop(0,'rgba(255,255,255,.85)');shade.addColorStop(.58,'rgba(255,255,255,.38)');shade.addColorStop(1,'rgba(255,255,255,0)');
@@ -208,7 +272,7 @@ export function createLobby3D(app) {
       g.beginPath();g.moveTo(0,h);for(let x=0;x<=w;x+=8)g.lineTo(x,112+i*29+28*Math.sin(x*.011+i)+16*Math.sin(x*.027+i*4)+8*Math.cos(x*.059+i));g.lineTo(w,h);g.fillStyle=c;g.fill();
     });
   });
-  box(4.15,1.55,.07,std('#84663e',.38,.55),-4,2.12,5.94);
+  frameFor('cornice_panorama',box(4.15,1.55,.07,std('#84663e',.38,.55),-4,2.12,5.94),-4,2.12,5.94,Math.PI,.07);
   plane(4.04,1.43,new THREE.MeshStandardMaterial({map:panorama,roughness:.92}),-4,2.12,5.895,Math.PI);
   // lampadari
   for (const x of [-3.5, 3.5]) {
@@ -515,6 +579,11 @@ export function createLobby3D(app) {
   const cueM = std('#d8b77f', 0.4);
   for (let i = 0; i < 7; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.014, 1.45, 8), cueM); c.position.set(-0.05, 0.98, -0.55 + i * 0.18); rack.add(c); }
   rack.position.set(18.95, 0, 0); scene.add(rack);
+  // rastrelliera vera di Blender: noce, mensola a coppette, otto stecche con il manico scuro e l'anello d'ottone
+  finishPiece('rastrelliera', 19.0, 0, 0, -Math.PI / 2, [rack]);
+  // applique anche qui, ai lati della porta (pareti nord e sud)
+  finishPiece('applique', 9.5, 2.05, -6.0, 0);
+  finishPiece('applique', 9.5, 2.05, 6.0, Math.PI);
   const jb = new THREE.Group();
   box(0.9, 1.4, 0.55, std('#3a0d22', 0.4, 0.3), 0, 0.7, 0, jb);
   ['#ff2bd6', '#ffd23f', '#22d3ee'].forEach((c, i) => { const t = new THREE.Mesh(new THREE.TorusGeometry(0.4 - i * 0.06, 0.014, 8, 32, Math.PI), glow(c, 3)); t.position.set(0, 1.4, 0.28); jb.add(t); });
@@ -623,7 +692,7 @@ export function createLobby3D(app) {
   }
   const darkWood=std('#2b211d',.55);
   box(2.89,.04,.45,brassTrim,0,.002,-6.16);
-  const cardWall=std('#8d7665',.92);
+  const cardWall=std('#2f4a3a',.92); // verde bottiglia, come il panno dei tavoli
   const carpet=tiles(157,23,24);carpet.wrapS=carpet.wrapT=THREE.RepeatWrapping;carpet.repeat.set(3,3);
   plane(14,11.85,new THREE.MeshStandardMaterial({map:carpet,roughness:.96}),0,0,-12.2,0,-Math.PI/2);
   plane(14,12,std('#d0bfa6',1),0,H,-12.2,0,Math.PI/2);
@@ -631,6 +700,8 @@ export function createLobby3D(app) {
   wallX(-7.3,7.3,-18.28,cardWall);
   point('#ffe0af',16,0,2.95,-11.2,14);
   const opal=glow('#ffe6bc',1.45);
+  // applique d'ottone sulle pareti laterali, a metà sala
+  finishPiece('applique',-7.0,2.05,-12.2,Math.PI/2);finishPiece('applique',7.0,2.05,-12.2,-Math.PI/2);
   for(const x of [-4,0,4]){
     box(.025,.23,.025,brassTrim,x,H-.115,-12.1);
     box(1.6,.09,.18,opal,x,H-.27,-12.1);
@@ -638,57 +709,102 @@ export function createLobby3D(app) {
   const tabletop=(key,title)=>canvasTex(512,384,(g,w,h)=>{
     g.fillStyle='#255348';g.fillRect(0,0,w,h);
     g.fillStyle='#e1c995';g.textAlign='center';g.font='bold 26px Georgia';g.fillText(title,w/2,360);
-    const disc=(x,y,r,c)=>{g.fillStyle=c;g.beginPath();g.arc(x,y,r,0,2*Math.PI);g.fill()};
-    if(['checkmate','dama-italiana','scarabeo','battaglia-navale'].includes(key)){
-      const n=key==='scarabeo'?13:key==='battaglia-navale'?10:8, tile=260/n;
-      for(let row=0;row<n;row++)for(let col=0;col<n;col++){
-        const x=126+col*tile,y=26+row*tile;
-        g.fillStyle=key==='battaglia-navale'?'#507b93':key==='scarabeo'?((row+col)%5?'#bbac88':'#bb7970'):(row+col)%2?'#715138':'#dfcba7';
-        g.fillRect(x,y,tile-.8,tile-.8);
-      }
-      if(key==='scarabeo'){g.fillStyle='#493527';g.font='bold 19px monospace';[...'PAROLA'].forEach((v,i)=>g.fillText(v,196+i*tile,164))}
-      if(key==='battaglia-navale'){g.fillStyle='#354854';g.fillRect(152,80,101,19);g.fillRect(263,134,19,75);disc(220,90,6,'#f66b41')}
-    }else if(key==='forza-4'){
-      g.fillStyle='#346998';g.fillRect(100,34,312,246);
-      for(let y=0;y<6;y++)for(let x=0;x<7;x++)disc(130+x*42,58+y*39,15,y>=5-(x%3)?((x+y)%2?'#d95141':'#f5cb62'):'#183d40');
-    }else{
-      for(let i=0;i<5;i++){g.save();g.translate(150+i*52,164+Math.abs(i-2)*11);g.rotate((i-2)*.14);g.fillStyle='#182f29';g.fillRect(-35,-61,86,130);g.fillStyle=key==='uno'?['#ca4b41','#d9aa37','#43855b','#407ca2','#bb4740'][i]:'#f3e1bc';g.fillRect(-38,-65,84,127);
-        g.fillStyle=key==='uno'?'#fff1d8':i%2?'#a84035':'#39332d';g.font='bold 42px Georgia';g.fillText(key==='uno'?String(i+3):['♦','♣','♥','♠','♦'][i],4,13);g.restore()}
-    }
+    // sul panno solo il nome del gioco: su ogni tavolo ci sono i pezzi veri (modelli di Blender, più sotto)
   });
-  const draughtGeometry=new THREE.CylinderGeometry(.036,.04,.022,12);
-  const pawnGeometry=new THREE.LatheGeometry([[.047,0],[.047,.014],[.026,.034],[.018,.064],[.031,.075],[.036,.092],[.021,.115],[.001,.121]].map(([r,y])=>new THREE.Vector2(r,y)),12);
-  const pieces=(geometry,material,locations)=>{
-    const set=new THREE.InstancedMesh(geometry,material,locations.length),matrix=new THREE.Matrix4();
-    locations.forEach(([x,y,z],index)=>set.setMatrixAt(index,matrix.makeTranslation(x,y,z)));scene.add(set);
-  };
+  // tavoli e sedie moderni di Blender (blender/sala_tavoli.blend → models/sala_tavoli.glb), più sotto: queste liste
+  // dicono dove vanno; i blocchi di prima (cardStandIns) restano finché il modello non arriva
+  const cardTables=[],cardChairs=[],cardStandIns=[];
+  let connectFour=null; // [x, z] del tavolo di Forza 4, se c'è
+  const cardGames=[]; // [gioco, x, z] dei tavoli di carte
+  let wordTable=null; // [x, z] del tavolo di Scarabeo, se c'è
+  let navalTable=null; // [x, z] del tavolo di Battaglia navale, se c'è
+  let chessTable=null,damaTable=null; // [x, z] dei tavoli di Scacchi e Dama, se ci sono
   BOARD.forEach(([key,title],i)=>{
     if(!avail.has(key))return;
     const x=(i%3-1)*4.1,z=-8.8-Math.floor(i/3)*3.55;
     groundTint(x,z,2.75,2.35,contact);
-    box(.48,.63,.48,darkWood,x,.34,z);box(1.98,.13,1.4,walnut,x,.74,z);
+    cardStandIns.push(box(.48,.63,.48,darkWood,x,.34,z),box(1.98,.13,1.4,walnut,x,.74,z));
+    cardTables.push([x,z,0]);
+    if(key==='forza-4')connectFour=[x,z];
+    if(CARD_LAYOUTS[key])cardGames.push([key,x,z]);
+    if(key==='scarabeo')wordTable=[x,z];
+    if(key==='battaglia-navale')navalTable=[x,z];
+    if(key==='checkmate')chessTable=[x,z];
+    if(key==='dama-italiana')damaTable=[x,z];
     box(1.91,.022,1.33,brassTrim,x,.816,z);
     plane(1.84,1.27,new THREE.MeshStandardMaterial({map:tabletop(key,title),roughness:.86}),x,.834,z,0,-Math.PI/2);
-    if(key==='checkmate'||key==='dama-italiana'){
-      for(let side=0;side<2;side++){
-        const locations=[];
-        for(let row=0;row<(key==='checkmate'?2:3);row++)for(let col=0;col<8;col++){
-          const rank=side?7-row:row;if(key==='dama-italiana'&&(rank+col)%2===0)continue;
-          locations.push([x+((126+(col+.5)*32.5)/512-.5)*1.84,.85,z+((26+(rank+.5)*32.5)/384-.5)*1.27]);
-        }
-        pieces(key==='checkmate'?pawnGeometry:draughtGeometry,side?brassTrim:darkWood,locations);
-      }
-    }
     for(const side of [-1,1]){
-      box(.46,.39,.4,walnut,x+side*1.24,.2,z);
-      box(.52,.09,.49,chairLeather,x+side*1.24,.44,z);
-      box(.07,.39,.49,chairLeather,x+side*1.47,.63,z);
+      cardStandIns.push(box(.46,.39,.4,walnut,x+side*1.24,.2,z),box(.52,.09,.49,chairLeather,x+side*1.24,.44,z),box(.07,.39,.49,chairLeather,x+side*1.47,.63,z));
+      cardChairs.push([x+side*1.24,z,-side*Math.PI/2]); // la sedia guarda il tavolo
       spots.push({x:x+side*1.24,z:z+.62,hx:.2,hz:.12,pad:.5,label:'Siediti',where:'Sala tavoli',seat:true,px:x+side*1.24,pz:z,yaw:side*Math.PI/2});
     }
     solid(x-1.51,x+1.51,z-.72,z+.72);
     spots.push({x,z,hx:1.50,hz:.72,pad:.81,label:title,key,where:'Sala tavoli',act:()=>app.open(key)});
   });
-  function poster(x,z,angle,title,subtitle,palette,motif){
+  // tavolo su colonna centrale e sedia a guscio girevole: tutti a istanze, un oggetto per materiale (pochi da disegnare)
+  new GLTFLoader().load(new URL('models/sala_tavoli.glb',import.meta.url).href,gltf=>{
+    gltf.scene.updateMatrixWorld(true);
+    const up=new THREE.Vector3(0,1,0),one=new THREE.Vector3(1,1,1),q=new THREE.Quaternion(),m=new THREE.Matrix4();
+    const place=(name,list)=>{
+      const src=gltf.scene.getObjectByName(name);if(!src||!list.length)return;
+      src.traverse(o=>{
+        if(!o.isMesh)return;
+        const set=new THREE.InstancedMesh(o.geometry,o.material,list.length);
+        list.forEach(([x,z,a],i)=>set.setMatrixAt(i,m.compose(new THREE.Vector3(x,0,z),q.setFromAxisAngle(up,a),one).multiply(o.matrixWorld)));
+        set.castShadow=true;set.receiveShadow=true;scene.add(set);
+      });
+    };
+    place('tavolo_carte',cardTables);place('sedia_carte',cardChairs);
+    for(const o of cardStandIns)scene.remove(o);
+  });
+  // Forza 4 sul suo tavolo (blender/forza4.blend → models/forza4.glb): la griglia in piedi al centro, di taglio, così
+  // ognuno dei due giocatori la vede dal suo lato; i gettoni della partita nei fori e quelli di riserva nel vassoio
+  // davanti a ciascuno (rossi a sinistra, gialli a destra). Per ora una partita di esempio: le posizioni sono dati
+  // (col, riga, colore), così più avanti si può mostrare la partita vera.
+  if(connectFour)new GLTFLoader().load(new URL('models/forza4.glb',import.meta.url).href,gltf=>{
+    const [tx,tz]=connectFour,top=.834,P=.06,ROW0=.079; // passo dei fori e centro della riga più bassa (forza4.blend)
+    const grid=gltf.scene.getObjectByName('f4_griglia'),disc=gltf.scene.getObjectByName('f4_gettone'),tray=gltf.scene.getObjectByName('f4_vassoio');
+    if(grid){const g=grid.clone();g.position.set(tx,top,tz);g.rotation.y=Math.PI/2;g.traverse(o=>{if(o.isMesh)o.castShadow=true});scene.add(g)}
+    for(const side of [-1,1])if(tray){const t=tray.clone();t.position.set(tx+side*.62,top,tz);scene.add(t)}
+    const discMesh=disc?.isMesh?disc:disc?.children.find(o=>o.isMesh);if(!discMesh)return;
+    const RED='#d9372f',YELLOW='#f2c230';
+    const game=[[3,0,RED],[2,0,YELLOW],[4,0,RED],[3,1,YELLOW],[1,0,YELLOW],[2,1,RED],[4,1,YELLOW],[3,2,RED],[5,0,RED],[5,1,YELLOW],[0,0,YELLOW]];
+    const spare=[];for(const [side,c] of [[-1,RED],[1,YELLOW]])for(let k=0;k<6;k++)spare.push([side,k,c]);
+    const set=new THREE.InstancedMesh(discMesh.geometry,discMesh.material,game.length+spare.length);
+    const m=new THREE.Matrix4(),q=new THREE.Quaternion(),one=new THREE.Vector3(1,1,1);
+    // nella griglia: il disco guarda i giocatori (asse lungo x)
+    q.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2);
+    game.forEach(([col,row,c],i)=>{set.setMatrixAt(i,m.compose(new THREE.Vector3(tx,top+ROW0+row*P,tz-(col-3)*P),q,one));set.setColorAt(i,new THREE.Color(c))});
+    // nel vassoio: distesi, in fila
+    q.setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
+    spare.forEach(([side,k,c],i)=>{set.setMatrixAt(game.length+i,m.compose(new THREE.Vector3(tx+side*.62,top+.012,tz-.11+k*.044),q,one));set.setColorAt(game.length+i,new THREE.Color(c))});
+    set.castShadow=true;scene.add(set);
+  });
+  // carte sui tavoli di UNO, Scopa, Briscola e Briscola in cinque (blender/carte.blend → models/carte.glb): le
+  // posizioni sono dati in table-cards.js; per tavolo un atlante delle facce e tre oggetti soltanto
+  if(cardGames.length)new GLTFLoader().load(new URL('models/carte.glb',import.meta.url).href,gltf=>{
+    const parts=cardParts(gltf);
+    for(const [key,x,z] of cardGames)for(const mesh of buildCardTable(parts,CARD_LAYOUTS[key],x,z))scene.add(mesh);
+  });
+  // Scarabeo (blender/scarabeo.blend → models/scarabeo.glb): plancia al centro con le parole, un leggio con le tessere
+  // davanti a ciascun giocatore, sacchetto in un angolo; le tessere sono dati in table-scarabeo.js
+  if(wordTable)new GLTFLoader().load(new URL('models/scarabeo.glb',import.meta.url).href,gltf=>{
+    for(const o of buildScarabeoTable(gltf,SCARABEO_LAYOUT,...wordTable))scene.add(o);
+  });
+  // Battaglia navale (blender/navale.blend → models/navale.glb): una valigetta aperta davanti a ciascun giocatore,
+  // blu e rossa, con i coperchi in piedi schiena contro schiena; flotte e colpi sono dati in table-navale.js
+  if(navalTable)new GLTFLoader().load(new URL('models/navale.glb',import.meta.url).href,gltf=>{
+    for(const o of buildNavaleTable(gltf,NAVALE_LAYOUT,...navalTable))scene.add(o);
+  });
+  // Scacchi e Dama (blender/scacchi.blend → models/scacchi.glb): scacchiera di legno intarsiato, pezzi Staunton e
+  // pedine bianche e nere; due partite a metà, come dati in table-scacchi.js. Il Bianco siede a x positivo
+  if(chessTable||damaTable)new GLTFLoader().load(new URL('models/scacchi.glb',import.meta.url).href,gltf=>{
+    if(chessTable)for(const o of buildChessTable(gltf,CHESS_LAYOUT,...chessTable))scene.add(o);
+    if(damaTable)for(const o of buildDamaTable(gltf,DAMA_LAYOUT,...damaTable))scene.add(o);
+  });
+  // frameName: la cornice di Blender per la stanza (dorata nel biliardo, neon nella sala giochi, ottone altrove)
+  // y: altezza del centro (nel biliardo più su: il battisedia è a 1,2 m e la cornice dorata è più grande)
+  function poster(x,z,angle,title,subtitle,palette,motif,frameName='cornice_ottone',y=1.92){
     const map=canvasTex(384,512,(g,w,h)=>{
       g.fillStyle=palette[0];g.fillRect(0,0,w,h);g.strokeStyle=palette[1];g.lineWidth=3;g.strokeRect(14,14,w-28,h-28);
       g.save();g.translate(192,210);g.rotate(-.17);
@@ -701,8 +817,9 @@ export function createLobby3D(app) {
       else {g.strokeStyle=palette[2];g.lineWidth=6;for(let i=0;i<6;i++)g.strokeRect(-95+i*9,-105+i*9,185-i*18,185-i*18)}
       g.restore();g.fillStyle=palette[1];g.textAlign='center';g.font='900 44px Arial';g.fillText(title,192,378,338);g.font='bold 21px monospace';g.fillText(subtitle,192,430,338);
     });
-    const frame=box(1.25,1.66,.055,brassTrim,x,1.92,z);frame.rotation.y=angle;
-    plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),1.92,z+.033*Math.cos(angle),angle);
+    const frame=box(1.25,1.66,.055,brassTrim,x,y,z);frame.rotation.y=angle;
+    frameFor(frameName,frame,x,y,z,angle,.055);
+    plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),y,z+.033*Math.cos(angle),angle);
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
   doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.92,-5.96);
@@ -736,10 +853,10 @@ export function createLobby3D(app) {
     plane(1.91,1.433,new THREE.MeshBasicMaterial({map:artwork}),6.73,1.75,3.6,-Math.PI/2);
     spots.push({x:6.65,z:3.6,hx:.12,hz:.95,pad:1,label:'Lavagna',act:()=>app.enterGallery?app.enterGallery(boardRoom):app.open('lavagna-spazio-libero')});
   }
-  poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector');
-  poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool');
+  poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector','cornice_neon');
+  poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool','cornice_dorata',2.15);
   // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
-  const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#16131c',.98);
+  const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#1b1e2a',.98);
   plane(14,12.4,std('#4c2935',.98),0,0,12.26,0,-Math.PI/2);
   plane(14,12.4,std('#101118',1),0,H,12.26,0,Math.PI/2);
   wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
@@ -1025,8 +1142,14 @@ export function createLobby3D(app) {
   poster(-6.94,12,Math.PI/2,'CINEMA','PROIEZIONE IN SALA',['#442333','#ffe2ab','#c58461'],'film');
   // Reception counter and tabletop receiver on the east side of the atrium.
   const counterX=5.95,counterZ=-3.35;
-  box(1.14,.9,2.15,walnut,counterX,.45,counterZ);
-  box(1.25,.09,2.29,brassTrim,counterX,.94,counterZ);
+  // il mobile della radio: credenza di noce anni '60 con ante a doghe, gambe affusolate e filo d'ottone
+  // (blender/credenza_radio.blend → models/credenza_radio.glb, stile «Circolo»); finché non arriva, la scatola di prima
+  const counterStandIn=[box(1.14,.9,2.15,walnut,counterX,.45,counterZ),box(1.25,.09,2.29,brassTrim,counterX,.94,counterZ)];
+  new GLTFLoader().load(new URL('models/credenza_radio.glb',import.meta.url).href,gltf=>{
+    const credenza=gltf.scene;credenza.position.set(counterX,0,counterZ);credenza.rotation.y=-Math.PI/2; // ante verso la stanza
+    credenza.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
+    scene.add(credenza);for(const o of counterStandIn)scene.remove(o);
+  });
   solid(counterX-.63,counterX+.63,counterZ-1.15,counterZ+1.15);
   const receiver=new THREE.Group();receiver.position.set(counterX,1.00,counterZ);receiver.rotation.y=-Math.PI/2;scene.add(receiver);
   // radio vintage fatta in Blender (blender/radio.blend → models/radio.glb): cupola in legno, griglia in stoffa,
@@ -1264,6 +1387,72 @@ export function createLobby3D(app) {
   plane(3.4, 0.85, new THREE.MeshBasicMaterial({ map: neonText('ARCADE', '#3ee7ff'), transparent: true, depthWrite: false, color: new THREE.Color(2, 2, 2) }), -18.98, 2.75, 0, Math.PI / 2);
   point('#a855f7', 7, -13, 2.8, 0, 11); point('#22d3ee', 5, -17, 2.4, -4, 8); point('#ff2bd6', 5, -17, 2.4, 4, 8); point('#ffb347', 4, -9, 2.4, 0, 8);
   for (const [c, z] of [['#22d3ee', -5.96], ['#ff2bd6', 5.96]]) box(11.8, 0.03, 0.03, glow(c, 3), -13, H - 0.12, z);
+
+  // ========== rifiniture delle pareti, stanza per stanza (trimWall, stile «Circolo») ==========
+  const TRIM = {
+    // atrio: crema sopra, boiserie di noce sotto, battisedia d'ottone, cornice avorio
+    atrium: { wood: '#5a3a28', lower: std('#5a3a28', 0.5), rail: std('#b8925a', 0.32, 0.7), skirt: std('#2e1d14', 0.55), crown: std('#f2e8d5', 0.7), railH: 1.0 },
+    // sala tavoli: verde bottiglia, boiserie di noce, filo d'ottone
+    cards: { wood: '#583828', lower: std('#583828', 0.5), rail: std('#c3a064', 0.32, 0.64), skirt: std('#2e1d14', 0.55), crown: std('#5a3a28', 0.5), railH: 1.0 },
+    // biliardo: rosso pompeiano, boiserie scura più alta (le stecche ci si appoggiano), oro brunito
+    pool: { wood: '#3e2519', lower: std('#3e2519', 0.5), rail: std('#8a6a3a', 0.35, 0.6), skirt: std('#22140d', 0.55), crown: std('#8a6a3a', 0.4, 0.5), railH: 1.2 },
+    // sala giochi: niente legno, una riga di neon azzurro a metà parete e lo zoccolo che brilla
+    arcade: { neon: glow('#33e1ff', 1.6), skirt: glow('#ff4fd8', 1.3), crown: std('#0b0a18', 0.6), railH: 1.0 },
+    // cinema: pannelli in velluto come le poltrone, lucine di cortesia nello zoccolo
+    cinema: { lower: std('#6f2033', 0.97), rail: std('#a5535f', 0.89), skirt: std('#14161f', 0.8), crown: std('#14161f', 0.8), railH: 1.0, lights: glow('#e7b866', 1.4) }
+  };
+  // atrio (x -7…7): porte a nord (sala tavoli), a sud (cinema), a est (biliardo) e a ovest (giochi)
+  trimWall(TRIM.atrium, 'x', -6.84, 6.84, -6.0, 1, [[0, DOOR]]);
+  trimWall(TRIM.atrium, 'x', -6.84, 6.84, 6.0, -1, [[0, 1.65]]);
+  trimWall(TRIM.atrium, 'z', -6.0, 6.0, 6.84, -1, [[0, DOOR]]);
+  trimWall(TRIM.atrium, 'z', -6.0, 6.0, -6.84, 1, [[0, DOOR]]);
+  // sala biliardo (x 7…19)
+  trimWall(TRIM.pool, 'x', 7.16, 19, -6.0, 1);
+  trimWall(TRIM.pool, 'x', 7.16, 19, 6.0, -1);
+  trimWall(TRIM.pool, 'z', -6.0, 6.0, 19.0, -1);
+  trimWall(TRIM.pool, 'z', -6.0, 6.0, 7.16, 1, [[0, DOOR]]);
+  // sala giochi (x -19…-7)
+  trimWall(TRIM.arcade, 'x', -19, -7.16, -6.0, 1);
+  trimWall(TRIM.arcade, 'x', -19, -7.16, 6.0, -1);
+  trimWall(TRIM.arcade, 'z', -6.0, 6.0, -19.0, 1);
+  trimWall(TRIM.arcade, 'z', -6.0, 6.0, -7.16, -1, [[0, DOOR]]);
+  // sala tavoli (z -18…-6)
+  trimWall(TRIM.cards, 'z', -18.13, -6.3, -7.0, 1);
+  trimWall(TRIM.cards, 'z', -18.13, -6.3, 7.0, -1);
+  trimWall(TRIM.cards, 'x', -7.0, 7.0, -18.13, 1);
+  trimWall(TRIM.cards, 'x', -7.0, 7.0, -6.3, -1, [[0, DOOR]]);
+  // cinema (z 6…18): pareti laterali e quella d'ingresso; la parete dello schermo resta libera
+  trimWall(TRIM.cinema, 'z', 6.375, 18.4, -7.0, 1);
+  trimWall(TRIM.cinema, 'z', 6.375, 18.4, 7.0, -1);
+  trimWall(TRIM.cinema, 'x', -7.0, 7.0, 6.375, 1, [[0, 1.65]]);
+  // un oggetto per materiale
+  for (const [m, list] of trimGeo) {
+    const mesh = new THREE.Mesh(mergeGeometries(list), m);
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    trimMeshes.set(m, mesh);
+    for (const g of list) g.dispose();
+  }
+  trimGeo.clear();
+  // pannelli di boiserie veri: tutti in un oggetto a istanze (uno da disegnare), ognuno alla misura del suo riquadro e
+  // con il legno della sua stanza; i pannelli piatti di trimWall restano finché non arrivano
+  finishKit.then((kit) => {
+    const src = kit?.getObjectByName('boiserie_pannello');
+    const geo = src?.isMesh ? src.geometry : src?.children.find((c) => c.isMesh)?.geometry;
+    if (!geo || !boiserie.length) return;
+    const panels = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 }), boiserie.length);
+    const q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), m4 = new THREE.Matrix4();
+    boiserie.forEach((b, i) => {
+      const angle = b.axis === 'x' ? (b.n > 0 ? 0 : Math.PI) : b.n > 0 ? Math.PI / 2 : -Math.PI / 2;
+      const at = b.axis === 'x' ? new THREE.Vector3(b.at, 0.14, b.face) : new THREE.Vector3(b.face, 0.14, b.at);
+      m4.compose(at, q.setFromAxisAngle(up, angle), new THREE.Vector3(b.w, b.h, 1));
+      panels.setMatrixAt(i, m4);
+      panels.setColorAt(i, new THREE.Color(b.color));
+    });
+    panels.receiveShadow = true;
+    scene.add(panels);
+    for (const b of boiserie) if (trimMeshes.get(b.flat)) trimMeshes.get(b.flat).visible = false;
+  });
 
   // ========== il personaggio ==========
   const me = makeCharacter(readLook());
