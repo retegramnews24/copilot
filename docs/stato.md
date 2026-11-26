@@ -7,35 +7,22 @@ Aggiornato il 26 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.67** (`25a09ce`), pubblicata.
-- `staging`: 1.0.67 più i lavori della Lobby 3D elencati sotto, non ancora su `main`.
+- `main`: **1.0.68**, con tutta la Lobby 3D nuova. Commit fatto, le 8 prove passate; diventa pubblica col Push da
+  GitHub Desktop.
+- `staging`: 1.0.68, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
 
-**Lobby 3D, sala tavoli: gli oggetti di ogni gioco sul suo tavolo.** Un gioco per volta: schizzo, poi Blender se
-serve, poi sul tavolo.
+Niente. Sala tavoli della Lobby 3D finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo,
+Battaglia navale, Scacchi e Dama), come dati nei file `public/lobby3d/table-*.js` e `connectFour` in `lobby3d.js`,
+così più avanti il tavolo potrà mostrare la partita vera. Sedie ai lati corti, ogni giocatore ha i suoi pezzi
+davanti.
 
-- Fatti tutti: Forza 4, carte (UNO, Scopa, Briscola, Briscola in cinque), Scarabeo, Battaglia navale (valigette di
-  plastica classica, blu e rossa, partita a metà con i pioli), Scacchi e Dama (scacchiera di legno intarsiato,
-  pezzi Staunton in bosso ed ebano, pedine bianche e nere, partite a metà).
-- Resta da guardare tutto insieme nella Lobby 3D vera, sull'app di prova.
-- Come sono fatti: pezzi a istanze, posizioni decise dal codice (`public/lobby3d/table-cards.js`,
-  `table-scarabeo.js`, `table-navale.js`, `table-scacchi.js`, `connectFour` in `lobby3d.js`), così più avanti il
-  tavolo potrà mostrare la partita vera.
-  Sedie ai lati corti, ogni giocatore ha i suoi pezzi davanti.
+## Da provare dopo il Push
 
-## Su staging, in attesa di prova e dell'ok per main
-
-Commit da `b98eb2a` a `4ab939b`:
-
-- Stile «Circolo» della Lobby 3D: colori delle pareti per stanza, zoccoletto, boiserie, battisedia, cornici
-  (`docs/finiture-lobby.md`).
-- Arredi fatti in Blender: credenza della radio, cornici dei quadri, rastrelliera delle stecche, applique.
-- Tavoli e sedie moderni nella sala tavoli.
-- Forza 4, carte e Scarabeo sui tavoli.
-- Battaglia navale, Scacchi e Dama sui loro tavoli.
-
-Prima di portarli su `main`: i controlli a mano di `docs/controlli-prima-del-rilascio.md`.
+- La Lobby 3D nuova (stile «Circolo», arredi di Blender, tavoli e sedie moderni, pezzi veri su tutti i tavoli) non
+  è ancora stata vista dentro Telegram. Prima sull'app di prova, poi i controlli a mano di
+  `docs/controlli-prima-del-rilascio.md`, poi il Push di `main`.
 
 ## Rimandato
 
