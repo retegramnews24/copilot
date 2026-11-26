@@ -249,14 +249,21 @@ export function checkInner(outer, inner, minW = MIN_WIDTH) {
 function checkWidth(outer, inner, MIN_WIDTH) {
   const polys = [outer, inner], idx = makeIndex(polys);
   const inTrack = (p) => pointInPoly(p, outer) && !pointInPoly(p, inner);
+  // distanza lungo il bordo da un punto all'altro (analisi 11.5): prima si contavano i punti come se fossero sempre a
+  // mezza casella, e un bordo fittissimo faceva migliaia di controlli inutili
+  const along = polys.map((P) => {
+    const acc = [0];
+    for (let i = 1; i < P.length; i++) acc.push(acc[i - 1] + dist(P[i - 1], P[i]));
+    return { acc, total: acc[P.length - 1] + dist(P[P.length - 1], P[0]) };
+  });
   for (let pi = 0; pi < 2; pi++) {
-    const P = polys[pi];
+    const P = polys[pi], { acc, total } = along[pi];
     for (let i = 0; i < P.length; i++) {
       const v = P[i];
       for (const s of idx.query(v.x - MIN_WIDTH, v.y - MIN_WIDTH, v.x + MIN_WIDTH, v.y + MIN_WIDTH)) {
         if (s.pi === pi) {
-          const n = P.length, k = Math.min(Math.abs(i - s.i), n - Math.abs(i - s.i));
-          if (k * 0.5 < MIN_WIDTH * 1.6) continue; // vicini sullo stesso bordo
+          const gap = Math.abs(acc[i] - acc[s.i]), k = Math.min(gap, total - gap);
+          if (k < MIN_WIDTH * 1.6) continue; // vicini sullo stesso bordo
         }
         const { d, q } = distToSeg(v, s.a, s.b);
         if (d < MIN_WIDTH && d > 1e-6 && inTrack(lerp(v, q, 0.5))) return { error: `Pista troppo stretta qui: servono almeno ${String(MIN_WIDTH).replace('.', ',')} caselle.`, at: lerp(v, q, 0.5) };

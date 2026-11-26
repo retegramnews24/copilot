@@ -1,11 +1,11 @@
 // Gara a quadretti: collega disegno, regole e scena 3D.
 // Per ora si gioca sullo stesso telefono: Giallo è l'ospite (mette l'auto e muove per primo), Rosso chi crea la pista.
-import { Editor } from './editor.js?v=dadfc8c433';
-import * as R from './rules.js?v=2b5af737d6';
-import { Race3D } from './scene3d.js?v=33f0142d5f';
+import { Editor } from './editor.js?v=cbade91535';
+import * as R from './rules.js?v=b9ea8cb4e1';
+import { Race3D } from './scene3d.js?v=90abba5212';
 import { Sfx } from './sound.js?v=cca82ba0d6';
-import { AiDriver, distField } from './ai.js?v=88b6b7a525';
-import { Tutorial } from './tutorial.js?v=633df7e600';
+import { AiDriver, distField } from './ai.js?v=3c0be1d2ae';
+import { Tutorial } from './tutorial.js?v=e7b8a13853';
 import { isTouchDevice } from '../touch-device.js';
 
 // scritte giuste per il dispositivo (analisi 10.12): «col dito» e «tocca» sul telefono, «col mouse» e «clicca» sul computer
@@ -211,7 +211,7 @@ $('lapP').onclick = () => { draft.laps = Math.min(9, draft.laps + 1); showLaps()
 
 $('go').onclick = () => {
   tut.hide();
-  if (draft.normal < 0) return toast('Prima tocca una delle due frecce: è il verso di gara.');
+  if (draft.normal < 0) return toast(`Prima ${tap} una delle due frecce: è il verso di gara.`);
   // controllo finale di tutta la pista prima del 3D
   const c = R.checkInner(draft.outer, draft.inner, R.minWidth(draft.players));
   if (c.error) return fail(c);
@@ -622,7 +622,7 @@ function netWaiting(s) {
   const seated = !!(me && s.players.some((p) => p.id === me.player));
   // chi l'ha aperta dalla Lobby guarda: entra solo se tocca «Entra in gara»
   if (!seated) {
-    $('rcHelp').textContent = missing > 0 ? `Stai guardando: ${missing === 1 ? 'manca un pilota' : `mancano ${missing} piloti`}. Tocca «Entra in gara» per correre.` : 'Stai guardando: la gara è al completo.';
+    $('rcHelp').textContent = missing > 0 ? `Stai guardando: ${missing === 1 ? 'manca un pilota' : `mancano ${missing} piloti`}. ${Tap} «Entra in gara» per correre.` : 'Stai guardando: la gara è al completo.';
     $('netGo').hidden = missing <= 0;
     $('netGo').textContent = 'Entra in gara';
     $('netGo').dataset.kind = 'join';
@@ -739,7 +739,7 @@ $('netClose').onclick = () => {
   const kind = netCloseKind(), b = $('netClose');
   if (!kind) return;
   // abbandonare chiede conferma: la gara continua senza di te
-  if (kind === 'abandon' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Sicuro? Tocca di nuovo per abbandonare'; return; }
+  if (kind === 'abandon' && !b.dataset.sure) { b.dataset.sure = '1'; b.textContent = `Sicuro? ${Tap} di nuovo per abbandonare`; return; }
   b.dataset.sure = '';
   $('menu').hidden = true;
   toApp('action', { kind });

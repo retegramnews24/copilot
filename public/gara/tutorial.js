@@ -4,25 +4,30 @@
 // - "da leggere" (modal): blocca il gioco finché non premi il tasto, per esempio tutti i consigli della gara insieme.
 // Ogni fumetto compare una volta sola. Si può saltare e si può sempre rifare dal menu.
 
+import { isTouchDevice } from '../touch-device.js';
+
 const KEY = 'gara.tutorial';
+// scritte per telefono o computer (analisi 11.7): «col dito» e «tocca», oppure mouse, clic e rotellina
+const touch = isTouchDevice();
+const Tap = touch ? 'Tocca' : 'Clicca', tap = touch ? 'tocca' : 'clicca';
 
 export const STEPS = {
-  setup: { title: 'Benvenuto in F1 on paper!', text: 'Qui scegli contro chi corri e l’ora della gara. Poi disegni la tua pista con il dito e la corri in 3D. Quando sei pronto premi «Disegna la pista».' },
-  draw1: { title: '1 · Il bordo esterno', text: 'Se vuoi una pista grande, prima allontana la vista con il cursore (−). Poi passa il dito per disegnare il bordo esterno e torna vicino al punto di partenza: si chiude da solo. Con due dita sposti e ingrandisci.' },
+  setup: { title: 'Benvenuto in F1 on paper!', text: `Qui scegli contro chi corri e l’ora della gara. Poi disegni la tua pista ${touch ? 'con il dito' : 'con il mouse'} e la corri in 3D. Quando sei pronto premi «Disegna la pista».` },
+  draw1: { title: '1 · Il bordo esterno', text: touch ? 'Se vuoi una pista grande, prima allontana la vista con il cursore (−). Poi passa il dito per disegnare il bordo esterno e torna vicino al punto di partenza: si chiude da solo. Con due dita sposti e ingrandisci.' : 'Se vuoi una pista grande, prima allontana la vista con la rotellina o con il cursore (−). Poi tieni premuto il tasto sinistro per disegnare il bordo esterno e torna vicino al punto di partenza: si chiude da solo. Con il tasto destro sposti la vista.' },
   draw2: { title: '2 · Il bordo interno', text: 'Ora disegna il bordo interno, tutto dentro il primo. Lo spazio tra i due bordi è l’asfalto: lascia almeno 2,5 caselle.' },
   draw3: { title: '3 · La linea di partenza', text: 'Traccia una linea da un bordo all’altro. Verde: ci stanno tutte le auto affiancate. Rossa: non ci stanno, rifalla dove la pista è più larga.' },
-  draw4: { title: '4 · Verso e giri', text: 'Tocca una delle due frecce sulla linea per scegliere il verso di gara. Con − e + scegli quanti giri.' },
+  draw4: { title: '4 · Verso e giri', text: ` una delle due frecce sulla linea per scegliere il verso di gara. Con − e + scegli quanti giri.` },
   create3d: { title: 'Pista pronta!', text: 'Ora puoi creare la pista 3D: premi «Crea pista 3D» in basso a destra.' },
-  place: { title: 'La partenza', text: 'Tocca una casella bianca sulla linea per mettere la tua auto. Le auto partono affiancate, con una casella libera tra una e l’altra.' },
+  place: { title: 'La partenza', text: ` una casella bianca sulla linea per mettere la tua auto. Le auto partono affiancate, con una casella libera tra una e l’altra.` },
   race: {
     modal: true, ok: 'Via!', title: 'Come si corre',
     items: [
       ['🚦 Semaforo', 'Le luci rosse si accendono una alla volta: quando diventano verdi, si parte.'],
-      ['🎯 Le mosse', 'Le auto vanno di casella in casella. I dischi colorati sono i punti dove puoi arrivare: tocca un disco e l’auto parte subito.'],
+      ['🎯 Le mosse', `Le auto vanno di casella in casella. I dischi colorati sono i punti dove puoi arrivare: ${tap} un disco e l’auto parte subito.`],
       ['⚙️ Le marce', 'Il numero sul disco è la marcia, cioè quante caselle fai. Blu: sali. Verde: tieni. Rosso: scali. Una marcia alla volta, dalla N alla 7ª.'],
       ['➡️ L’inerzia', 'L’auto tende a ripetere la mossa di prima: i dischi stanno intorno al punto dove ti porterebbe. Non puoi frenare o girare di colpo: prima delle curve rallenta!'],
       ['✕ Urto', 'Le ✕ escono di pista. Se ne tocchi una sbatti: resti fermo 2 turni, poi riparti in prima.'],
-      ['👆 La vista', 'Un dito sposta la vista; due dita ingrandiscono, girano e inclinano. Se la sposti resta lì: «Centra» ti riporta sulla tua auto. Con «Griglia» nascondi i quadretti.']
+      ['👆 La vista', (touch ? 'Un dito sposta la vista; due dita ingrandiscono, girano e inclinano.' : 'Trascina col tasto sinistro per spostare la vista; la rotellina ingrandisce, il tasto destro gira, Maiuscole con la rotellina inclina.') + ' Se la sposti resta lì: «Centra» ti riporta sulla tua auto. Con «Griglia» nascondi i quadretti.']
     ]
   },
   crash: { title: 'Urto!', text: 'Al primo turno resti fermo. Al secondo l’auto si gira verso la pista. Poi riparti in prima, una casella alla volta.', auto: 7000 },

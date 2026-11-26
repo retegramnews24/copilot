@@ -17,7 +17,7 @@ export const QUALITY = {
   media: { post: false, ratio: 1.5, shadow: 1024, grass: 0.45, water: false, flare: false },
   bassa: { post: false, ratio: 1, shadow: 512, grass: 0, water: false, flare: false }
 };
-import { inTrack, clearance, pointInPoly } from './rules.js?v=2b5af737d6';
+import { inTrack, clearance, pointInPoly } from './rules.js?v=b9ea8cb4e1';
 
 const GEAR_COL = { down: '#ef4444', same: '#22c55e', up: '#3b82f6' };
 
@@ -2078,10 +2078,12 @@ export class Race3D {
   frame() {
     // schermata della gara nascosta (si disegna una pista nuova): niente disegno (analisi 10.8)
     if (!this.host.isConnected || this.host.offsetParent === null) return;
-    // gioco a turni, quasi sempre fermo: senza animazioni, auto da seguire o dita sullo schermo basta un fotogramma
-    // su due (circa 30 al secondo)
+    // gioco a turni, quasi sempre fermo: senza animazioni, auto da seguire o dita sullo schermo bastano 30 fotogrammi
+    // al secondo, contati sul tempo e non sullo schermo (a 120 Hz «uno su due» era 60; analisi 11.9)
     const idle = !this.anims.length && !this.fx.length && !this.follow && !this.rig.goal && !this.pointers.size;
-    if (idle && (this.skip = !this.skip)) return;
+    const at = performance.now();
+    if (idle && at - (this.drawnAt || 0) < 1000 / 30 - 2) return;
+    this.drawnAt = at;
     const dt = Math.min(0.05, this.clock.getDelta()), now = performance.now();
     this.anims = this.anims.filter((a) => { const k = Math.min(1, (now - a.t0) / a.ms); a.fn(k); if (k >= 1) { a.res(); return false; } return true; });
     if (this.fx.length) this.stepFx(dt);

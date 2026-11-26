@@ -32,7 +32,7 @@ const car = (name, progress, lane, skill) => {
   c.skill = skill;
   return c;
 };
-const DT = 1 / 30;
+const DT = 1 / 60; // come il gioco (analisi 11.9)
 
 // una corsa come in main.js: tre auto guidate dal gioco, colpi e urti; ritorna quanto ci mette ogni auto
 function race(seed, limit = 8 * 60) {
@@ -67,7 +67,7 @@ for (const at of [430, 431, 432, 433]) {
   const c = car('ferma', at, 0, 0.97);
   const input = aiInput(c, [c], DT);
   assert.equal(input.gas, true, `ferma al punto ${at}: deve dare gas`);
-  for (let i = 0; i < 90; i++) drive(c, aiInput(c, [c], DT), DT, [c]);
+  for (let i = 0; i < 180; i++) drive(c, aiInput(c, [c], DT), DT, [c]);
   assert.ok(c.v > 2, `al punto ${at} riparte (velocità ${c.v.toFixed(2)})`);
 }
 assert.ok(MIN_TARGET > 0);
@@ -81,7 +81,7 @@ const hitOnce = () => {
   shooter.cool = 0;
   shooter.stun = 0;
   shots.fire(shooter);
-  for (let i = 0; i < 10; i++) shots.update(DT, [shooter, target], c => hits.push(c.name));
+  for (let i = 0; i < 20; i++) shots.update(DT, [shooter, target], c => hits.push(c.name));
 };
 hitOnce();
 assert.equal(hits.length, 1, 'first shot hits');

@@ -1,5 +1,5 @@
 // Disegno della pista in 2D sulla griglia. Un dito disegna, due dita spostano e ingrandiscono.
-import { finishNormals } from './rules.js?v=2b5af737d6';
+import { finishNormals } from './rules.js?v=b9ea8cb4e1';
 
 export class Editor {
   constructor(canvas) {
