@@ -189,8 +189,86 @@ export function newBody(x, y, z, yaw = 0) {
   return { x, y, z, vx: 0, vy: 0, vz: 0, yaw, pitch: 0, onGround: false, crouch: false };
 }
 
-// input: {fwd, side (-1..1), jump, crouch, walk, yaw, pitch}
-export function moveStep(b, input, dt, boxes) {
+// Mappa grande (deserto): scatole divise in celle per cercare solo quelle vicine, più l'altezza del terreno a
+// griglia (map-deserto.js), letta con un'interpolazione tra i quattro punti vicini. boxes: [minX,minY,minZ,maxX,
+// maxY,maxZ] oppure {min,max}. Si passa a moveStep al posto dell'elenco di scatole.
+export function makeWorld(rawBoxes, ground = null, cell = 4) {
+  const boxes = rawBoxes.map(b => (Array.isArray(b) ? { min: [b[0], b[1], b[2]], max: [b[3], b[4], b[5]], noShot: b[6] === 1 } : b));
+  const grid = new Map();
+  const key = (i, j) => i * 4096 + j;
+  boxes.forEach((b, n) => {
+    for (let i = Math.floor(b.min[0] / cell); i <= Math.floor(b.max[0] / cell); i++)
+      for (let j = Math.floor(b.min[2] / cell); j <= Math.floor(b.max[2] / cell); j++) {
+        const k = key(i, j);
+        if (!grid.has(k)) grid.set(k, []);
+        grid.get(k).push(n);
+      }
+  });
+  const seen = new Int32Array(boxes.length);
+  let stamp = 0;
+  const near = (x, z, r = 1) => {
+    stamp += 1;
+    const out = [];
+    for (let i = Math.floor((x - r) / cell); i <= Math.floor((x + r) / cell); i++)
+      for (let j = Math.floor((z - r) / cell); j <= Math.floor((z + r) / cell); j++) {
+        const list = grid.get(key(i, j));
+        if (!list) continue;
+        for (const n of list)
+          if (seen[n] !== stamp) {
+            seen[n] = stamp;
+            out.push(boxes[n]);
+          }
+      }
+    return out;
+  };
+  const height = (x, z) => {
+    if (!ground) return 0;
+    const g = ground;
+    const fx = Math.max(0, Math.min(g.nx - 1.001, (x - g.x0) / g.step));
+    const fz = Math.max(0, Math.min(g.nz - 1.001, (z - g.z0) / g.step));
+    const i = Math.floor(fx);
+    const j = Math.floor(fz);
+    const u = fx - i;
+    const v = fz - j;
+    const h = (a, c) => g.h[c * g.nx + a];
+    return ((h(i, j) * (1 - u) + h(i + 1, j) * u) * (1 - v) + (h(i, j + 1) * (1 - u) + h(i + 1, j + 1) * u) * v) / 100;
+  };
+  // raggio: scatole lungo il percorso, cella per cella (più veloce che provarle tutte)
+  const ray = (o, d, maxT = 300) => {
+    let best = null;
+    const len = Math.min(maxT, 200);
+    const stepT = cell * 0.5;
+    stamp += 1;
+    for (let t = 0; t <= len + stepT; t += stepT) {
+      const x = o.x + d.x * Math.min(t, len);
+      const z = o.z + d.z * Math.min(t, len);
+      const i0 = Math.floor(x / cell);
+      const j0 = Math.floor(z / cell);
+      for (let i = i0 - 1; i <= i0 + 1; i++)
+        for (let j = j0 - 1; j <= j0 + 1; j++) {
+          const list = grid.get(key(i, j));
+          if (!list) continue;
+          for (const n of list) {
+            if (seen[n] === stamp) continue;
+            seen[n] = stamp;
+            const box = boxes[n];
+            if (box.noShot) continue;
+            const hit = rayBox(o, d, box, maxT);
+            if (hit !== null && (!best || hit < best.t)) best = { t: hit, box };
+          }
+        }
+      if (best && best.t < t - cell) break;
+    }
+    return best;
+  };
+  return { boxes, near, height, ray };
+}
+
+// input: {fwd, side (-1..1), jump, crouch, walk, yaw, pitch}. boxes: elenco di scatole oppure un mondo (makeWorld).
+export function moveStep(b, input, dt, where) {
+  const world = where && where.near ? where : null;
+  const boxes = world ? world.near(b.x, b.z, 1.2) : where;
+  const wasOnGround = b.onGround;
   b.yaw = input.yaw;
   b.pitch = Math.max(-1.5, Math.min(1.5, input.pitch));
   const wantCrouch = !!input.crouch;
@@ -217,9 +295,11 @@ export function moveStep(b, input, dt, boxes) {
   }
   b.vx += clamp(tx - b.vx, PLAYER.accel * k * dt);
   b.vz += clamp(tz - b.vz, PLAYER.accel * k * dt);
+  let jumped = false;
   if (input.jump && b.onGround && !b.crouch) {
     b.vy = PLAYER.jump;
     b.onGround = false;
+    jumped = true;
   }
   b.vy -= PLAYER.gravity * dt;
   const h = b.crouch ? PLAYER.crouchHeight : PLAYER.height;
@@ -227,8 +307,14 @@ export function moveStep(b, input, dt, boxes) {
   slide(b, 2, b.vz * dt, boxes, h);
   b.onGround = false;
   slide(b, 1, b.vy * dt, boxes, h);
-  if (b.y < 0) {
-    b.y = 0;
+  // terreno (nel poligono è il pavimento a y = 0): si sale da soli e, scendendo a piedi, si resta attaccati
+  const g = world ? world.height(b.x, b.z) : 0;
+  if (b.y < g) {
+    b.y = g;
+    b.vy = 0;
+    b.onGround = true;
+  } else if (!b.onGround && wasOnGround && !jumped && b.vy <= 0 && b.y - g < 0.3) {
+    b.y = g;
     b.vy = 0;
     b.onGround = true;
   }
@@ -290,6 +376,46 @@ export function eyeHeight(b) {
 export function lookDir(yaw, pitch) {
   const c = Math.cos(pitch);
   return { x: -Math.sin(yaw) * c, y: Math.sin(pitch), z: -Math.cos(yaw) * c };
+}
+
+// ---------- giocatori (online) ----------
+
+// Dove si colpisce un giocatore: testa (sfera), busto e gambe (scatole dritte, uguali da ogni lato).
+// p: {x, y, z, crouch}. Ritorna {t, zone} oppure null.
+export function playerHit(o, d, p, maxT = 300) {
+  const k = (p.crouch ? PLAYER.crouchHeight : PLAYER.height) / PLAYER.height;
+  const head = raySphere(o, d, { x: p.x, y: p.y + 1.62 * k, z: p.z }, 0.16, maxT);
+  const body = rayBox(o, d, { min: [p.x - 0.26, p.y + 0.85 * k, p.z - 0.26], max: [p.x + 0.26, p.y + 1.48 * k, p.z + 0.26] }, maxT);
+  const legs = rayBox(o, d, { min: [p.x - 0.2, p.y, p.z - 0.2], max: [p.x + 0.2, p.y + 0.85 * k, p.z + 0.2] }, maxT);
+  let best = null;
+  for (const [t, zone] of [
+    [head, 'testa'],
+    [body, 'corpo'],
+    [legs, 'gambe']
+  ])
+    if (t !== null && (!best || t < best.t)) best = { t, zone };
+  return best;
+}
+
+// Dispersione dell'arma secondo come ci si muove (uguale per il telefono e il server).
+export function spreadFor(weapon, body, scoped) {
+  const w = WEAPONS[weapon];
+  let spread = weapon === 'falco' && scoped ? w.scopedSpread : w.spread;
+  if (w.melee) return 0;
+  const moving = Math.hypot(body.vx, body.vz) > 1;
+  if (!body.onGround) spread *= 3;
+  else if (moving && weapon !== 'tuono') spread *= 2;
+  if (body.crouch) spread *= 0.7;
+  return spread;
+}
+
+// Il coltello alle spalle: chi colpisce sta dietro (entro 60° dalla schiena di chi è colpito).
+export function fromBehind(attacker, victim) {
+  const dx = victim.x - attacker.x;
+  const dz = victim.z - attacker.z;
+  const l = Math.hypot(dx, dz) || 1;
+  const f = lookDir(victim.yaw, 0);
+  return (f.x * dx + f.z * dz) / l > 0.5;
 }
 
 // ---------- sagome del poligono ----------

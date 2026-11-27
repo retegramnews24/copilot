@@ -6,6 +6,7 @@ let ctx = null;
 let master = null;
 let noiseBuf = null;
 let volume = 0.8;
+let bus = null; // per un suono più piano (spari lontani degli altri)
 
 function ensure() {
   if (!soundAllowed()) return null;
@@ -49,7 +50,7 @@ function noise(t, dur, freq, q, gain, type = 'lowpass') {
   const g = ctx.createGain();
   g.gain.setValueAtTime(gain, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  src.connect(f).connect(g).connect(master);
+  src.connect(f).connect(g).connect(bus || master);
   src.start(t, Math.random() * 0.5, dur + 0.05);
 }
 
@@ -61,7 +62,7 @@ function tone(t, dur, f0, f1, gain, type = 'sine') {
   const g = ctx.createGain();
   g.gain.setValueAtTime(gain, t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g).connect(master);
+  o.connect(g).connect(bus || master);
   o.start(t);
   o.stop(t + dur + 0.02);
 }
@@ -75,9 +76,22 @@ const VOICE = {
   falco: { crack: [1800, 0.18, 1.0], thump: [70, 30, 0.3, 1.0], tail: [350, 1.2, 0.45] }
 };
 
-export function shot(weapon) {
+export function shot(weapon, gain = 1) {
   if (!ensure()) return;
   const t = ctx.currentTime;
+  if (gain < 1) {
+    bus = ctx.createGain();
+    bus.gain.value = Math.max(0.02, gain);
+    bus.connect(master);
+  }
+  try {
+    voice(weapon, t);
+  } finally {
+    bus = null;
+  }
+}
+
+function voice(weapon, t) {
   if (weapon === 'coltello') {
     noise(t, 0.12, 2500, 1.5, 0.35, 'bandpass');
     return;
@@ -133,6 +147,21 @@ export function pickup() {
   const t = ctx.currentTime;
   noise(t, 0.08, 1200, 2, 0.3, 'bandpass');
   tone(t + 0.05, 0.08, 600, 900, 0.1, 'triangle');
+}
+
+// colpiti: un colpo sordo; eliminazione confermata: due note
+export function hurt() {
+  if (!ensure()) return;
+  const t = ctx.currentTime;
+  tone(t, 0.12, 180, 90, 0.5, 'triangle');
+  noise(t, 0.08, 600, 1, 0.3);
+}
+
+export function kill() {
+  if (!ensure()) return;
+  const t = ctx.currentTime;
+  tone(t, 0.09, 880, 880, 0.15, 'triangle');
+  tone(t + 0.09, 0.16, 1320, 1320, 0.15, 'triangle');
 }
 
 export function step() {

@@ -249,6 +249,12 @@ async function route(req, env) {
     return env.ROOMS.get(env.ROOMS.idFromName('pong:' + pong[1])).fetch(
       new Request(u.origin + '/pong/' + pong[2], req)
     );
+  // Zona Operativa (zona-server.js): per ora una partita sola per tutto il circolo
+  const zona = u.pathname.match(/^\/api\/zona\/(state|ws)$/);
+  if (zona)
+    return env.ROOMS.get(env.ROOMS.idFromName('zona-deserto-v1')).fetch(
+      new Request(u.origin + '/zona/' + zona[1], req)
+    );
   const moto = u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
   if (moto)
     return env.ROOMS.get(env.ROOMS.idFromName('moto:' + moto[1])).fetch(

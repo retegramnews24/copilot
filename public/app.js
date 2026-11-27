@@ -27,6 +27,7 @@ import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=7ca29f05f4';
+import {createZonaLink} from './zona-link.js?v=82897f4ea7';
 import {createGolfLink} from './golf-link.js?v=3f3958e0a2';
 import {createArcadeLink} from './arcade-link.js?v=a4ce33c363';
 import {createF1Link} from './f1-link.js?v=8cf05cfcd5';
@@ -104,6 +105,8 @@ async function buildLobby3D(){
 // (destroy: memoria e grafica liberate) e il gioco ha il telefono per sé. Uscendo se ne costruisce una nuova, si
 // aspetta che sia pronta e si riparte in fondo al corridoio. L'overlay (id «-overlay») tiene ferma la riapertura da sola.
 let zoneOpen=false;
+// la partita online della Zona: il collegamento autenticato resta qui (zona-link.js), la pagina del gioco usa postMessage
+const zonaLink=createZonaLink({frame:()=>$('zona-frame'),token:()=>sessionToken});
 function enterZone(){
  const status=$('zona-status'),frame=$('zona-frame');
  status.textContent='Spengo la Lobby…';status.hidden=false;frame.hidden=true;$('zona-overlay').hidden=false;
@@ -115,7 +118,7 @@ function enterZone(){
  frame.src='/zona/index.html';
 }
 async function leaveZone(){
- if(!zoneOpen)return;zoneOpen=false;
+ if(!zoneOpen)return;zoneOpen=false;zonaLink.close();
  const status=$('zona-status'),frame=$('zona-frame');
  frame.onload=null;frame.src='about:blank';frame.hidden=true;status.textContent='Riaccendo la Lobby…';status.hidden=false;
  try{

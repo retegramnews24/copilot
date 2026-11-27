@@ -2,11 +2,11 @@
 // con le regole di rules.js (le stesse che userà il server dalla tappa 2).
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
-import { WEAPONS, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=ff9b08b2fa';
-import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=45f7427933';
+import { WEAPONS, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=79c25dfc2d';
+import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=4f0b9d8f55';
 import { createControls } from './controls.js?v=e180132236';
 import { createViewmodel } from './viewmodel.js?v=af06afbe4f';
-import * as sfx from './audio.js?v=a541447a7e';
+import * as sfx from './audio.js?v=337aee686c';
 
 const $ = id => document.getElementById(id);
 const SETTINGS_KEY = 'zona-impostazioni';
@@ -298,6 +298,11 @@ $('sfida-via').onclick = () => {
   for (const t of targets) t.down = 0;
   challenge = { left: 60 };
   play();
+};
+// la partita online sul deserto: stessa pagina con ?online (main.js)
+$('cambia').onclick = () => {
+  document.exitPointerLock?.();
+  location.search = '?online=1';
 };
 $('esci').onclick = () => {
   document.exitPointerLock?.();

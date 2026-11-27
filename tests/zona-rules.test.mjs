@@ -101,14 +101,15 @@ assert.deepEqual([a(), a(), a()], [b(), b(), b()]);
 assert.equal(rayBox({ x: 0, y: 1, z: 0 }, { x: 0, y: 0, z: 1 }, { min: [-1, 0, 5], max: [1, 2, 6] }), 5);
 assert.equal(rayBox({ x: 0, y: 3, z: 0 }, { x: 0, y: 0, z: 1 }, { min: [-1, 0, 5], max: [1, 2, 6] }), null);
 
-// Movimento nel poligono: si parte nel corridoio, si cammina in avanti fino alla sala, i muri fermano
+// Movimento nel poligono: si parte nella sala, si cammina fino al bancone, i muri fermano
 {
   const s = POLIGONO.start;
   const body = newBody(s.x, s.y, s.z, s.yaw);
   run(body, { fwd: 0, side: 0, yaw: s.yaw, pitch: 0 }, 0.5, POLIGONO.boxes);
   assert.ok(body.onGround && Math.abs(body.y) < 1e-6, 'si sta in piedi sul pavimento');
-  run(body, { fwd: 1, side: 0, yaw: s.yaw, pitch: 0 }, 1, POLIGONO.boxes);
-  assert.ok(body.z > s.z + 4.5 && body.z < s.z + 5.5, 'in un secondo si fanno circa 5 m: ' + body.z);
+  const walker = newBody(-5, 0, -7, s.yaw);
+  run(walker, { fwd: 0, side: -1, yaw: s.yaw, pitch: 0 }, 1, POLIGONO.boxes);
+  assert.ok(walker.x > -0.5 && walker.x < 0.5, 'in un secondo si fanno circa 5 m: ' + walker.x);
   run(body, { fwd: 1, side: 0, yaw: s.yaw, pitch: 0 }, 8, POLIGONO.boxes);
   assert.ok(Math.abs(body.z - (-5.4 - PLAYER.radius)) < 0.01, 'il bancone delle armi ferma: ' + body.z);
   const lane = newBody(5.6, 0, -1.2, s.yaw);

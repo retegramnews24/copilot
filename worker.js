@@ -17,6 +17,7 @@ import { F1Room } from './f1-server.js';
 import { BiliardoRoom } from './biliardo-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
+import { ZonaRoom } from './zona-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
 import { initialCheckers, playCheckers } from './checkers.js';
@@ -350,6 +351,7 @@ export class Room extends DurableObject {
       return (this.youtube ??= new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req, viewer);
     if (path === '/blackboard/ws' || path === '/blackboard/create') return this.blackboard.fetch(req);
     if (path.startsWith('/pong/')) return this.pong.fetch(req);
+    if (path.startsWith('/zona/')) return this.zona.fetch(req);
     if (new URL(req.url).pathname.startsWith('/golf/')) return this.golf.fetch(req);
     if (new URL(req.url).pathname.startsWith('/f1/')) return this.f1.fetch(req);
     if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
@@ -706,6 +708,10 @@ export class Room extends DurableObject {
   get lobbyHub() {
     return (this._lobbyHub ??= new LobbyHub(this.ctx, this.env));
   }
+  // Zona Operativa (zona-server.js): creata solo nella sua Durable Object, al primo bisogno
+  get zona() {
+    return (this._zona ??= new ZonaRoom(this.ctx, this.env));
+  }
   get blackboard() {
     return (this._blackboard ??= new Blackboard(this.ctx));
   }
@@ -740,6 +746,7 @@ export class Room extends DurableObject {
     if (a?.kind === 'lab') return; // Labyrinth tolto: collegamenti rimasti da prima, si chiudono da soli
     if (a?.kind === 'moto-trial') return this.moto.message(ws, message);
     if (a?.kind === 'pong') return this.pong.message(ws, message);
+    if (a?.kind === 'zona') return this.zona.message(ws, message);
     if (a?.kind !== 'lobby') {
       ws.close(1008, 'Sola lettura.');
       return;
@@ -913,6 +920,8 @@ export class Room extends DurableObject {
     if (attachment?.kind === 'cinema') return this.cinema.close(ws);
     if (attachment?.kind === 'moto-trial') {
       await this.moto.close(ws);
+    } else if (attachment?.kind === 'zona') {
+      this.zona.close(ws);
     } else if (attachment?.kind === 'pong') {
       await this.pong.close(ws);
     } else if (attachment?.kind === 'lobby') {
@@ -945,6 +954,7 @@ export class Room extends DurableObject {
     if (kind === 'cinema') return this.cinema.close(ws);
     if (kind === 'moto-trial') return this.moto.close(ws);
     if (kind === 'pong') return this.pong.close(ws);
+    if (kind === 'zona') return this.zona.close(ws);
     ws.close(1011, 'Riconnettersi.');
   }
   async alarm() {

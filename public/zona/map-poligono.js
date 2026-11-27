@@ -6,8 +6,8 @@
 const b = (x0, x1, y0, y1, z0, z1, extra = {}) => ({ min: [x0, z0, -y1], max: [x1, z1, -y0], ...extra });
 
 export const POLIGONO = {
-  // dove si parte (fondo del corridoio d'ingresso) e verso dove si guarda (+z: la sala e le corsie)
-  start: { x: 0, y: 0, z: -15, yaw: Math.PI },
+  // dove si parte (nella sala, davanti alla parete dell'ingresso) e verso dove si guarda (+z: il bancone e le corsie)
+  start: { x: 0, y: 0, z: -7, yaw: Math.PI },
   boxes: [
     b(-8, 8, -53, 17, -1, 0), // pavimento
     b(-8, 8, -53, 17, 4.0, 5), // soffitto
@@ -16,13 +16,7 @@ export const POLIGONO = {
     b(-7, 7, -52.3, -52, 0, 4), // fondo
     b(-7, 7, -52, -46, 0, 0.6, { noWalk: false }), // terrapieno (primo gradino)
     b(-7, 7, -52, -50.8, 0, 3.0),
-    b(-7, -0.8, 8, 8.3, 0, 4), // parete dell'ingresso
-    b(0.8, 7, 8, 8.3, 0, 4),
-    b(-0.8, 0.8, 8, 8.3, 2.3, 4),
-    b(-1.1, -0.8, 8.3, 16, 0, 2.6), // corridoio
-    b(0.8, 1.1, 8.3, 16, 0, 2.6),
-    b(-1.1, 1.1, 8.3, 16.3, 2.6, 3),
-    b(-1.1, 1.1, 16, 16.3, 0, 2.6), // fondo del corridoio (chiuso)
+    b(-7, 7, 8, 8.3, 0, 4), // parete dell'ingresso (niente corridoio: si parte nella sala)
     b(-7, 7, -0.55, 0.05, 0, 1.06), // mensola sulla linea di tiro
     b(-7, 7, -0.6, -0.5, 1.06, 4, { noShot: true }), // oltre la linea di tiro non si passa (ma si spara)
     ...[-4.2, -1.4, 1.4, 4.2].map(x => b(x - 0.06, x + 0.06, 0.05, 2.0, 0, 1.96)), // separatori

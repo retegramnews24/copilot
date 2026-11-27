@@ -4,8 +4,9 @@ Il gioco che parte in fondo al corridoio della Zona operativa della Lobby 3D (`d
 operativa»): la Lobby si spegne davvero e si apre `public/zona/index.html`. È uno sparatutto in prima persona
 originale, dello stesso genere di Counter-Strike, ma con nome, mappe, armi, grafica e suoni nostri.
 
-Stato: **tappa 1 (poligono di tiro) scritta, da provare nell'app**. Modelli in `blender/zona_*.blend`, esportati in
-`public/zona/models/` (`armi.glb`: armi, braccia con 17 azioni, cassa medica; `poligono.glb`).
+Stato: **tappa 1 (poligono di tiro) e tappa 2 (online sul deserto) scritte, da provare nell'app di staging**.
+Modelli in `blender/zona_*.blend`, esportati in `public/zona/models/` (`armi.glb`: armi, braccia con 17 azioni, cassa
+medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 
 ## Cosa non si fa (vale per tutte le tappe)
 
@@ -34,7 +35,7 @@ Stato: **tappa 1 (poligono di tiro) scritta, da provare nell'app**. Modelli in `
 
 ### Ancora da decidere (domande a scelta al proprietario, quando serve)
 
-- Il nome della prima mappa e dei suoi posti (prima della tappa 2).
+- Il nome della prima mappa e dei suoi posti (per ora nel gioco si chiama «Deserto»).
 - I bot: quanto bravi, e se l'ospite sceglie il livello (prima della tappa 3).
 - Personaggi: aspetto dei soldati Rossi e Blu (prima della tappa 2).
 - Se più avanti aggiungere altre modalità (era stata proposta anche «Ordigno», piazza e disinnesca: non scelta).
@@ -228,8 +229,9 @@ spara, si ricarica. Mirino, munizioni, colpi sulle sagome (punteggio e tempo), s
 Web Audio, come nei giochi arcade). Levette sul telefono, WASD e mouse sul computer. Menù con Esc: sensibilità,
 volume, Esci. Niente server.
 
-**Modello del poligono** (`blender/zona_poligono.blend`, fatto): si entra dal corridoio di cemento (x ±0,8,
-y 8…16, punto `partenza` in fondo) in una sala 14 × 8 m con armadietti, panca, casse di munizioni, mobiletto con la
+**Modello del poligono** (`blender/zona_poligono.blend`, fatto): niente corridoio (tolto su richiesta del
+proprietario), si parte già nella sala (punto `partenza` davanti alla parete dell'ingresso, guardando il bancone),
+una sala 14 × 8 m con armadietti, panca, casse di munizioni, mobiletto con la
 cassa medica, pannello forato e scritta «POLIGONO» sopra la porta; al centro il **bancone delle armi** con i punti
 `tavolo_<arma>` per le sei armi. Linea di tiro gialla e nera a y 0, mensola a 1 m (non si passa oltre), 5
 postazioni con i separatori e il numero della corsia (punti `postazione_1…5`). Poligono lungo 52 m: righe tra le
@@ -270,15 +272,54 @@ un'altra persona. Si vede l'altro soldato muoversi e sparare, la salute, chi ha 
 secondi, il conto alla rovescia dei 5 minuti e la classifica finale. Le armi a terra spariscono quando qualcuno le
 prende e tornano dopo 20 secondi.
 
-**File.** `zona-server.js` (classe `ZonaRoom`: collegamenti, passo di 20 al secondo, salute, colpi con il ritorno
-indietro, armi a terra, tempo), `worker.js` (crearla e indirizzarle i messaggi), `public/zona/net.js` (collegamento,
-previsione e correzione, altri giocatori nel passato), `public/zona/map-deserto.js`, `public/zona/models/deserto.glb`
-e `public/zona/models/soldato.glb` (da Blender, due colori).
+**Fatto (codice).** Nel menù del poligono «Gioca online» ricarica la pagina con `?online` (`main.js` sceglie
+`zona.js` o `online.js`: in memoria c'è una mappa sola); dal menù online «Poligono di tiro» torna indietro.
 
-**Prove.** `tests/zona-server.test.mjs`: due giocatori finti, il colpo conta solo se il raggio arriva, la salute
-scende, l'eliminazione e la rinascita, il ritorno indietro non oltre 0,2 s, il tempo finisce e c'è un vincitore; un
-giocatore che manda tasti impossibili (troppo veloce, attraverso i muri) viene corretto. A mano: due persone su
-staging, telefono contro computer.
+- **Una partita sola per tutto il circolo** (Durable Object `zona-deserto-v1`, `/api/zona/ws` e `/api/zona/state`),
+  fino a 8 persone, Tutti contro tutti. Da soli si gira per la mappa «in attesa»; quando entra il secondo parte la
+  partita di 5 minuti (punteggi a zero, tutti rinascono). A tempo scaduto 10 secondi di classifica (vince chi ha più
+  eliminazioni, a parità meno morti, se no pareggio), poi se ne comincia un'altra. Se si resta in uno, si torna in
+  attesa; se escono tutti si riparte da capo. Niente si salva: la partita vive in memoria.
+- **Server** (`zona-server.js`, classe `ZonaRoom` creata in `worker.js` solo quando serve): 20 passi al secondo con
+  `setInterval` solo con qualcuno collegato. Il telefono manda comandi di 1/60 s (avanti, lato, tasti a bit, sguardo,
+  arma in mano) a gruppi ogni 50 ms; il server li rifà con `rules.js` e scarta quelli in più rispetto al tempo
+  passato (niente corse troppo veloci). Colpi: il telefono dice quale momento sta guardando, il server rimette gli
+  altri dov'erano allora (storia delle posizioni di 0,6 s, ma mai oltre 0,2 s indietro) e tira i raggi: testa, busto e
+  gambe (`playerHit` in `rules.js`); il coltello alle spalle fa 100. Rinascita dopo 3 s nel punto `rinascita_*` più
+  lontano da chi è vivo, con Baretta e coltello. Armi a terra: E le prende (va nel posto 1), tornano dopo 20 s; casse
+  mediche prese passandoci sopra se la salute non è piena, +50, tornano dopo 30 s. Se la Durable Object si spegne, al
+  primo messaggio rifà i giocatori dai collegamenti aperti.
+- **Collegamento**: come gli altri giochi, il WebSocket autenticato resta nell'app (`public/zona-link.js`, aperto da
+  `app.js`); la pagina del gioco manda e riceve con postMessage (`zona:connect`, `zona:send`, `zona:packet`).
+- **Telefono** (`public/zona/net.js`, `online.js`): il proprio movimento si calcola subito con le stesse regole e si
+  corregge quando arriva la posizione vera (rifacendo i comandi non ancora confermati, la differenza si smaltisce in
+  un decimo di secondo); gli altri si disegnano 100 ms nel passato, a metà tra due fotografie del server. Sparo,
+  rinculo, suono e buco sul muro si vedono subito; il danno arriva dal server (segno sul mirino, numeri, schermo
+  rosso quando si è colpiti). Soldati degli altri con le animazioni (gambe: fermo, cammina, corre, accucciato, cade;
+  busto: spara, colpito), il petto si piega per la mira, l'arma in mano, il nome sopra la testa; i colori pari sono
+  Blu e i dispari Rossi. Tempo in alto, eliminazioni a destra, classifica con Tab (sul telefono toccando la salute),
+  schermata «Eliminato da…» con il conto alla rovescia. La partita continua anche con il menù aperto.
+- **Mappa**: `deserto.glb` (tutta la scena «Scene», senza la scena `Esempi`; le case uguali usano la stessa mesh e
+  nel gioco diventano `InstancedMesh`, una per tipo), `soldati.glb` (i due soldati con i due scheletri e le 8
+  azioni, come tracce NLA dello scheletro Rossi; nel gioco servono a tutti e due). `public/zona/map-deserto.js` è
+  **generato** da `scripts/zona-deserto-urti.py` dentro Blender: 2.523 scatole (le isole di case, mura, muretti,
+  muri alti, torre, massi e casse; massi e casse un po' più strette), 4 confini invisibili che i colpi attraversano,
+  l'altezza del terreno a griglia di 1 m (133 × 133, letta con raggi, interpolata tra quattro punti) e i punti della
+  raccolta `punti`. `rules.js` ha `makeWorld` (scatole divise in celle di 4 m, terreno, raggio cella per cella) e
+  `moveStep` accetta il mondo al posto dell'elenco di scatole: si cammina sul terreno e, scendendo a piedi, si resta
+  attaccati.
+
+Da sapere: il terreno non ferma i colpi (sale e scende al massimo di un metro e mezzo). Le scatole sono dritte: le
+rocce sono un poco più strette del loro ingombro. Le armi in mano agli altri seguono la mano destra e lo sguardo,
+non l'osso della mano. Nell'anteprima locale la pagina online si apre ma non trova il server («si gioca dall'app»).
+
+**Prove.** `tests/zona-server.test.mjs`: due giocatori finti; colpo al corpo e in testa, colpo a vuoto, il muro ferma
+il colpo, eliminazione e rinascita dopo 3 s, ritorno indietro che colpisce dove si vedeva ma non oltre 0,2 s, 600
+comandi in un colpo solo scartati, numeri strani senza danni, correre contro un muro non lo attraversa, armi a terra
+che spariscono e tornano, cambio solo verso armi possedute, cassa medica, fine partita con vincitore e nuova
+partita, uscite, stessa persona da un'altra finestra, risveglio della Durable Object. `tests/zona-net.test.mjs`:
+`net.js` contro il server vero con 60 ms di ritardo per parte, corsa a zig-zag con salti: il telefono finisce dove
+lo mette il server, senza scatti. A mano: due persone su staging, telefono contro computer.
 
 ### Tappa 3: fino a 8, squadre e bot
 

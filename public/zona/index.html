@@ -8,7 +8,7 @@
 <!-- Zona Operativa (docs/zona-operativa.md): si apre in fondo al corridoio della sala giochi, con la Lobby 3D spenta
      (public/lobby3d/corridor.js, app.js). Tappa 1: poligono di tiro, da soli. «Esci» chiede all'app di riaccendere
      la Lobby. -->
-<link rel="stylesheet" href="zona.css?v=dc81955563">
+<link rel="stylesheet" href="zona.css?v=bc9534a8bf">
 <script src="../frame-errors.js?v=42f44db1ac"></script>
 </head>
 <body>
@@ -21,7 +21,12 @@
   <div id="conti"></div>
   <div id="sfida" hidden></div>
   <div id="avviso" hidden></div>
-  <div id="salute"><small>SALUTE</small>100</div>
+  <div id="salute"><small>SALUTE</small><span id="salute-n">100</span></div>
+  <div id="tempo" hidden></div>
+  <div id="feed"></div>
+  <div id="ferita"></div>
+  <div id="morto" hidden></div>
+  <div id="classifica" hidden></div>
   <div id="armi"><div class="nome" id="arma-nome"></div><div class="colpi" id="arma-colpi"></div><div class="stato" id="arma-stato"></div></div>
 </div>
 <div id="cannocchiale" hidden></div>
@@ -49,6 +54,7 @@
     <div class="risultato" id="risultato" hidden></div>
     <button id="gioca" type="button">Gioca</button>
     <button id="sfida-via" type="button" class="secondo">Sfida: 60 secondi</button>
+    <button id="cambia" type="button" class="secondo">Gioca online</button>
     <label>Sensibilità <input id="sens" type="range" min="0.2" max="3" step="0.05" value="1"></label>
     <label>Volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.8"></label>
     <button id="esci" type="button" class="secondo">Esci</button>
@@ -57,6 +63,6 @@
 </div>
 
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
-<script type="module" src="zona.js?v=f460581b9c"></script>
+<script type="module" src="main.js?v=46026b23f5"></script>
 </body>
 </html>

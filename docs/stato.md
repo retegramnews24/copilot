@@ -53,19 +53,29 @@ quadro, tunnel di cemento, in fondo la Lobby 3D si spegne davvero e parte il gio
 del proprietario: porta blindata industriale, tunnel di cemento, insegna «ZONA OPERATIVA», spegnimento vero (al
 ritorno la Lobby si ricarica in qualche secondo). Il gioco, **Zona Operativa**, è progettato in
 `docs/zona-operativa.md` (scelte del proprietario e 4 tappe: poligono di tiro, uno contro uno online, fino a 8 con
-squadre Rossa/Blu e bot, rifiniture). Ancora nessun codice di gioco. Fatti in Blender, guidati passo passo dal
+squadre Rossa/Blu e bot, rifiniture). Fatti in Blender, guidati passo passo dal
 proprietario: mappa del deserto (`zona_deserto.blend`, con i punti di armi, casse mediche, rinascite e partenze),
 soldati Rossi e Blu con 8 animazioni (`zona_soldato.blend`), 5 armi più coltello, braccia in prima persona e cassa
 medica (`zona_armi.blend`), poligono di tiro con le sagome (`zona_poligono.blend`). Regole delle armi decise.
 Tappa 1 scritta (`public/zona/`, poligono di tiro da soli con le 5 armi e il coltello): provata
 nell'anteprima locale (si cammina, si prende un'arma al bancone, il colpo in testa abbatte la sagoma), da provare
-nell'app vera. Niente server ancora.
+nell'app vera. Tappa 2 scritta, non ancora in un commit: «Gioca online» nel menù porta alla partita sul deserto,
+Tutti contro tutti, una partita sola per il circolo (`zona-server.js`, `public/zona-link.js`, `public/zona/net.js`,
+`online.js`; mappa e soldati esportati da Blender, urti generati da `scripts/zona-deserto-urti.py`). Provata con le
+prove automatiche (server e previsione contro il server) e nell'anteprima con messaggi finti (mappa, soldato,
+classifica, eliminazione); il server vero si prova solo su staging. `main` resta 1.0.71 finché poligono e partita
+online non sono provati nell'app di staging.
 
 ## Da provare
 
 - Zona Operativa, poligono di tiro, nel computer e nel telefono: muoversi, prendere le armi al bancone, sparare,
   ricaricare, mirino del Falco, sfida di 60 secondi, suoni, Esci. Guardare se le braccia e le armi stanno bene in
   vista e se il telefono regge.
+
+- Zona Operativa online, in due su staging (meglio telefono contro computer): «Gioca online», ci si vede e ci si
+  spara, salute, eliminazioni, rinascita dopo 3 s, armi a terra che spariscono e tornano dopo 20 s, casse mediche,
+  classifica con Tab e a fine partita (5 minuti). Guardare se il movimento degli altri è liscio, se i colpi «dove si
+  vedeva» contano, se la scala della torre centrale si sale, e come stanno le armi in mano ai soldati.
 
 - Zona operativa nell'app vera, sul telefono: entrare, arrivare in fondo, uscire con «Esci» e ritrovarsi nel
   corridoio. Guardare che la Lobby torni normale (luci, radio, persone) e che il telefono non scaldi.
