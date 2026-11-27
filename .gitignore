@@ -19,6 +19,8 @@ Thumbs.db
 desktop.ini
 
 backups/
+# pagine di prova solo locali (anteprima), mai online
+public/_prova-*
 
 # Copie di sicurezza di Blender (le fa Blender a ogni salvataggio)
 *.blend1

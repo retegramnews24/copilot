@@ -12,7 +12,28 @@ Aggiornato il 26 novembre 2026.
 
 ## In corso
 
-Niente. Sala tavoli della Lobby 3D finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo,
+**Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario (solo in locale, non ancora in un
+commit): sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
+ingresso in piano con la Lobby, poi una rampa continua (niente gradini) che scende di 60 cm fino alla prima fila,
+tenda d'ingresso com'era (si apre da sola avvicinandosi; la prova di una tenda «viva» che si sposta come stoffa
+è stata tolta su richiesta del proprietario), 5 file con due divanetti doppi per parte (4 posti a sinistra e 4 a destra della corsia centrale, 20 divanetti),
+schermo 7 × 3,94 m col bordo basso a 1,3 m dal pavimento davanti; visuale che entra come nelle altre porte; luci di
+sala basse. Cabina di proiezione incassata sopra l'ingresso (`blender/proiettore.blend` → `models/proiettore.glb`):
+finestrella col vetro, proiettore digitale moderno inclinato verso il centro dello schermo; col film in proiezione
+obiettivo e lucina accesi, fascio di luce largo quanto lo schermo, luci di sala ancora più basse; il fascio prende
+colore e luminosità dal film e nell'obiettivo si vede il film in piccolo, specchiato (con YouTube il fascio tremola
+da solo). Tende ai lati dello schermo fatte nel codice: velluto a pieghe dal pavimento al tetto, contro la parete dello
+schermo. La sala è buia perché i suoi materiali sono più scuri (`CINEMA_DIM` 0,18, riflessi bassi, pelle opaca), non
+perché si abbassa la luce di tutta la scena: è la luce scelta dal proprietario, uguale vista dalla Lobby e da dentro.
+Applique del cinema di Blender (`blender/applique_cinema.blend` → `models/applique_cinema.glb`): 5 per parete tra i
+pannelli, con un ventaglio di luce sopra e sotto. Locandina nell'atrio accanto alla porta del cinema: titolo di
+quello che si proietta e, dopo 10 secondi di film continui sullo stesso canale, un fotogramma del video (con
+YouTube la copertina, se si lascia leggere). Girandosi il film non compare più in un riquadro piccolo.
+Pagina di prova solo locale: `public/_prova-proiettore.html` (film finto, tasti per spostarsi). Cinema spento: sullo schermo l'insegna «BINOTTOLAND
+PLAYGROUND CINEMA» su sipario rosso con cornice déco dorata, ferma (`public/lobby3d/cinema-sign.js`; scelta del
+proprietario tra quattro proposte, anche rispetto a una versione con le lampadine animate).
+
+La sala tavoli è finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo, della Lobby 3D finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo,
 Battaglia navale, Scacchi e Dama), come dati nei file `public/lobby3d/table-*.js` e `connectFour` in `lobby3d.js`,
 così più avanti il tavolo potrà mostrare la partita vera. Sedie ai lati corti, ogni giocatore ha i suoi pezzi
 davanti.
