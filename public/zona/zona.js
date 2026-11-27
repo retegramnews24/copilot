@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { WEAPONS, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=ff9b08b2fa';
 import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=45f7427933';
-import { createControls } from './controls.js?v=fe121f2c2c';
+import { createControls } from './controls.js?v=e180132236';
 import { createViewmodel } from './viewmodel.js?v=af06afbe4f';
 import * as sfx from './audio.js?v=a541447a7e';
 
@@ -261,6 +261,7 @@ function showMenu(show) {
   $('menu').hidden = !show;
   $('caricamento').hidden = true;
   $('hud').hidden = show || !ready;
+  if (controls) controls.active = !show && ready;
   if (show) {
     controls && (controls.fire = false);
     $('gioca').textContent = started ? 'Riprendi' : 'Gioca';
@@ -289,7 +290,7 @@ function play() {
   started = true;
   sfx.unlockAudio();
   showMenu(false);
-  if (!controls.touch) canvas.requestPointerLock?.();
+  controls.lock();
 }
 $('gioca').onclick = play;
 $('sfida-via').onclick = () => {

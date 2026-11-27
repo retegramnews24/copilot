@@ -38,10 +38,24 @@ export function createControls(canvas, ui, { onMenu }) {
     s.fire = false;
     s.aim = false;
   });
+  // Puntatore bloccato quando si può; se il browser non lo permette (alcune finestre di Telegram, riquadri senza il
+  // permesso) si gioca a «mouse libero»: la vista segue il mouse dentro la finestra e il cursore sparisce.
+  s.free = !canvas.requestPointerLock;
+  s.lock = () => {
+    if (touch || s.free) return;
+    try {
+      const p = canvas.requestPointerLock();
+      if (p && p.catch) p.catch(() => (s.free = true));
+    } catch {
+      s.free = true;
+    }
+  };
+  document.addEventListener('pointerlockerror', () => (s.free = true));
+  const steering = () => s.locked || (s.free && s.active);
   canvas.addEventListener('mousedown', e => {
     if (touch) return;
-    if (!s.locked) {
-      canvas.requestPointerLock?.();
+    if (!steering()) {
+      s.lock();
       return;
     }
     if (e.button === 0) s.fire = true;
@@ -52,17 +66,25 @@ export function createControls(canvas, ui, { onMenu }) {
   });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   addEventListener('wheel', e => {
-    if (s.locked) press(e.deltaY > 0 ? 'prossima' : 'precedente');
+    if (steering()) press(e.deltaY > 0 ? 'prossima' : 'precedente');
   });
   document.addEventListener('pointerlockchange', () => {
     s.locked = document.pointerLockElement === canvas;
-    if (!s.locked && !touch) {
+    if (s.locked) s.free = false;
+    else if (!touch && !s.free) {
+      s.fire = false;
+      onMenu(true);
+    }
+  });
+  addEventListener('keydown', e => {
+    if (e.code === 'Escape' && s.free && s.active) {
       s.fire = false;
       onMenu(true);
     }
   });
   addEventListener('mousemove', e => {
-    if (!s.locked) return;
+    canvas.style.cursor = s.free && s.active ? 'none' : '';
+    if (!steering()) return;
     const k = 0.0022 * s.sens * (s.zoom || 1);
     s.yaw -= e.movementX * k;
     s.pitch = Math.max(-1.5, Math.min(1.5, s.pitch - e.movementY * k));
