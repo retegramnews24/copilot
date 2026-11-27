@@ -387,6 +387,13 @@ con il punto di mira (`SIGHT` in `viewmodel.js`) sulla linea dello sguardo, disp
 `rules.js`), e si cammina soltanto (il server mette il passo lento quando arriva il bit della mira). Col Ruggito si
 vede il punto rosso nella lente.
 
+**Mouse libero con due monitor (28 novembre).** Dove Telegram non lascia bloccare il puntatore (Telegram Web, e
+forse alcune versioni per computer) si gioca a «mouse libero» e il cursore poteva uscire sull'altro monitor: la vista
+si fermava e non si girava a 360°. In `controls.js`: vicino al bordo sinistro o destro della finestra (15% per lato)
+la vista continua a girare, più in fretta più si è vicini al bordo (fino a circa un giro in 2 secondi), con una
+freccia sul bordo; se il mouse esce dalla finestra si ferma; a ogni clic (al massimo ogni 3 s) si riprova a bloccare
+il puntatore.
+
 **Da fare ancora, se il proprietario vuole:** impostazioni dell'ospite (tempo, livello dei bot), annuncio sulla
 bacheca della Lobby, bot che salgono sulle torri o raccolgono armi.
 

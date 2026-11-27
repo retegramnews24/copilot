@@ -86,6 +86,9 @@ vero) e nell'anteprima contro 3 bot; non ancora in un commit.
   ricaricare, mirino del Falco, sfida di 60 secondi, suoni, Esci. Guardare se le braccia e le armi stanno bene in
   vista e se il telefono regge.
 
+- Zona Operativa col mouse libero (l'amico con due monitor): portando il mouse al bordo della finestra la vista
+  deve continuare a girare, a 360°.
+
 - Zona Operativa a squadre con i bot, anche da soli: scelta della squadra, i bot che girano e sparano (troppo
   bravi o troppo scarsi?), punteggio delle squadre, mani e mira con il tasto destro.
 

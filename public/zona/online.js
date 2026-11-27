@@ -20,7 +20,7 @@ import {
   rng
 } from './rules.js?v=6b60391eb6';
 import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
-import { createControls } from './controls.js?v=3ccaaf123b';
+import { createControls } from './controls.js?v=3e96426e5e';
 import { createViewmodel } from './viewmodel.js?v=346e311811';
 import { createNet, DT } from './net.js?v=fca50b11d7';
 import * as sfx from './audio.js?v=337aee686c';

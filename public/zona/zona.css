@@ -92,3 +92,9 @@ html,body{margin:0;height:100%;background:#0d0f11;color:#e8e2d2;font:15px/1.35 s
 #mirino.puntorosso{display:block!important}
 #mirino.puntorosso i.h,#mirino.puntorosso i.v{display:none}
 #mirino.puntorosso .punto{width:5px;height:5px;left:-2.5px;top:-2.5px;border-radius:50%;background:#ff2a1a;box-shadow:0 0 4px #ff2a1a}
+/* mouse libero: vicino al bordo la vista continua a girare (controls.js) */
+#bordo-giro{position:fixed;top:0;bottom:0;width:15%;pointer-events:none;display:flex;align-items:center;font:800 34px system-ui,sans-serif;color:rgba(255,255,255,.55);text-shadow:0 1px 4px #000}
+#bordo-giro.sinistra{left:0;justify-content:flex-start;padding-left:14px;background:linear-gradient(90deg,rgba(255,255,255,.10),transparent)}
+#bordo-giro.destra{right:0;justify-content:flex-end;padding-right:14px;background:linear-gradient(270deg,rgba(255,255,255,.10),transparent)}
+#bordo-giro.sinistra::before{content:'\25C0'}
+#bordo-giro.destra::before{content:'\25B6'}
