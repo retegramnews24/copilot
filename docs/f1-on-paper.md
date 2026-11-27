@@ -26,11 +26,16 @@ telefono, oppure online da 2 a 8 auto tra persone e bot (`f1-server.js`, un ogge
   - «Contro l'IA»: tu più da 1 a 7 bot; prima metti la tua auto, poi i bot la loro.
   - «Stesso telefono»: i piloti giocano a turno e dopo di loro i bot, che mettono l'auto e muovono da soli quando
     tocca a loro.
-  - Online: chi crea sceglie quanti piloti aspettare (lui compreso) e quanti bot; in sala d'attesa può cambiare i bot finché non
+  - Online: chi crea sceglie quanti piloti aspettare (lui compreso) e quanti bot (si parte sempre da 0 bot: i
+    posti sono per le persone); in sala d'attesa può cambiare i bot finché non
     preme «Parti ora», solo nei posti non presi dalle persone. Al via i posti rimasti liberi restano vuoti. I bot
     vanno sulla linea per ultimi (dopo chi ha creato la gara) e scelgono subito a ogni giro, così si aspettano solo le
     persone. Se vince un bot nessuno prende la vittoria nella Lobby. Per la Lobby i posti sono quelli delle persone
     («2/3 piloti + 1 bot»).
+
+- **Entrare.** Dall'avviso della campanella o della bacheca, dalla Lobby, oppure con «Gioca» (anche dal cabinet della
+  Lobby 3D): se hai una gara online aperta la riprendi; se una gara aspetta piloti ci entri subito; solo altrimenti si
+  apre il gioco per una gara nuova (`public/f1-link.js`).
 
 ## Limiti della pista
 

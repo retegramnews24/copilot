@@ -122,7 +122,9 @@ function loadSetup() {
   if (Number.isInteger(s.laps)) draft.laps = Math.max(1, Math.min(9, s.laps));
   if (Number.isInteger(s.bots)) draft.bots = s.bots;
   if (Number.isInteger(s.people)) draft.people = s.people;
-  else if (Number.isInteger(s.players)) draft.people = s.players - (draft.mode === 'local' ? 0 : draft.bots);
+  else if (Number.isInteger(s.players)) draft.people = s.players;
+  // online si parte sempre senza bot: i posti sono per le persone, i bot si aggiungono a mano
+  if (draft.mode === 'net') draft.bots = 0;
   fitCars();
 }
 
@@ -138,6 +140,8 @@ for (const b of document.querySelectorAll('[data-m]'))
     draft.mode = b.dataset.m;
     // tornando da «Contro l'IA» (dove sei solo tu) si riparte da 2 piloti
     if (draft.people < 2) draft.people = 2;
+    // online si parte senza bot: i posti sono per le persone, i bot si aggiungono a mano
+    if (draft.mode === 'net') draft.bots = 0;
     fitCars();
     syncSetupButtons();
     setupInfo();

@@ -156,6 +156,10 @@ try {
   const inLobby = (await call(8002, '/api/lobby')).data.games.find(g => g.room === room2);
   assert.equal(inLobby.capacity, 1, 'for the Lobby the seats are the people’s');
   assert.equal(inLobby.bots, 1);
+  assert.ok(
+    (await call(8002, '/api/lobby')).data.notices.some(n => n.room === room2),
+    'the bell notice is there also with a bot'
+  );
   assert.equal((await call(8002, '/api/f1/' + room2 + '/join', {})).status, 409, 'full with the bot');
   assert.equal((await call(8002, '/api/f1/' + room2 + '/bots', { bots: 0 })).status, 409, 'only the creator');
   const noBot = await call(8001, '/api/f1/' + room2 + '/bots', { bots: 0 });

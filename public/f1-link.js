@@ -105,14 +105,23 @@ export function createF1Link({
     }
   }
   // Open a race from the Lobby, the bell or "Riprendi": join while there are seats, otherwise watch.
-  async function open(selected) {
+  // join: from the cabinet / «Gioca» you go straight into the race waiting for drivers (no «Entra in gara» to tap).
+  async function open(selected, join = false) {
     const who = me();
     if (!who || pending || (!overlay.hidden && room === selected)) return;
     pending = true;
     try {
       const path = '/api/f1/' + selected;
       // chi non è già dentro guarda la sala d'attesa e sceglie lui se entrare (tasto «Entra» nel gioco)
-      const result = await request(path + '/state');
+      let result = await request(path + '/state');
+      const s = result.state;
+      if (
+        join &&
+        s.phase === 'waiting' &&
+        !s.players.some(p => p.id === who.player) &&
+        s.players.length + (s.bots || 0) < s.capacity
+      )
+        result = await request(path + '/join', {});
       if (!overlay.hidden) close();
       clock(result);
       // la sala si segna solo con la pista in mano: prima, se la pista non arrivava, restava segnata a gioco chiuso
@@ -148,8 +157,17 @@ export function createF1Link({
     roomClosed(selected);
     onError('Gara chiusa.');
   }
+  // «Gioca» (anche dal cabinet della Lobby 3D): se c'è una gara online tua la riprendi; se una gara aspetta piloti
+  // ci entri; solo altrimenti si apre il gioco per una gara nuova
   $('play-f1').onclick = () => {
-    if (overlay.hidden) show(false);
+    if (!overlay.hidden || pending) return;
+    const who = me(),
+      list = (games?.() || []).filter(g => g.game === 'f1' && g.phase !== 'finished');
+    const mine = who && list.find(g => g.players?.some(p => p.id === who.player)),
+      free = who && list.find(g => g.phase === 'waiting' && (g.players?.length || 0) < g.capacity);
+    if (mine) open(mine.room);
+    else if (free) open(free.room, true);
+    else show(false);
   };
   frame.addEventListener('load', () => {
     if (!overlay.hidden) {

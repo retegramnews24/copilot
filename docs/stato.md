@@ -75,14 +75,15 @@ online non sono provati nell'app di staging.
 **F1 on paper! con i bot** (`docs/f1-on-paper.md`, voce «Bot»): in tutti e tre i modi si scelgono «Piloti» e «Bot»,
 al massimo 8 auto in tutto: «Contro l'IA» tu più da 1 a 7 bot, «Stesso telefono» piloti a turno più bot che muovono da
 soli, online persone più bot (cambiabili in sala d'attesa da chi crea). Scelte del proprietario: posti liberi vuoti al
-via, bravi come l'IA di oggi; nomi «Bot 1, Bot 2…». Su staging dal commit 81cfe5a; dopo, non ancora in un commit:
-la scelta «Piloti» più «Bot» e i bot sullo stesso telefono (provati nell'anteprima con 1 pilota e 3 bot).
+via, bravi come l'IA di oggi; nomi «Bot 1, Bot 2…». Tutto su staging. Poi: online si parte sempre da 0 bot (prima un
+bot salvato poteva prendersi l'unico posto libero, e all'altro non restava posto), e «Gioca» / il cabinet porta nella
+gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara nuova.
 
 ## Da provare
 
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,
-  l'avviso nella campanella e una gara con un bot.
+  l'avviso nella campanella e una gara con un bot; in due, uno crea la gara e l'altro entra dal cabinet.
 
 - Zona Operativa, poligono di tiro, nel computer e nel telefono: muoversi, prendere le armi al bancone, sparare,
   ricaricare, mirino del Falco, sfida di 60 secondi, suoni, Esci. Guardare se le braccia e le armi stanno bene in
