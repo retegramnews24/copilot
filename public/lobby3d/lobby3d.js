@@ -18,13 +18,14 @@ import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=6d79d0e827';
-import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=8c167441b8';
+import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a262b27013';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea7100a3a8';
 import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
 import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
 import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
+import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=278b8afd1b';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 
 const H = 3.4; // altezza delle stanze
@@ -1369,6 +1370,79 @@ export function createLobby3D(app) {
     }
   }
   drawLocandina(null);
+
+  // Macchinetta caffè e snack (docs/macchinetta.md; vending.js, models/macchinetta.glb), nell'atrio contro la parete
+  // del cinema, a destra della porta, girata verso l'atrio. «Usa (E)»: la visuale va davanti al pannello e si toccano
+  // i tasti; il prodotto pronto si prende toccandolo e passa in mano al personaggio; «Mangia / Bevi» (F) per consumarlo
+  // in tre volte. Gli altri lo vedono: il prodotto in mano viaggia nella posa (snack: id, quanti ne restano, morsi).
+  const VEND={x:6.15,z:5.22},HELD_SCALE=2.2; // in mano più grande del vero: i personaggi sono a blocchi
+  let vend=null,vendGltf=null,vendMode=false,held=null,heldBites=0;
+  const vendSound=vendingSounds(()=>soundAllowed()&&audioContext?.state==='running'?audioContext:null);
+  solid(VEND.x-.57,VEND.x+.57,VEND.z,6.0);
+  spots.push({x:VEND.x,z:VEND.z-.3,hx:.55,hz:.2,pad:.7,label:'Macchinetta',where:'Lobby',vend:true,act:()=>{}});
+  new GLTFLoader().load(new URL('models/macchinetta.glb',import.meta.url).href,gltf=>{
+    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:vendSound});
+    vend.root.position.set(VEND.x,0,VEND.z);vend.root.rotation.y=Math.PI;scene.add(vend.root);
+  });
+  const vendExit=document.createElement('button'),eatButton=document.createElement('button');
+  vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=true;
+  // sul computer «Mangia / Bevi» sta sopra il tasto d'azione, così non si coprono
+  for(const [b,up] of [[vendExit,8],[eatButton,60]])b.style.cssText=touch?'order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + '+up+'px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  (touch?dock:el).append(vendExit,eatButton);
+  function enterVend(){
+    if(!vend||held)return;
+    if(document.pointerLockElement)document.exitPointerLock?.();
+    vendMode=true;resetMovement();me.root.visible=false;actB.hidden=true;stick.hidden=true;vendExit.hidden=false;near=null;
+  }
+  function exitVend(){
+    if(!vendMode)return;
+    vendMode=false;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
+  }
+  vendExit.onclick=exitVend;
+  // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto (vano, sportello o bicchiere)
+  const vendRay=new THREE.Raycaster(),vendNDC=new THREE.Vector2();
+  el.addEventListener('pointerdown',e=>{
+    if(!vendMode||!vend||e.target.tagName!=='CANVAS')return;
+    e.stopPropagation();e.preventDefault();
+    const b=host.getBoundingClientRect();vendNDC.set(2*(e.clientX-b.left)/b.width-1,1-2*(e.clientY-b.top)/b.height);
+    vendRay.setFromCamera(vendNDC,camera);
+    const hit=vendRay.intersectObject(vend.root,true)[0];if(!hit)return;
+    const readyMesh=vend.ready()?.mesh;let onReady=false;
+    for(let q=hit.object;q;q=q.parent)if(q===readyMesh)onReady=true;
+    const v=vend.hit(hit.object);
+    if(onReady||v?.type==='flap'||v?.type==='cup'){const product=vend.take();if(product){holdProduct(product);exitVend()}}
+  },true);
+  function holdProduct(product){
+    held=makeHeld(vendGltf,product);heldBites=0;held.group.scale.setScalar(HELD_SCALE);scene.add(held.group);
+    eatButton.textContent=(product.pack?'Mangia':'Bevi')+' · '+product.name+(touch?'':' (F)');eatButton.hidden=false;
+  }
+  function eat(){
+    if(!held||!held.left())return;
+    const left=held.bite();heldBites++;vendSound(held.product.pack?'morso':'sorso');
+    (me.fx||(me.fx={crouch:0,guard:0,punch:9,starsUntil:0})).bite=0;
+    if(!left){const done=held;held=null;eatButton.hidden=true;setTimeout(()=>done.group.removeFromParent(),450)}
+  }
+  eatButton.onclick=eat;
+  // il prodotto segue la mano destra del personaggio (in piedi, dritto, girato come lui)
+  const handPoint=new THREE.Vector3();
+  function toHand(c,group){
+    c.elbows[0].updateWorldMatrix(true,false);
+    handPoint.set(0,-.3,.12);c.elbows[0].localToWorld(handPoint);
+    group.position.set(handPoint.x,handPoint.y-.1,handPoint.z);group.rotation.set(0,c.root.rotation.y,0);
+    group.visible=c.root.visible;
+  }
+  const heldPose=()=>held&&held.left()?{snack:{id:held.product.id,left:held.left(),n:heldBites}}:{};
+  const PRODUCTS=new Map([...SNACKS,...DRINKS].map(p=>[p.id,p]));
+  // gli altri: il prodotto in mano come nella loro posa; a ogni morso nuovo il braccio sale alla bocca
+  function peerSnack(c){
+    const want=c.snackWanted,product=want&&vendGltf?PRODUCTS.get(want.id):null;
+    if(c.snack&&(!product||c.snack.product!==product)){c.snack.group.removeFromParent();c.snack=null}
+    if(product&&!c.snack){c.snack=makeHeld(vendGltf,product);c.snack.group.scale.setScalar(HELD_SCALE);scene.add(c.snack.group);c.snackN=want.n}
+    if(!c.snack)return;
+    if(want.n!==c.snackN){c.snackN=want.n;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).bite=0}
+    while(c.snack.left()>want.left)c.snack.bite();
+    c.snack.update(peerDt);toHand(c,c.snack.group);
+  }
   // Reception counter and tabletop receiver on the east side of the atrium.
   const counterX=5.95,counterZ=-3.35;
   // il mobile della radio: credenza di noce anni '60 con ante a doghe, gambe affusolate e filo d'ottone
@@ -1749,11 +1823,11 @@ export function createLobby3D(app) {
       let look=cam.yaw-Math.PI;look=Math.atan2(Math.sin(look),Math.cos(look));
       const yaw=seating.seat?seating.yaw:Math.PI;
       look=cam.yaw-yaw;look=Math.atan2(Math.sin(look),Math.cos(look));
-      return {station:'seat',x:r(pos.x),z:r(pos.z),y:Math.round((cinemaFloor(pos.x,pos.z)+(stools[seating.stool]?.y??0))*1000)/1000,yaw:r(yaw),look:r(look),pitch:r(cam.pitch)};
+      return {station:'seat',x:r(pos.x),z:r(pos.z),y:Math.round((cinemaFloor(pos.x,pos.z)+(stools[seating.stool]?.y??0))*1000)/1000,yaw:r(yaw),look:r(look),pitch:r(cam.pitch),...heldPose()};
     }
     // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
     const r=v=>Math.round(v*20)/20;
-    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(lastHit?{hit:lastHit}:{})};
+    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(lastHit?{hit:lastHit}:{}),...heldPose()};
   }
   function descriptor(){
     const pose=currentPose();if(!pose)return null;
@@ -1774,7 +1848,7 @@ export function createLobby3D(app) {
     for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1}
     c.lookYaw=Number(p.look)||0;c.lookPitch=0;
     animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
-    actCharacter(c,{crouch:p.crouch,guard:p.guard},peerDt,t);
+    actCharacter(c,{crouch:p.crouch,guard:p.guard,hold:!!p.snack},peerDt,t);
     return {x:w.x,z:w.z,yaw:w.yaw};
   }
   function seatPose(c,p){
@@ -1917,14 +1991,15 @@ export function createLobby3D(app) {
         if(c.seenPunch===undefined){c.seenPunch=cp.punch||0;c.seenHit=cp.hit?.n||0}
         if((cp.punch||0)!==c.seenPunch){c.seenPunch=cp.punch||0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0}
         if(cp.hit&&cp.hit.n!==c.seenHit){c.seenHit=cp.hit.n;struck(String(cp.hit.id),!!cp.hit.blocked,c)}
+        c.snackWanted=cp.snack||null; // prodotto della macchinetta in mano (peerSnack)
       }
       for(const [id,c] of peers)if(!present.has(id)){
-        c.root.removeFromParent();
+        c.root.removeFromParent();c.snack?.group.removeFromParent();
         const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh||o.isSprite){geometries.add(o.geometry);materials.add(o.material)}});
         for(const g of geometries)g.dispose();for(const m of materials){m.map?.dispose();m.dispose()}peers.delete(id);
       }
     }
-    for(const c of peers.values())c.root.visible=!!modelPose(c,c.pose);
+    for(const c of peers.values()){c.root.visible=!!modelPose(c,c.pose);peerSnack(c)}
   }
   let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0, jumpPrep = 0;
   // salto: prima le ginocchia si piegano un poco (0,12 s, la spinta) e poi si stacca da terra
@@ -1949,6 +2024,9 @@ export function createLobby3D(app) {
     if (!active || document.querySelector('dialog[open]')) return;
     // bacheca aperta: si scrive nella chat; Esc la chiude
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
+    // davanti alla macchinetta si usano solo i tasti sul pannello; Esc per andare via
+    if (vendMode) { if (e.type === 'keydown' && e.code === 'Escape') exitVend(); e.preventDefault(); return; }
+    if (held && e.code === 'KeyF') { if (e.type === 'keydown' && !e.repeat) eat(); e.preventDefault(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
     if(e.code==='KeyH'){if(e.type==='keydown'&&!e.repeat)toggleHelp();e.preventDefault();return} // i comandi
@@ -2139,7 +2217,7 @@ export function createLobby3D(app) {
     animateCharacter(me, moving, dt, t);
     // un passo a ogni appoggio del piede (più piano abbassati, più forte correndo)
     { const foot = Math.floor(me.phase / Math.PI); if (foot !== lastFoot) { lastFoot = foot; if (moving > 0.4 && !seating && jumpHeight === 0) fxSound('step', Math.min(1.2, moving / SPEED) * (crouching ? 0.45 : 1)); } }
-    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating }, dt, t);
+    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating, hold: !!held }, dt, t);
     if (jumpPrep > 0 && (jumpPrep -= dt) <= 0) { jumpPrep = 0; if (!seating) verticalSpeed = 4.1; } // finita la spinta: si salta
     if (verticalSpeed !== 0 || jumpHeight > 0) {
       const gravity = 13, inAir = jumpHeight > 0;
@@ -2175,8 +2253,9 @@ export function createLobby3D(app) {
       actB.hidden = !near;
       if (near?.pong) actB.textContent = monitor ? 'Spegni Pong · '+(touch?'tocca il monitor':'racchetta I/K') : 'Avvia Pong'+(touch?'':' (E)');
       else if (near?.balilla) actB.textContent = near.label + (touch ? ' · Gioca' : ' · Gioca (E)');
-      else if (near) actB.textContent = (near.sit||near.seat?'':'Apri · ') + near.label + (touch ? '' : '  (E)') + (near.stool!=null&&!touch ? ' · Prendi (G)' : '');
+      else if (near) actB.textContent = (near.sit||near.seat?'':near.vend?'Usa · ':'Apri · ') + near.label + (touch ? '' : '  (E)') + (near.stool!=null&&!touch ? ' · Prendi (G)' : '');
     }
+    if (vendMode) { near = null; actB.hidden = true; } // davanti alla macchinetta c'è solo «Esci»
     ring.visible = !!near && !!near.mq;
     for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
     if (near && near.mq) { ring.position.set(near.x, 0.012, near.z); ring.rotation.z = t; }
@@ -2202,6 +2281,15 @@ export function createLobby3D(app) {
     camera.position.copy(tgt).addScaledVector(tmp, d);
     camera.position.y = Math.min(H - 0.15, camera.position.y); // stessa altezza in tutte le sale, anche nel cinema più alto
     camera.lookAt(tgt);
+    // macchinetta: davanti al pannello, a un metro, all'altezza degli occhi; si anima solo da vicino
+    if(vendMode){
+      // abbastanza lontano da vedere tutta la larghezza (1,1 m) anche su uno schermo stretto, almeno 1,15 m
+      const half=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect);
+      const d=Math.max(1.15,.62/Math.tan(half));
+      camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z);
+    }
+    if(vend&&(vendMode||Math.hypot(pos.x-VEND.x,pos.z-VEND.z)<9))vend.update(dt,performance.now());
+    if(held){held.update(dt);toHand(me,held.group)}
     if(seating){
       standButton.hidden=!touch;seatActions.hidden=!touch&&enterButton.hidden;
       actB.hidden=true;
@@ -2293,7 +2381,7 @@ export function createLobby3D(app) {
     const anchor=modelPose(me,localPose);
     me.head.visible=!firstPerson;
     // al calcio balilla il tuo personaggio non copre il tavolo nella tua vista (gli altri lo vedono alle manopole)
-    if(!seating)me.root.visible=!playing()&&!boardOpen;
+    if(!seating&&!vendMode)me.root.visible=!playing()&&!boardOpen;
     // al calcio balilla la telecamera la decide il tavolo (dal tuo lato, o dall'alto sullo stesso telefono)
     if(firstPerson&&!seating&&!playing()&&!boardOpen){
       const yaw=anchor?.yaw??cam.yaw;
@@ -2435,6 +2523,7 @@ export function createLobby3D(app) {
       return;
     }
     if(s.radio){resetMovement();s.act();return}
+    if(s.vend){enterVend();return} // macchinetta: visuale davanti al pannello, la 3D resta aperta
     if(s.station)parked={station:s.station,slot:freeSeat(s)};
     hide();
     s.act();

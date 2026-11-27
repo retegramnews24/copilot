@@ -46,6 +46,13 @@ try{
  spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'f1-on-paper',slot:4,shirt:'#112233',shorts:'#445566'}}));
  walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.station==='f1-on-paper'))).users.find(u=>u.id==='21').clubPose;
  assert.equal(walker.slot,4);assert.equal(walker.x,undefined);
+ // macchinetta: il prodotto in mano passa agli altri (solo con un id valido e da 1 a 3 morsi rimasti)
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:4,yaw:0,snack:{id:'espresso',left:2,n:1}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.snack))).users.find(u=>u.id==='21').clubPose;
+ assert.deepEqual(walker.snack,{id:'espresso',left:2,n:1});
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:4.5,yaw:0,snack:{id:'<b>',left:9}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.5))).users.find(u=>u.id==='21').clubPose;
+ assert.equal(walker.snack,undefined,'snack non valido scartato');
  spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false,pose:null}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&!u.clubPose));
  spectator.ws.send(JSON.stringify({type:'presence',room:dama.data.state.room,away:true}));await until(spectator,p=>p.users&&!p.users.some(u=>u.id==='21'));
  console.log('PASS spectator presence: live chess/checkers table changes, unique identity, Lobby return and away removal.');

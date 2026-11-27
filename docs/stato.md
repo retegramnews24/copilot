@@ -7,11 +7,15 @@ Aggiornato il 26 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.70**: sala cinema nuova della Lobby 3D. Le 8 prove passate. (1.0.69: backup dall'app; 1.0.68:
-  Lobby 3D nuova.)
-- `staging`: 1.0.70, uguale a `main` (`branch-diff`: nessuna differenza).
+- `main`: **1.0.71**: macchinetta caffè e snack nell'atrio (1.0.70: sala cinema nuova; 1.0.69: backup dall'app;
+  1.0.68: Lobby 3D nuova). Le 8 prove passate.
+- `staging`: 1.0.71, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
+
+**Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
+porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,
+anche con due giocatori.
 
 **Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario. Nella 1.0.70 (staging e main), da
 guardare con un film vero nell'app: sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,

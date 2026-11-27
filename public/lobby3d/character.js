@@ -236,6 +236,17 @@ export function actCharacter(c, a, dt, t) {
     c.torso.rotation.y = -0.2 * back * up;
     c.head.rotation.x += -0.08 * down * back;
   }
+  // un prodotto della macchinetta in mano (a.hold): braccio destro avanti col gomito piegato; a ogni morso o sorso
+  // (c.fx.bite = secondi dall'ultimo) la mano sale alla bocca per mezzo secondo
+  fx.bite = (fx.bite ?? 9) + dt;
+  if (a.hold) {
+    const b = fx.bite < 0.5 ? Math.sin((fx.bite / 0.5) * Math.PI) : 0;
+    c.arms[0].rotation.x = mix(0.55, 1.05, b);
+    c.arms[0].rotation.z = mix(0.12, 0.25, b);
+    c.elbows[0].rotation.x = mix(1.25, 2.15, b);
+    c.elbows[0].rotation.z = 0;
+    c.head.rotation.x += 0.12 * b;
+  }
   // stelline
   const st = fx.starsUntil > t ? stars(c) : c.stars;
   if (st) {

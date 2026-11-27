@@ -862,6 +862,22 @@ export class Room extends DurableObject {
                       : 0
                   }
                 : {}),
+              // prodotto della macchinetta in mano (solo visivo): quale, quanti morsi o sorsi restano, quanti fatti
+              ...((pose.station === 'walk' || pose.station === 'seat') &&
+              pose.snack &&
+              typeof pose.snack.id === 'string' &&
+              /^[a-z0-9-]{1,16}$/i.test(pose.snack.id) &&
+              Number.isInteger(pose.snack.left) &&
+              pose.snack.left >= 1 &&
+              pose.snack.left <= 3
+                ? {
+                    snack: {
+                      id: pose.snack.id,
+                      left: pose.snack.left,
+                      n: Number.isInteger(pose.snack.n) ? Math.max(0, pose.snack.n) % 1e9 : 0
+                    }
+                  }
+                : {}),
               // azioni solo visive mentre si cammina: abbassato, in parata, colpi dati e a chi (niente salute)
               ...(pose.station === 'walk'
                 ? {
