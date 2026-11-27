@@ -414,7 +414,11 @@ export class Room extends DurableObject {
             return json({ error: MSG.live }, 426);
           // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
           makeRoomFor(this.ctx, userOf(req)?.id);
-          const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
+          // ?look=1: il tavolo della Lobby 3D che mostra la partita (public/lobby3d/table-live.js). Vista da
+          // spettatore e senza giocatore: non tiene in vita una partita finita (hasResultViewer), non entra senza posto
+          const look = new URL(req.url).searchParams.get('look') === '1';
+          const seen = look ? null : viewer;
+          const isPlayer = !!seen && (s.players || []).some(p => p.id === seen);
           if (!isPlayer && this.ctx.getWebSockets().length >= 60)
             return json({ error: 'Tavolo pieno: troppe persone collegate.' }, 429);
           const pair = new WebSocketPair();
@@ -424,9 +428,9 @@ export class Room extends DurableObject {
             memberId: userOf(req)?.id,
             accessTag: req.headers.get('X-Access-Tag'),
             expires: Number(req.headers.get('X-Session-Expires')),
-            player: viewer
+            player: seen
           });
-          pair[1].send(JSON.stringify(this.public(s, viewer)));
+          pair[1].send(JSON.stringify(this.public(s, seen)));
           return new Response(null, {
             status: 101,
             webSocket: pair[0],

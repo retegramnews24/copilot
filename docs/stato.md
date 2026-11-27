@@ -3,7 +3,7 @@
 Una pagina sola, da leggere all'inizio di ogni sessione e da aggiornare alla fine. Qui non si racconta cosa è stato
 fatto (quello è nella storia dei commit): si scrive solo cosa serve per ripartire.
 
-Aggiornato il 26 novembre 2026.
+Aggiornato il 27 novembre 2026.
 
 ## Versioni
 
@@ -43,17 +43,25 @@ Battaglia navale, Scacchi e Dama), come dati nei file `public/lobby3d/table-*.js
 così più avanti il tavolo potrà mostrare la partita vera. Sedie ai lati corti, ogni giocatore ha i suoi pezzi
 davanti.
 
+**Partita vera sui tavoli della Lobby 3D** (`docs/finiture-lobby.md`, voce «Partita vera sui tavoli»): fatto
+Forza 4, su staging dopo il push. Scelte del proprietario: si vede la tua partita, se no quella con l'ultima mossa;
+senza partite i pezzi in posizione iniziale; in diretta solo vicino alla sala; si parte da Forza 4 e si aggiunge un
+gioco alla volta, dopo averlo guardato nell'app.
+
 ## Da provare
 
-Niente. Il 26 novembre il proprietario ha visto la Lobby 3D nuova nell'app vera e ha fatto le prove del balilla
+- Forza 4 vero sul tavolo 3D, con due persone: una gioca, l'altra guarda il tavolo nella sala tavoli e vede i
+  gettoni comparire; a partita chiusa la griglia torna vuota.
+
+Il resto è a posto. Il 26 novembre il proprietario ha visto la Lobby 3D nuova nell'app vera e ha fatto le prove del balilla
 (gol contato e fine partita sul server vero, posto tenuto 30 secondi con l'app nascosta): tutto a posto. Il
 ripristino di un backup è stato provato sull'app di prova (Impostazioni → Backup). Lo schermo intero funziona su
 Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web non lo permette.
 
 ## Rimandato
 
-- Sala tavoli: mostrare sul tavolo 3D la partita vera, come Pong sul televisore, così chi guarda non deve entrare
-  nel gioco.
+- Sala tavoli: la partita vera anche sugli altri tavoli (dopo Forza 4): Scacchi, Dama, carte, Scarabeo,
+  Battaglia navale.
 - Lobby 3D, meno oggetti disegnati (analisi 3.4 e 3.5): da riprendere se il telefono scalda. Prima guardare i
   numeri in Debug → «Misure della Lobby 3D».
 - Dividere `public/lobby3d/lobby3d.js` e `public/app.js` in pezzi, uno per volta, con un piano.

@@ -25,6 +25,7 @@ import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea710
 import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
 import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
 import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
+import { createTableLive } from './table-live.js?v=df2df46159';
 import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=278b8afd1b';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 
@@ -770,27 +771,39 @@ export function createLobby3D(app) {
   });
   // Forza 4 sul suo tavolo (blender/forza4.blend → models/forza4.glb): la griglia in piedi al centro, di taglio, così
   // ognuno dei due giocatori la vede dal suo lato; i gettoni della partita nei fori e quelli di riserva nel vassoio
-  // davanti a ciascuno (rossi a sinistra, gialli a destra). Per ora una partita di esempio: le posizioni sono dati
-  // (col, riga, colore), così più avanti si può mostrare la partita vera.
+  // davanti a ciascuno (rossi a sinistra, gialli a destra). Nella griglia la partita vera (table-live.js): la tua, se
+  // no quella con l'ultima mossa; senza partite la griglia è vuota. Un solo oggetto: 12 di riserva, poi fino a 42.
+  let connectFourBoard=null,paintConnectFour=()=>{};
   if(connectFour)new GLTFLoader().load(new URL('models/forza4.glb',import.meta.url).href,gltf=>{
     const [tx,tz]=connectFour,top=.834,P=.06,ROW0=.079; // passo dei fori e centro della riga più bassa (forza4.blend)
     const grid=gltf.scene.getObjectByName('f4_griglia'),disc=gltf.scene.getObjectByName('f4_gettone'),tray=gltf.scene.getObjectByName('f4_vassoio');
     if(grid){const g=grid.clone();g.position.set(tx,top,tz);g.rotation.y=Math.PI/2;g.traverse(o=>{if(o.isMesh)o.castShadow=true});scene.add(g)}
     for(const side of [-1,1])if(tray){const t=tray.clone();t.position.set(tx+side*.62,top,tz);scene.add(t)}
     const discMesh=disc?.isMesh?disc:disc?.children.find(o=>o.isMesh);if(!discMesh)return;
-    const RED='#d9372f',YELLOW='#f2c230';
-    const game=[[3,0,RED],[2,0,YELLOW],[4,0,RED],[3,1,YELLOW],[1,0,YELLOW],[2,1,RED],[4,1,YELLOW],[3,2,RED],[5,0,RED],[5,1,YELLOW],[0,0,YELLOW]];
-    const spare=[];for(const [side,c] of [[-1,RED],[1,YELLOW]])for(let k=0;k<6;k++)spare.push([side,k,c]);
-    const set=new THREE.InstancedMesh(discMesh.geometry,discMesh.material,game.length+spare.length);
+    const COLORS=[new THREE.Color('#d9372f'),new THREE.Color('#f2c230')]; // Rosso (giocatore 0), Giallo (giocatore 1)
+    const SPARE=12,set=new THREE.InstancedMesh(discMesh.geometry,discMesh.material,SPARE+42);
     const m=new THREE.Matrix4(),q=new THREE.Quaternion(),one=new THREE.Vector3(1,1,1);
-    // nella griglia: il disco guarda i giocatori (asse lungo x)
-    q.setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2);
-    game.forEach(([col,row,c],i)=>{set.setMatrixAt(i,m.compose(new THREE.Vector3(tx,top+ROW0+row*P,tz-(col-3)*P),q,one));set.setColorAt(i,new THREE.Color(c))});
     // nel vassoio: distesi, in fila
     q.setFromAxisAngle(new THREE.Vector3(1,0,0),Math.PI/2);
-    spare.forEach(([side,k,c],i)=>{set.setMatrixAt(game.length+i,m.compose(new THREE.Vector3(tx+side*.62,top+.012,tz-.11+k*.044),q,one));set.setColorAt(game.length+i,new THREE.Color(c))});
+    for(let i=0;i<SPARE;i++){const side=i<6?-1:1;set.setMatrixAt(i,m.compose(new THREE.Vector3(tx+side*.62,top+.012,tz-.11+(i%6)*.044),q,one));set.setColorAt(i,COLORS[i<6?0:1])}
+    // nella griglia: il disco guarda i giocatori (asse lungo x). board: 42 caselle, riga 0 in alto (connect4.js)
+    const face=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),Math.PI/2);
+    paintConnectFour=board=>{
+      let n=SPARE;
+      (board||[]).forEach((who,at)=>{
+        if(who!==0&&who!==1)return;
+        const col=at%7,row=5-Math.floor(at/7);
+        set.setMatrixAt(n,m.compose(new THREE.Vector3(tx,top+ROW0+row*P,tz-(col-3)*P),face,one));set.setColorAt(n,COLORS[who]);n++;
+      });
+      set.count=n;set.instanceMatrix.needsUpdate=true;if(set.instanceColor)set.instanceColor.needsUpdate=true;
+    };
+    paintConnectFour(connectFourBoard);
     set.castShadow=true;scene.add(set);
   });
+  // collegamento alle partite vere, solo nella sala tavoli o davanti alla sua porta (watch, vicino a frame più sotto)
+  const tableLive=createTableLive({games:()=>app.tables?.()||[],player:()=>app.me?.()?.player,token:()=>app.token?.(),onState:(game,s)=>{
+    if(game==='connect4'){connectFourBoard=s?.connect4?.board||null;paintConnectFour(connectFourBoard)}
+  }});
   // carte sui tavoli di UNO, Scopa, Briscola e Briscola in cinque (blender/carte.blend → models/carte.glb): le
   // posizioni sono dati in table-cards.js; per tavolo un atlante delle facce e tre oggetti soltanto
   if(cardGames.length)new GLTFLoader().load(new URL('models/carte.glb',import.meta.url).href,gltf=>{
@@ -2307,6 +2320,8 @@ export function createLobby3D(app) {
   let lastDraw = 0, frameGap = 0, stillSince = 0, drawnAt = 0;
   // guardia: con la 3D aperta e visibile, se per più di un secondo e mezzo non si è disegnato niente il ciclo riparte
   setInterval(() => { if (active && !document.hidden && !asleep && performance.now() - drawnAt > 1500) { cancelAnimationFrame(raf); lastDraw = 0; raf = requestAnimationFrame(frame); } }, 1000);
+  // partite vere sui tavoli: collegate solo con la 3D visibile e tu nella sala tavoli o davanti alla porta (z < -4,5)
+  setInterval(() => tableLive.watch(active && !document.hidden && !asleep && pos.z < -4.5), 1000);
   const camWas = new THREE.Vector3(), camLook = new THREE.Quaternion();
   function frame(now) {
     if (!active) return;

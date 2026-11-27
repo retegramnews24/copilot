@@ -85,11 +85,14 @@ try{
  assert.equal((await call(50,'/api/room/'+unoRoom+'/claim',{})).status,409);
  let unoState=(await call(40,'/api/room/'+unoRoom+'/state')).data;
  assert.equal((await call(41,'/api/room/'+unoRoom+'/start',{revision:unoState.revision})).status,403);
+ // ?look=1 (tavolo della Lobby 3D): anche per chi siede è la vista da spettatore, senza mano
+ const lookRes=await mf.dispatchFetch('https://unit.test/api/room/'+unoRoom+'/ws?look=1',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(40)}});assert.equal(lookRes.status,101);const look={ws:lookRes.webSocket,packets:[],waiters:[]};look.ws.addEventListener('message',e=>{const p=JSON.parse(e.data);look.packets.push(p);for(const fn of [...look.waiters])fn(p)});look.ws.accept();sockets.push(look.ws);
  const unoClients=[];for(const id of [40,41,50]){const res=await mf.dispatchFetch('https://unit.test/api/room/'+unoRoom+'/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(id)}});assert.equal(res.status,101);const client={ws:res.webSocket,packets:[],waiters:[]};client.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);client.packets.push(p);for(const fn of [...client.waiters])fn(p)});client.ws.accept();sockets.push(client.ws);unoClients.push(client)}
  assert.equal((await call(40,'/api/room/'+unoRoom+'/start',{revision:0})).status,409);
  const started=await call(40,'/api/room/'+unoRoom+'/start',{revision:unoState.revision});assert.equal(started.status,200);unoState=started.data;assert.equal(unoState.players.length,10);assert.deepEqual(unoState.uno.scores,Array(10).fill(0));
  const ids=[];for(let id=40;id<=49;id++){const view=(await call(id,'/api/room/'+unoRoom+'/state')).data.uno;assert.equal(view.hand.length,unoState.uno.counts[id-40]);ids.push(...view.hand.map(c=>c.id));assert.ok(!('deck' in view)&&!('hands' in view))}assert.equal(new Set(ids).size,unoState.uno.counts.reduce((a,b)=>a+b,0));
  const spec=(await call(50,'/api/room/'+unoRoom+'/state')).data.uno;assert.deepEqual(spec.hand,[]);assert.deepEqual(spec.legalMoves,[]);
+ {const packet=await until(look,p=>p.phase==='playing');assert.deepEqual(packet.uno.hand,[],'look=1: no hand');look.ws.close()}
  for(let i=0;i<unoClients.length;i++){const packet=await until(unoClients[i],p=>p.phase==='playing');assert.equal(packet.uno.hand.length,i===2?0:unoState.uno.counts[i]);assert.ok(!('deck' in packet.uno)&&!('hands' in packet.uno))}
  assert.equal((await call(50,'/api/room/'+unoRoom+'/move',{kind:'draw',revision:unoState.revision})).status,403);
  const nextId=40+unoState.turn,nextView=(await call(nextId,'/api/room/'+unoRoom+'/state')).data.uno;
