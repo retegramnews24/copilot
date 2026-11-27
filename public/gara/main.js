@@ -70,20 +70,23 @@ const draft = {
   finish: null,
   normal: -1,
   laps: 3,
-  players: 2,
+  players: 2, // auto in gara: piloti più bot
+  people: 2, // piloti (persone)
+  bots: 1, // bot guidati dall'IA, in ogni modo
   time: 'day',
-  mode: 'ai',
-  bots: 1 // contro l'IA: da 1 a 7 bot; online: bot nei posti, da 0 alle auto meno una
+  mode: 'ai'
 };
 const NET_MAX = 8; // online: fino a 8 piloti
-const AI_MAX = 8; // contro l'IA: tu più fino a 7 bot
-const maxCars = () => (draft.mode === 'net' ? NET_MAX : draft.mode === 'ai' ? AI_MAX : R.MAX_CARS);
-// i bot devono stare nelle auto scelte (online resta almeno il posto di chi crea la gara)
-function fitBots() {
-  if (draft.mode === 'ai') {
-    draft.bots = Math.max(1, Math.min(AI_MAX - 1, draft.bots));
-    draft.players = draft.bots + 1;
-  } else draft.bots = Math.max(0, Math.min(draft.players - 1, draft.bots));
+const BOT_TOTAL = 8; // con i bot al massimo 8 auto in tutto, in ogni modo
+const maxCars = () => (draft.mode === 'net' ? NET_MAX : draft.mode === 'ai' ? BOT_TOTAL : R.MAX_CARS);
+// Piloti e bot: contro l'IA sei solo tu (con almeno un bot); sullo stesso telefono e online da 1 pilota in su,
+// con i bot al massimo 8 auto in tutto, e sempre almeno 2 auto
+function fitCars() {
+  const ai = draft.mode === 'ai';
+  draft.people = ai ? 1 : Math.max(1, Math.min(maxCars(), draft.people));
+  draft.bots = Math.max(ai ? 1 : 0, Math.min(BOT_TOTAL - draft.people, draft.bots));
+  if (draft.people + draft.bots < 2) draft.people = 2;
+  draft.players = draft.people + draft.bots;
 }
 
 // il giocatore: chi è (lo dice Binottoland) e le ultime scelte, ricordate in questo telefono come negli altri giochi
@@ -96,6 +99,7 @@ function saveSetup() {
       JSON.stringify({
         mode: draft.mode,
         players: draft.players,
+        people: draft.people,
         bots: draft.bots,
         time: draft.time,
         laps: draft.laps
@@ -115,10 +119,11 @@ function loadSetup() {
   if (!s) return;
   if (['ai', 'local'].includes(s.mode) || (s.mode === 'net' && embedded)) draft.mode = s.mode;
   if (['day', 'sunset', 'night'].includes(s.time)) draft.time = s.time;
-  if (Number.isInteger(s.players)) draft.players = Math.max(2, Math.min(maxCars(), s.players));
   if (Number.isInteger(s.laps)) draft.laps = Math.max(1, Math.min(9, s.laps));
   if (Number.isInteger(s.bots)) draft.bots = s.bots;
-  fitBots();
+  if (Number.isInteger(s.people)) draft.people = s.people;
+  else if (Number.isInteger(s.players)) draft.people = s.players - (draft.mode === 'local' ? 0 : draft.bots);
+  fitCars();
 }
 
 // modalità: contro l'IA (una tua auto e una dell'IA, mosse insieme), tutti sullo stesso telefono a turno,
@@ -130,13 +135,10 @@ function syncSetupButtons() {
 }
 for (const b of document.querySelectorAll('[data-m]'))
   b.onclick = () => {
-    const was = draft.mode;
     draft.mode = b.dataset.m;
-    draft.players = Math.max(2, Math.min(draft.players, maxCars()));
-    // contro l'IA c'è almeno un bot; passando al Multiplayer si parte senza bot
-    if (draft.mode === 'ai' && was !== 'ai') draft.bots = Math.max(1, draft.players - 1);
-    if (draft.mode === 'net' && was !== 'net') draft.bots = 0;
-    fitBots();
+    // tornando da «Contro l'IA» (dove sei solo tu) si riparte da 2 piloti
+    if (draft.people < 2) draft.people = 2;
+    fitCars();
     syncSetupButtons();
     setupInfo();
     saveSetup();
@@ -164,48 +166,44 @@ const HELP = {
 
 // ---------- scelta iniziale: quante auto ----------
 function setupInfo() {
-  fitBots();
+  fitCars();
   const n = draft.players,
     ai = draft.mode === 'ai',
     bots = draft.bots,
-    people = n - bots;
+    people = draft.people;
   $('carRow').hidden = ai;
-  $('botRow').hidden = draft.mode === 'local';
+  $('carN').textContent = people;
   $('botN').textContent = bots;
+  // i tasti si spengono ai limiti: con i bot al massimo 8 auto in tutto
+  const full = bots ? n >= BOT_TOTAL : people >= maxCars();
+  $('carM').disabled = people <= (bots ? 1 : 2);
+  $('carP').disabled = full;
+  $('botM').disabled = bots <= (ai ? 1 : 0) || (bots === 1 && people === 1);
+  $('botP').disabled = n >= BOT_TOTAL;
   const botsTxt = bots === 1 ? 'un bot' : `${bots} bot`;
   $('modeInfo').textContent = ai
     ? `La tua auto contro ${bots === 1 ? 'una dell’IA' : `${bots} dell’IA`} (Bot 1${bots > 1 ? `…Bot ${bots}` : ''}). Muovete nello stesso momento: tu scegli, i bot scelgono, e le auto partono insieme.`
     : draft.mode === 'net'
-      ? `Gara online: disegni la pista, poi la gara compare negli avvisi di Binottoland e aspetta ${people === 1 ? 'solo te' : people === 2 ? 'un altro pilota' : `altri ${people - 1} piloti`}${bots ? ` (più ${botsTxt}, che guida l’IA)` : ''}. In sala d’attesa puoi cambiare i bot finché non parti: i posti rimasti liberi restano vuoti. Ognuno sceglie la sua mossa dal suo telefono, tutti nello stesso momento: quando ha scelto anche l’ultimo, le auto si muovono insieme. 1 minuto per scegliere, poi guida il pilota automatico.`
-      : 'Giocate tutti sullo stesso telefono, a turno.';
-  $('carN').textContent = n;
+      ? `Gara online: disegni la pista, poi la gara compare negli avvisi di Binottoland e aspetta ${people === 1 ? 'solo te (nessun altro pilota)' : people === 2 ? 'un altro pilota' : `altri ${people - 1} piloti`}${bots ? ` (più ${botsTxt}, che guida l’IA)` : ''}. In sala d’attesa puoi cambiare i bot finché non parti: i posti rimasti liberi restano vuoti. Ognuno sceglie la sua mossa dal suo telefono, tutti nello stesso momento: quando ha scelto anche l’ultimo, le auto si muovono insieme. 1 minuto per scegliere, poi guida il pilota automatico.`
+      : `Giocate in ${people} sullo stesso telefono, a turno${bots ? `, con ${botsTxt} che ${bots === 1 ? 'muove' : 'muovono'} da sol${bots === 1 ? 'o' : 'i'} quando tocca a ${bots === 1 ? 'lui' : 'loro'}` : ''}.`;
+  // pallini delle auto: prima i piloti, poi i bot (con la B)
   $('carDots').innerHTML = R.carColors(n)
-    .map(c => `<span style="--c:${c.hex}">${c.num}</span>`)
+    .map((c, i) => `<span style="--c:${c.hex}">${i >= people ? 'B' : c.num}</span>`)
     .join('');
   $('setupInfo').textContent =
-    `Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
+    `${n} auto in gara (${people === 1 ? (ai ? 'tu' : '1 pilota') : `${people} piloti`}${bots ? ` + ${botsTxt}` : ''}). Griglia quasi infinita: la vista parte larga ${R.startCells(n)} caselle. La pista va bene se sulla linea di partenza ci stanno ${n} auto affiancate.`;
 }
-$('carM').onclick = () => {
-  draft.players = Math.max(2, draft.players - 1);
+const changeCars = (key, d) => () => {
+  draft[key] += d;
+  // con i bot le auto sono al massimo 8: un pilota in più non toglie un bot, si ferma
+  if (d > 0 && draft.people + draft.bots > (draft.bots ? BOT_TOTAL : maxCars())) draft[key] -= d;
   setupInfo();
   saveSetup();
 };
-$('carP').onclick = () => {
-  draft.players = Math.min(maxCars(), draft.players + 1);
-  setupInfo();
-  saveSetup();
-};
-// bot: contro l'IA cambiano le auto in gara (tu più i bot); online occupano posti della gara
-$('botM').onclick = () => {
-  draft.bots--;
-  setupInfo();
-  saveSetup();
-};
-$('botP').onclick = () => {
-  draft.bots++;
-  setupInfo();
-  saveSetup();
-};
+$('carM').onclick = changeCars('people', -1);
+$('carP').onclick = changeCars('people', 1);
+$('botM').onclick = changeCars('bots', -1);
+$('botP').onclick = changeCars('bots', 1);
 $('startDraw').onclick = () => {
   $('setup').hidden = true;
   ed.setBoard(R.boardSize());
@@ -395,7 +393,7 @@ $('go').onclick = () => {
     toApp('create', { track, laps: draft.laps, time: draft.time, bots: draft.bots });
     return;
   }
-  startRace(b.track, draft.laps, draft.players, draft.mode);
+  startRace(b.track, draft.laps, draft.players, draft.mode, draft.bots);
 };
 
 // ---------- gara ----------
@@ -405,7 +403,8 @@ let scene = null,
   lastTrack = null,
   lastLaps = 3,
   lastN = 2,
-  lastMode = 'ai';
+  lastMode = 'ai',
+  lastBots = 1;
 let COL = R.carColors(2);
 let drivers = []; // contro l'IA: un pilota dell'IA per ogni bot (auto 1, 2…; la 0 è la tua)
 const isAi = () => race && race.mode === 'ai';
@@ -458,11 +457,13 @@ function makeScene() {
   }
 }
 
-async function startRace(track, laps, n, mode = 'local') {
+// bots: le ultime auto sono dei bot (contro l'IA tutte tranne la tua; sullo stesso telefono dopo i piloti)
+async function startRace(track, laps, n, mode = 'local', bots = 0) {
   lastTrack = track;
   lastLaps = laps;
   lastN = n;
   lastMode = mode;
+  lastBots = bots;
   show('rc');
   if (!makeScene()) return;
   scene.resize();
@@ -474,14 +475,15 @@ async function startRace(track, laps, n, mode = 'local') {
   race = R.newRace(track, laps, n);
   race.mode = mode;
   COL = race.colors;
-  if (mode === 'ai') {
-    COL = race.colors = COL.map((c, i) =>
-      i
-        ? { ...c, name: `Bot ${i}`, raw: `Bot ${i}`, role: 'bot' }
-        : { ...c, name: 'Tu', raw: 'Tu', role: 'tu' }
-    );
-    drivers = race.cars.map((c, i) => (i ? new AiDriver(track, laps) : null));
-  } else drivers = [];
+  const first = mode === 'ai' ? 1 : n - bots; // la prima auto dei bot
+  COL = race.colors = COL.map((c, i) =>
+    i >= first
+      ? { ...c, name: `Bot ${i - first + 1}`, raw: `Bot ${i - first + 1}`, role: 'bot' }
+      : mode === 'ai'
+        ? { ...c, name: 'Tu', raw: 'Tu', role: 'tu' }
+        : { ...c, raw: c.name, role: i === first - 1 ? 'creatore' : 'ospite' }
+  );
+  drivers = race.cars.map((c, i) => (i >= first ? new AiDriver(track, laps) : null));
   scene.setCars(race, COL);
   busy = false;
   $('over').hidden = true;
@@ -549,6 +551,15 @@ function refresh() {
     return;
   }
   if (race.phase === 'over') return;
+  // sullo stesso telefono, quando tocca a un bot muove da solo
+  if (!net && !isAi() && drivers[race.turn]) {
+    scene.clearMarks();
+    busy = true;
+    chips();
+    $('rcHelp').textContent = `${COL[race.turn].name} sceglie…`;
+    setTimeout(botTurn, 450);
+    return;
+  }
   // contro l'IA: se la tua auto è ferma per l'urto, i bot muovono da soli
   if (isAi() && race.cars[0].crash) {
     scene.clearMarks();
@@ -715,6 +726,31 @@ async function runRound(myOpt) {
   if (!done) refresh();
 }
 
+// sullo stesso telefono: la mossa del bot di turno, con la stessa IA di «Contro l'IA»
+async function botTurn() {
+  if (!race || race.phase !== 'race' || !drivers[race.turn]) {
+    busy = false;
+    return;
+  }
+  const i = race.turn,
+    car = race.cars[i],
+    opts = R.options(race);
+  const opt = (opts.length && drivers[i].choose(race, i, [], opts)) || {
+    x: car.pos.x + car.dir.x,
+    y: car.pos.y + car.dir.y,
+    gear: 1,
+    crash: true,
+    stop: { ...car.pos }
+  };
+  scene.setGear(i, opt.crash ? 0 : opt.gear);
+  const from = { ...car.pos },
+    prevGear = car.gear;
+  const ev = R.applyMove(race, opt);
+  const done = await play([{ i, from, opt, prevGear }], ev);
+  busy = false;
+  if (!done) refresh();
+}
+
 async function pick(mark) {
   if (busy || !race) return;
   if (!mark) return;
@@ -746,7 +782,8 @@ async function pick(mark) {
     const car = race.cars.find(c => c.pos && c.pos.x === mark.x && c.pos.y === mark.y);
     scene.placeCar(car.id, car.pos, race.track.normal);
     sfx.tick(true);
-    if (isAi() && race.phase === 'place') aiPlace();
+    // dopo l'ultimo pilota i bot mettono le loro auto (stanno in fondo)
+    if (race.phase === 'place' && drivers[race.turn]) aiPlace();
     refresh.placed = race.phase === 'race' ? false : refresh.placed;
     if (race.phase === 'race') {
       // tutte le auto sulla linea: semaforo, prima i rossi uno alla volta, poi verde e si parte
@@ -853,7 +890,7 @@ $('close').onclick = () => {
 const again = () => {
   $('menu').hidden = true;
   refresh.placed = false;
-  startRace(lastTrack, lastLaps, lastN, lastMode);
+  startRace(lastTrack, lastLaps, lastN, lastMode, lastBots);
 };
 $('again').onclick = again;
 $('again2').onclick = again;

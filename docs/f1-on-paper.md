@@ -21,8 +21,12 @@ telefono, oppure online da 2 a 8 auto tra persone e bot (`f1-server.js`, un ogge
   «Abbandona la gara»: la gara continua, la tua auto la guida il pilota automatico e non puoi vincere.
 - **Bot.** Si chiamano «Bot 1», «Bot 2»… e guidano come l'IA di «Contro l'IA» (`AiDriver` di `ai.js`, che cerca la
   strada più corta), non come il pilota automatico. Non si fermano dove ha scelto di fermarsi un'altra auto.
-  - «Contro l'IA»: tu più da 1 a 7 bot (8 auto al massimo); prima metti la tua auto, poi i bot la loro.
-  - Online: chi crea sceglie le auto in tutto (2-8) e quanti bot; in sala d'attesa può cambiare i bot finché non
+  - Nella schermata «Nuova gara» si scelgono «Piloti» (le persone) e «Bot»: con i bot al massimo 8 auto in tutto
+    (senza bot, sullo stesso telefono restano fino a 16 piloti).
+  - «Contro l'IA»: tu più da 1 a 7 bot; prima metti la tua auto, poi i bot la loro.
+  - «Stesso telefono»: i piloti giocano a turno e dopo di loro i bot, che mettono l'auto e muovono da soli quando
+    tocca a loro.
+  - Online: chi crea sceglie quanti piloti aspettare (lui compreso) e quanti bot; in sala d'attesa può cambiare i bot finché non
     preme «Parti ora», solo nei posti non presi dalle persone. Al via i posti rimasti liberi restano vuoti. I bot
     vanno sulla linea per ultimi (dopo chi ha creato la gara) e scelgono subito a ogni giro, così si aspettano solo le
     persone. Se vince un bot nessuno prende la vittoria nella Lobby. Per la Lobby i posti sono quelli delle persone
