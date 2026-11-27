@@ -13,6 +13,10 @@ Aggiornato il 26 novembre 2026.
 
 ## In corso
 
+**Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): fatta e messa nell'atrio, a destra della
+porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Solo in locale, non
+ancora in un commit: da provare nell'app di prova, anche con due giocatori.
+
 **Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario. Nella 1.0.70 (staging e main), da
 guardare con un film vero nell'app: sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
 ingresso in piano con la Lobby, poi una rampa continua (niente gradini) che scende di 60 cm fino alla prima fila,
