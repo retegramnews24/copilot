@@ -5,6 +5,7 @@ export function createZonaLink({ frame, token }) {
   let socket = null;
   let wanted = false;
   let retry = 0;
+  let room = '';
   const post = data => frame().contentWindow?.postMessage(data, location.origin);
   function drop() {
     clearTimeout(retry);
@@ -19,7 +20,7 @@ export function createZonaLink({ frame, token }) {
     drop();
     if (!wanted || !token())
       return post({ type: 'zona:status', open: false, reason: 'Accesso scaduto: riapri l’app.' });
-    const s = (socket = new WebSocket(location.origin.replace(/^http/, 'ws') + '/api/zona/ws', [
+    const s = (socket = new WebSocket(location.origin.replace(/^http/, 'ws') + '/api/zona/' + room + 'ws', [
       'checkmate',
       token()
     ]));
@@ -39,6 +40,7 @@ export function createZonaLink({ frame, token }) {
     const d = e.data;
     if (d?.type === 'zona:connect') {
       wanted = true;
+      room = d.room === 'poligono' ? 'poligono/' : ''; // il poligono condiviso o la partita sul deserto
       connect();
     } else if (d?.type === 'zona:disconnect') {
       wanted = false;

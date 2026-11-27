@@ -96,7 +96,9 @@ export function createNet({ world, body, onMessage, onStatus }) {
     },
     inFrame,
     error,
-    connect: () => post({ type: 'zona:connect' }),
+    connect: (room = 'deserto') => post({ type: 'zona:connect', room }),
+    // un messaggio semplice (nel poligono condiviso: dove si sta e quando si spara)
+    send: obj => post({ type: 'zona:send', data: JSON.stringify(obj) }),
     disconnect: () => post({ type: 'zona:disconnect' }),
     serverNow: () => (offset === null ? 0 : performance.now() + offset),
     viewTime() {

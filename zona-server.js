@@ -81,6 +81,9 @@ export class ZonaRoom {
     this.events = [];
     this.tickN = 0;
     this.timer = null;
+    // 'deserto': la partita; 'poligono': il poligono di tiro condiviso, dove ci si vede soltanto (niente colpi tra
+    // giocatori: ognuno muove sé stesso e il server passa posizioni e spari agli altri)
+    this.mode = 'deserto';
   }
 
   sockets() {
@@ -93,7 +96,11 @@ export class ZonaRoom {
   fetch(req) {
     const user = userOf(req);
     if (!user?.player) return json({ error: MSG.login }, 401);
-    const path = new URL(req.url).pathname;
+    let path = new URL(req.url).pathname;
+    if (path.startsWith('/zona/poligono/')) {
+      this.mode = 'poligono';
+      path = path.replace('/poligono', '');
+    }
     this.sync();
     if (path === '/zona/state')
       return json({ phase: this.phase, players: [...this.players.values()].map(p => p.name) });
@@ -116,6 +123,7 @@ export class ZonaRoom {
       kind: ZONA.key,
       id: user.player,
       name: String(user.name || 'Giocatore').slice(0, 30),
+      mode: this.mode,
       memberId: user.id,
       opened: this.now(),
       expires: Number(req.headers.get('X-Session-Expires')),
@@ -131,7 +139,10 @@ export class ZonaRoom {
 
   // dopo un risveglio della Durable Object la memoria è vuota: si rifanno i giocatori dai collegamenti aperti
   sync() {
-    for (const s of this.sockets()) if (!this.players.has(s)) this.join(s);
+    for (const s of this.sockets()) {
+      if (s.deserializeAttachment().mode === 'poligono') this.mode = 'poligono';
+      if (!this.players.has(s)) this.join(s);
+    }
   }
 
   join(socket) {
@@ -160,13 +171,18 @@ export class ZonaRoom {
       history: []
     };
     this.players.set(socket, p);
-    this.spawn(p);
+    const range = this.mode === 'poligono';
+    if (range) {
+      this.phase = 'poligono';
+      p.posed = false; // si vede dopo la prima posizione mandata
+    } else this.spawn(p);
     this.event({ e: 'entra', id: p.id, n: p.name });
     this.send(p, {
       t: 'ciao',
       id: p.id,
+      mode: this.mode,
       tick: ZONA.tick,
-      items: this.items.map(i => [i.kind, i.x, i.y, i.z])
+      items: range ? [] : this.items.map(i => [i.kind, i.x, i.y, i.z])
     });
     this.checkPhase(now);
     this.start();
@@ -207,7 +223,7 @@ export class ZonaRoom {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     // nessuno collegato: la prossima volta si riparte da capo
-    this.phase = 'attesa';
+    this.phase = this.mode === 'poligono' ? 'poligono' : 'attesa';
     this.results = null;
     for (const i of this.items) i.readyAt = 0;
   }
@@ -225,6 +241,7 @@ export class ZonaRoom {
   // ---------- partita ----------
 
   checkPhase(now) {
+    if (this.mode === 'poligono') return;
     const n = this.players.size;
     if (this.phase === 'attesa' && n >= 2) this.begin(now);
     else if (this.phase === 'partita' && n < 2) {
@@ -293,6 +310,7 @@ export class ZonaRoom {
     this.sync();
     const now = this.now();
     this.tickN += 1;
+    if (this.mode === 'poligono') return this.broadcast(now);
     if (this.phase === 'partita' && now >= this.endsAt) this.finish(now);
     else if (this.phase === 'fine' && now >= this.endsAt) {
       if (this.players.size >= 2) this.begin(now);
@@ -311,17 +329,20 @@ export class ZonaRoom {
 
   broadcast(now) {
     const list = [...this.players.values()];
-    const others = list.map(p => [
-      p.id,
-      +p.body.x.toFixed(3),
-      +p.body.y.toFixed(3),
-      +p.body.z.toFixed(3),
-      +p.body.yaw.toFixed(3),
-      +p.body.pitch.toFixed(3),
-      (p.body.crouch ? 1 : 0) | (p.alive ? 0 : 2) | (p.body.onGround ? 4 : 0),
-      ARMI.indexOf(p.current),
-      p.color
-    ]);
+    const range = this.mode === 'poligono';
+    const others = list
+      .filter(p => !range || p.posed)
+      .map(p => [
+        p.id,
+        +p.body.x.toFixed(3),
+        +p.body.y.toFixed(3),
+        +p.body.z.toFixed(3),
+        +p.body.yaw.toFixed(3),
+        +p.body.pitch.toFixed(3),
+        (p.body.crouch ? 1 : 0) | (p.alive ? 0 : 2) | (p.body.onGround ? 4 : 0),
+        ARMI.indexOf(p.current),
+        p.color
+      ]);
     const base = {
       t: 's',
       k: this.tickN,
@@ -334,6 +355,10 @@ export class ZonaRoom {
       ev: this.events
     };
     this.events = [];
+    if (range) {
+      for (const p of list) this.send(p, base);
+      return;
+    }
     for (const p of list) {
       const b = p.body;
       this.send(p, {
@@ -374,6 +399,7 @@ export class ZonaRoom {
     } catch {
       return;
     }
+    if (this.mode === 'poligono') return this.rangeMessage(p, m);
     if (m?.t !== 'in' || !Array.isArray(m.c) || !Number.isInteger(m.s)) return;
     const now = this.now();
     // tempo a disposizione: chi manda più comandi del tempo passato (troppo veloce) se li vede scartare
@@ -387,6 +413,28 @@ export class ZonaRoom {
       this.command(p, c, now);
     }
     p.seq = Math.max(p.seq, m.s);
+  }
+
+  // Poligono condiviso: ognuno si muove da sé e manda dove sta ({t:'posa', p:[x, y, z, yaw, pitch, bit, arma]}) e
+  // quando spara ({t:'spara', w}). Niente danni tra giocatori: il server lo passa soltanto agli altri.
+  rangeMessage(p, m) {
+    if (m?.t === 'posa' && Array.isArray(m.p)) {
+      const [x, y, z, yaw, pitch, bits, arma] = m.p;
+      if (![x, y, z, yaw].every(Number.isFinite)) return;
+      Object.assign(p.body, {
+        x: clamp(x, -40, 40),
+        y: clamp(y, -2, 10),
+        z: clamp(z, -80, 40),
+        yaw,
+        pitch: num(pitch, -1.5, 1.5),
+        crouch: !!((bits | 0) & 1),
+        onGround: !!((bits | 0) & 4)
+      });
+      p.alive = true;
+      p.posed = true;
+      if (ARMI[arma]) p.current = ARMI[arma];
+    } else if (m?.t === 'spara' && ARMI.includes(m.w) && p.posed)
+      this.event({ e: 'spara', id: p.id, w: m.w });
   }
 
   command(p, c, now) {

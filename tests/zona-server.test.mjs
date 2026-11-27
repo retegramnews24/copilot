@@ -335,6 +335,51 @@ const fresh = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false });
 fresh.message(c, JSON.stringify({ t: 'in', s: 1, c: [[0, 0, 0, 0, 0, 0]] }));
 assert.equal(fresh.players.size, 1, 'ricostruito');
 
+// ---------- poligono condiviso: ci si vede, niente fuoco amico ----------
+sockets.length = 0;
+const range = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false });
+const enter = (id, name) => {
+  const before = sockets.length;
+  assert.equal(range.fetch(req('/zona/poligono/ws', id, name)).status, 200);
+  return sockets[before];
+};
+const r1 = enter(5, 'Elena');
+const r2 = enter(6, 'Franco');
+assert.equal(r1.last('ciao').mode, 'poligono');
+assert.equal(r1.last('ciao').items.length, 0, 'nel poligono niente armi a terra');
+range.tick();
+assert.equal(r1.last().ph, 'poligono', 'in due non parte nessuna partita');
+assert.equal(r1.last().p.length, 0, 'si vede chi ha già mandato dove sta');
+assert.equal(r1.last().me, undefined);
+range.message(r1, JSON.stringify({ t: 'posa', p: [1, 0, -5, 0.5, 0.1, 5, 3] }));
+range.message(r2, JSON.stringify({ t: 'posa', p: [2, 0, -5, 0, 0, 4, 0] }));
+range.message(r2, JSON.stringify({ t: 'posa', p: [NaN, 0, 0, 0, 0, 0, 0] })); // ignorata
+range.message(r1, JSON.stringify({ t: 'spara', w: 'ruggito' }));
+range.message(r1, JSON.stringify({ t: 'in', s: 1, c: [[0, 0, BIT.fire, 0, 0, 0]] })); // comandi della partita: ignorati
+clock += ZONA.tick;
+range.tick();
+const seen = r2.last();
+const elena = seen.p.find(p => p[0] === 'tg:5');
+assert.deepEqual(elena.slice(1, 4), [1, 0, -5], 'Franco vede Elena dov’è');
+assert.equal(elena[6] & 1, 1, 'accucciata');
+assert.equal(elena[7], ARMI.indexOf('ruggito'), 'con il Ruggito in mano');
+assert.ok(seen.p.find(p => p[0] === 'tg:6')[1] === 2, 'la posa sbagliata non sposta Franco');
+assert.ok(
+  seen.ev.some(e => e.e === 'spara' && e.id === 'tg:5' && e.w === 'ruggito'),
+  'si sente lo sparo'
+);
+assert.ok(!seen.ev.some(e => e.e === 'colpo' || e.e === 'elimina'), 'nessun danno tra giocatori');
+// fuori dal poligono non si va (posizioni assurde tenute dentro)
+range.message(r1, JSON.stringify({ t: 'posa', p: [999, 99, -999, 0, 0, 4, 0] }));
+clock += ZONA.tick;
+range.tick();
+const far = r2.last().p.find(p => p[0] === 'tg:5');
+assert.ok(far[1] <= 40 && far[2] <= 10 && far[3] >= -80);
+// dopo un risveglio la stanza si ricorda che è il poligono
+const again = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false });
+again.sync();
+assert.equal(again.mode, 'poligono');
+
 console.log(
   'PASS zona-server: collegamento, colpi, muri, ritorno indietro, comandi impossibili, armi a terra, casse, fine partita'
 );

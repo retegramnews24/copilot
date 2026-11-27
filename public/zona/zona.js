@@ -7,6 +7,8 @@ import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=4f0b9d8f55';
 import { createControls } from './controls.js?v=e180132236';
 import { createViewmodel } from './viewmodel.js?v=af06afbe4f';
 import * as sfx from './audio.js?v=337aee686c';
+import { createNet } from './net.js?v=5cd00f6ceb';
+import { createSoldiers, ARMI } from './soldiers.js?v=cb5e951769';
 
 const $ = id => document.getElementById(id);
 const SETTINGS_KEY = 'zona-impostazioni';
@@ -67,7 +69,7 @@ const tables = [];
 const decals = [];
 let ready = false;
 
-const [poligono, armi] = await Promise.all([load('poligono.glb'), load('armi.glb')]).catch(e => {
+const [poligono, armi, soldati] = await Promise.all([load('poligono.glb'), load('armi.glb'), load('soldati.glb')]).catch(e => {
   $('caricamento-testo').innerHTML = 'Non riesco a caricare il gioco. <button id="esci-errore" type="button">Esci</button>';
   $('esci-errore').onclick = () => parent.postMessage({ type: 'zona-exit' }, location.origin);
   throw e;
@@ -78,6 +80,32 @@ poligono.scene.traverse(o => {
   if (o.name.startsWith('sagoma_c')) targets.push({ node: o, x: o.position.x, y: o.position.y, z: o.position.z, angle: 0, down: 0, hits: 0 });
 });
 vm = createViewmodel(armi, innerWidth / innerHeight, 'blu');
+
+// ---------- poligono condiviso: si vedono gli altri che sono qui ----------
+// Il server (zona-server.js, stanza «poligono») passa soltanto posizioni e spari: niente fuoco amico, i colpi
+// attraversano i giocatori e valgono solo per sagome e muri; le sagome sono di ognuno.
+const soldiers = createSoldiers(scene, soldati, vm.worldModels);
+const names = new Map();
+let me = null;
+const net = createNet({
+  world: null,
+  body: newBody(0, 0, 0),
+  onMessage(m) {
+    if (m.t === 'ciao') me = m.id;
+    if (m.t !== 's') return;
+    for (const r of m.sc) names.set(r[0], r[1]);
+    for (const e of m.ev) {
+      if (e.e === 'spara' && e.id !== me) {
+        const d = soldiers.shot(e.id, e.w, camera.position);
+        if (d !== null) sfx.shot(e.w, Math.min(1, 9 / Math.max(9, d)));
+      }
+    }
+    soldiers.prune(new Set(m.p.map(p => p[0])));
+  }
+});
+if (net.inFrame) net.connect('poligono');
+let poseAt = 0;
+addEventListener('pagehide', () => net.disconnect());
 poligono.scene.traverse(o => {
   const m = /^tavolo_(\w+)$/.exec(o.name);
   if (m && vm.worldModels[m[1]]) {
@@ -252,6 +280,7 @@ function shoot() {
   }
   vm.fire();
   sfx.shot(current);
+  if (net.inFrame) net.send({ t: 'spara', w: current });
   if (current === 'tuono') sfx.pump();
   if (current === 'falco') controls.aim = false; // dopo il colpo si toglie il mirino per tirare l'otturatore
 }
@@ -301,10 +330,12 @@ $('sfida-via').onclick = () => {
 };
 // la partita online sul deserto: stessa pagina con ?online (main.js)
 $('cambia').onclick = () => {
+  net.disconnect();
   document.exitPointerLock?.();
   location.search = '?online=1';
 };
 $('esci').onclick = () => {
+  net.disconnect();
   document.exitPointerLock?.();
   parent.postMessage({ type: 'zona-exit' }, location.origin);
 };
@@ -376,6 +407,13 @@ function frame(now) {
       t.angle = Math.min(1.45, t.angle + dt * 12);
     } else t.angle = Math.max(0, t.angle - dt * 4);
     t.node.rotation.x = t.angle;
+  }
+  // gli altri nel poligono (100 ms nel passato) e, 20 volte al secondo, dove sono io
+  soldiers.update(net.others(net.viewTime(), me), dt, names);
+  if (net.inFrame && now - poseAt >= 50) {
+    poseAt = now;
+    const p = [body.x, body.y, body.z, controls.yaw, controls.pitch, (body.crouch ? 1 : 0) | (body.onGround ? 4 : 0), ARMI.indexOf(current)];
+    net.send({ t: 'posa', p: p.map(v => +v.toFixed(3)) });
   }
   renderer.clear();
   renderer.render(scene, camera);

@@ -21,15 +21,14 @@ import {
 import { BOXES, GROUND } from './map-deserto.js?v=2cc5684ce1';
 import { createControls } from './controls.js?v=e180132236';
 import { createViewmodel } from './viewmodel.js?v=af06afbe4f';
-import { createNet, DT } from './net.js?v=889e5e6ca3';
+import { createNet, DT } from './net.js?v=5cd00f6ceb';
 import * as sfx from './audio.js?v=337aee686c';
 
 const $ = id => document.getElementById(id);
 // gli stessi numeri del server (zona-server.js): ordine delle armi e bit dei comandi
-const ARMI = ['baretta', 'calabrone', 'tuono', 'ruggito', 'falco', 'coltello'];
+import { createSoldiers, ARMI, COLORS } from './soldiers.js?v=cb5e951769';
 const BIT = { jump: 1, crouch: 2, walk: 4, fire: 8, reload: 16, take: 32, scope: 64 };
 const TAKE = 1.4;
-const COLORS = ['#4aa3ff', '#ff5a4a', '#e8b81e', '#5fd17a', '#c77dff', '#ff9f43', '#4dd6d0', '#f2f2f2'];
 const SETTINGS_KEY = 'zona-impostazioni';
 const settings = (() => {
   try {
@@ -134,206 +133,8 @@ vm = createViewmodel(armi, innerWidth / innerHeight, 'blu');
 resize();
 const world = makeWorld(BOXES, GROUND);
 
-// ---------- soldati degli altri ----------
-const UPPER = [
-  'schiena',
-  'petto',
-  'collo',
-  'testa',
-  'spallaL',
-  'braccioL',
-  'avambraccioL',
-  'manoL',
-  'spallaR',
-  'braccioR',
-  'avambraccioR',
-  'manoR'
-];
-const clean = n => n.replace(/_\d+$/, '');
-soldati.scene.traverse(o => (o.name = clean(o.name)));
-const clips = {};
-for (const c of soldati.animations) {
-  for (const t of c.tracks) t.name = t.name.replace(/_\d+(?=\.)/, '');
-  clips[c.name] = c;
-  // per spara, ricarica e colpito solo il busto: le gambe continuano a camminare
-  if (['spara', 'ricarica', 'colpito'].includes(c.name))
-    clips[c.name + '_busto'] = new THREE.AnimationClip(
-      c.name + '_busto',
-      c.duration,
-      c.tracks.filter(t => UPPER.includes(t.name.split('.')[0]))
-    );
-}
-const rigs = {
-  blu: soldati.scene.getObjectByName('scheletro_blu'),
-  rossi: soldati.scene.getObjectByName('scheletro_rossi')
-};
-function cloneSkinned(src) {
-  const c = src.clone(true);
-  const bones = {};
-  c.traverse(o => o.isBone && (bones[o.name] = o));
-  c.traverse(o => {
-    if (o.isSkinnedMesh) {
-      o.bind(
-        new THREE.Skeleton(
-          o.skeleton.bones.map(b => bones[b.name]),
-          o.skeleton.boneInverses
-        ),
-        o.bindMatrix
-      );
-      o.frustumCulled = false;
-    }
-  });
-  return c;
-}
-function nameSprite(text, color) {
-  const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 64;
-  const g = c.getContext('2d');
-  g.font = '700 30px system-ui,sans-serif';
-  g.textAlign = 'center';
-  g.lineWidth = 6;
-  g.strokeStyle = 'rgba(0,0,0,.7)';
-  g.strokeText(text, 128, 42);
-  g.fillStyle = color;
-  g.fillText(text, 128, 42);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false }));
-  s.scale.set(1.4, 0.35, 1);
-  s.position.y = 2.15;
-  return s;
-}
-const flashTex = (() => {
-  const c = document.createElement('canvas');
-  c.width = c.height = 32;
-  const g = c.getContext('2d');
-  const r = g.createRadialGradient(16, 16, 0, 16, 16, 16);
-  r.addColorStop(0, 'rgba(255,245,200,1)');
-  r.addColorStop(1, 'rgba(255,140,30,0)');
-  g.fillStyle = r;
-  g.fillRect(0, 0, 32, 32);
-  return new THREE.CanvasTexture(c);
-})();
-const soldiers = new Map(); // id -> soldato
-function soldierFor(p, name) {
-  let s = soldiers.get(p.id);
-  if (s) return s;
-  const team = p.color % 2 ? 'rossi' : 'blu';
-  const root = new THREE.Group();
-  const model = cloneSkinned(rigs[team]);
-  model.position.set(0, 0, 0);
-  model.rotation.set(0, 0, 0);
-  root.add(model);
-  model.traverse(o => o.isSkinnedMesh && (o.visible = o.name.startsWith('soldato_' + team)));
-  const mixer = new THREE.AnimationMixer(model);
-  const act = n => mixer.clipAction(clips[n]);
-  const s2 = {
-    root,
-    model,
-    mixer,
-    act,
-    base: null,
-    dead: false,
-    petto: model.getObjectByName('petto'),
-    hand: model.getObjectByName('manoR'),
-    guns: {},
-    gun: null,
-    flash: null,
-    flashT: 0,
-    last: null,
-    speed: 0,
-    label: nameSprite(name || 'Giocatore', COLORS[p.color % COLORS.length])
-  };
-  root.add(s2.label);
-  scene.add(root);
-  soldiers.set(p.id, s2);
-  return s2;
-}
-function setBase(s, name, timeScale = 1) {
-  const a = s.act(name);
-  a.timeScale = timeScale;
-  if (s.base === a) return;
-  a.reset();
-  if (name === 'cade') {
-    a.setLoop(THREE.LoopOnce, 1);
-    a.clampWhenFinished = true;
-  } else a.setLoop(THREE.LoopRepeat, Infinity);
-  a.fadeIn(0.15).play();
-  s.base?.fadeOut(0.15);
-  s.base = a;
-}
-function upperOnce(s, name) {
-  const a = s.act(name + '_busto');
-  a.setLoop(THREE.LoopOnce, 1);
-  a.clampWhenFinished = false;
-  a.reset().setEffectiveWeight(1.4).play();
-}
-function gunFor(s, weapon) {
-  if (s.gun?.userData.weapon === weapon) return;
-  if (s.gun) s.gun.visible = false;
-  if (!s.guns[weapon] && vm.worldModels[weapon]) {
-    const g = vm.worldModels[weapon].clone(true);
-    g.userData.weapon = weapon;
-    const f = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: flashTex,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        transparent: true
-      })
-    );
-    f.position.set(
-      0,
-      0.05,
-      weapon === 'falco' ? 1.0 : weapon === 'tuono' || weapon === 'ruggito' ? 0.7 : 0.35
-    );
-    f.scale.setScalar(0.4);
-    f.visible = false;
-    g.add(f);
-    g.userData.flash = f;
-    s.root.add(g);
-    s.guns[weapon] = g;
-  }
-  s.gun = s.guns[weapon] || null;
-  if (s.gun) s.gun.visible = true;
-}
-const tmpV = new THREE.Vector3();
-const tmpQ = new THREE.Quaternion();
-const axis = new THREE.Vector3();
-function updateSoldier(s, p, dt) {
-  s.root.position.set(p.x, p.y, p.z);
-  s.root.rotation.y = p.yaw + Math.PI; // il modello guarda verso +z, la vista con yaw 0 verso -z
-  const moved = s.last ? Math.hypot(p.x - s.last.x, p.z - s.last.z) / Math.max(dt, 1e-3) : 0;
-  s.speed += (Math.min(8, moved) - s.speed) * Math.min(1, dt * 8);
-  s.last = { x: p.x, z: p.z };
-  if (p.dead) setBase(s, 'cade');
-  else if (p.crouch) setBase(s, 'accucciato');
-  else if (s.speed < 0.6) setBase(s, 'fermo');
-  else if (s.speed < 3.6) setBase(s, 'cammina', s.speed / 2.6);
-  else setBase(s, 'corre', s.speed / 5.2);
-  s.label.visible = !p.dead;
-  s.mixer.update(dt);
-  // mira in alto e in basso: si piega il petto attorno all'asse destra del soldato
-  if (!p.dead && s.petto) {
-    s.root.updateMatrixWorld(true);
-    axis.set(-1, 0, 0).applyQuaternion(s.root.quaternion);
-    s.petto.parent.getWorldQuaternion(tmpQ);
-    axis.applyQuaternion(tmpQ.invert());
-    s.petto.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(axis, p.pitch * 0.8));
-  }
-  gunFor(s, ARMI[p.weapon] || 'baretta');
-  if (s.gun) {
-    s.gun.visible = !p.dead;
-    s.model.updateMatrixWorld(true);
-    s.hand.getWorldPosition(tmpV);
-    s.root.worldToLocal(tmpV);
-    s.gun.position.copy(tmpV);
-    s.gun.rotation.set(-p.pitch, 0, 0);
-    if (s.flashT > 0 && (s.flashT -= dt) <= 0) s.gun.userData.flash.visible = false;
-  }
-}
-
+// ---------- soldati degli altri (soldiers.js) ----------
+const soldiers = createSoldiers(scene, soldati, vm.worldModels);
 // ---------- armi e casse a terra ----------
 let items = []; // {kind, x, y, z, node, away}
 function setItems(list) {
@@ -527,11 +328,7 @@ function onMessage(m) {
   }
   for (const e of m.ev) onEvent(e);
   // chi è uscito: via il suo soldato
-  for (const [id, s] of soldiers)
-    if (!m.p.some(p => p[0] === id)) {
-      scene.remove(s.root);
-      soldiers.delete(id);
-    }
+  soldiers.prune(new Set(m.p.map(p => p[0])));
 }
 
 function onEvent(e) {
@@ -548,16 +345,8 @@ function onEvent(e) {
   } else if (e.e === 'spara') {
     if (e.at) decalAt(e.at);
     if (e.id === me) return;
-    const s = soldiers.get(e.id);
-    if (s) {
-      upperOnce(s, 'spara');
-      if (s.gun?.userData.flash && e.w !== 'coltello') {
-        s.gun.userData.flash.visible = true;
-        s.flashT = 0.06;
-      }
-      const d = s.root.position.distanceTo(camera.position);
-      sfx.shot(e.w, Math.min(1, 9 / Math.max(9, d)));
-    }
+    const d = soldiers.shot(e.id, e.w, camera.position);
+    if (d !== null) sfx.shot(e.w, Math.min(1, 9 / Math.max(9, d)));
   } else if (e.e === 'colpo') {
     if (e.a === me) {
       $('segno').className = 'on ' + (e.h ? 'testa' : '');
@@ -576,7 +365,7 @@ function onEvent(e) {
       $('ferita').className = 'on';
       hurtT = 0.35;
       sfx.hurt();
-    } else soldiers.get(e.v) && upperOnce(soldiers.get(e.v), 'colpito');
+    } else soldiers.hit(e.v);
   } else if (e.e === 'elimina') {
     feed(
       `<b style="color:${color(e.a)}">${esc(name(e.a))}</b> ${e.h ? '◎' : '✕'} ${WEAPONS[e.w]?.name || ''} <b style="color:${color(e.v)}">${esc(name(e.v))}</b>`
@@ -904,7 +693,7 @@ function frame(now) {
   kick *= Math.max(0, 1 - dt * 9);
   kickYaw *= Math.max(0, 1 - dt * 9);
   // gli altri, un attimo nel passato
-  for (const p of net.others(net.viewTime(), me)) updateSoldier(soldierFor(p, names.get(p.id)), p, dt);
+  soldiers.update(net.others(net.viewTime(), me), dt, names);
   for (const i of items) if (!i.away) i.node.rotation.y = time * 0.8;
   if (ready) updateHud(dt);
   renderer.clear();
@@ -924,7 +713,7 @@ globalThis.zonaStato = () => ({
   alive,
   body: { ...body },
   current,
-  others: [...soldiers.keys()],
+  others: [...soldiers.all.keys()],
   items: items.map(i => [i.kind, i.away])
 });
 

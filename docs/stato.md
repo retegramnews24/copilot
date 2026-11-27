@@ -59,11 +59,12 @@ soldati Rossi e Blu con 8 animazioni (`zona_soldato.blend`), 5 armi più coltell
 medica (`zona_armi.blend`), poligono di tiro con le sagome (`zona_poligono.blend`). Regole delle armi decise.
 Tappa 1 scritta (`public/zona/`, poligono di tiro da soli con le 5 armi e il coltello): provata
 nell'anteprima locale (si cammina, si prende un'arma al bancone, il colpo in testa abbatte la sagoma), da provare
-nell'app vera. Tappa 2 scritta, non ancora in un commit: «Gioca online» nel menù porta alla partita sul deserto,
+nell'app vera. Tappa 2 scritta (commit su staging, non caricato): «Gioca online» nel menù porta alla partita sul deserto,
 Tutti contro tutti, una partita sola per il circolo (`zona-server.js`, `public/zona-link.js`, `public/zona/net.js`,
 `online.js`; mappa e soldati esportati da Blender, urti generati da `scripts/zona-deserto-urti.py`). Provata con le
 prove automatiche (server e previsione contro il server) e nell'anteprima con messaggi finti (mappa, soldato,
-classifica, eliminazione); il server vero si prova solo su staging. `main` resta 1.0.71 finché poligono e partita
+classifica, eliminazione); il server vero si prova solo su staging. Dopo il commit, non ancora in un commit: anche
+il poligono è condiviso (ci si vede, niente fuoco amico, sagome di ognuno). `main` resta 1.0.71 finché poligono e partita
 online non sono provati nell'app di staging.
 
 ## Da provare
@@ -75,7 +76,8 @@ online non sono provati nell'app di staging.
 - Zona Operativa online, in due su staging (meglio telefono contro computer): «Gioca online», ci si vede e ci si
   spara, salute, eliminazioni, rinascita dopo 3 s, armi a terra che spariscono e tornano dopo 20 s, casse mediche,
   classifica con Tab e a fine partita (5 minuti). Guardare se il movimento degli altri è liscio, se i colpi «dove si
-  vedeva» contano, se la scala della torre centrale si sale, e come stanno le armi in mano ai soldati.
+  vedeva» contano, se la scala della torre centrale si sale, e come stanno le armi in mano ai soldati. Nel poligono,
+  in due: ci si vede, si sentono gli spari dell'altro, i colpi lo attraversano.
 
 - Zona operativa nell'app vera, sul telefono: entrare, arrivare in fondo, uscire con «Esci» e ritrovarsi nel
   corridoio. Guardare che la Lobby torni normale (luci, radio, persone) e che il telefono non scaldi.

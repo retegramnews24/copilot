@@ -309,6 +309,15 @@ prende e tornano dopo 20 secondi.
   `moveStep` accetta il mondo al posto dell'elenco di scatole: si cammina sul terreno e, scendendo a piedi, si resta
   attaccati.
 
+- **Poligono condiviso** (richiesta del proprietario: «ci si veda nel poligono tra giocatori, no fuoco amico li
+  dentro»): una stanza a parte, `zona-poligono-v1` (`/api/zona/poligono/ws`), con la stessa `ZonaRoom` in modalità
+  «poligono». Lì ognuno si muove da sé con le regole di sempre e manda 20 volte al secondo dove sta (posizione,
+  sguardo, accucciato, arma in mano) e quando spara; il server lo passa agli altri, tenendo le posizioni dentro il
+  poligono. Gli altri si vedono come soldati in terza persona (stesso `soldiers.js` della partita, 100 ms nel
+  passato), si sentono e si vede la fiammata. Niente fuoco amico: i colpi attraversano i giocatori e valgono solo
+  per sagome e muri. Le sagome sono di ognuno (scelta più semplice): chi spara le vede cadere solo da sé, così punti
+  e sfida dei 60 secondi restano personali.
+
 Da sapere: il terreno non ferma i colpi (sale e scende al massimo di un metro e mezzo). Le scatole sono dritte: le
 rocce sono un poco più strette del loro ingombro. Le armi in mano agli altri seguono la mano destra e lo sguardo,
 non l'osso della mano. Nell'anteprima locale la pagina online si apre ma non trova il server («si gioca dall'app»).
