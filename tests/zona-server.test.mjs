@@ -50,7 +50,8 @@ globalThis.Response = class extends RealResponse {
 };
 
 let clock = 1_000_000;
-const room = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false, seed: 1 });
+// senza bot: qui si provano le regole con due persone (i bot hanno tests/zona-bots.test.mjs)
+const room = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false, seed: 1, bots: false });
 const req = (path, id, name) =>
   new Request('https://internal' + path, {
     headers: {
@@ -296,7 +297,9 @@ room.tick();
 const end = a.last();
 assert.equal(end.ph, 'fine');
 const fine = a.events().find(e => e.e === 'fine');
-assert.equal(fine.r.winner, 'tg:1', 'vince chi ha più eliminazioni');
+assert.equal(fine.r.winner, P(a).team, 'vince la squadra con più eliminazioni');
+assert.notEqual(P(a).team, P(b).team, 'due persone sole: una per squadra');
+assert.equal(fine.r.score[P(a).team], 3);
 assert.deepEqual(
   fine.r.rows.map(r => [r.name, r.kills]),
   [
@@ -331,9 +334,23 @@ assert.equal(room.timer, null);
 
 // dopo un risveglio (memoria vuota) i giocatori si rifanno dai collegamenti aperti
 const c = join(3, 'Carla');
-const fresh = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false });
+const fresh = new ZonaRoom(ctx, {}, { now: () => clock, autoTick: false, bots: false });
 fresh.message(c, JSON.stringify({ t: 'in', s: 1, c: [[0, 0, 0, 0, 0, 0]] }));
 assert.equal(fresh.players.size, 1, 'ricostruito');
+
+// ---------- mirando si cammina soltanto ----------
+{
+  const s = join(9, 'Gina');
+  tick();
+  place(s, spot.x, spot.z, -Math.PI / 2);
+  P(s).alive = true;
+  const x0 = P(s).body.x;
+  drive(s, 60, { fwd: 1, yaw: -Math.PI / 2, bits: BIT.scope });
+  const walked = Math.abs(P(s).body.x - x0);
+  assert.ok(walked < PLAYER.walk * 1.1 && walked > PLAYER.walk * 0.6, 'mirando in 1 s: ' + walked.toFixed(2) + ' m');
+  s.readyState = 3;
+  room.close(s);
+}
 
 // ---------- poligono condiviso: ci si vede, niente fuoco amico ----------
 sockets.length = 0;

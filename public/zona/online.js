@@ -3,6 +3,7 @@
 // (zona-server.js). Il collegamento passa dall'app (zona-link.js), il movimento si prevede con net.js.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { Sky } from '../vendor/three/addons/objects/Sky.js';
 import {
   WEAPONS,
   PLAYER,
@@ -17,16 +18,16 @@ import {
   spreadFor,
   pelletDirs,
   rng
-} from './rules.js?v=79c25dfc2d';
-import { BOXES, GROUND } from './map-deserto.js?v=2cc5684ce1';
-import { createControls } from './controls.js?v=e180132236';
-import { createViewmodel } from './viewmodel.js?v=af06afbe4f';
-import { createNet, DT } from './net.js?v=5cd00f6ceb';
+} from './rules.js?v=6b60391eb6';
+import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
+import { createControls } from './controls.js?v=3ccaaf123b';
+import { createViewmodel } from './viewmodel.js?v=346e311811';
+import { createNet, DT } from './net.js?v=fca50b11d7';
 import * as sfx from './audio.js?v=337aee686c';
 
 const $ = id => document.getElementById(id);
 // gli stessi numeri del server (zona-server.js): ordine delle armi e bit dei comandi
-import { createSoldiers, ARMI, COLORS } from './soldiers.js?v=cb5e951769';
+import { createSoldiers, ARMI, COLORS } from './soldiers.js?v=a121bc0992';
 const BIT = { jump: 1, crouch: 2, walk: 4, fire: 8, reload: 16, take: 32, scope: 64 };
 const TAKE = 1.4;
 const SETTINGS_KEY = 'zona-impostazioni';
@@ -44,7 +45,7 @@ const saveSettings = () => {
 };
 
 // ---------- pagina ----------
-document.querySelectorAll('.sotto').forEach(e => (e.textContent = 'Deserto · Tutti contro tutti'));
+document.querySelectorAll('.sotto').forEach(e => (e.textContent = 'Deserto · Rossa contro Blu'));
 $('sfida-via').hidden = true;
 $('cambia').textContent = 'Poligono di tiro';
 $('conti').hidden = true;
@@ -55,15 +56,50 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPrefere
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.55;
 renderer.autoClear = false;
+// ombre del sole (morbide) solo intorno a chi gioca: il riquadro segue il giocatore a passi fissi, così non tremano
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0xa9cbe6);
-scene.fog = new THREE.Fog(0xd8d0bd, 90, 330);
-scene.add(new THREE.HemisphereLight(0xdcecff, 0xb39a74, 1.5));
-const sun = new THREE.DirectionalLight(0xfff1d6, 2.0);
-sun.position.set(40, 80, 25);
-scene.add(sun);
+// sole basso del pomeriggio, da sud-ovest: ombre lunghe che disegnano le case
+const SUN_DIR = new THREE.Vector3(-0.55, 0.62, 0.56).normalize();
+const sky = new Sky();
+sky.scale.setScalar(550); // dentro la distanza della camera (600 m)
+const su = sky.material.uniforms;
+su.turbidity.value = 4;
+su.rayleigh.value = 1.2;
+su.mieCoefficient.value = 0.004;
+su.mieDirectionalG.value = 0.82;
+su.sunPosition.value.copy(SUN_DIR).multiplyScalar(1000);
+scene.add(sky);
+// foschia del deserto, color sabbia chiara: le dune lontane sfumano nel cielo
+scene.fog = new THREE.FogExp2(0xd9cbb0, 0.0042);
+scene.add(new THREE.HemisphereLight(0xcfe3ff, 0xc29a66, 0.8));
+const sun = new THREE.DirectionalLight(0xffe2b8, 4.2);
+sun.castShadow = true;
+const SHADOW = 48; // metri coperti dalle ombre attorno al giocatore
+const SHADOW_SIZE = matchMedia('(pointer: coarse)').matches ? 2048 : 4096;
+sun.shadow.mapSize.set(SHADOW_SIZE, SHADOW_SIZE);
+Object.assign(sun.shadow.camera, {
+  left: -SHADOW,
+  right: SHADOW,
+  top: SHADOW,
+  bottom: -SHADOW,
+  near: 1,
+  far: 260
+});
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.035;
+scene.add(sun, sun.target);
+function followSun(x, z) {
+  const step = (SHADOW * 2) / SHADOW_SIZE; // un punto dell'ombra: ci si sposta solo a passi interi
+  const cx = Math.round(x / step) * step;
+  const cz = Math.round(z / step) * step;
+  sun.target.position.set(cx, 0, cz);
+  sun.position.set(cx + SUN_DIR.x * 120, SUN_DIR.y * 120, cz + SUN_DIR.z * 120);
+}
+followSun(0, 0);
 const BASE_FOV = 72;
 const camera = new THREE.PerspectiveCamera(BASE_FOV, innerWidth / innerHeight, 0.05, 600);
 camera.rotation.order = 'YXZ';
@@ -105,11 +141,19 @@ const [deserto, armi, soldati] = await Promise.all([
 });
 
 // mappa: le case e le altre cose uguali si disegnano a istanze, una chiamata per tipo
+// paesaggio lontano (dune, rocce, case fuori dalle mura): niente ombre da proiettare, solo da ricevere
+const FAR = /^(dune|mesas|terreno_fuori|fuori_)/;
 function addInstanced(root) {
   root.updateMatrixWorld(true);
   const groups = new Map();
   root.traverse(o => {
     if (!o.isMesh) return;
+    // colori pieni e opachi, come la Lobby: niente lucido di plastica
+    for (const m of [o.material].flat()) {
+      m.roughness = 0.92;
+      m.metalness = 0;
+    }
+    o.userData.far = FAR.test(o.name);
     const k = o.geometry.uuid + '|' + o.material.uuid;
     if (!groups.has(k)) groups.set(k, []);
     groups.get(k).push(o);
@@ -119,12 +163,16 @@ function addInstanced(root) {
     if (list.length === 1) {
       const m = new THREE.Mesh(first.geometry, first.material);
       first.matrixWorld.decompose(m.position, m.quaternion, m.scale);
+      m.castShadow = !first.userData.far;
+      m.receiveShadow = true;
       scene.add(m);
       continue;
     }
     const im = new THREE.InstancedMesh(first.geometry, first.material, list.length);
     list.forEach((o, i) => im.setMatrixAt(i, o.matrixWorld));
     im.computeBoundingSphere();
+    im.castShadow = !first.userData.far;
+    im.receiveShadow = true;
     scene.add(im);
   }
 }
@@ -148,6 +196,7 @@ function setItems(list) {
           new THREE.MeshLambertMaterial({ color: 0xffffff })
         );
     node.position.set(x, y + 0.25, z);
+    node.traverse(o => o.isMesh && (o.castShadow = true));
     scene.add(node);
     return { kind, x, y, z, node, away: false };
   });
@@ -295,6 +344,9 @@ function onMessage(m) {
   if (m.t === 'ciao') {
     me = m.id;
     setItems(m.items);
+    setTeam(m.team);
+    // ricollegati (rete o server riavviato): si richiede la squadra scelta
+    if (chosen && chosen !== 'auto' && chosen !== m.team) net.send({ t: 'squadra', s: chosen });
     if (!ready) {
       ready = true;
       $('caricamento').hidden = true;
@@ -306,6 +358,8 @@ function onMessage(m) {
   phase = m.ph;
   left = m.left;
   score = m.sc;
+  teamScore = m.sq || [0, 0];
+  if (m.me?.tm) setTeam(m.me.tm);
   for (const [id, name] of m.sc.map(r => [r[0], r[1]])) names.set(id, name);
   for (let n = 0; n < items.length; n++) {
     items[n].away = m.it.includes(n);
@@ -374,15 +428,36 @@ function onEvent(e) {
     if (e.v === me) killer = e.a;
   } else if (e.e === 'entra' && e.id !== me) feed(esc(e.n) + ' è entrato');
   else if (e.e === 'esce') feed(esc(e.n) + ' è uscito');
+  else if (e.e === 'squadra' && e.id !== me)
+    feed(esc(name(e.id)) + ' passa ai ' + (e.s === 'rossa' ? 'Rossi' : 'Blu'));
   else if (e.e === 'via') {
-    feed('<b>Si comincia: 5 minuti!</b>');
+    feed('<b>Si comincia: 5 minuti, Rossa contro Blu!</b>');
     results = null;
   } else if (e.e === 'fine') {
     results = e.r;
     controls.fire = false;
   }
 }
-const color = id => COLORS[(score.find(r => r[0] === id)?.[4] ?? 0) % COLORS.length];
+// colore della squadra (0 Blu, 1 Rossa)
+const teamOf = id => score.find(r => r[0] === id)?.[4] ?? 0;
+const color = id => COLORS[teamOf(id)];
+let myTeam = null;
+let teamScore = [0, 0];
+let chosen = null; // squadra scelta in questa visita: 'rossa', 'blu' o 'auto'
+function setTeam(t) {
+  if (!t || t === myTeam) return;
+  myTeam = t;
+  vm.setTeam(t === 'rossa' ? 'rossi' : 'blu');
+}
+// all'inizio si sceglie la squadra; si può cambiare dal menù (si rinasce alla nuova partenza)
+for (const s of ['rossa', 'blu', 'auto'])
+  $('sq-' + s).onclick = () => {
+    chosen = s;
+    net.send({ t: 'squadra', s });
+    for (const o of ['rossa', 'blu', 'auto']) $('sq-' + o).classList.toggle('scelta', o === s);
+    $('gioca').hidden = false;
+    $('gioca').click();
+  };
 const esc = s =>
   String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -421,11 +496,13 @@ function showMenu(show) {
     controls.fire = false;
     $('gioca').textContent = started ? 'Riprendi' : 'Gioca';
     $('gioca').disabled = !ready;
+    $('squadre').hidden = !ready;
+    $('gioca').hidden = !chosen; // la prima volta si entra scegliendo la squadra
   }
 }
 $('comandi').innerHTML = matchMedia('(pointer: coarse)').matches
-  ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (Falco), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
-  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · clic destro mirino (Falco) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc passo lento · Tab classifica · Esc menù (la partita continua)';
+  ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (mirando si cammina), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
+  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc passo lento · Tab classifica · Esc menù (la partita continua)';
 $('sens').value = settings.sens;
 $('volume').value = settings.volume;
 $('sens').oninput = e => {
@@ -474,7 +551,7 @@ function table(rows, winner) {
     rows
       .map(
         (r, n) =>
-          `<tr class="${r.id === me ? 'io' : ''}"><td>${n + 1}</td><td style="color:${color(r.id)}">${esc(r.name)}${r.id === winner ? ' ★' : ''}</td><td>${r.kills}</td><td>${r.deaths}</td></tr>`
+          `<tr class="${r.id === me ? 'io' : ''}"><td>${n + 1}</td><td>${esc(r.name)}${r.bot ? ' <span class="bot">bot</span>' : ''}</td><td>${r.kills}</td><td>${r.deaths}</td></tr>`
       )
       .join('') +
     '</table>'
@@ -490,12 +567,11 @@ function updateHud(dt) {
   $('arma-stato').textContent =
     g.reloading > 0 ? 'Ricarica…' : g.ammo === 0 && !w.melee ? 'R per ricaricare' : '';
   $('tempo').hidden = false;
-  $('tempo').textContent =
-    phase === 'partita'
-      ? clock(left)
-      : phase === 'fine'
-        ? 'Partita finita'
-        : 'In attesa di un altro giocatore';
+  // in alto: Blu · tempo · Rossa
+  $('tempo').innerHTML =
+    `<span class="sq-blu">BLU ${teamScore[0]}</span>` +
+    (phase === 'partita' ? clock(left) : phase === 'fine' ? 'Fine' : 'In attesa…') +
+    `<span class="sq-rossa">${teamScore[1]} ROSSA</span>`;
   $('tempo').classList.toggle('poco', phase === 'partita' && left < 30000);
   // avviso: arma a terra vicina
   if (toastT > 0) toastT -= dt;
@@ -518,25 +594,38 @@ function updateHud(dt) {
   const showScore = tabHeld || phase === 'fine';
   $('classifica').hidden = !showScore;
   if (showScore) {
-    const rows =
+    const rows = (
       results && phase === 'fine'
         ? results.rows
-        : score
-            .map(r => ({ id: r[0], name: r[1], kills: r[2], deaths: r[3] }))
-            .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+        : score.map(r => ({
+            id: r[0],
+            name: r[1],
+            kills: r[2],
+            deaths: r[3],
+            team: r[4] ? 'rossa' : 'blu',
+            bot: !!r[5]
+          }))
+    ).sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
+    const NAME = { blu: 'Blu', rossa: 'Rossa' };
     const head =
       phase === 'fine' && results
         ? results.winner
-          ? results.winner === me
-            ? 'Hai vinto!'
-            : 'Vince ' + esc(names.get(results.winner) || '')
+          ? results.winner === myTeam
+            ? 'La tua squadra ha vinto!'
+            : 'Vince la squadra ' + NAME[results.winner]
           : 'Pareggio'
         : 'Classifica';
+    const side = (t, n) =>
+      `<div><h3 style="color:${COLORS[n]}">${NAME[t]} · ${teamScore[n]}</h3>` +
+      table(rows.filter(r => r.team === t)) +
+      '</div>';
     $('classifica').innerHTML =
       '<h2>' +
       head +
-      '</h2>' +
-      table(rows, results?.winner) +
+      '</h2><div class="squadre">' +
+      side('blu', 0) +
+      side('rossa', 1) +
+      '</div>' +
       (phase === 'fine' ? '<small>Tra poco una nuova partita</small>' : '');
   }
   // mirino
@@ -546,10 +635,13 @@ function updateHud(dt) {
   $('m-d').style.left = gap + 'px';
   $('m-a').style.top = -gap - 8 + 'px';
   $('m-b').style.top = gap + 'px';
-  const scoped = current === 'falco' && controls.aim && alive;
+  const scoped = aiming() && current === 'falco';
   $('cannocchiale').hidden = !scoped;
-  $('mirino').classList.toggle('nascosto', scoped || w.melee || !alive);
-  $('t-mira').hidden = current !== 'falco' || !controls.touch;
+  // mirando le mire dell'arma prendono il posto del mirino
+  $('mirino').classList.toggle('nascosto', aimT > 0.5 || w.melee || !alive);
+  $('t-mira').hidden = w.melee || !controls.touch;
+  $('t-mira').classList.toggle('on', controls.aim);
+  $('mirino').classList.toggle('puntorosso', aimT > 0.5 && current === 'ruggito');
   if (markerT > 0 && (markerT -= dt) <= 0) $('segno').className = '';
   if (hurtT > 0 && (hurtT -= dt) <= 0) $('ferita').className = '';
 }
@@ -561,7 +653,7 @@ function shootFx() {
   const dir = lookDir(controls.yaw + kickYaw, controls.pitch + kick);
   if (!w.melee) {
     // il buco sul muro lo mette subito il telefono (il server lo manda agli altri)
-    const d = pelletDirs(dir, spreadFor(current, body, controls.aim), 1, random)[0];
+    const d = pelletDirs(dir, spreadFor(current, body, aiming()), 1, random)[0];
     const wall = world.ray(eye, d, 300);
     if (wall)
       decal(new THREE.Vector3(eye.x + d.x * wall.t, eye.y + d.y * wall.t, eye.z + d.z * wall.t), wall.box);
@@ -574,8 +666,12 @@ function shootFx() {
   vm.fire();
   sfx.shot(current);
   if (current === 'tuono') sfx.pump();
-  if (current === 'falco') controls.aim = false;
+  if (current === 'falco') aimBlock = 0.9; // dopo il colpo si toglie il cannocchiale per tirare l'otturatore
 }
+// si mira tenendo premuto il tasto destro (sul telefono MIRA), con tutte le armi tranne il coltello
+let aimBlock = 0;
+let aimT = 0; // 0..1, per far scorrere vista e arma
+const aiming = () => alive && controls.aim && !WEAPONS[current].melee && aimBlock <= 0;
 function beginReload() {
   const g = guns[current];
   const w = WEAPONS[current];
@@ -616,7 +712,11 @@ function fixedStep() {
     }
     if (controls.take('prendi')) bits |= BIT.take;
     if (controls.fire) bits |= BIT.fire;
-    if (controls.aim && current === 'falco') bits |= BIT.scope;
+    // mirando si cammina soltanto (lo controlla anche il server)
+    if (aiming()) {
+      bits |= BIT.scope | BIT.walk;
+      input.walk = true;
+    }
   } else controls.pressed.clear();
   // l'arma in mano, come farà il server con lo stesso comando
   for (const g of Object.values(guns))
@@ -673,13 +773,17 @@ function frame(now) {
   const eyeY = eyeHeight(body) + net.error.y;
   camera.position.set(body.x + net.error.x, alive ? eyeY : body.y + 0.5, body.z + net.error.z);
   camera.rotation.set(controls.pitch + kick, controls.yaw + kickYaw, alive ? 0 : 0.4);
-  const scoped = current === 'falco' && controls.aim && alive;
-  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV;
+  if (aimBlock > 0) aimBlock -= dt;
+  const aim = aiming();
+  aimT += ((aim ? 1 : 0) - aimT) * Math.min(1, dt * 14);
+  const scoped = aim && current === 'falco';
+  // Falco: cannocchiale ×4 subito; le altre armi stringono la vista poco a poco (×1,35)
+  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + 0.35 * aimT);
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
-  controls.zoom = scoped ? 1 / WEAPONS.falco.zoom : 1;
+  controls.zoom = camera.fov / BASE_FOV;
   vm.setVisible(!scoped && alive);
   const look = { x: angleDiff(controls.yaw, prevLook.yaw), y: controls.pitch - prevLook.pitch };
   prevLook = { yaw: controls.yaw, pitch: controls.pitch };
@@ -687,13 +791,16 @@ function frame(now) {
     dt,
     Math.min(1, speed / 5) * (body.onGround ? 1 : 0),
     { x: -Math.max(-0.05, Math.min(0.05, look.x)), y: Math.max(-0.05, Math.min(0.05, look.y)) },
-    time
+    time,
+    current === 'falco' ? 0 : aimT
   );
   muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 60);
   kick *= Math.max(0, 1 - dt * 9);
   kickYaw *= Math.max(0, 1 - dt * 9);
+  followSun(body.x, body.z);
   // gli altri, un attimo nel passato
-  soldiers.update(net.others(net.viewTime(), me), dt, names);
+  // il nome sopra la testa solo per i compagni di squadra
+  soldiers.update(net.others(net.viewTime(), me), dt, names, p => p.color === (myTeam === 'rossa' ? 1 : 0));
   for (const i of items) if (!i.away) i.node.rotation.y = time * 0.8;
   if (ready) updateHud(dt);
   renderer.clear();
@@ -703,6 +810,8 @@ function frame(now) {
 }
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
+// solo nell'anteprima locale: le braccia per guardarle da vicino (camera spostabile)
+if (location.hostname === 'localhost') globalThis.zonaBraccia = vm;
 // per le prove nell'anteprima (sola lettura)
 globalThis.zonaStato = () => ({
   online: true,

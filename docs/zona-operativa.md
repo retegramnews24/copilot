@@ -33,10 +33,14 @@ medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 | Computer | **WASD e mouse**: mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
 | Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
 
+Aggiornamento del 28 novembre (scelte del proprietario): la partita sul deserto è **sempre a squadre**, Rossa contro
+Blu, 4 contro 4, al massimo 8 persone; i posti vuoti li prendono i **bot**, livello **medi**; **all'inizio si
+sceglie la squadra** (Rossa, Blu o automatica). Si mira **tenendo premuto il tasto destro** con tutte le armi, e
+mirando **si cammina soltanto**. Il poligono di tiro è condiviso (ci si vede, niente fuoco amico).
+
 ### Ancora da decidere (domande a scelta al proprietario, quando serve)
 
 - Il nome della prima mappa e dei suoi posti (per ora nel gioco si chiama «Deserto»).
-- I bot: quanto bravi, e se l'ospite sceglie il livello (prima della tappa 3).
 - Personaggi: aspetto dei soldati Rossi e Blu (prima della tappa 2).
 - Se più avanti aggiungere altre modalità (era stata proposta anche «Ordigno», piazza e disinnesca: non scelta).
 
@@ -318,6 +322,22 @@ prende e tornano dopo 20 secondi.
   per sagome e muri. Le sagome sono di ognuno (scelta più semplice): chi spara le vede cadere solo da sé, così punti
   e sfida dei 60 secondi restano personali.
 
+- **Grafica del deserto** (28 novembre, su richiesta del proprietario): cielo vero (`Sky` di three) con il sole
+  basso del pomeriggio da sud-ovest, ombre morbide del sole in un riquadro di 96 m che segue il giocatore a passi
+  interi (così non tremano; 4096 punti sul computer, 2048 sul telefono), foschia color sabbia, materiali opachi.
+  Paesaggio lontano senza ombre proiettate.
+- **Sfarfallio** nelle intersezioni e su alcuni muri: nei modelli c'erano facce sovrapposte sullo stesso piano con
+  colori diversi (case, mura, muri alti, torre; nel poligono dettagli, righe e anelli delle sagome). Corrette in
+  Blender staccando di 3-4 mm la faccia più piccola di ogni coppia; piazzole delle partenze alzate a 9 cm.
+- **Spigoli arrotondati**: in `zona_deserto.blend` case, mura, muretti, muri alti, torre e casse hanno uno smusso di
+  3 cm (2 cm muretti e casse) in 2 passaggi. Le mesh uniche passano da 15.000 a 115.000 triangoli e `deserto.glb` da
+  3 a 11 MB: sul computer va bene, sul telefono il primo caricamento è più lento.
+- **Torre centrale**: la scala ora arriva davvero ai piani (mancavano 2 gradini alla prima rampa e 4 alla seconda) e
+  le tre fasce esterne, che erano lastre piene sopra il buco della scala, sono anelli intorno ai muri. Nel
+  movimento (`rules.js`) se dopo un gradino se ne tocca subito un altro basso si sale anche su quello (al massimo 3,
+  65 cm in tutto, ognuno al massimo 40 cm): le scale strette si prendono di lato con il corpo su due gradini. Provato
+  con una simulazione: dalla porta sud si arriva alla terrazza a 12 m.
+
 Da sapere: il terreno non ferma i colpi (sale e scende al massimo di un metro e mezzo). Le scatole sono dritte: le
 rocce sono un poco più strette del loro ingombro. Le armi in mano agli altri seguono la mano destra e lo sguardo,
 non l'osso della mano. Nell'anteprima locale la pagina online si apre ma non trova il server («si gioca dall'app»).
@@ -331,6 +351,46 @@ partita, uscite, stessa persona da un'altra finestra, risveglio della Durable Ob
 lo mette il server, senza scatti. A mano: due persone su staging, telefono contro computer.
 
 ### Tappa 3: fino a 8, squadre e bot
+
+**Fatto (codice, 28 novembre).** Senza ospite né impostazioni per ora (scelte del proprietario: sempre a squadre,
+bot medi).
+
+- **Squadre** (`zona-server.js`): al collegamento si va nella squadra con meno persone; dal menù «Rossa», «Blu» o
+  «Automatica» (la prima volta si entra scegliendo; si può cambiare, si rinasce alla nuova partenza). Al massimo 4
+  persone per squadra. Si rinasce alla partenza della propria squadra (`partenza_blu_1…4`, `partenza_rossa_1…4`), in
+  un punto libero. Niente fuoco amico: i compagni non si colpiscono e i colpi li attraversano. Vince la squadra con
+  più eliminazioni (a parità, pareggio). Si gioca appena c'è una persona (con i bot); a 0 persone si ferma tutto.
+- **Bot** (`zona-bots.js`): ogni squadra si riempie fino a 4; quando entra una persona esce un bot (prima uno già
+  eliminato), quando esce torna. Nomi «Bot Aldo», «Bot Bruna»… Si muovono con gli stessi comandi dei giocatori
+  (stesse regole e muri). Mappa dei passaggi a celle di mezzo metro (libera dove un giocatore sta in piedi), strada
+  con A* accorciata nei tratti dritti; restano a terra (niente torri). Vista: fino a 70 m, 130° davanti, 9 m anche
+  alle spalle, raggio dagli occhi al petto e alla testa che si ferma ai muri. «Medi»: sparano dopo circa mezzo
+  secondo (0,45 s ± 0,2) da quando vedono un nemico, si girano al massimo di 6 rad/s, mirano al petto con un errore
+  di 0,025 rad più 0,0011 per metro, che cambia ogni 0,35 s; da vicino si spostano di lato. Senza nemici vanno dove
+  hanno visto qualcuno (per 4 s), se no verso un punto a caso (armi, casse, rinascite, partenze, centro); se restano
+  fermi saltano e rifanno la strada. Non raccolgono armi: partono con Calabrone, Ruggito o Tuono a caso.
+- **Pagina** (`online.js`): scelta della squadra nel menù, in alto «BLU n · tempo · n ROSSA», classifica con Tab
+  divisa per squadra (i bot segnati), nome sopra la testa solo per i compagni, braccia del colore della propria
+  squadra (`viewmodel.js`, `setTeam`). I soldati hanno il modello della squadra (Blu o Rossi).
+
+**Prove.** `tests/zona-bots.test.mjs`: strada tra le due partenze tutta libera, il muro nasconde e alle spalle non si
+vede, da soli 7 bot e 4 contro 4, in due 6 bot, scelta della squadra con un bot che esce, al massimo 4 persone per
+squadra, niente fuoco amico; 90 secondi di partita con 6 bot: girano, sparano e colpiscono, nessuno dentro un muro,
+un passo del server sotto i 200 ms (circa 15 ms).
+
+**Mani e mira (28 novembre).** In `zona_armi.blend` i pugni chiusi sono diventati mani con le dita (palmo sul lato
+esterno, tre dita in tre falangi che girano attorno all'impugnatura, indice destro sul grilletto, pollice dietro),
+costruite attorno al punto dove passano impugnatura e canna in ogni azione `tiene_`; guanti neri (Blu) e mani
+fasciate (Rossi). Ai soldati visti dagli altri le armi lunghe vanno dalla mano destra verso la sinistra (seguono le
+animazioni). Mira con il tasto destro tenuto (telefono: MIRA): vista ×1,35 (Falco: cannocchiale ×4), arma al centro
+con il punto di mira (`SIGHT` in `viewmodel.js`) sulla linea dello sguardo, dispersione a metà (`AIM_SPREAD` in
+`rules.js`), e si cammina soltanto (il server mette il passo lento quando arriva il bit della mira). Col Ruggito si
+vede il punto rosso nella lente.
+
+**Da fare ancora, se il proprietario vuole:** impostazioni dell'ospite (tempo, livello dei bot), annuncio sulla
+bacheca della Lobby, bot che salgono sulle torri o raccolgono armi.
+
+Progetto iniziale della tappa:
 
 **Cosa si vede.** Il menù della partita: chi la apre è l'ospite e sceglie modalità (Tutti contro tutti o A
 squadre), tempo e bot. Gli altri scelgono Rossa o Blu (o «automatica»). Fino a 8 persone; i posti vuoti li

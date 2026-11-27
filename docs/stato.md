@@ -64,7 +64,12 @@ Tutti contro tutti, una partita sola per il circolo (`zona-server.js`, `public/z
 `online.js`; mappa e soldati esportati da Blender, urti generati da `scripts/zona-deserto-urti.py`). Provata con le
 prove automatiche (server e previsione contro il server) e nell'anteprima con messaggi finti (mappa, soldato,
 classifica, eliminazione); il server vero si prova solo su staging. Dopo il commit, non ancora in un commit: anche
-il poligono è condiviso (ci si vede, niente fuoco amico, sagome di ognuno). `main` resta 1.0.71 finché poligono e partita
+il poligono è condiviso (ci si vede, niente fuoco amico, sagome di ognuno), poi caricato. Poi, caricati su staging il 28 novembre:
+sfarfallio corretto nei modelli (deserto e poligono), cielo, ombre e spigoli arrotondati sul deserto, scala della
+torre che sale fino alla terrazza. E ancora: tappa 3 (sempre a squadre Rossa
+contro Blu, 4 contro 4, bot «medi» nei posti vuoti, squadra scelta all'inizio), mani con le dita, arma dei soldati
+lungo le due mani, mira con il tasto destro per tutte le armi camminando. Tutto provato con le prove automatiche e
+nell'anteprima con messaggi finti; i bot veri si vedono solo su staging. `main` resta 1.0.71 finché poligono e partita
 online non sono provati nell'app di staging.
 
 ## Da provare
@@ -72,6 +77,9 @@ online non sono provati nell'app di staging.
 - Zona Operativa, poligono di tiro, nel computer e nel telefono: muoversi, prendere le armi al bancone, sparare,
   ricaricare, mirino del Falco, sfida di 60 secondi, suoni, Esci. Guardare se le braccia e le armi stanno bene in
   vista e se il telefono regge.
+
+- Zona Operativa a squadre con i bot, anche da soli: scelta della squadra, i bot che girano e sparano (troppo
+  bravi o troppo scarsi?), punteggio delle squadre, mani e mira con il tasto destro.
 
 - Zona Operativa online, in due su staging (meglio telefono contro computer): «Gioca online», ci si vede e ci si
   spara, salute, eliminazioni, rinascita dopo 3 s, armi a terra che spariscono e tornano dopo 20 s, casse mediche,

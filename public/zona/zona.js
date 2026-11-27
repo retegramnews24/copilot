@@ -2,13 +2,13 @@
 // con le regole di rules.js (le stesse che userà il server dalla tappa 2).
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
-import { WEAPONS, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=79c25dfc2d';
+import { WEAPONS, AIM_SPREAD, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=6b60391eb6';
 import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=4f0b9d8f55';
-import { createControls } from './controls.js?v=e180132236';
-import { createViewmodel } from './viewmodel.js?v=af06afbe4f';
+import { createControls } from './controls.js?v=3ccaaf123b';
+import { createViewmodel } from './viewmodel.js?v=346e311811';
 import * as sfx from './audio.js?v=337aee686c';
-import { createNet } from './net.js?v=5cd00f6ceb';
-import { createSoldiers, ARMI } from './soldiers.js?v=cb5e951769';
+import { createNet } from './net.js?v=fca50b11d7';
+import { createSoldiers, ARMI } from './soldiers.js?v=a121bc0992';
 
 const $ = id => document.getElementById(id);
 const SETTINGS_KEY = 'zona-impostazioni';
@@ -227,12 +227,18 @@ function decal(point, box) {
   decals.push(m);
 }
 
+// si mira tenendo premuto il tasto destro (sul telefono MIRA), con tutte le armi tranne il coltello
+let aimBlock = 0;
+let aimT = 0;
+const aiming = () => controls.aim && !WEAPONS[current].melee && aimBlock <= 0;
+
 function shoot() {
   const w = WEAPONS[current];
   const eye = { x: body.x, y: eyeHeight(body), z: body.z };
   const dir = lookDir(controls.yaw + kickYaw, controls.pitch + kick);
   const moving = Math.hypot(body.vx, body.vz) > 1;
-  let spread = current === 'falco' && controls.aim ? w.scopedSpread : w.spread;
+  // mirando (tasto destro): Falco con il cannocchiale, le altre armi a metà dispersione
+  let spread = !aiming() ? w.spread : current === 'falco' ? w.scopedSpread : w.spread * AIM_SPREAD;
   if (!w.melee) {
     if (!body.onGround) spread *= 3;
     else if (moving && current !== 'tuono') spread *= 2;
@@ -282,7 +288,7 @@ function shoot() {
   sfx.shot(current);
   if (net.inFrame) net.send({ t: 'spara', w: current });
   if (current === 'tuono') sfx.pump();
-  if (current === 'falco') controls.aim = false; // dopo il colpo si toglie il mirino per tirare l'otturatore
+  if (current === 'falco') aimBlock = 0.9; // dopo il colpo si toglie il cannocchiale per tirare l'otturatore
 }
 
 // ---------- interfaccia ----------
@@ -301,8 +307,8 @@ function showMenu(show) {
 }
 
 $('comandi').innerHTML = matchMedia('(pointer: coarse)').matches
-  ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (Falco), RIC. ricarica, ARMA cambia arma, PRENDI vicino al bancone.'
-  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · clic destro mirino (Falco) · R ricarica · E prendi un\'arma dal bancone · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc passo lento · Esc menù';
+  ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (mirando si cammina), RIC. ricarica, ARMA cambia arma, PRENDI vicino al bancone.'
+  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un\'arma dal bancone · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc passo lento · Esc menù';
 $('sens').value = settings.sens;
 $('volume').value = settings.volume;
 $('sens').oninput = e => {
@@ -366,10 +372,12 @@ function updateHud() {
   $('m-d').style.left = gap + 'px';
   $('m-a').style.top = -gap - 8 + 'px';
   $('m-b').style.top = gap + 'px';
-  const scoped = current === 'falco' && controls.aim;
+  const scoped = aiming() && current === 'falco';
   $('cannocchiale').hidden = !scoped;
-  $('mirino').classList.toggle('nascosto', scoped || w.melee);
-  $('t-mira').hidden = current !== 'falco' || !controls.touch;
+  $('mirino').classList.toggle('nascosto', aimT > 0.5 || w.melee);
+  $('t-mira').hidden = w.melee || !controls.touch;
+  $('t-mira').classList.toggle('on', controls.aim);
+  $('mirino').classList.toggle('puntorosso', aimT > 0.5 && current === 'ruggito');
 }
 
 // ---------- ciclo ----------
@@ -386,17 +394,19 @@ function frame(now) {
   const eyeY = eyeHeight(body);
   camera.position.set(body.x, eyeY, body.z);
   camera.rotation.set(controls.pitch + kick, controls.yaw + kickYaw, 0);
-  const scoped = current === 'falco' && controls.aim;
-  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV;
+  if (aimBlock > 0) aimBlock -= dt;
+  aimT += ((aiming() ? 1 : 0) - aimT) * Math.min(1, dt * 14);
+  const scoped = aiming() && current === 'falco';
+  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + 0.35 * aimT);
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
-  controls.zoom = scoped ? 1 / WEAPONS.falco.zoom : 1;
+  controls.zoom = camera.fov / BASE_FOV;
   vm.setVisible(!scoped);
   const look = { x: angleDiff(controls.yaw, prevLook.yaw), y: controls.pitch - prevLook.pitch };
   prevLook = { yaw: controls.yaw, pitch: controls.pitch };
-  vm.update(dt, Math.min(1, Math.hypot(body.vx, body.vz) / 5) * (body.onGround ? 1 : 0), { x: -Math.max(-0.05, Math.min(0.05, look.x)), y: Math.max(-0.05, Math.min(0.05, look.y)) }, time);
+  vm.update(dt, Math.min(1, Math.hypot(body.vx, body.vz) / 5) * (body.onGround ? 1 : 0), { x: -Math.max(-0.05, Math.min(0.05, look.x)), y: Math.max(-0.05, Math.min(0.05, look.y)) }, time, current === 'falco' ? 0 : aimT);
   muzzleLight.intensity = Math.max(0, muzzleLight.intensity - dt * 60);
   kick *= Math.max(0, 1 - dt * 9);
   kickYaw *= Math.max(0, 1 - dt * 9);
@@ -424,6 +434,7 @@ const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
 function step(dt) {
   const input = controls.read();
+  if (aiming()) input.walk = true; // mirando si cammina soltanto
   moveStep(body, input, dt, POLIGONO.boxes);
   const speed = Math.hypot(body.vx, body.vz);
   if (body.onGround && speed > 3 && (stepT -= dt) <= 0) {

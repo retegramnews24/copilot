@@ -8,7 +8,7 @@
 <!-- Zona Operativa (docs/zona-operativa.md): si apre in fondo al corridoio della sala giochi, con la Lobby 3D spenta
      (public/lobby3d/corridor.js, app.js). Tappa 1: poligono di tiro, da soli. «Esci» chiede all'app di riaccendere
      la Lobby. -->
-<link rel="stylesheet" href="zona.css?v=bc9534a8bf">
+<link rel="stylesheet" href="zona.css?v=0fbd301e99">
 <script src="../frame-errors.js?v=42f44db1ac"></script>
 </head>
 <body>
@@ -52,6 +52,7 @@
     <h1>ZONA OPERATIVA</h1>
     <p class="sotto">Poligono di tiro</p>
     <div class="risultato" id="risultato" hidden></div>
+    <div id="squadre" hidden><p>Scegli la squadra</p><button id="sq-rossa" type="button" class="rossa">Rossa</button><button id="sq-blu" type="button" class="blu">Blu</button><button id="sq-auto" type="button" class="secondo">Automatica</button></div>
     <button id="gioca" type="button">Gioca</button>
     <button id="sfida-via" type="button" class="secondo">Sfida: 60 secondi</button>
     <button id="cambia" type="button" class="secondo">Gioca online</button>
@@ -63,6 +64,6 @@
 </div>
 
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
-<script type="module" src="main.js?v=2e7a6fa716"></script>
+<script type="module" src="main.js?v=52f36d9bda"></script>
 </body>
 </html>

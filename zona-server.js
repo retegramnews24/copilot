@@ -1,8 +1,12 @@
-// Zona Operativa, tappa 2: la partita online sulla mappa del deserto (docs/zona-operativa.md). Il server decide
-// tutto: muove i giocatori con le regole di public/zona/rules.js (le stesse del telefono), controlla i colpi tornando
-// indietro nel tempo di quanto è in ritardo chi spara (al massimo 0,2 s), tiene salute, eliminazioni, rinascite, armi
-// a terra e casse mediche, e il tempo della partita. Gira a 20 passi al secondo solo finché c'è qualcuno collegato;
-// niente si salva: la partita vive in memoria (se la Durable Object si spegne, al primo messaggio si riparte).
+// Zona Operativa: la partita online sulla mappa del deserto (docs/zona-operativa.md). Il server decide tutto: muove
+// i giocatori con le regole di public/zona/rules.js (le stesse del telefono), controlla i colpi tornando indietro nel
+// tempo di quanto è in ritardo chi spara (al massimo 0,2 s), tiene salute, eliminazioni, rinascite, armi a terra e
+// casse mediche, e il tempo della partita. Sempre a squadre, Rossa contro Blu, 4 contro 4: i posti che le persone
+// lasciano vuoti li prendono i bot (zona-bots.js). Niente fuoco amico. Gira a 20 passi al secondo solo finché c'è
+// qualcuno collegato; niente si salva: la partita vive in memoria (se la Durable Object si spegne, al primo messaggio
+// si riparte).
+// Nella stanza «poligono» (poligono di tiro condiviso) invece ci si vede soltanto: ognuno muove sé stesso e il server
+// passa posizioni e spari agli altri.
 import {
   PLAYER,
   WEAPONS,
@@ -23,6 +27,7 @@ import {
   fromBehind
 } from './public/zona/rules.js';
 import { BOXES, GROUND, POINTS } from './public/zona/map-deserto.js';
+import { createNav, botThink, BOT_NAMES, BOT_WEAPONS } from './zona-bots.js';
 import { userOf, json } from './worker-shared.js';
 import { MSG } from './public/messages.js';
 
@@ -30,7 +35,7 @@ export const ZONA = {
   key: 'zona',
   tick: 50, // ms: 20 passi al secondo
   cmdDt: 1 / 60, // ogni comando del telefono vale 1/60 di secondo
-  maxPlayers: 8,
+  perTeam: 4, // 4 contro 4, al massimo 8 in tutto
   match: 300_000, // 5 minuti
   results: 10_000, // classifica a fine partita, poi se ne comincia un'altra
   respawn: 3_000,
@@ -45,6 +50,8 @@ export const ZONA = {
 export const ARMI = ['baretta', 'calabrone', 'tuono', 'ruggito', 'falco', 'coltello'];
 // bit dei comandi
 export const BIT = { jump: 1, crouch: 2, walk: 4, fire: 8, reload: 16, take: 32, scope: 64 };
+// squadre: nei messaggi 0 = Blu, 1 = Rossa
+export const TEAMS = ['blu', 'rossa'];
 
 // Mappa per gli urti: le scatole delle case e i confini (map-deserto.js), uguale a quella del telefono.
 export function desertWorld() {
@@ -60,14 +67,15 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const num = (v, a, b) => (Number.isFinite(v) ? clamp(v, a, b) : 0);
 
 export class ZonaRoom {
-  // options (per le prove): now = orologio, autoTick = false per far andare i passi a mano
+  // options (per le prove): now = orologio, autoTick = false per far andare i passi a mano, bots = false senza bot
   constructor(ctx, env, options = {}) {
     this.ctx = ctx;
     this.env = env;
     this.now = options.now || (() => Date.now());
     this.autoTick = options.autoTick !== false;
+    this.useBots = options.bots !== false;
     this.world = desertWorld();
-    this.spawns = points('rinascita_');
+    this.starts = { blu: points('partenza_blu_'), rossa: points('partenza_rossa_') };
     this.items = [...points('raccolta_'), ...points('cassa_medica_')].map(p => ({
       ...p,
       kind: p.name.startsWith('cassa') ? 'cassa_medica' : p.tipo,
@@ -75,15 +83,40 @@ export class ZonaRoom {
     }));
     this.random = rng(options.seed ?? 89);
     this.players = new Map(); // socket -> giocatore
+    this.bots = [];
+    this.botN = 0;
     this.phase = 'attesa';
     this.endsAt = 0;
     this.results = null;
     this.events = [];
     this.tickN = 0;
     this.timer = null;
-    // 'deserto': la partita; 'poligono': il poligono di tiro condiviso, dove ci si vede soltanto (niente colpi tra
-    // giocatori: ognuno muove sé stesso e il server passa posizioni e spari agli altri)
+    // 'deserto': la partita; 'poligono': il poligono di tiro condiviso
     this.mode = 'deserto';
+  }
+
+  // mappa dei passaggi per i bot: si calcola la prima volta che serve
+  get nav() {
+    return (this._nav ??= createNav(this.world));
+  }
+
+  // dove vanno i bot quando non vedono nessuno: armi a terra, casse, rinascite, partenze, centro
+  goals() {
+    return (this._goals ??= [
+      ...this.items,
+      ...points('rinascita_'),
+      ...this.starts.blu,
+      ...this.starts.rossa,
+      { x: 0, z: 6 }
+    ]);
+  }
+
+  all() {
+    return [...this.players.values(), ...this.bots];
+  }
+
+  humans(team) {
+    return [...this.players.values()].filter(p => p.team === team).length;
   }
 
   sockets() {
@@ -107,7 +140,7 @@ export class ZonaRoom {
     if (path !== '/zona/ws' || req.headers.get('Upgrade')?.toLowerCase() !== 'websocket')
       return json({ error: MSG.live }, 426);
     const old = [...this.players.values()].find(p => p.id === user.player);
-    if (!old && this.players.size >= ZONA.maxPlayers)
+    if (!old && this.players.size >= ZONA.perTeam * 2)
       return json({ error: 'La Zona Operativa è al completo.' }, 409);
     if (old) {
       old.socket.serializeAttachment({ ...old.socket.deserializeAttachment(), closed: true });
@@ -145,14 +178,9 @@ export class ZonaRoom {
     }
   }
 
-  join(socket) {
-    const a = socket.deserializeAttachment();
+  newPlayer(fields) {
     const now = this.now();
-    const p = {
-      socket,
-      id: a.id,
-      name: a.name,
-      color: this.freeColor(),
+    return {
       body: newBody(0, 0, 0),
       hp: PLAYER.health,
       alive: false,
@@ -168,29 +196,69 @@ export class ZonaRoom {
       view: now,
       fireHeld: false,
       scoped: false,
-      history: []
+      history: [],
+      ...fields
     };
-    this.players.set(socket, p);
+  }
+
+  join(socket) {
+    const a = socket.deserializeAttachment();
     const range = this.mode === 'poligono';
+    const p = this.newPlayer({ socket, id: a.id, name: a.name });
+    if (!range) p.team = this.pickTeam(a.team);
+    this.players.set(socket, p);
     if (range) {
       this.phase = 'poligono';
+      p.team = 'blu';
       p.posed = false; // si vede dopo la prima posizione mandata
-    } else this.spawn(p);
+    } else {
+      this.spawn(p);
+      this.fillBots();
+    }
     this.event({ e: 'entra', id: p.id, n: p.name });
     this.send(p, {
       t: 'ciao',
       id: p.id,
       mode: this.mode,
       tick: ZONA.tick,
+      team: p.team,
       items: range ? [] : this.items.map(i => [i.kind, i.x, i.y, i.z])
     });
-    this.checkPhase(now);
+    this.checkPhase(this.now());
     this.start();
   }
 
-  freeColor() {
-    const used = new Set([...this.players.values()].map(p => p.color));
-    for (let c = 0; ; c++) if (!used.has(c)) return c;
+  // squadra: quella chiesta se ha posto (al massimo 4 persone), se no quella con meno persone
+  pickTeam(want, me = null) {
+    const count = t => [...this.players.values()].filter(p => p !== me && p.team === t).length;
+    if (TEAMS.includes(want) && count(want) < ZONA.perTeam) return want;
+    const [b, r] = TEAMS.map(count);
+    if (b !== r) return b < r ? 'blu' : 'rossa';
+    return me?.team || (this.random() < 0.5 ? 'blu' : 'rossa');
+  }
+
+  // i bot riempiono ogni squadra fino a 4; quando entra una persona ne esce uno
+  fillBots() {
+    if (this.mode !== 'deserto') return;
+    const humans = this.players.size;
+    for (const team of TEAMS) {
+      const want = this.useBots && humans ? Math.max(0, ZONA.perTeam - this.humans(team)) : 0;
+      let mine = this.bots.filter(b => b.team === team);
+      while (mine.length > want) {
+        // esce prima un bot già eliminato, se no l'ultimo entrato
+        const out = mine.find(b => !b.alive) || mine[mine.length - 1];
+        this.bots.splice(this.bots.indexOf(out), 1);
+        mine = mine.filter(b => b !== out);
+      }
+      while (mine.length < want) {
+        const used = new Set(this.bots.map(b => b.name));
+        const name = 'Bot ' + (BOT_NAMES.find(n => !used.has('Bot ' + n)) || ++this.botN);
+        const bot = this.newPlayer({ id: 'bot:' + ++this.botN, name, team, bot: true });
+        this.bots.push(bot);
+        mine.push(bot);
+        if (this.phase === 'partita' || this.phase === 'attesa') this.spawn(bot);
+      }
+    }
   }
 
   leave(socket) {
@@ -198,6 +266,7 @@ export class ZonaRoom {
     if (!p) return;
     this.players.delete(socket);
     this.event({ e: 'esce', id: p.id, n: p.name });
+    this.fillBots();
     this.checkPhase(this.now());
     if (!this.players.size) this.stop();
   }
@@ -225,6 +294,7 @@ export class ZonaRoom {
     // nessuno collegato: la prossima volta si riparte da capo
     this.phase = this.mode === 'poligono' ? 'poligono' : 'attesa';
     this.results = null;
+    this.bots = [];
     for (const i of this.items) i.readyAt = 0;
   }
 
@@ -233,6 +303,7 @@ export class ZonaRoom {
   }
 
   send(p, data) {
+    if (!p.socket) return;
     try {
       p.socket.send(JSON.stringify(data));
     } catch {}
@@ -240,11 +311,12 @@ export class ZonaRoom {
 
   // ---------- partita ----------
 
+  // si gioca appena ci sono almeno due giocatori (anche bot), di cui almeno una persona
   checkPhase(now) {
     if (this.mode === 'poligono') return;
-    const n = this.players.size;
-    if (this.phase === 'attesa' && n >= 2) this.begin(now);
-    else if (this.phase === 'partita' && n < 2) {
+    const n = this.all().length;
+    if (this.phase === 'attesa' && n >= 2 && this.players.size) this.begin(now);
+    else if (this.phase === 'partita' && (n < 2 || !this.players.size)) {
       this.phase = 'attesa';
       this.endsAt = 0;
     }
@@ -255,33 +327,44 @@ export class ZonaRoom {
     this.endsAt = now + ZONA.match;
     this.results = null;
     for (const i of this.items) i.readyAt = 0;
-    for (const p of this.players.values()) {
+    for (const p of this.all()) {
       p.kills = 0;
       p.deaths = 0;
-      this.spawn(p);
+      p.alive = false; // così le partenze si scelgono libere
     }
+    for (const p of this.all()) this.spawn(p);
     this.event({ e: 'via' });
+  }
+
+  teamScore() {
+    const s = { blu: 0, rossa: 0 };
+    for (const p of this.all()) s[p.team] += p.kills;
+    return s;
   }
 
   finish(now) {
     this.phase = 'fine';
     this.endsAt = now + ZONA.results;
-    const rows = [...this.players.values()]
-      .map(p => ({ id: p.id, name: p.name, kills: p.kills, deaths: p.deaths }))
+    const rows = this.all()
+      .map(p => ({ id: p.id, name: p.name, team: p.team, bot: !!p.bot, kills: p.kills, deaths: p.deaths }))
       .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
-    const tie = rows.length > 1 && rows[0].kills === rows[1].kills && rows[0].deaths === rows[1].deaths;
-    this.results = { rows, winner: rows.length && !tie ? rows[0].id : null };
+    const score = this.teamScore();
+    const winner = score.blu === score.rossa ? null : score.blu > score.rossa ? 'blu' : 'rossa';
+    this.results = { rows, score, winner };
     this.event({ e: 'fine', r: this.results });
   }
 
-  // punto di rinascita lontano da chi è vivo (a parità, uno a caso col seme)
+  // rinascita alla partenza della propria squadra, in un punto libero (a parità, uno a caso col seme)
   spawnPoint(p) {
-    const alive = [...this.players.values()].filter(o => o !== p && o.alive);
+    const others = this.all().filter(o => o !== p && o.alive);
+    const spots = this.starts[p.team] || this.starts.blu;
     let best = [];
     let bestD = -1;
-    for (const s of this.spawns) {
-      const d = alive.length ? Math.min(...alive.map(o => Math.hypot(o.body.x - s.x, o.body.z - s.z))) : 1000;
-      const r = Math.round(d / 5); // differenze sotto i 5 m non contano
+    for (const s of spots) {
+      const d = others.length
+        ? Math.min(...others.map(o => Math.hypot(o.body.x - s.x, o.body.z - s.z)))
+        : 100;
+      const r = Math.min(3, Math.round(d)); // basta un paio di metri liberi
       if (r > bestD) {
         bestD = r;
         best = [s];
@@ -299,6 +382,14 @@ export class ZonaRoom {
     p.guns = { baretta: newGun('baretta'), coltello: newGun('coltello') };
     p.slot1 = null;
     p.current = 'baretta';
+    // i bot non raccolgono armi da terra: partono con una delle tre principali
+    if (p.bot) {
+      const w = BOT_WEAPONS[Math.floor(this.random() * BOT_WEAPONS.length)];
+      p.guns[w] = newGun(w);
+      p.slot1 = w;
+      p.current = w;
+      p.ai = null;
+    }
     p.fireHeld = false;
     p.history = [];
     this.event({ e: 'nasce', id: p.id, x: s.x, y: p.body.y, z: s.z, yaw: s.yaw });
@@ -313,14 +404,26 @@ export class ZonaRoom {
     if (this.mode === 'poligono') return this.broadcast(now);
     if (this.phase === 'partita' && now >= this.endsAt) this.finish(now);
     else if (this.phase === 'fine' && now >= this.endsAt) {
-      if (this.players.size >= 2) this.begin(now);
+      if (this.players.size) this.begin(now);
       else {
         this.phase = 'attesa';
         this.results = null;
       }
     }
-    for (const p of this.players.values()) {
-      if (!p.alive && now >= p.deadUntil) this.spawn(p);
+    // i bot pensano e si muovono con tre comandi da 1/60 di secondo, come un telefono
+    if (this.phase !== 'fine')
+      for (const bot of this.bots) {
+        if (!bot.alive) continue;
+        const c = botThink(this, bot, now, ZONA.tick / 1000);
+        bot.view = now;
+        for (let k = 0; k < 3; k++) {
+          const fire = c.fire && (c.auto || k === 0);
+          const bits = (c.jump && k === 0 ? BIT.jump : 0) | (fire ? BIT.fire : 0);
+          this.command(bot, [c.fwd, c.side, bits, c.yaw, c.pitch, ARMI.indexOf(bot.current)], now);
+        }
+      }
+    for (const p of this.all()) {
+      if (!p.alive && now >= p.deadUntil && this.phase !== 'fine') this.spawn(p);
       p.history.push({ t: now, x: p.body.x, y: p.body.y, z: p.body.z, crouch: p.body.crouch });
       while (p.history.length && p.history[0].t < now - ZONA.history) p.history.shift();
     }
@@ -328,7 +431,7 @@ export class ZonaRoom {
   }
 
   broadcast(now) {
-    const list = [...this.players.values()];
+    const list = this.all();
     const range = this.mode === 'poligono';
     const others = list
       .filter(p => !range || p.posed)
@@ -341,8 +444,9 @@ export class ZonaRoom {
         +p.body.pitch.toFixed(3),
         (p.body.crouch ? 1 : 0) | (p.alive ? 0 : 2) | (p.body.onGround ? 4 : 0),
         ARMI.indexOf(p.current),
-        p.color
+        TEAMS.indexOf(p.team)
       ]);
+    const score = this.teamScore();
     const base = {
       t: 's',
       k: this.tickN,
@@ -351,7 +455,8 @@ export class ZonaRoom {
       left: this.endsAt ? Math.max(0, this.endsAt - now) : 0,
       p: others,
       it: this.items.map((i, n) => (i.readyAt > now ? n : -1)).filter(n => n >= 0),
-      sc: list.map(p => [p.id, p.name, p.kills, p.deaths, p.color]),
+      sc: list.map(p => [p.id, p.name, p.kills, p.deaths, TEAMS.indexOf(p.team), p.bot ? 1 : 0]),
+      sq: [score.blu, score.rossa],
       ev: this.events
     };
     this.events = [];
@@ -359,7 +464,7 @@ export class ZonaRoom {
       for (const p of list) this.send(p, base);
       return;
     }
-    for (const p of list) {
+    for (const p of this.players.values()) {
       const b = p.body;
       this.send(p, {
         ...base,
@@ -376,6 +481,7 @@ export class ZonaRoom {
           hp: p.hp,
           al: p.alive,
           ru: p.alive ? 0 : Math.max(0, p.deadUntil - now),
+          tm: p.team,
           s1: p.slot1,
           cur: p.current,
           am: Object.fromEntries(
@@ -400,6 +506,7 @@ export class ZonaRoom {
       return;
     }
     if (this.mode === 'poligono') return this.rangeMessage(p, m);
+    if (m?.t === 'squadra') return this.changeTeam(p, m.s);
     if (m?.t !== 'in' || !Array.isArray(m.c) || !Number.isInteger(m.s)) return;
     const now = this.now();
     // tempo a disposizione: chi manda più comandi del tempo passato (troppo veloce) se li vede scartare
@@ -413,6 +520,19 @@ export class ZonaRoom {
       this.command(p, c, now);
     }
     p.seq = Math.max(p.seq, m.s);
+  }
+
+  // scelta della squadra (all'inizio, e si può cambiare): si rinasce alla nuova partenza, senza contare un'eliminazione
+  changeTeam(p, want) {
+    if (!['blu', 'rossa', 'auto'].includes(want)) return;
+    const a = p.socket.deserializeAttachment();
+    p.socket.serializeAttachment({ ...a, team: want === 'auto' ? null : want });
+    const team = want === 'auto' ? p.team : this.pickTeam(want, p);
+    if (team === p.team) return;
+    p.team = team;
+    this.fillBots();
+    if (this.phase !== 'fine') this.spawn(p);
+    this.event({ e: 'squadra', id: p.id, s: team });
   }
 
   // Poligono condiviso: ognuno si muove da sé e manda dove sta ({t:'posa', p:[x, y, z, yaw, pitch, bit, arma]}) e
@@ -446,13 +566,14 @@ export class ZonaRoom {
       p.current = want;
       p.scoped = false;
     }
-    p.scoped = bit('scope') && p.current === 'falco';
+    // mira (tasto destro): meno dispersione, e mirando si cammina soltanto
+    p.scoped = bit('scope') && !WEAPONS[p.current].melee;
     const input = {
       fwd: num(fwd, -1, 1),
       side: num(side, -1, 1),
       jump: bit('jump'),
       crouch: bit('crouch'),
-      walk: bit('walk'),
+      walk: bit('walk') || p.scoped,
       yaw: Number.isFinite(yaw) ? yaw : p.body.yaw,
       pitch: num(pitch, -1.5, 1.5)
     };
@@ -530,8 +651,9 @@ export class ZonaRoom {
     const dir = lookDir(b.yaw, b.pitch);
     const dirs = pelletDirs(dir, spreadFor(weapon, b, p.scoped), w.pellets, this.random);
     const t = clamp(p.view, now - ZONA.rewind, now);
-    const targets = [...this.players.values()]
-      .filter(o => o !== p && o.alive)
+    // niente fuoco amico: i compagni non si colpiscono e i colpi li attraversano
+    const targets = this.all()
+      .filter(o => o !== p && o.alive && o.team !== p.team)
       .map(o => ({ o, at: this.positionAt(o, t) }));
     const dealt = new Map();
     let impact = null;

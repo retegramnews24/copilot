@@ -17,6 +17,7 @@ export const PLAYER = {
   gravity: 20,
   jump: 6.2, // salto di circa 1 m
   step: 0.4, // gradino che si sale da soli
+  stairs: 0.65, // più gradini di fila nello stesso passo (scala presa di lato, il corpo tocca due gradini)
   health: 100
 };
 
@@ -357,8 +358,21 @@ function slide(b, axis, delta, boxes, h) {
     const rise = c.max[1] - b.y;
     if (rise > 0 && rise <= PLAYER.step && (b.onGround || b.vy <= 0)) {
       const oldY = b.y;
-      b.y = c.max[1] + 0.001;
-      if (!blocked(b, boxes, h)) continue;
+      // si sale; se lì sopra si tocca un altro gradino basso, si sale anche su quello (al massimo 3, PLAYER.stairs in tutto)
+      let top = c.max[1];
+      let ok = false;
+      for (let k = 0; k < 3; k++) {
+        b.y = top + 0.001;
+        const body = bodyBox(b, h);
+        const next = boxes.find(o => !o.noWalk && overlap(body, o));
+        if (!next) {
+          ok = true;
+          break;
+        }
+        if (next.max[1] - top > PLAYER.step || next.max[1] - oldY > PLAYER.stairs) break;
+        top = next.max[1];
+      }
+      if (ok) continue;
       b.y = oldY;
     }
     const r = PLAYER.radius;
@@ -397,10 +411,12 @@ export function playerHit(o, d, p, maxT = 300) {
   return best;
 }
 
-// Dispersione dell'arma secondo come ci si muove (uguale per il telefono e il server).
-export function spreadFor(weapon, body, scoped) {
+// Dispersione dell'arma secondo come ci si muove (uguale per il telefono e il server). aimed: si mira con il tasto
+// destro (Falco: cannocchiale; le altre armi: metà dispersione).
+export const AIM_SPREAD = 0.5;
+export function spreadFor(weapon, body, aimed) {
   const w = WEAPONS[weapon];
-  let spread = weapon === 'falco' && scoped ? w.scopedSpread : w.spread;
+  let spread = !aimed ? w.spread : weapon === 'falco' ? w.scopedSpread : w.spread * AIM_SPREAD;
   if (w.melee) return 0;
   const moving = Math.hypot(body.vx, body.vz) > 1;
   if (!body.onGround) spread *= 3;

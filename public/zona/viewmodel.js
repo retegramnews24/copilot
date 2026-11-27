@@ -5,7 +5,19 @@ import * as THREE from 'three';
 
 export const WEAPON_NAMES = ['baretta', 'calabrone', 'tuono', 'ruggito', 'falco', 'coltello'];
 
+// punto di mira di ogni arma (tacca, mirino o lente del punto rosso), nelle coordinate dell'arma come MUZZLE
+// (misurati in blender/zona_armi.blend): mirando va al centro della vista
+const SIGHT = {
+  baretta: [0, 0.088, 0],
+  calabrone: [0, 0.095, 0],
+  tuono: [0, 0.064, 0.3],
+  ruggito: [0, 0.1, 0.05],
+  falco: [0, 0.13, 0.15]
+};
+const sight = new THREE.Vector3();
+
 // bocca della canna nelle coordinate dell'arma (da Blender: x, z, -y)
+
 const MUZZLE = {
   baretta: [0, 0.063, 0.183],
   calabrone: [0, 0.036, 0.34],
@@ -73,7 +85,10 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
   const boneRel = new THREE.Matrix4().multiplyMatrices(rigInv, bone.matrixWorld);
   const headRel = new THREE.Vector3().setFromMatrixPosition(boneRel);
   // in posa di riposo l'arma sta nella testa dell'osso con gli assi dello scheletro: offset = osso⁻¹ · arma
-  const offset = new THREE.Matrix4().copy(boneRel).invert().multiply(new THREE.Matrix4().makeTranslation(headRel.x, headRel.y, headRel.z));
+  const offset = new THREE.Matrix4()
+    .copy(boneRel)
+    .invert()
+    .multiply(new THREE.Matrix4().makeTranslation(headRel.x, headRel.y, headRel.z));
 
   const tex = flashTexture();
   const guns = {};
@@ -86,7 +101,14 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
     g.traverse(o => o.isMesh && (o.frustumCulled = false));
     bone.add(g);
     if (MUZZLE[n]) {
-      const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true }));
+      const f = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: tex,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          transparent: true
+        })
+      );
       f.position.set(...MUZZLE[n]);
       f.scale.setScalar(n === 'falco' || n === 'tuono' ? 0.32 : 0.2);
       f.visible = false;
@@ -133,6 +155,12 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
     camera,
     worldModels,
     setAspect,
+    // maniche della squadra: 'blu' o 'rossi'
+    setTeam(t) {
+      rig.traverse(o => {
+        if (o.isMesh && o.name.startsWith('braccia_')) o.visible = o.name === 'braccia_' + t;
+      });
+    },
     setWeapon(name) {
       if (current === name) return;
       mixer.stopAllAction();
@@ -159,16 +187,25 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
       holder.visible = v;
     },
     // dt in secondi; move: velocità orizzontale (0..1) per il dondolio del passo; lookDelta: quanto si è girata la vista
-    update(dt, move, lookDelta, t) {
+    // aim (0..1): mirando l'arma si porta al centro, con le mire sulla linea dello sguardo
+    update(dt, move, lookDelta, t, aim = 0) {
       mixer.update(dt);
       if (flashT > 0) {
         flashT -= dt;
-        if (flashT <= 0) for (const g of Object.values(guns)) if (g.userData.flash) g.userData.flash.visible = false;
+        if (flashT <= 0)
+          for (const g of Object.values(guns)) if (g.userData.flash) g.userData.flash.visible = false;
       }
       base = base || { x: 0, y: 0 };
-      const bob = move * 0.012;
-      const tx = Math.sin(t * 9) * bob - lookDelta.x * 0.6;
-      const ty = -Math.abs(Math.cos(t * 9)) * bob - lookDelta.y * 0.6;
+      const bob = move * 0.012 * (1 - aim * 0.8);
+      let tx = Math.sin(t * 9) * bob - lookDelta.x * 0.6 * (1 - aim * 0.7);
+      let ty = -Math.abs(Math.cos(t * 9)) * bob - lookDelta.y * 0.6 * (1 - aim * 0.7);
+      const g = guns[current];
+      if (aim > 0 && g && SIGHT[current]) {
+        // il punto di mira (senza lo spostamento attuale) va al centro della vista
+        g.localToWorld(sight.set(...SIGHT[current])).sub(holder.position);
+        tx += (-sight.x - tx) * aim;
+        ty += (-sight.y - ty) * aim;
+      }
       holder.position.x += (tx - holder.position.x) * Math.min(1, dt * 10);
       holder.position.y += (ty - holder.position.y) * Math.min(1, dt * 8);
     },

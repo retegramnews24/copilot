@@ -105,6 +105,8 @@ export function createSoldiers(scene, soldati, worldModels) {
   const flashTex = flashTexture();
   const all = new Map(); // id -> soldato
   const tmpV = new THREE.Vector3();
+  const tmpL = new THREE.Vector3();
+  const tmpR = new THREE.Vector3();
   const tmpQ = new THREE.Quaternion();
   const axis = new THREE.Vector3();
 
@@ -117,7 +119,11 @@ export function createSoldiers(scene, soldati, worldModels) {
     model.position.set(0, 0, 0);
     model.rotation.set(0, 0, 0);
     root.add(model);
-    model.traverse(o => o.isSkinnedMesh && (o.visible = o.name.startsWith('soldato_' + team)));
+    model.traverse(o => {
+      if (!o.isSkinnedMesh) return;
+      o.visible = o.name.startsWith('soldato_' + team);
+      o.castShadow = true;
+    });
     const mixer = new THREE.AnimationMixer(model);
     s = {
       root,
@@ -127,6 +133,7 @@ export function createSoldiers(scene, soldati, worldModels) {
       base: null,
       petto: model.getObjectByName('petto'),
       hand: model.getObjectByName('manoR'),
+      handL: model.getObjectByName('manoL'),
       guns: {},
       gun: null,
       flashT: 0,
@@ -164,6 +171,7 @@ export function createSoldiers(scene, soldati, worldModels) {
     if (!s.guns[weapon] && worldModels[weapon]) {
       const g = worldModels[weapon].clone(true);
       g.userData.weapon = weapon;
+      g.traverse(o => o.isMesh && (o.castShadow = true));
       const f = new THREE.Sprite(
         new THREE.SpriteMaterial({
           map: flashTex,
@@ -215,7 +223,15 @@ export function createSoldiers(scene, soldati, worldModels) {
       s.hand.getWorldPosition(tmpV);
       s.root.worldToLocal(tmpV);
       s.gun.position.copy(tmpV);
-      s.gun.rotation.set(-p.pitch, 0, 0);
+      // armi lunghe: la canna va dalla mano destra (impugnatura) verso la sinistra (sotto la canna), così segue le
+      // animazioni; pistola e coltello, tenuti vicino, seguono lo sguardo
+      const weapon = ARMI[p.weapon] || 'baretta';
+      s.handL.getWorldPosition(tmpL);
+      s.hand.getWorldPosition(tmpR);
+      if (weapon !== 'baretta' && weapon !== 'coltello' && tmpL.distanceTo(tmpR) > 0.12) {
+        s.gun.up.set(0, 1, 0);
+        s.gun.lookAt(tmpL.addScaledVector(tmpL.clone().sub(tmpR), 2));
+      } else s.gun.rotation.set(-p.pitch, 0, 0);
       if (s.flashT > 0 && (s.flashT -= dt) <= 0) s.gun.userData.flash.visible = false;
     }
   }
@@ -223,9 +239,13 @@ export function createSoldiers(scene, soldati, worldModels) {
   return {
     all,
     get: id => all.get(id),
-    // list: giocatori da disegnare (da net.others); names: id -> nome
-    update(list, dt, names) {
-      for (const p of list) updateSoldier(soldierFor(p, names.get(p.id)), p, dt);
+    // list: giocatori da disegnare (da net.others); names: id -> nome; showName(p): se scrivere il nome (compagni)
+    update(list, dt, names, showName = null) {
+      for (const p of list) {
+        const s = soldierFor(p, names.get(p.id));
+        updateSoldier(s, p, dt);
+        if (showName && !showName(p)) s.label.visible = false;
+      }
     },
     // via chi non c'è più (ids: quelli ancora presenti)
     prune(ids) {

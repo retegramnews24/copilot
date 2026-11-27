@@ -59,10 +59,11 @@ export function createControls(canvas, ui, { onMenu }) {
       return;
     }
     if (e.button === 0) s.fire = true;
-    if (e.button === 2) s.aim = !s.aim;
+    if (e.button === 2) s.aim = true; // si mira tenendo premuto il tasto destro
   });
   addEventListener('mouseup', e => {
     if (e.button === 0) s.fire = false;
+    if (e.button === 2) s.aim = false;
   });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   addEventListener('wheel', e => {
