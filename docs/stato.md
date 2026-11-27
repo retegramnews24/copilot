@@ -38,7 +38,7 @@ Le pagine di prova solo locali (`public/_prova-*`) restano fuori da git (`.gitig
 PLAYGROUND CINEMA» su sipario rosso con cornice déco dorata, ferma (`public/lobby3d/cinema-sign.js`; scelta del
 proprietario tra quattro proposte, anche rispetto a una versione con le lampadine animate).
 
-La sala tavoli è finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo, della Lobby 3D finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo,
+La sala tavoli della Lobby 3D è finita: ogni gioco ha i suoi pezzi veri sul tavolo (Forza 4, carte, Scarabeo,
 Battaglia navale, Scacchi e Dama), come dati nei file `public/lobby3d/table-*.js` e `connectFour` in `lobby3d.js`,
 così più avanti il tavolo potrà mostrare la partita vera. Sedie ai lati corti, ogni giocatore ha i suoi pezzi
 davanti.
@@ -59,8 +59,6 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 - Dividere `public/lobby3d/lobby3d.js` e `public/app.js` in pezzi, uno per volta, con un piano.
 - F1 on paper!: salvare le mosse a blocchi sul server (analisi 11.8).
 - Punti facoltativi dell'analisi ancora aperti: 4.4, 4.8, 4.11, 4.12, 7.6, 7.9, 7.10, 7.11, 7.13.
-- Avvisi dei giochi: toglierli dalla chat della Lobby (restano solo nella campanella) e renderli cliccabili sul
-  pannello della Lobby 3D.
 
 ## Decisioni già prese (non riproporre)
 
@@ -71,7 +69,8 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 - Costi e limiti di Cloudflare non interessano: l'app la usano al massimo 7-8 persone.
 - Niente qualità automatica per i telefoni lenti.
 - Per ora poche analisi nuove.
-- Avvisi dei giochi nella campanella, non nella chat.
+- Avvisi dei giochi nella campanella, non nella chat (dalla 1.0.30). Nella Lobby 3D stanno sulla bacheca: aperta
+  con «Apri», ogni avviso ha il suo tasto (Entra, Riprendi…), come nella campanella (dalla 1.0.44).
 - Commit solo quando lo chiede il proprietario; il push lo fa Claude solo dopo il suo sì in chat, uno per volta
   (o lui da GitHub Desktop).
 - Le informazioni di lavoro su Binottoland stanno solo qui nel repo (`CLAUDE.md`, questo file, i documenti dei
