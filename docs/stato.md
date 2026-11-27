@@ -3,13 +3,15 @@
 Una pagina sola, da leggere all'inizio di ogni sessione e da aggiornare alla fine. Qui non si racconta cosa è stato
 fatto (quello è nella storia dei commit): si scrive solo cosa serve per ripartire.
 
-Aggiornato il 27 novembre 2026.
+Aggiornato il 28 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.71**: macchinetta caffè e snack nell'atrio (1.0.70: sala cinema nuova; 1.0.69: backup dall'app;
-  1.0.68: Lobby 3D nuova). Le 8 prove passate.
-- `staging`: 1.0.71, uguale a `main` (`branch-diff`: nessuna differenza).
+- `main`: **1.0.72**: Zona Operativa (poligono, online sul deserto, squadre con i bot), porta blindata e corridoio,
+  Forza 4 vero sul tavolo 3D, F1 on paper! con i bot (1.0.71: macchinetta caffè e snack; 1.0.70: sala cinema nuova).
+  Le 8 prove passate. Portata su richiesta del proprietario prima dei controlli a mano su staging: le voci di «Da
+  provare» qui sotto valgono ora anche per l'app vera.
+- `staging`: 1.0.72, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
 
@@ -69,13 +71,13 @@ sfarfallio corretto nei modelli (deserto e poligono), cielo, ombre e spigoli arr
 torre che sale fino alla terrazza. E ancora: tappa 3 (sempre a squadre Rossa
 contro Blu, 4 contro 4, bot «medi» nei posti vuoti, squadra scelta all'inizio), mani con le dita, arma dei soldati
 lungo le due mani, mira con il tasto destro per tutte le armi camminando. Tutto provato con le prove automatiche e
-nell'anteprima con messaggi finti; i bot veri si vedono solo su staging. `main` resta 1.0.71 finché poligono e partita
-online non sono provati nell'app di staging.
+nell'anteprima con messaggi finti; i bot veri si vedono solo su staging. Tutto portato su `main` nella 1.0.72, su
+richiesta del proprietario, prima della prova nell'app.
 
 **F1 on paper! con i bot** (`docs/f1-on-paper.md`, voce «Bot»): in tutti e tre i modi si scelgono «Piloti» e «Bot»,
 al massimo 8 auto in tutto: «Contro l'IA» tu più da 1 a 7 bot, «Stesso telefono» piloti a turno più bot che muovono da
 soli, online persone più bot (cambiabili in sala d'attesa da chi crea). Scelte del proprietario: posti liberi vuoti al
-via, bravi come l'IA di oggi; nomi «Bot 1, Bot 2…». Tutto su staging. Poi: online si parte sempre da 0 bot (prima un
+via, bravi come l'IA di oggi; nomi «Bot 1, Bot 2…». Tutto su staging e su `main` (1.0.72). Ultimo passo: online si parte sempre da 0 bot (prima un
 bot salvato poteva prendersi l'unico posto libero, e all'altro non restava posto), e «Gioca» / il cabinet porta nella
 gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara nuova.
 
