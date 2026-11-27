@@ -30,7 +30,7 @@ medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 | Prima mappa | **Deserto**: case di pietra e fango, torri di pietra, muretti; pianta nostra |
 | Grafica | **Low-poly come la Lobby 3D**: forme semplici, colori pieni, modelli Blender leggeri |
 | Telefono | **Due levette, mira libera** (nessun aiuto): levetta a sinistra per camminare, trascinare a destra per girarsi, tasto Spara |
-| Computer | **WASD e mouse**: mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
+| Computer | **WASD e mouse**: si cammina, **Maiusc tenuto corre** (come nella Lobby 3D; scelta del 28 novembre), mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
 | Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
 
 Aggiornamento del 28 novembre (scelte del proprietario): la partita sul deserto è **sempre a squadre**, Rossa contro

@@ -83,6 +83,9 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 
 ## Da provare
 
+- Zona Operativa al computer: ora si cammina e si corre tenendo Maiusc (prima era il contrario). Su staging, non
+  ancora su `main`.
+
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,
   l'avviso nella campanella e una gara con un bot; in due, uno crea la gara e l'altro entra dal cabinet.

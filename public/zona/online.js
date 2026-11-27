@@ -18,11 +18,11 @@ import {
   spreadFor,
   pelletDirs,
   rng
-} from './rules.js?v=6b60391eb6';
+} from './rules.js?v=b7541a7935';
 import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
-import { createControls } from './controls.js?v=3e96426e5e';
+import { createControls } from './controls.js?v=04ee1def20';
 import { createViewmodel } from './viewmodel.js?v=346e311811';
-import { createNet, DT } from './net.js?v=fca50b11d7';
+import { createNet, DT } from './net.js?v=7e8e01c5e4';
 import * as sfx from './audio.js?v=337aee686c';
 
 const $ = id => document.getElementById(id);
@@ -502,7 +502,7 @@ function showMenu(show) {
 }
 $('comandi').innerHTML = matchMedia('(pointer: coarse)').matches
   ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (mirando si cammina), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
-  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc passo lento · Tab classifica · Esc menù (la partita continua)';
+  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc tenuto corre · Tab classifica · Esc menù (la partita continua)';
 $('sens').value = settings.sens;
 $('volume').value = settings.volume;
 $('sens').oninput = e => {
