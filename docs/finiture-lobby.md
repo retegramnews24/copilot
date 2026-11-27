@@ -30,6 +30,17 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 - Pannello di boiserie, rastrelliera delle stecche e applique d'ottone (`blender/arredi_lobby.blend` → `public/lobby3d/models/finiture.glb`, 140 KB). I pannelli (cornice e specchiatura in rilievo) sono tutti in un oggetto a istanze, ognuno alla misura del suo riquadro e con il legno della sua stanza; quelli piatti di `trimWall` restano finché il modello non arriva. Rastrelliera sulla parete di fondo del biliardo (8 stecche, mensola a coppette); applique: 4 nell'atrio, 2 nella sala tavoli, 2 nel biliardo.
 - Sala tavoli, tavoli e sedie moderni (`blender/sala_tavoli.blend` → `public/lobby3d/models/sala_tavoli.glb`, 80 KB): tavolo con il piano di noce dagli angoli arrotondati su una colonna centrale scura con il disco a terra; sedia girevole a quattro razze con seduta e schienale imbottiti in pelle, lo schienale staccato su un montante di metallo. Stesse misure di prima (piano a 80,5 cm, seduta a 48,5 cm): pedine e posti a sedere non cambiano. A istanze, un oggetto per materiale.
 - Applique dell'atrio spostate dove non coprono quadri e lavagna.
+- Zona operativa (`public/lobby3d/corridor.js`): porta blindata industriale sulla parete nord della sala giochi
+  (centro x -15,95, vano 1,2 × 2,3 m, insegna rossa «ZONA OPERATIVA»; il quadro «INSERT COIN» è stato spostato a
+  x -17,85 per farle posto). Si apre scorrendo avvicinandosi. Dietro, un tunnel di cemento di 12 m (z -6,3…-18,3,
+  largo 1,6 m) con tubi, striscia gialla e nera, un neon ogni 2 m e una luce sola che segue il neon acceso davanti
+  a te. I neon alle spalle si spengono con un clic, il nero sale verso il fondo; in fondo (z < -17,2) la Lobby 3D
+  si spegne davvero (`destroy` in `lobby3d.js`: ascoltatori e intervalli annotati mentre si costruisce, collegamenti,
+  film, audio, geometrie, materiali, texture, contesto WebGL) e parte la pagina del gioco (`public/zona/index.html`,
+  per ora un segnaposto con «Esci») nell'overlay `#zona-overlay` di `app.js`. Uscendo, `app.js` costruisce una Lobby
+  nuova, aspetta che sia pronta e ti rimette in fondo al corridoio rivolto verso la porta; i neon si riaccendono dal
+  fondo. Nell'anteprima: 312 geometrie e 28 texture prima, 2 e 1 subito dopo, poi il contesto grafico chiuso.
+  Prova locale: `public/_prova-zona.html` (fuori da git).
 - Partita vera sui tavoli (per ora solo Forza 4; `public/lobby3d/table-live.js`, prova `tests/table-live.test.mjs`).
   Quale partita: la tua, se ne stai giocando una; se no quella con l'ultima mossa. Le partite degli altri contro
   l'AI o in tutorial non si mostrano; senza partite il gioco è in posizione iniziale (griglia vuota). In diretta,

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Zona operativa</title>
+<!-- Segnaposto del gioco della Zona operativa: si apre in fondo al corridoio della sala giochi, con la Lobby 3D
+     spenta (public/lobby3d/corridor.js, app.js). «Esci» chiede all'app di riaccendere la Lobby. -->
+<style>
+  html,body{margin:0;height:100%;background:#0d0f11;color:#d9d2c0;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  main{min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 16px;text-align:center}
+  h1{margin:0;font:900 clamp(30px,9vw,56px)/1 "Arial Black",Arial,sans-serif;letter-spacing:.04em;color:#ff3b30;text-shadow:0 0 18px rgba(255,59,48,.55)}
+  p{margin:0;max-width:30em;color:#a9a394}
+  .tag{font:bold 13px ui-monospace,monospace;letter-spacing:.2em;color:#e8b81e}
+  button{margin-top:10px;font:700 17px system-ui,sans-serif;padding:12px 28px;border-radius:999px;border:0;background:#e8b81e;color:#16140f;cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+  <span class="tag">AREA 01</span>
+  <h1>ZONA OPERATIVA</h1>
+  <p>Qui arriverà il gioco.</p>
+  <p>La Lobby 3D è spenta: il telefono è tutto per il gioco.</p>
+  <button id="exit" type="button">Esci</button>
+</main>
+<script>
+  document.getElementById('exit').onclick = () => parent.postMessage({ type: 'zona-exit' }, location.origin);
+</script>
+</body>
+</html>

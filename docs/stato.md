@@ -48,7 +48,17 @@ Forza 4, su staging dopo il push. Scelte del proprietario: si vede la tua partit
 senza partite i pezzi in posizione iniziale; in diretta solo vicino alla sala; si parte da Forza 4 e si aggiunge un
 gioco alla volta, dopo averlo guardato nell'app.
 
+**Zona operativa** (`docs/finiture-lobby.md`, voce «Zona operativa»): porta blindata nella sala giochi accanto al
+quadro, tunnel di cemento, in fondo la Lobby 3D si spegne davvero e parte il gioco (per ora un segnaposto). Scelte
+del proprietario: porta blindata industriale, tunnel di cemento, insegna «ZONA OPERATIVA», spegnimento vero (al
+ritorno la Lobby si ricarica in qualche secondo). Il gioco sarà uno sparatutto a squadre originale (stesso genere di
+Counter-Strike, ma nome, mappe, armi e grafica nostri): da progettare con un suo documento in `docs/`, con le
+domande a scelta al proprietario; si parte da un poligono di tiro da soli.
+
 ## Da provare
+
+- Zona operativa nell'app vera, sul telefono: entrare, arrivare in fondo, uscire con «Esci» e ritrovarsi nel
+  corridoio. Guardare che la Lobby torni normale (luci, radio, persone) e che il telefono non scaldi.
 
 - Forza 4 vero sul tavolo 3D, con due persone: una gioca, l'altra guarda il tavolo nella sala tavoli e vede i
   gettoni comparire; a partita chiusa la griglia torna vuota.

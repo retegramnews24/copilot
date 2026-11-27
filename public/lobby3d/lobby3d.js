@@ -28,6 +28,7 @@ import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './ta
 import { createTableLive } from './table-live.js?v=df2df46159';
 import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=278b8afd1b';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
+import { buildCorridor, inZone, ZONE } from './corridor.js?v=0fb346722b';
 
 const H = 3.4; // altezza delle stanze
 // sala cinema più lunga e più alta delle altre: parete dello schermo a z 20,55, tetto a 5,5 m. Si entra in piano
@@ -86,7 +87,18 @@ const CSS = `
 `;
 
 // ---------- il mondo ----------
+// Per lo spegnimento vero (destroy, Zona operativa): mentre la 3D si costruisce, ogni ascoltatore messo su window o
+// document e ogni setInterval vengono annotati, così destroy() li toglie tutti, anche quelli dei moduli dei flipper e
+// del balilla. Si annota solo durante la costruzione: lì ci sono tutte queste chiamate.
 export function createLobby3D(app) {
+  const life = [], every = window.setInterval;
+  window.addEventListener = (type, fn, opt) => { life.push(() => window.removeEventListener(type, fn, opt)); EventTarget.prototype.addEventListener.call(window, type, fn, opt); };
+  document.addEventListener = (type, fn, opt) => { life.push(() => document.removeEventListener(type, fn, opt)); EventTarget.prototype.addEventListener.call(document, type, fn, opt); };
+  window.setInterval = (...args) => { const id = every(...args); life.push(() => clearInterval(id)); return id; };
+  try { return buildLobby3D(app, life); }
+  finally { delete window.addEventListener; delete document.addEventListener; window.setInterval = every; }
+}
+function buildLobby3D(app, life) {
   const style = document.createElement('style'); style.textContent = CSS; document.head.append(style);
   const el = document.createElement('div');
   el.className = 'l3d'; el.hidden = true;
@@ -102,6 +114,11 @@ export function createLobby3D(app) {
   const dock = document.createElement('div'); dock.className = 'l3d-dock';
   if (touch) { el.append(dock); dock.append(actB); }
   stick.hidden = !touch;
+  // nero della Zona operativa: sale in fondo al corridoio e copre lo spegnimento della Lobby
+  const zoneFade = document.createElement('div');
+  zoneFade.style.cssText = 'position:absolute;inset:0;z-index:4;background:#000;opacity:0;pointer-events:none;display:flex;align-items:center;justify-content:center;color:#c9c2b0;font:600 16px/1.3 ui-monospace,monospace;letter-spacing:.08em';
+  el.append(zoneFade);
+  let zoneArmed = true, zoneLeaving = false, destroyed = false;
   // caricamento: modelli e texture passano tutti dal gestore predefinito di three.js. Lo splash ne mostra
   // l'avanzamento; finito tutto si preparano subito le luci di ogni sala, così aprendo la Lobby non scatta
   const loading = { done: 0, total: 0, idle: false, warm: false };
@@ -180,6 +197,10 @@ export function createLobby3D(app) {
       wallX(x0,-DOOR,-6.15,finish);wallX(DOOR,x1,-6.15,finish);
       // architrave della porta della sala tavoli: anche lui ferma la telecamera
       wallMeshes.push(box(2*DOOR,H-DOOR_H,.3,wallM,0,(H+DOOR_H)/2,-6.15));
+    }else if(x0===-19){
+      // sala giochi: la porta blindata della Zona operativa (corridor.js) accanto al quadro «INSERT COIN»
+      wallX(x0,ZONE.x-ZONE.door,-6.15,finish);wallX(ZONE.x+ZONE.door,x1,-6.15,finish);
+      wallMeshes.push(box(2*ZONE.door,H-ZONE.doorH,.3,wallM,ZONE.x,(H+ZONE.doorH)/2,-6.15));
     }else wallX(x0, x1, -6.15, finish);
     if(x0===-7){
       // porte della sala tavoli (nord) e del cinema (sud): stipiti e architrave arrotondati che attraversano il muro
@@ -878,7 +899,7 @@ export function createLobby3D(app) {
     plane(1.91,1.433,new THREE.MeshBasicMaterial({map:artwork}),6.73,1.75,3.6,-Math.PI/2);
     spots.push({x:6.65,z:3.6,hx:.12,hz:.95,pad:1,label:'Lavagna',act:()=>app.enterGallery?app.enterGallery(boardRoom):app.open('lavagna-spazio-libero')});
   }
-  poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector','cornice_neon');
+  poster(-17.85,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector','cornice_neon');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool','cornice_dorata',2.15);
   // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
   // Sala buia: i materiali del cinema sono più scuri (CINEMA_DIM) invece di abbassare la luce di tutta la scena
@@ -1703,6 +1724,21 @@ export function createLobby3D(app) {
   plane(3.4, 0.85, new THREE.MeshBasicMaterial({ map: neonText('ARCADE', '#3ee7ff'), transparent: true, depthWrite: false, color: new THREE.Color(2, 2, 2) }), -18.98, 2.75, 0, Math.PI / 2);
   point('#a855f7', 7, -13, 2.8, 0, 11); point('#22d3ee', 5, -17, 2.4, -4, 8); point('#ff2bd6', 5, -17, 2.4, 4, 8); point('#ffb347', 4, -9, 2.4, 0, 8);
   for (const [c, z] of [['#22d3ee', -5.96], ['#ff2bd6', 5.96]]) box(11.8, 0.03, 0.03, glow(c, 3), -13, H - 0.12, z);
+  // ========== ZONA OPERATIVA: porta blindata e corridoio di cemento (corridor.js) ==========
+  function zoneSound(type){
+    const ac=audioContext;if(!active||!soundAllowed()||ac?.state!=='running')return;
+    const now=ac.currentTime,g=ac.createGain();g.connect(ac.destination);
+    if(type==='door'){ // la porta che scorre: soffio d'aria e rombo sordo
+      const n=ac.createBufferSource(),b=ac.createBuffer(1,Math.floor(ac.sampleRate*.7),ac.sampleRate),d=b.getChannelData(0);
+      for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);
+      const lp=ac.createBiquadFilter();lp.type='lowpass';lp.frequency.value=420;n.buffer=b;
+      g.gain.setValueAtTime(.12,now);g.gain.exponentialRampToValueAtTime(.0001,now+.7);n.connect(lp).connect(g);n.start();n.onended=()=>{n.disconnect();lp.disconnect();g.disconnect()};
+    }else{ // un neon che si spegne: clic secco
+      const o=ac.createOscillator();o.type='square';o.frequency.setValueAtTime(1400,now);o.frequency.exponentialRampToValueAtTime(200,now+.04);
+      g.gain.setValueAtTime(.05,now);g.gain.exponentialRampToValueAtTime(.0001,now+.06);o.connect(g);o.start();o.stop(now+.07);o.onended=()=>{o.disconnect();g.disconnect()};
+    }
+  }
+  const corridor=buildCorridor({scene,box,plane,wallX,wallZ,colliders,H,sound:zoneSound});
 
   // ========== rifiniture delle pareti, stanza per stanza (trimWall, stile «Circolo») ==========
   const TRIM = {
@@ -1728,7 +1764,7 @@ export function createLobby3D(app) {
   trimWall(TRIM.pool, 'z', -6.0, 6.0, 19.0, -1);
   trimWall(TRIM.pool, 'z', -6.0, 6.0, 7.16, 1, [[0, DOOR]]);
   // sala giochi (x -19…-7)
-  trimWall(TRIM.arcade, 'x', -19, -7.16, -6.0, 1);
+  trimWall(TRIM.arcade, 'x', -19, -7.16, -6.0, 1, [[ZONE.x, ZONE.door + 0.14]]);
   trimWall(TRIM.arcade, 'x', -19, -7.16, 6.0, -1);
   trimWall(TRIM.arcade, 'z', -6.0, 6.0, -19.0, 1);
   trimWall(TRIM.arcade, 'z', -6.0, 6.0, -7.16, -1, [[0, DOOR]]);
@@ -2282,9 +2318,17 @@ export function createLobby3D(app) {
       if(reducedMotion||Math.abs(pos.x-demo.x)>12)continue;
       demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
     }
-    const where = pos.z > 6.15 ? 'Sala cinema' : pos.z < -6.15 ? 'Sala tavoli' : pos.x > 7 ? 'Sala biliardo' : pos.x < -7 ? 'Sala giochi' : 'Lobby';
+    const where = roomOf(pos.x, pos.z);
     if (whereEl.textContent !== where) whereEl.textContent = where;
     lightRoom(where);
+    // Zona operativa: porta, neon e il nero che sale verso il fondo; in fondo la Lobby si spegne (app.enterZone)
+    const zoneDepth=corridor.update(pos,dt,t);
+    if(zoneDepth<.3)zoneArmed=true; // tornando dal gioco si parte già in fondo: si riparte solo dopo essere tornati indietro
+    if(!zoneLeaving)zoneFade.style.opacity=zoneArmed?String(Math.max(0,zoneDepth-.55)/.45*.75):'0';
+    if(!zoneLeaving&&zoneArmed&&pos.z<ZONE.end&&inZone(pos.x,pos.z)&&app.enterZone){
+      zoneLeaving=true;resetMovement();zoneFade.style.transition='opacity .9s';zoneFade.style.opacity='1';
+      zoneFade.textContent='Spengo la Lobby…';setTimeout(()=>app.enterZone(),950);
+    }
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
     tmp.set(Math.sin(cam.yaw) * Math.cos(cam.pitch), Math.sin(cam.pitch), Math.cos(cam.yaw) * Math.cos(cam.pitch));
@@ -2321,7 +2365,7 @@ export function createLobby3D(app) {
   // guardia: con la 3D aperta e visibile, se per più di un secondo e mezzo non si è disegnato niente il ciclo riparte
   setInterval(() => { if (active && !document.hidden && !asleep && performance.now() - drawnAt > 1500) { cancelAnimationFrame(raf); lastDraw = 0; raf = requestAnimationFrame(frame); } }, 1000);
   // partite vere sui tavoli: collegate solo con la 3D visibile e tu nella sala tavoli o davanti alla porta (z < -4,5)
-  setInterval(() => tableLive.watch(active && !document.hidden && !asleep && pos.z < -4.5), 1000);
+  setInterval(() => tableLive.watch(active && !document.hidden && !asleep && pos.z < -4.5 && pos.x > -7.3), 1000);
   const camWas = new THREE.Vector3(), camLook = new THREE.Quaternion();
   function frame(now) {
     if (!active) return;
@@ -2581,6 +2625,35 @@ export function createLobby3D(app) {
     resetMovement(); drags.clear(); joy.id = null; joy.x = joy.y = 0; knob.style.transform = '';
     el.hidden = true;
   }
+  // Spegnimento vero (in fondo al corridoio della Zona operativa): via tutto, perché il gioco abbia il telefono per
+  // sé. Ascoltatori e intervalli (annotati in createLobby3D), collegamenti, film, audio, poi geometrie, materiali e
+  // texture e infine la grafica stessa (contesto WebGL perso apposta). Dopo, questa Lobby non si usa più: per
+  // tornare app.js ne costruisce una nuova. Restituisce quanta memoria grafica c'era e quanta ne resta.
+  function destroy() {
+    if (destroyed) return null;
+    hide(); destroyed = true; active = false;
+    cancelAnimationFrame(raf); tableLive.close(); playProjection(null);
+    for (const undo of life.splice(0)) try { undo(); } catch {}
+    THREE.DefaultLoadingManager.onProgress = THREE.DefaultLoadingManager.onLoad = () => {};
+    const before = { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
+    const freeMaterial = m => { for (const v of Object.values(m)) if (v?.isTexture) v.dispose(); m.dispose(); };
+    scene.traverse(o => {
+      o.geometry?.dispose();
+      for (const m of [].concat(o.material || [])) freeMaterial(m);
+      if (o.isInstancedMesh) o.dispose();
+    });
+    scene.environment?.dispose(); scene.clear();
+    const after = { geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures };
+    try { audioContext?.close(); } catch {}
+    renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove();
+    el.remove(); style.remove(); boardStyle.remove();
+    return { before, after };
+  }
+  // di ritorno dal gioco: in fondo al corridoio, rivolto verso la sala giochi, con i neon che si riaccendono
+  function fromZone() {
+    place(ZONE.x, ZONE.end + 0.9, Math.PI, 0.12); heading = Math.PI;
+    zoneArmed = false; corridor.wake(t);
+  }
   // app nascosta, o mini app ridotta a icona in Telegram (sleep/wake chiamati da app.js): niente disegno, niente film
   function sleep(){app.clubStream?.(null);quietProjection();playProjection(null);resetMovement();cancelAnimationFrame(raf);last=0}
   function wake(){if(document.hidden||asleep)return;playProjection(app.projection?.());syncTransport(true);if(active){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame)}}
@@ -2606,7 +2679,7 @@ export function createLobby3D(app) {
   // Luci per stanza: ogni luce in più pesa su ogni oggetto disegnato (sui telefoni si sente). Si accendono solo
   // quelle della stanza dove sei e dell'atrio; dall'atrio, che vede tutte le porte, la luce principale di ogni sala.
   // Le combinazioni si preparano subito dopo l'apertura, così cambiare stanza non dà scatti.
-  const roomOf = (x, z) => (z > 6.15 ? 'Sala cinema' : z < -6.15 ? 'Sala tavoli' : x > 7 ? 'Sala biliardo' : x < -7 ? 'Sala giochi' : 'Lobby');
+  const roomOf = (x, z) => (inZone(x, z) ? 'Zona operativa' : z > 6.15 ? 'Sala cinema' : z < -6.15 ? 'Sala tavoli' : x > 7 ? 'Sala biliardo' : x < -7 ? 'Sala giochi' : 'Lobby');
   const roomLights = [];
   const mainLight = new Map();
   let litRoom = '';
@@ -2626,11 +2699,13 @@ export function createLobby3D(app) {
   }
   let lightsReady = false;
   async function prepareLights() {
+    if (destroyed) return;
     collectLights();
     if (lightsReady || !renderer.compileAsync) return;
     lightsReady = true;
     const keep = litRoom;
-    for (const room of ['Lobby', 'Sala biliardo', 'Sala giochi', 'Sala tavoli', 'Sala cinema']) {
+    for (const room of ['Lobby', 'Sala biliardo', 'Sala giochi', 'Sala tavoli', 'Sala cinema', 'Zona operativa']) {
+      if (destroyed) return;
       if (room === keep) continue;
       // compileAsync legge le luci subito: si rimettono quelle giuste prima di aspettare, così non si vede niente
       lightRoom(room);
@@ -2649,7 +2724,7 @@ export function createLobby3D(app) {
     const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
     return { progress, ready: loading.idle && lights && film };
   }
-  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, notice, connection, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, notice, connection, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, destroy, fromZone, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }

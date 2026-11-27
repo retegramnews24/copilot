@@ -94,12 +94,38 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=b70d03f150');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=a2cebf3c54');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
+}),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
  return lobby3d;
 }
+// Zona operativa (corridoio della sala giochi, public/lobby3d/corridor.js): in fondo la Lobby 3D si spegne davvero
+// (destroy: memoria e grafica liberate) e il gioco ha il telefono per sé. Uscendo se ne costruisce una nuova, si
+// aspetta che sia pronta e si riparte in fondo al corridoio. L'overlay (id «-overlay») tiene ferma la riapertura da sola.
+let zoneOpen=false;
+function enterZone(){
+ const status=$('zona-status'),frame=$('zona-frame');
+ status.textContent='Spengo la Lobby…';status.hidden=false;frame.hidden=true;$('zona-overlay').hidden=false;
+ const freed=lobby3d?.destroy?.();lobby3d=null;lobby3dBack=Date.now();
+ if(freed)trace('3D','Lobby spenta per la Zona operativa · geometrie '+freed.before.geometries+'→'+freed.after.geometries+' · texture '+freed.before.textures+'→'+freed.after.textures);
+ sendPresence();clubAudio();
+ status.textContent='Carico la Zona operativa…';zoneOpen=true;
+ frame.onload=()=>{if(zoneOpen){status.hidden=true;frame.hidden=false}};
+ frame.src='/zona/index.html';
+}
+async function leaveZone(){
+ if(!zoneOpen)return;zoneOpen=false;
+ const status=$('zona-status'),frame=$('zona-frame');
+ frame.onload=null;frame.src='about:blank';frame.hidden=true;status.textContent='Riaccendo la Lobby…';status.hidden=false;
+ try{
+  await makeLobby3D();lobby3d.fromZone();
+  for(const t0=Date.now();!lobby3d.loading().ready&&Date.now()-t0<20000;)await new Promise(r=>setTimeout(r,200));
+  lobby3d.show();
+ }catch(e){err('Lobby 3D: '+e.message)}
+ $('zona-overlay').hidden=true;lobby3dBack=Date.now();lobby3dIdle=0;sendPresence();clubAudio();
+}
+addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='zona-exit'&&e.source===$('zona-frame').contentWindow)leaveZone()});
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
  const recent=Date.now()-errAt<10000?$('error').textContent:'';
