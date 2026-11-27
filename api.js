@@ -171,7 +171,7 @@ async function route(req, env) {
   if (req.headers.get('Origin') && req.headers.get('Origin') !== u.origin)
     return json({ error: 'Origine non consentita.' }, 403);
   if (u.pathname === '/api/health')
-    return json({ ok: true, version: '1.0.71', env: env.APP_ENV || 'production' });
+    return json({ ok: true, version: '1.0.72', env: env.APP_ENV || 'production' });
 
   if (u.pathname === '/api/session' && req.method === 'POST') return login(req, env);
   const groupMedia = /^\/api\/cinema\/(?:group|inbox)\/media\//.test(u.pathname);
@@ -233,7 +233,7 @@ async function route(req, env) {
       new Request(u.origin + '/biliardo/' + bil[2] + u.search, req)
     );
   const f1 = u.pathname.match(
-    /^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|start|play|close|abandon)$/
+    /^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|bots|start|play|close|abandon)$/
   );
   if (f1)
     return env.ROOMS.get(env.ROOMS.idFromName('f1:' + f1[1])).fetch(
@@ -248,6 +248,12 @@ async function route(req, env) {
   if (pong)
     return env.ROOMS.get(env.ROOMS.idFromName('pong:' + pong[1])).fetch(
       new Request(u.origin + '/pong/' + pong[2], req)
+    );
+  // Zona Operativa (zona-server.js): per ora una partita sola per tutto il circolo, più il poligono di tiro condiviso
+  const zona = u.pathname.match(/^\/api\/zona\/(?:(poligono)\/)?(state|ws)$/);
+  if (zona)
+    return env.ROOMS.get(env.ROOMS.idFromName(zona[1] ? 'zona-poligono-v1' : 'zona-deserto-v1')).fetch(
+      new Request(u.origin + '/zona/' + (zona[1] ? 'poligono/' : '') + zona[2], req)
     );
   const moto = u.pathname.match(/^\/api\/moto-trial\/([a-f0-9-]{36})\/(state|ws)$/);
   if (moto)

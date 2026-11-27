@@ -69,6 +69,8 @@ questo file si carica da solo. Non tenere decisioni solo nelle note di Claude: v
   pulire la scena da `bpy.data`; smussi con `bmesh.ops.bevel(..., clamp_overlap=True)`; tagli booleani uno per volta
   (due sovrapposti nello stesso taglio si annullano). Esportare in GLB con gli oggetti all'origine, `export_yup=True`;
   il davanti dei modelli guarda verso -Y (diventa +z in three).
+- Blender: il proprietario guarda il lavoro direttamente in Blender, quindi niente immagini (`look`) in chat, salvo
+  che le chieda.
 - Anteprima locale: mai `file://`, sempre il piccolo server `node scripts/anteprima.mjs` sulla cartella `public/`
   (nelle sessioni di Claude: `Anteprima Binottoland` in `.claude/launch.json`, porta 8788).
 - Il repo è pubblico: niente token, indirizzi email o dati di persone nei file.
@@ -86,6 +88,7 @@ questo file si carica da solo. Non tenere decisioni solo nelle note di Claude: v
 | Biliardo | `docs/biliardo.md` | `public/biliardo/`, `biliardo-server.js` |
 | F1 on paper! | `docs/f1-on-paper.md` | `public/gara/`, `f1-server.js`, `public/f1-link.js` |
 | Ruggine 89 | `docs/ruggine-89.md` | `public/ruggine/` |
+| Zona Operativa (sparatutto) | `docs/zona-operativa.md` | `public/zona/`, `zona-server.js` (da fare) |
 | Golf | `docs/golf.md` | `public/golf/`, `golf-server.js` |
 | Moto Trial | `docs/moto-trial.md` | `public/moto-trial/`, `moto-trial-server.js` |
 | Acquedotto! e giochi arcade | `docs/acquedotto.md` | `public/arcade/` |

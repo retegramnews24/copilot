@@ -27,9 +27,10 @@ import {renderUno as renderUnoTable} from './uno-ui.js?v=1ab74ee73d';
 import {renderConnect4 as drawConnect4} from './connect4-ui.js?v=5be07b8991';
 import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=7ca29f05f4';
+import {createZonaLink} from './zona-link.js?v=b8e8ed14d4';
 import {createGolfLink} from './golf-link.js?v=3f3958e0a2';
 import {createArcadeLink} from './arcade-link.js?v=a4ce33c363';
-import {createF1Link} from './f1-link.js?v=8cf05cfcd5';
+import {createF1Link} from './f1-link.js?v=b8d752024d';
 import {createBiliardoLink} from './biliardo-link.js?v=2b2c975586';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 import {initBackupPanel} from './backup-panel.js?v=916a596819';
@@ -39,7 +40,7 @@ if(/-staging\./.test(location.hostname))document.documentElement.dataset.env='st
 const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
 if(tg?.platform==='android')document.documentElement.dataset.telegramPlatform='android';
 // Version shown in Informazioni, Debug and problem reports. Increase it at every release.
-const APP_VERSION='1.0.71',APP_NAME='Binottoland Playground '+APP_VERSION;
+const APP_VERSION='1.0.72',APP_NAME='Binottoland Playground '+APP_VERSION;
 const $=id=>document.getElementById(id);
 // Cinema rooms, socket and iframe (see cinema-lobby.js). Dependencies are wrapped: some are defined further down.
 const cinema=createCinemaLobby({projectionChanged:()=>lobby3d?.syncProjection(),tg,token:()=>sessionToken,readAppearance,safeInsets,enterFullscreen:()=>enterFullscreen(),leaveRoom:()=>leaveRoom(),selectPage:page=>selectPage(page),renderNow:()=>renderNow()});
@@ -94,12 +95,40 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=c610babd3c');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=a2cebf3c54');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
+}),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
  return lobby3d;
 }
+// Zona operativa (corridoio della sala giochi, public/lobby3d/corridor.js): in fondo la Lobby 3D si spegne davvero
+// (destroy: memoria e grafica liberate) e il gioco ha il telefono per sé. Uscendo se ne costruisce una nuova, si
+// aspetta che sia pronta e si riparte in fondo al corridoio. L'overlay (id «-overlay») tiene ferma la riapertura da sola.
+let zoneOpen=false;
+// la partita online della Zona: il collegamento autenticato resta qui (zona-link.js), la pagina del gioco usa postMessage
+const zonaLink=createZonaLink({frame:()=>$('zona-frame'),token:()=>sessionToken});
+function enterZone(){
+ const status=$('zona-status'),frame=$('zona-frame');
+ status.textContent='Spengo la Lobby…';status.hidden=false;frame.hidden=true;$('zona-overlay').hidden=false;
+ const freed=lobby3d?.destroy?.();lobby3d=null;lobby3dBack=Date.now();
+ if(freed)trace('3D','Lobby spenta per la Zona operativa · geometrie '+freed.before.geometries+'→'+freed.after.geometries+' · texture '+freed.before.textures+'→'+freed.after.textures);
+ sendPresence();clubAudio();
+ status.textContent='Carico la Zona operativa…';zoneOpen=true;
+ frame.onload=()=>{if(zoneOpen){status.hidden=true;frame.hidden=false}};
+ frame.src='/zona/index.html';
+}
+async function leaveZone(){
+ if(!zoneOpen)return;zoneOpen=false;zonaLink.close();
+ const status=$('zona-status'),frame=$('zona-frame');
+ frame.onload=null;frame.src='about:blank';frame.hidden=true;status.textContent='Riaccendo la Lobby…';status.hidden=false;
+ try{
+  await makeLobby3D();lobby3d.fromZone();
+  for(const t0=Date.now();!lobby3d.loading().ready&&Date.now()-t0<20000;)await new Promise(r=>setTimeout(r,200));
+  lobby3d.show();
+ }catch(e){err('Lobby 3D: '+e.message)}
+ $('zona-overlay').hidden=true;lobby3dBack=Date.now();lobby3dIdle=0;sendPresence();clubAudio();
+}
+addEventListener('message',e=>{if(e.origin===location.origin&&e.data?.type==='zona-exit'&&e.source===$('zona-frame').contentWindow)leaveZone()});
 async function openLobby3D(){
  try{localStorage.setItem(LOBBY3D_KEY,'1')}catch{}
  const recent=Date.now()-errAt<10000?$('error').textContent:'';
@@ -197,7 +226,7 @@ function renderLobby(){
    const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
    card.className='table-card';info.className='turn-note';
    title.textContent='F1 on paper! · sala '+game.number;
-   info.textContent=game.players.length+'/'+game.capacity+' piloti · '+game.laps+(game.laps===1?' giro':' giri')+(game.phase==='waiting'?' · In attesa':' · In gara');
+   info.textContent=game.players.length+'/'+game.capacity+' piloti'+(game.bots?' + '+game.bots+' bot':'')+' · '+game.laps+(game.laps===1?' giro':' giri')+(game.phase==='waiting'?' · In attesa':' · In gara');
    const mine=game.players.some(p=>p.id===identity?.player);
    enter.disabled=!identity;
    enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';

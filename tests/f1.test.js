@@ -7,6 +7,7 @@ import {
   makeRace,
   joinRace,
   leaveRace,
+  setBots,
   startRace,
   playRace,
   advanceRace,
@@ -211,6 +212,51 @@ for (let i = 0; i < 2000 && m2.phase !== 'finished'; i++) {
 assert.equal(m2.phase, 'finished');
 assert.equal(m2.abandoned, false);
 assert.equal(m2.winners.length, 1);
+
+// bot: chi crea sceglie quanti, li cambia in sala d'attesa, i posti liberi restano vuoti; i bot vanno sulla linea per
+// ultimi, scelgono subito a ogni giro e guidano con l'IA del gioco
+const t4 = makeTrack(drawn(4));
+assert.throws(() => makeRace('r', 1, anna, 0, { laps: 1, bots: 4 }, t4), /Da 0 a 3 bot/);
+const m3 = makeRace('room-3', 6, anna, 0, { laps: 1, bots: 2 }, t4);
+assert.equal(m3.bots, 2);
+joinRace(m3, bruno);
+assert.throws(() => joinRace(m3, carla), /completo/, 'two people and two bots: full');
+assert.throws(() => setBots(m3, bruno.player, 1), /chi ha creato/);
+assert.throws(() => setBots(m3, anna.player, 3), /Da 0 a 2 bot/);
+assert.equal(setBots(m3, anna.player, 1), true);
+assert.equal(joinRace(m3, carla), true);
+assert.equal(m3.phase, 'waiting', 'the start is in the server: here only the join');
+assert.match(
+  tableNotice(anna, 'f1', 6, 'room-3', { capacity: 3, bots: 1, laps: 1 }).text,
+  /cerca 2 piloti \(4 auto, 1 bot, 1 giro\)/
+);
+leaveRace(m3, carla.player);
+startRace(m3, anna.player, 0, t4);
+assert.deepEqual(m3.seats, ['p-bruno', 'p-anna', 'bot:1'], 'the free seat stays empty, the bot goes last');
+playRace(m3, bruno.player, R.placeable({ ...m3.race, track: t4 })[0], 0, t4);
+playRace(m3, anna.player, R.placeable({ ...m3.race, track: t4 })[0], 0, t4);
+assert.equal(m3.phase, 'race', 'the bot has put its car on the line by itself');
+assert.equal(m3.moves.at(-1).auto, undefined, 'a bot is not the autopilot');
+assert.deepEqual(publicRace(m3).chosen, [false, false, true], 'the bot has already chosen');
+for (let i = 0; i < 3000 && m3.phase !== 'finished'; i++) {
+  const race = { ...m3.race, track: t4 };
+  const k = race.cars.findIndex((c, j) => !c.crash && !m3.pending[j]);
+  if (k < 0) {
+    advanceRace(m3, m3.turnAt, t4);
+    continue;
+  }
+  assert.ok(k < 2, 'only people are waited for');
+  const target = autoMove(race, k);
+  playRace(m3, m3.seats[k], { x: target.x, y: target.y }, i, t4);
+}
+assert.equal(m3.phase, 'finished');
+assert.equal(m3.abandoned, false);
+assert.ok(
+  m3.moves.filter(e => e.kind === 'round').every(e => !e.auto[2]),
+  'the bot is never driven by the autopilot'
+);
+// the bot drives better than the autopilot: it usually wins, and then nobody gets the win in the Lobby
+if (m3.seats[m3.race.winner] === 'bot:1') assert.deepEqual(m3.winners, []);
 
 // solo le mosse nuove (analisi 10.4): con ?moves=N arrivano le mosse dalla N in poi e le auto senza percorso;
 // attaccate a quelle già avute danno la stessa gara di prima, molto più leggera

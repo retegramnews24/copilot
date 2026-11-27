@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0d0f11">
+<title>Zona Operativa</title>
+<!-- Zona Operativa (docs/zona-operativa.md): si apre in fondo al corridoio della sala giochi, con la Lobby 3D spenta
+     (public/lobby3d/corridor.js, app.js). Tappa 1: poligono di tiro, da soli. «Esci» chiede all'app di riaccendere
+     la Lobby. -->
+<link rel="stylesheet" href="zona.css?v=810d3afc2b">
+<script src="../frame-errors.js?v=42f44db1ac"></script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div class="hud" id="hud" hidden>
+  <div id="mirino"><i class="h" id="m-s"></i><i class="h" id="m-d"></i><i class="v" id="m-a"></i><i class="v" id="m-b"></i><i class="punto"></i></div>
+  <div id="segno"></div>
+  <div id="danni"></div>
+  <div id="conti"></div>
+  <div id="sfida" hidden></div>
+  <div id="avviso" hidden></div>
+  <div id="salute"><small>SALUTE</small><span id="salute-n">100</span></div>
+  <div id="tempo" hidden></div>
+  <div id="feed"></div>
+  <div id="ferita"></div>
+  <div id="morto" hidden></div>
+  <div id="classifica" hidden></div>
+  <div id="armi"><div class="nome" id="arma-nome"></div><div class="colpi" id="arma-colpi"></div><div class="stato" id="arma-stato"></div></div>
+</div>
+<div id="cannocchiale" hidden></div>
+
+<div id="tocco" hidden>
+  <div id="levetta" hidden><i></i></div>
+  <button id="t-spara" type="button">SPARA</button>
+  <button id="t-mira" type="button">MIRA</button>
+  <button id="t-ricarica" type="button">RIC.</button>
+  <button id="t-salta" type="button">SALTA</button>
+  <button id="t-giu" type="button">GIÙ</button>
+  <button id="t-arma" type="button">ARMA</button>
+  <button id="t-prendi" type="button" hidden>PRENDI</button>
+  <button id="t-menu" type="button">☰</button>
+</div>
+
+<div class="schermo" id="caricamento">
+  <div class="pannello"><h1>ZONA OPERATIVA</h1><p class="sotto">Poligono di tiro</p><p id="caricamento-testo">Carico…</p></div>
+</div>
+
+<div class="schermo" id="menu" hidden>
+  <div class="pannello">
+    <h1>ZONA OPERATIVA</h1>
+    <p class="sotto">Poligono di tiro</p>
+    <div class="risultato" id="risultato" hidden></div>
+    <div id="squadre" hidden><p>Scegli la squadra</p><button id="sq-rossa" type="button" class="rossa">Rossa</button><button id="sq-blu" type="button" class="blu">Blu</button><button id="sq-auto" type="button" class="secondo">Automatica</button></div>
+    <button id="gioca" type="button">Gioca</button>
+    <button id="sfida-via" type="button" class="secondo">Sfida: 60 secondi</button>
+    <button id="cambia" type="button" class="secondo">Gioca online</button>
+    <label>Sensibilità <input id="sens" type="range" min="0.2" max="3" step="0.05" value="1"></label>
+    <label>Volume <input id="volume" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+    <button id="esci" type="button" class="secondo">Esci</button>
+    <div class="comandi" id="comandi"></div>
+  </div>
+</div>
+
+<script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
+<script type="module" src="main.js?v=8b421555bd"></script>
+</body>
+</html>

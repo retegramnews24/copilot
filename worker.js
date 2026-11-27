@@ -17,6 +17,7 @@ import { F1Room } from './f1-server.js';
 import { BiliardoRoom } from './biliardo-server.js';
 import { MotoTrialRoom } from './moto-trial-server.js';
 import { PongRoom } from './pong-server.js';
+import { ZonaRoom } from './zona-server.js';
 import { DurableObject } from 'cloudflare:workers';
 import { Chess } from 'chess.js';
 import { initialCheckers, playCheckers } from './checkers.js';
@@ -350,6 +351,7 @@ export class Room extends DurableObject {
       return (this.youtube ??= new YouTubeCatalog(this.env.YOUTUBE_API_KEY)).fetch(req, viewer);
     if (path === '/blackboard/ws' || path === '/blackboard/create') return this.blackboard.fetch(req);
     if (path.startsWith('/pong/')) return this.pong.fetch(req);
+    if (path.startsWith('/zona/')) return this.zona.fetch(req);
     if (new URL(req.url).pathname.startsWith('/golf/')) return this.golf.fetch(req);
     if (new URL(req.url).pathname.startsWith('/f1/')) return this.f1.fetch(req);
     if (new URL(req.url).pathname.startsWith('/biliardo/')) return this.biliardo.fetch(req);
@@ -414,7 +416,11 @@ export class Room extends DurableObject {
             return json({ error: MSG.live }, 426);
           // al massimo 3 collegamenti per persona; il tetto di 60 vale per chi guarda, i giocatori entrano sempre
           makeRoomFor(this.ctx, userOf(req)?.id);
-          const isPlayer = !!viewer && (s.players || []).some(p => p.id === viewer);
+          // ?look=1: il tavolo della Lobby 3D che mostra la partita (public/lobby3d/table-live.js). Vista da
+          // spettatore e senza giocatore: non tiene in vita una partita finita (hasResultViewer), non entra senza posto
+          const look = new URL(req.url).searchParams.get('look') === '1';
+          const seen = look ? null : viewer;
+          const isPlayer = !!seen && (s.players || []).some(p => p.id === seen);
           if (!isPlayer && this.ctx.getWebSockets().length >= 60)
             return json({ error: 'Tavolo pieno: troppe persone collegate.' }, 429);
           const pair = new WebSocketPair();
@@ -424,9 +430,9 @@ export class Room extends DurableObject {
             memberId: userOf(req)?.id,
             accessTag: req.headers.get('X-Access-Tag'),
             expires: Number(req.headers.get('X-Session-Expires')),
-            player: viewer
+            player: seen
           });
-          pair[1].send(JSON.stringify(this.public(s, viewer)));
+          pair[1].send(JSON.stringify(this.public(s, seen)));
           return new Response(null, {
             status: 101,
             webSocket: pair[0],
@@ -702,6 +708,10 @@ export class Room extends DurableObject {
   get lobbyHub() {
     return (this._lobbyHub ??= new LobbyHub(this.ctx, this.env));
   }
+  // Zona Operativa (zona-server.js): creata solo nella sua Durable Object, al primo bisogno
+  get zona() {
+    return (this._zona ??= new ZonaRoom(this.ctx, this.env));
+  }
   get blackboard() {
     return (this._blackboard ??= new Blackboard(this.ctx));
   }
@@ -736,6 +746,7 @@ export class Room extends DurableObject {
     if (a?.kind === 'lab') return; // Labyrinth tolto: collegamenti rimasti da prima, si chiudono da soli
     if (a?.kind === 'moto-trial') return this.moto.message(ws, message);
     if (a?.kind === 'pong') return this.pong.message(ws, message);
+    if (a?.kind === 'zona') return this.zona.message(ws, message);
     if (a?.kind !== 'lobby') {
       ws.close(1008, 'Sola lettura.');
       return;
@@ -909,6 +920,8 @@ export class Room extends DurableObject {
     if (attachment?.kind === 'cinema') return this.cinema.close(ws);
     if (attachment?.kind === 'moto-trial') {
       await this.moto.close(ws);
+    } else if (attachment?.kind === 'zona') {
+      this.zona.close(ws);
     } else if (attachment?.kind === 'pong') {
       await this.pong.close(ws);
     } else if (attachment?.kind === 'lobby') {
@@ -941,6 +954,7 @@ export class Room extends DurableObject {
     if (kind === 'cinema') return this.cinema.close(ws);
     if (kind === 'moto-trial') return this.moto.close(ws);
     if (kind === 'pong') return this.pong.close(ws);
+    if (kind === 'zona') return this.zona.close(ws);
     ws.close(1011, 'Riconnettersi.');
   }
   async alarm() {

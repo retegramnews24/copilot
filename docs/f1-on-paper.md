@@ -3,8 +3,8 @@
 [← Binottoland](../README.md)
 
 Gara a turni su una griglia: si disegna la pista col dito (o col mouse), poi si corre in 3D muovendo l'auto di
-casella in casella. Nel codice si chiama anche «Gara a quadretti» (`public/gara`). Da soli contro l'IA sullo stesso
-telefono, oppure online da 2 a 8 piloti (`f1-server.js`, un oggetto del server per gara).
+casella in casella. Nel codice si chiama anche «Gara a quadretti» (`public/gara`). Da soli contro i bot sullo stesso
+telefono, oppure online da 2 a 8 auto tra persone e bot (`f1-server.js`, un oggetto del server per gara).
 
 ## Regole concordate
 
@@ -19,6 +19,23 @@ telefono, oppure online da 2 a 8 piloti (`f1-server.js`, un oggetto del server p
 - **Online.** Tutti scelgono insieme e le auto si muovono quando ha scelto l'ultimo. 60 secondi per mossa, poi guida
   il pilota automatico; per chi non c'è (app nascosta o ridotta a icona da 20 secondi, o ha abbandonato) guida subito.
   «Abbandona la gara»: la gara continua, la tua auto la guida il pilota automatico e non puoi vincere.
+- **Bot.** Si chiamano «Bot 1», «Bot 2»… e guidano come l'IA di «Contro l'IA» (`AiDriver` di `ai.js`, che cerca la
+  strada più corta), non come il pilota automatico. Non si fermano dove ha scelto di fermarsi un'altra auto.
+  - Nella schermata «Nuova gara» si scelgono «Piloti» (le persone) e «Bot»: con i bot al massimo 8 auto in tutto
+    (senza bot, sullo stesso telefono restano fino a 16 piloti).
+  - «Contro l'IA»: tu più da 1 a 7 bot; prima metti la tua auto, poi i bot la loro.
+  - «Stesso telefono»: i piloti giocano a turno e dopo di loro i bot, che mettono l'auto e muovono da soli quando
+    tocca a loro.
+  - Online: chi crea sceglie quanti piloti aspettare (lui compreso) e quanti bot (si parte sempre da 0 bot: i
+    posti sono per le persone); in sala d'attesa può cambiare i bot finché non
+    preme «Parti ora», solo nei posti non presi dalle persone. Al via i posti rimasti liberi restano vuoti. I bot
+    vanno sulla linea per ultimi (dopo chi ha creato la gara) e scelgono subito a ogni giro, così si aspettano solo le
+    persone. Se vince un bot nessuno prende la vittoria nella Lobby. Per la Lobby i posti sono quelli delle persone
+    («2/3 piloti + 1 bot»).
+
+- **Entrare.** Dall'avviso della campanella o della bacheca, dalla Lobby, oppure con «Gioca» (anche dal cabinet della
+  Lobby 3D): se hai una gara online aperta la riprendi; se una gara aspetta piloti ci entri subito; solo altrimenti si
+  apre il gioco per una gara nuova (`public/f1-link.js`).
 
 ## Limiti della pista
 
@@ -49,6 +66,6 @@ nascosta e, ferma, disegna un fotogramma su due. Se la grafica 3D non parte la g
 
 ## Prove
 
-`tests/f1.test.js` (regole, limiti della pista, solo le mosse nuove), `tests/f1-runtime.test.js` (server vero: crea,
-pista sbagliata fermata in `api.js`, entra, mosse insieme, mosse nuove, abbandono, chiude),
+`tests/f1.test.js` (regole, limiti della pista, solo le mosse nuove, bot), `tests/f1-runtime.test.js` (server vero:
+crea, pista sbagliata fermata in `api.js`, entra, mosse insieme, mosse nuove, abbandono, bot, chiude),
 `tests/absent-players.test.mjs` (pilota automatico per chi non c'è).

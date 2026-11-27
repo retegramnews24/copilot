@@ -23,15 +23,17 @@ const BILIARDO_NAMES = {
 // Kept in their own list (not in the chat); the app shows them in the Lobby bell, each with a button.
 export function tableNotice(user, game, number, room, summary = null) {
   let where = isArcade(game) ? ' · sala ' + number : ' · Tavolo ' + number;
-  // F1 on paper!: how many drivers the race is waiting for, and how many laps
-  if (game === 'f1' && summary?.capacity)
+  // F1 on paper!: how many drivers the race is waiting for, the bots, and how many laps
+  // (capacity: the seats for people; the bots are on top)
+  if (game === 'f1' && summary?.capacity && summary.capacity > 1)
     where +=
       ' · cerca ' +
       (summary.capacity - 1) +
       (summary.capacity === 2 ? ' pilota' : ' piloti') +
       ' (' +
-      summary.capacity +
+      (summary.capacity + (summary.bots || 0)) +
       ' auto, ' +
+      (summary.bots ? summary.bots + ' bot, ' : '') +
       summary.laps +
       (summary.laps === 1 ? ' giro)' : ' giri)');
   // Biliardo: the specialty, the teams (from 3 players: teams chosen by the players, up to 8) and the players wanted
@@ -522,8 +524,10 @@ export class LobbyHub {
               appearance: body.game === 'golf' ? body.appearance : undefined,
               campaign: body.game === 'golf' ? body.campaign : undefined,
               collisions: body.game === 'golf' ? body.collisions === true : undefined,
-              // F1 on paper!: the drawn track, laps, time of day (the number of drivers is in the track)
-              ...(body.game === 'f1' ? { track: body.track, laps: body.laps, time: body.time } : {}),
+              // F1 on paper!: the drawn track, laps, time of day, bots (the number of cars is in the track)
+              ...(body.game === 'f1'
+                ? { track: body.track, laps: body.laps, time: body.time, bots: body.bots }
+                : {}),
               // Biliardo: the specialty, the points to win (5 birilli, boccette) or the reds (snooker), and the
               // players (2, or 3 / 4 in two teams). "points", not "target": that is the tournament format of other games
               ...(body.game === 'biliardo'
