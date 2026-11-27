@@ -1,0 +1,59 @@
+/* Zona Operativa: pagina del gioco (poligono di tiro, tappa 1). */
+html,body{margin:0;height:100%;background:#0d0f11;color:#e8e2d2;font:15px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
+#gl{position:fixed;inset:0;display:block;width:100%;height:100%}
+.hud{position:fixed;inset:0;pointer-events:none}
+#mirino{position:absolute;left:50%;top:50%;width:0;height:0}
+#mirino i{position:absolute;background:#f4efe0;box-shadow:0 0 2px #000}
+#mirino .h{width:8px;height:2px;top:-1px}
+#mirino .v{width:2px;height:8px;left:-1px}
+#mirino .punto{width:2px;height:2px;left:-1px;top:-1px}
+#mirino.nascosto{display:none}
+#segno{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;opacity:0;transition:opacity .15s}
+#segno.on{opacity:1;transition:none}
+#segno::before,#segno::after{content:"";position:absolute;left:10px;top:0;width:2px;height:22px;background:#fff;transform:rotate(45deg)}
+#segno::after{transform:rotate(-45deg)}
+#segno.testa::before,#segno.testa::after{background:#ff4d3a}
+#armi{position:absolute;right:max(16px,env(safe-area-inset-right));bottom:max(16px,env(safe-area-inset-bottom));text-align:right;text-shadow:0 1px 3px #000}
+#armi .nome{font:800 15px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#e8b81e}
+#armi .colpi{font:800 34px ui-monospace,Consolas,monospace}
+#armi .colpi small{font-size:18px;color:#a9a394}
+#armi .stato{font-size:13px;color:#ffcf6b;min-height:18px}
+#salute{position:absolute;left:max(16px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));font:800 30px ui-monospace,Consolas,monospace;text-shadow:0 1px 3px #000}
+#salute small{font:700 13px system-ui,sans-serif;color:#a9a394;display:block;letter-spacing:.1em}
+#conti{position:absolute;left:50%;top:max(12px,env(safe-area-inset-top));transform:translateX(-50%);background:rgba(10,11,13,.55);padding:6px 14px;border-radius:8px;font-size:14px;white-space:nowrap}
+#conti b{color:#e8b81e}
+#sfida{position:absolute;left:50%;top:calc(max(12px,env(safe-area-inset-top)) + 40px);transform:translateX(-50%);font:800 28px ui-monospace,monospace;color:#ff6b4a;text-shadow:0 1px 3px #000}
+#avviso{position:absolute;left:50%;top:62%;transform:translateX(-50%);background:rgba(10,11,13,.7);padding:6px 14px;border-radius:999px;font-weight:700}
+#danni{position:absolute;inset:0}
+#danni span{position:absolute;font:800 18px system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000;transform:translate(-50%,-50%);animation:sale .8s ease-out forwards}
+#danni span.testa{color:#ff5a40;font-size:22px}
+@keyframes sale{to{transform:translate(-50%,-160%);opacity:0}}
+#cannocchiale{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,transparent 0,transparent min(34vw,34vh),#000 calc(min(34vw,34vh) + 2px))}
+#cannocchiale::before,#cannocchiale::after{content:"";position:absolute;background:#000}
+#cannocchiale::before{left:0;right:0;top:50%;height:1px}
+#cannocchiale::after{top:0;bottom:0;left:50%;width:1px}
+.schermo{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,9,10,.82);padding:16px;box-sizing:border-box}
+.pannello{width:min(440px,100%);max-height:100%;overflow:auto;background:#16181b;border:1px solid #2c2f34;border-radius:14px;padding:20px;box-sizing:border-box}
+.pannello h1{margin:0 0 2px;font:900 26px/1 "Arial Black",Arial,sans-serif;letter-spacing:.04em;color:#ff3b30}
+.pannello .sotto{margin:0 0 14px;color:#a9a394;font-size:13px;letter-spacing:.15em;text-transform:uppercase}
+.pannello button{display:block;width:100%;margin:8px 0;font:700 16px system-ui,sans-serif;padding:12px;border-radius:10px;border:0;background:#e8b81e;color:#16140f;cursor:pointer}
+.pannello button.secondo{background:#2a2d31;color:#e8e2d2}
+.pannello label{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:10px 0;font-size:14px}
+.pannello input[type=range]{flex:1;max-width:200px}
+.pannello .comandi{font-size:13px;color:#a9a394;margin:12px 0 0;line-height:1.6}
+.pannello .risultato{background:#1f2226;border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:14px}
+#caricamento p{margin:8px 0 0;color:#a9a394}
+#tocco{position:fixed;inset:0;pointer-events:none}
+#tocco button{pointer-events:auto;position:absolute;border:2px solid rgba(255,255,255,.35);background:rgba(20,22,25,.45);color:#fff;font:800 12px system-ui,sans-serif;border-radius:50%;width:62px;height:62px;padding:0;touch-action:none}
+#tocco button.on{background:rgba(232,184,30,.55)}
+#t-spara{right:max(24px,env(safe-area-inset-right));bottom:120px;width:84px!important;height:84px!important;background:rgba(200,40,30,.45)!important}
+#t-mira{right:120px;bottom:180px}
+#t-ricarica{right:30px;bottom:220px}
+#t-salta{right:120px;bottom:100px}
+#t-giu{right:190px;bottom:60px}
+#t-arma{right:30px;bottom:300px}
+#t-prendi{left:50%;bottom:120px;transform:translateX(-50%);border-radius:999px!important;width:auto!important;padding:0 18px!important}
+#t-menu{right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));width:44px!important;height:44px!important;border-radius:10px!important}
+#levetta{position:absolute;width:110px;height:110px;border-radius:50%;border:2px solid rgba(255,255,255,.3);background:rgba(255,255,255,.06)}
+#levetta i{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.35)}
+[hidden]{display:none!important}

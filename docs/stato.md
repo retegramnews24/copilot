@@ -51,11 +51,21 @@ gioco alla volta, dopo averlo guardato nell'app.
 **Zona operativa** (`docs/finiture-lobby.md`, voce «Zona operativa»): porta blindata nella sala giochi accanto al
 quadro, tunnel di cemento, in fondo la Lobby 3D si spegne davvero e parte il gioco (per ora un segnaposto). Scelte
 del proprietario: porta blindata industriale, tunnel di cemento, insegna «ZONA OPERATIVA», spegnimento vero (al
-ritorno la Lobby si ricarica in qualche secondo). Il gioco sarà uno sparatutto a squadre originale (stesso genere di
-Counter-Strike, ma nome, mappe, armi e grafica nostri): da progettare con un suo documento in `docs/`, con le
-domande a scelta al proprietario; si parte da un poligono di tiro da soli.
+ritorno la Lobby si ricarica in qualche secondo). Il gioco, **Zona Operativa**, è progettato in
+`docs/zona-operativa.md` (scelte del proprietario e 4 tappe: poligono di tiro, uno contro uno online, fino a 8 con
+squadre Rossa/Blu e bot, rifiniture). Ancora nessun codice di gioco. Fatti in Blender, guidati passo passo dal
+proprietario: mappa del deserto (`zona_deserto.blend`, con i punti di armi, casse mediche, rinascite e partenze),
+soldati Rossi e Blu con 8 animazioni (`zona_soldato.blend`), 5 armi più coltello, braccia in prima persona e cassa
+medica (`zona_armi.blend`), poligono di tiro con le sagome (`zona_poligono.blend`). Regole delle armi decise.
+Tappa 1 scritta (`public/zona/`, poligono di tiro da soli con le 5 armi e il coltello): provata
+nell'anteprima locale (si cammina, si prende un'arma al bancone, il colpo in testa abbatte la sagoma), da provare
+nell'app vera. Niente server ancora.
 
 ## Da provare
+
+- Zona Operativa, poligono di tiro, nel computer e nel telefono: muoversi, prendere le armi al bancone, sparare,
+  ricaricare, mirino del Falco, sfida di 60 secondi, suoni, Esci. Guardare se le braccia e le armi stanno bene in
+  vista e se il telefono regge.
 
 - Zona operativa nell'app vera, sul telefono: entrare, arrivare in fondo, uscire con «Esci» e ritrovarsi nel
   corridoio. Guardare che la Lobby torni normale (luci, radio, persone) e che il telefono non scaldi.
@@ -120,3 +130,6 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 - Biliardo: regole ufficiali; fisica sempre uguale su tutti i dispositivi (niente `sin`, `cos`, `exp` in
   `physics.js`).
 - Ruggine 89: piste create dal codice; Blender eventualmente solo per i modelli. È un gioco originale.
+- Zona Operativa: tutte le scelte (nome, modalità, 8 persone più bot, 5 minuti, armi a terra, 4 armi più coltello,
+  deserto, low-poly, comandi, menù) stanno in `docs/zona-operativa.md`. Niente di Counter-Strike, nemmeno la pianta
+  delle sue mappe.

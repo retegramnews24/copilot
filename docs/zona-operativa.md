@@ -1,0 +1,306 @@
+# Zona Operativa (sparatutto)
+
+Il gioco che parte in fondo al corridoio della Zona operativa della Lobby 3D (`docs/finiture-lobby.md`, voce «Zona
+operativa»): la Lobby si spegne davvero e si apre `public/zona/index.html`. È uno sparatutto in prima persona
+originale, dello stesso genere di Counter-Strike, ma con nome, mappe, armi, grafica e suoni nostri.
+
+Stato: **tappa 1 (poligono di tiro) scritta, da provare nell'app**. Modelli in `blender/zona_*.blend`, esportati in
+`public/zona/models/` (`armi.glb`: armi, braccia con 17 azioni, cassa medica; `poligono.glb`).
+
+## Cosa non si fa (vale per tutte le tappe)
+
+- Niente di Counter-Strike: nomi, loghi, schermate, modelli, suoni, nomi delle armi e piante delle mappe. Il repo è
+  pubblico. In particolare la prima mappa **non** è la pianta di una mappa famosa del deserto (il proprietario ne
+  ha mandato una foto come esempio del genere): si prende solo l'idea generale (due partenze opposte, tre strade,
+  un centro conteso, angoli per nascondersi) e la pianta si disegna da zero.
+- Scartati: decompilare o rifare Counter-Strike, collegarsi a giochi online esterni, convertire motori a codice
+  aperto.
+
+## Scelte del proprietario (27 novembre 2026)
+
+| Argomento | Scelta |
+| --- | --- |
+| Nome | **Zona Operativa**, come l'insegna sulla porta |
+| Modalità | Due: **Tutti contro tutti** (ognuno per sé) e **A squadre**, squadra **Rossa** contro squadra **Blu** |
+| Giocatori | Al massimo **8 persone vere**; se sono meno, i posti vuoti li riempiono i **bot** (a squadre: fino a 4 contro 4) |
+| Fine partita | **A tempo**: 5 minuti, si rinasce dopo 3 secondi, vince chi (o la squadra che) ha più eliminazioni |
+| Armi | Niente soldi né negozio: le armi stanno **a terra in punti fissi** e ricompaiono dopo un po' |
+| Quali armi | **5 + coltello**: **Baretta** pistola 10 colpi (sempre in mano), **Calabrone** mitraglietta 20 colpi, **Tuono** fucile a pompa 5 colpi, **Ruggito** fucile d'assalto 25 colpi, **Falco** fucile da cecchino a colpo singolo |
+| Prima mappa | **Deserto**: case di pietra e fango, torri di pietra, muretti; pianta nostra |
+| Grafica | **Low-poly come la Lobby 3D**: forme semplici, colori pieni, modelli Blender leggeri |
+| Telefono | **Due levette, mira libera** (nessun aiuto): levetta a sinistra per camminare, trascinare a destra per girarsi, tasto Spara |
+| Computer | **WASD e mouse**: mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
+| Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
+
+### Ancora da decidere (domande a scelta al proprietario, quando serve)
+
+- Il nome della prima mappa e dei suoi posti (prima della tappa 2).
+- I bot: quanto bravi, e se l'ospite sceglie il livello (prima della tappa 3).
+- Personaggi: aspetto dei soldati Rossi e Blu (prima della tappa 2).
+- Se più avanti aggiungere altre modalità (era stata proposta anche «Ordigno», piazza e disinnesca: non scelta).
+
+## La prima mappa: il borgo nel deserto (bozza)
+
+Pianta nostra, quadrata, **128 × 128 m** (scelta del proprietario: 4 volte la superficie della prima bozza): a
+piedi si attraversa in 30-40 secondi. Bozza a blocchi in `blender/zona_deserto.blend`, guidata passo passo dal
+proprietario. Partenze opposte in diagonale.
+Tre strade tra le due partenze, collegate in due punti, e un centro alto conteso:
+
+```
+  [Partenza Blu: il pozzo e le palme]  ───── strada alta: tetti e muretti ─────┐
+        │                                                                       │
+        │                  ┌──── TORRE GRANDE (centro, si sale) ────┐           │
+        ├── vicoli ────────┤        cortile con i muretti           ├── vicoli ─┤
+        │                  └────────────────────────────────────────┘           │
+        │                                                                       │
+        └───── strada bassa: letto del fiume asciutto, sotto il ponte ── [Partenza Rossa: la cava]
+```
+
+- Fatto finora in Blender: cielo limpido (solo in Blender; nel gioco si rifà in three.js), dune e rocce
+  lontane all'orizzonte, terreno sconnesso a triangoli con strade battute, pietre piccole, medie e massi, mura di
+  pietra con pilastri, torrioni d'angolo e 5 tratti crollati. Case: 5 tipi scelti dal proprietario (tutti), vuoti
+  dentro con porte e finestre vere: A fango con parapetto, B due piani a gradoni con scala esterna, C bianca con
+  cupola, D casa-torre di pietra, E casa con cortile e pozzo. Gli esempi stanno fuori dal muro nord (raccolta
+  `esempi_case`); nel villaggio 18 copie (raccolta `case`) che usano la stessa mesh degli esempi.
+- Torre centrale (`torre_centrale`): pietra, 8 × 8 m, tre piani da 4 m più la terrazza a 12 m con i merli; porte a
+  sud e a nord, feritoie su ogni piano, scale di legno interne a rampe (est, ovest, est) con i buchi nei solai.
+- Ripari (`massi`, `casse`): rocce lunghe e basse ai lati della strada ad anello, massi grossi e gruppi di massi
+  nei punti aperti, cataste di casse accanto alle case. Mai sulle strade, nelle partenze o davanti alle porte.
+- Altri 4 tipi di casette (scelta del proprietario): F casetta di fango con giare, G rimessa con tetto a una falda,
+  H due volumi uniti con passaggio interno, I bottega con portico e tenda blu. Gli esempi dei 9 tipi stanno nella
+  scena `Esempi` del file (non nella scena della mappa).
+- Mappa più fitta, perché non ci si veda da lontano: 44 case dentro le mura, messe a caso ma dove chiudono più
+  viste lunghe, con vicoli di almeno 3,5 m; 8 muri alti 3,2 m (`muri_alti`) di traverso sulla strada ad anello,
+  sfalsati, così la strada non è più dritta per 128 m. Misura con i raggi a 1,6 m d'altezza: le viste libere oltre
+  50 m sono scese dal 16% al 2%, oltre 80 m dall'8% allo 0%; dalle partenze la vista più lunga è circa 85 m.
+- Muretti a secco (`muretti`): pietre una per una, alte 0,85-1,15 m, qualche pietra mancante e qualche copertina;
+  30 tratti, alcuni a L.
+- Tutta l'isola ha lo stesso terreno sconnesso, anche fuori dalle mura (fino a circa 110 m dal centro, poi si
+  unisce alle dune). Fuori dalle mura: 40 case sparse a caso con angoli qualsiasi (raccolta `case_fuori`), sassi e
+  massi. Solo paesaggio: da dentro non si esce.
+- Ridotta per il telefono: da 82.000 a 47.000 triangoli. Terreno fuori dalle mura separato (`terreno_fuori`) e
+  semplificato; sassi e massi semplificati; tolte le facce di sotto appoggiate a terra; le case fuori usano versioni
+  semplici senza interni (`lontana_A`…`lontana_I`). Nel gioco le case uguali vanno disegnate a istanze
+  (`InstancedMesh`), una per tipo.
+- Muretti bassi (ci si ripara accucciati) e alti (si gira intorno), case con due porte e una finestra, tre torri di
+  pietra: una grande al centro con la scala, due piccole sui lati da cui si vede una strada sola.
+- Nessuna stanza chiusa senza seconda uscita; nessun punto da cui si vede una partenza.
+- In Tutti contro tutti si rinasce in 12 punti sparsi, lontano da chi è vivo; a squadre ogni squadra ha 4 punti
+  alla sua partenza.
+- Armi a terra: mitraglietta nei vicoli (2), fucile a pompa nelle case (2), fucile di precisione in cima alle torri
+  piccole (2). Ricompaiono dopo 20 secondi.
+- Colori: sabbia e pietra chiara, ombre azzurrine, porte di legno colorate, teli rossi e blu sulle due partenze.
+- Si costruisce in Blender (`blender/zona_deserto.blend` → `public/zona/models/deserto.glb`), più una pianta
+  semplice per gli urti (scatole e rampe) scritta come dati in `public/zona/map-deserto.js`, la stessa che usa il
+  server.
+
+### Punti della mappa
+
+Nella raccolta `punti` di `blender/zona_deserto.blend`, come oggetti vuoti con la proprietà `tipo` (nel GLB
+arrivano come nodi con i loro `extras`: il gioco li legge da lì). Le coppie sono simmetriche rispetto al centro
+(x, y → -x, -y), così nessuna squadra è avvantaggiata; ogni punto a terra ha 1,2 m liberi intorno.
+
+- `raccolta_falco_1/2`: sulle terrazze delle due case a gradoni a nord e a sud della torre (si sale dalla scala
+  esterna; nel parapetto est della casa B c'è ora un varco dove arriva la scala).
+- `raccolta_tuono_1/2`: dentro le due case di fango a ovest e a est del centro.
+- `raccolta_calabrone_1/2`: nei vicoli a nord-ovest e a sud-est.
+- `raccolta_ruggito_1/2`: vicino al cortile centrale.
+- `cassa_medica_1…4`: due verso ovest/est e due verso nord/sud. Modello `cassa_medica` in `zona_armi.blend`:
+  valigetta bianca con croce verde, maniglia e chiusure (580 triangoli; croce verde, non rossa).
+- `rinascita_01…12`: rinascita in Tutti contro tutti, a coppie simmetriche, almeno 20 m l'una dall'altra, rivolte
+  verso il centro.
+- `partenza_blu_1…4`, `partenza_rossa_1…4`: le partenze a squadre sulle due piazzole d'angolo.
+
+## Personaggi
+
+Scelte del proprietario: **due divise diverse** (non solo il colore), **viso coperto**, in prima persona si vedono
+**braccia e arma** (modello a parte, da fare con le armi).
+
+In `blender/zona_soldato.blend`, low-poly, circa 750 triangoli ciascuno, a pezzi rigidi (ogni pezzo segue un osso
+solo), davanti verso -Y, alti 1,8 m in posa a T:
+
+- **Rossi** (`soldato_rossi`): tunica chiara, gilet marrone aperto, fascia rossa in vita, cartucciera di traverso,
+  pantaloni larghi con le fasce alle caviglie, turbante chiaro con banda rossa e coda dietro, fazzoletto rosso sul
+  viso con la fessura per gli occhi.
+- **Blu** (`soldato_blu`): divisa sabbia, giubbotto tattico grigio con tasche e toppa blu, zainetto, cintura,
+  ginocchiere, fascia blu sulle braccia, elmetto con fascia blu e occhiali, passamontagna scuro.
+- Scheletro uguale per tutti e due (`scheletro_rossi`, `scheletro_blu`, 19 ossa con nomi italiani: bacino,
+  schiena, petto, collo, testa, spalla, braccio, avambraccio, mano, coscia, stinco, piede), così le animazioni si
+  fanno una volta sola.
+- Animazioni (azioni di Blender, 30 al secondo, tutte con l'arma imbracciata: mano destra all'impugnatura davanti
+  al petto, sinistra avanti sotto la canna): `fermo` (respiro, 60 fotogrammi, in ciclo), `cammina` (32, ciclo),
+  `corre` (20, ciclo, busto in avanti), `accucciato` (40, ciclo, un ginocchio quasi a terra), `spara` (8, rinculo),
+  `ricarica` (44, la mano sinistra va al caricatore e alla cintura), `colpito` (12, scatto all'indietro), `cade`
+  (40, si piega e cade di schiena, braccia aperte). Fatte con un calcolo di posizioni (piedi a terra, mani sull'arma),
+  non a mano.
+- Nel gioco: l'arma si attacca all'osso `mano.R`; la mira in alto e in basso si fa ruotando `petto` dal codice;
+  le gambe usano `cammina`/`corre` e il busto può fare `spara`/`ricarica` sopra (miscelando le azioni). Da fare più
+  avanti, se serve: camminare accucciati.
+
+## Regole delle armi e della salute (scelte del proprietario)
+
+Bilanciamento **«Duro, la testa conta»**: salute 100 per tutti, colpo in **testa ×4**, gambe ×0,75, corpo ×1.
+Munizioni di riserva **infinite** (conta solo il tempo di ricarica). La salute si recupera solo con le **casse
+mediche a terra**: punti fissi come le armi, +50 salute (non oltre 100), ricompaiono dopo 30 secondi.
+
+| Arma | Danno a colpo | Cadenza | Caricatore | Ricarica | Distanza buona |
+| --- | --- | --- | --- | --- | --- |
+| Baretta | 25 | 5 al secondo, un colpo per clic | 10 | 1,4 s | fino a 25 m |
+| Calabrone | 18 | 12 al secondo, automatica | 20 | 2,0 s | fino a 20 m |
+| Tuono | 14 per pallino, 8 pallini | 1 ogni 0,9 s | 5 | 0,5 s per cartuccia | fino a 10 m |
+| Ruggito | 28 | 9 al secondo, automatica | 25 | 2,3 s | fino a 40 m |
+| Falco | 110 | 1 ogni 1,6 s | 1 | 2,6 s | ovunque, con mirino ×4 |
+| Coltello | 50 (alle spalle 100) | 2 al secondo | | | a contatto |
+
+Oltre la distanza buona il danno cala fino al 60% (il Tuono oltre 15 m quasi niente). Colpi per eliminare: in testa
+1 con Baretta, Ruggito, Falco; 2 con Calabrone; al corpo 4 Baretta e Ruggito, 6 Calabrone, 1 Falco, 1 Tuono da
+vicino. I numeri vanno in `public/zona/rules.js` e si ritoccano dopo le prove.
+
+## Armi (modelli)
+
+In `blender/zona_armi.blend`, low-poly a colori sui vertici, misure vere, l'origine di ogni arma è il punto
+dell'impugnatura (lì va l'osso `mano.R`) e la canna guarda verso -Y. Il caricatore è un oggetto figlio a parte, così
+nella ricarica si può togliere.
+
+Seconda versione, più curata (spigoli smussati, sagome vere invece di scatole, più dettagli), 1.600-2.400
+triangoli per arma: vanno bene in prima persona; per le armi in mano agli altri, se il telefono soffre, si fa una
+versione semplice.
+
+- **Baretta** (`baretta`): carrello sabbia con zigrinature davanti e dietro, finestra di espulsione, fusto nero con
+  slitta, ponticello, cane, sicura, guancette di legno zigrinate, mire con i puntini bianchi.
+- **Calabrone** (`calabrone`): castello con leva d'armamento, manicotto forato con anelli gialli, slitta lunga,
+  mire, impugnatura e impugnatura davanti in gomma, calcio a telaio, caricatore a strisce gialle e nere.
+- **Tuono** (`tuono`): castello con finestre, canna con bindella e mirino d'ottone, serbatoio a tubo, pompa di legno
+  a scanalature, calcio a pistola di legno con zigrinatura e calciolo di gomma, 5 cartucce rosse col fondello
+  d'ottone sul fianco.
+- **Ruggito** (`ruggito`): castello sabbia in due parti, paramano ottagonale con feritoie, blocco del gas e mirino,
+  spegnifiamma a punte, slitta, mirino a punto rosso con lente, calcio sabbia su tubo, caricatore curvo a pezzi.
+- **Falco** (`falco`): canna scanalata con freno di bocca, calcio di legno scuro con appoggio guancia e calciolo,
+  cannocchiale con torrette e anelli, otturatore a pomello, grilletto d'ottone, bipiede chiuso.
+- **Coltello** (`coltello`): lama con filo e dorso, guardia, manico di legno con anelli di gomma, pomolo.
+
+### Braccia in prima persona
+
+Nello stesso file: scheletro `braccia` (ossa `radice`, `arma`, `braccio`, `avambraccio`, `mano` destra e sinistra),
+occhio (camera `occhio`) all'origine che guarda verso -Y, campo visivo 75°. Due versioni: `braccia_blu` (maniche
+sabbia con fascia blu, guanti neri) e `braccia_rossi` (maniche chiare col risvolto, polsini rossi, mani fasciate),
+circa 1.400 triangoli. Le mani sono pugni chiusi che impugnano.
+
+- L'arma si attacca all'osso `arma` (oggetto figlio dell'osso, posizione (0, -0,1, 0)); dove sta l'arma e dove
+  stanno le mani lo decidono le azioni, calcolate con le posizioni vere dell'impugnatura e dell'appoggio di ogni arma.
+- Azioni per ogni arma (`baretta`, `calabrone`, `tuono`, `ruggito`, `falco`, `coltello`): `tiene_<arma>` (leggero
+  dondolio, in ciclo), `spara_<arma>` (rinculo; il Tuono tira indietro la pompa; il coltello affonda) e
+  `ricarica_<arma>` (arma inclinata, mano sinistra al caricatore, giù a prenderne un altro e di nuovo su; il Tuono
+  mette le cartucce una alla volta, il Falco tira l'otturatore).
+- La Baretta si tiene a due mani; mitraglietta con l'impugnatura davanti; Tuono, Ruggito e Falco con la sinistra
+  sotto la canna; il coltello con la destra sola.
+- Nel file c'è una vetrina (raccolta `vetrina_fp`, sotto le braccia principali) con tutte e sei le armi in mano.
+
+Si gioca soprattutto dal computer (indicazione del proprietario): armi e braccia possono restare dettagliate;
+il telefono resta possibile ma non è la misura di tutto.
+
+## Come funziona (per tutte le tappe)
+
+- Pagina a sé, `public/zona/index.html`, con three.js come la Lobby; si apre nell'overlay `#zona-overlay` di
+  `app.js`, con la Lobby spenta. «Esci» (dal menù Esc) manda `zona-exit` all'app, come oggi.
+- Il server decide colpi e salute: il telefono manda solo i tasti premuti e la direzione dello sguardo; il server
+  muove tutti, controlla i colpi e manda a tutti posizioni, salute ed eliminazioni. Così nessuno bara e tutti vedono
+  la stessa partita.
+- Il proprio movimento si vede subito (il telefono prevede e poi si corregge sul server); gli altri si vedono un
+  attimo nel passato, scorrevoli. Per i colpi il server «torna indietro» di quanto è in ritardo chi spara (al massimo
+  0,2 s), così si colpisce quello che si vedeva.
+- Le regole (movimento, urti con la mappa, danni delle armi, raggio del colpo) stanno in un file solo,
+  `public/zona/rules.js`, usato sia dal telefono sia dal server, con calcoli uguali su ogni dispositivo (niente
+  `Math.random` nelle regole: numeri casuali con un seme, come nel biliardo).
+- Il server è una parte della Durable Object `Room` come il balilla (`balilla-hub.js`) e il golf: una classe
+  `ZonaRoom` in `zona-server.js`, creata in `worker.js`, collegata con WebSocket. Gira a 20 passi al secondo solo
+  finché c'è qualcuno collegato.
+
+## Le tappe
+
+Si fa una tappa per volta, e si passa alla successiva solo dopo che il proprietario l'ha provata nell'app.
+
+### Tappa 1: poligono di tiro, da soli
+
+**Cosa si vede.** Dal corridoio si entra in un poligono di tiro di cemento (continua il tunnel): corsie con sagome
+che si alzano e cadono, un tavolo con le 4 armi e il coltello. Si cammina, si salta, si raccolgono le armi, si
+spara, si ricarica. Mirino, munizioni, colpi sulle sagome (punteggio e tempo), suoni nostri (fatti nel codice con
+Web Audio, come nei giochi arcade). Levette sul telefono, WASD e mouse sul computer. Menù con Esc: sensibilità,
+volume, Esci. Niente server.
+
+**Modello del poligono** (`blender/zona_poligono.blend`, fatto): si entra dal corridoio di cemento (x ±0,8,
+y 8…16, punto `partenza` in fondo) in una sala 14 × 8 m con armadietti, panca, casse di munizioni, mobiletto con la
+cassa medica, pannello forato e scritta «POLIGONO» sopra la porta; al centro il **bancone delle armi** con i punti
+`tavolo_<arma>` per le sei armi. Linea di tiro gialla e nera a y 0, mensola a 1 m (non si passa oltre), 5
+postazioni con i separatori e il numero della corsia (punti `postazione_1…5`). Poligono lungo 52 m: righe tra le
+corsie, cartelli e righe a 10, 20, 35 e 50 m, travi para-colpi a strisce, tubi sul soffitto, neon (materiale
+`neon`, luminoso), in fondo il terrapieno di sabbia a gradoni sotto la scritta «ZONA OPERATIVA». Soffitto a 4 m.
+**Sagome** (`sagoma`, 630 triangoli): cartone a forma di busto con testa, anelli stampati su petto e testa, su un
+paletto; l'origine è la cerniera, così il gioco le fa cadere ruotandole all'indietro e le rialza; stanno sulla base
+`sagoma_base`. 16 sagome: in ogni corsia a 10, 20 e 35 m (un po' sfalsate), nella corsia 3 anche a 50 m per il
+Falco; ognuna ha le proprietà `corsia` e `distanza`. Circa 8.000 triangoli in tutto.
+
+**Fatto (codice).** `public/zona/index.html` e `zona.css` (pagina, mirino, conti, menù), `zona.js` (scena, ciclo,
+colpi, sagome che cadono e si rialzano dopo 2,5 s, buchi sui muri, rinculo, mirino del Falco ×4 con il
+cannocchiale, sfida di 60 secondi con il risultato nel menù), `rules.js` (movimento con urti a scatole, salto,
+accucciato, gradini; armi con cadenza, ricarica, dispersione; danni con testa ×4), `map-poligono.js` (scatole del
+poligono), `controls.js` (computer e telefono), `viewmodel.js` (braccia e arma con le azioni di Blender, fiammata),
+`audio.js` (spari, ricariche, colpi sulle sagome, passi, tutti fatti nel codice). Si parte con Baretta e coltello;
+al bancone E (o PRENDI) prende un'arma: Calabrone, Tuono, Ruggito e Falco vanno nel posto 1 (una alla volta).
+Punti: busto 1, testa 3. Prove: `tests/zona-rules.test.mjs`. Nell'anteprima locale c'è `zonaStato()` per leggere
+lo stato e, solo su localhost, `zonaProvaSparo(true/false)`.
+
+Da sapere: lo scheletro delle braccia in Blender ha la mano destra a +x, che dalla camera «occhio» appare a
+sinistra; nel gioco `viewmodel.js` lo specchia (z → -z). Se si rifanno le braccia, meglio metterle giuste in
+Blender (destra a -x) e togliere lo specchio.
+
+**File previsti all'inizio.** `public/zona/index.html` (pagina e interfaccia), `public/zona/zona.js` (scena, ciclo di gioco),
+`public/zona/rules.js` (movimento, urti, armi: già pensato per il server), `public/zona/controls.js` (levette,
+tastiera e mouse), `public/zona/weapons.js` (modelli e animazioni in mano), `public/zona/audio.js`,
+`public/zona/models/armi.glb` (da `blender/zona_armi.blend`), `public/zona/models/poligono.glb`.
+
+**Prove.** `tests/zona-rules.test.mjs`: movimento e urti con muri e rampe, danni e cadenza di ogni arma,
+ricarica, raggio del colpo che si ferma sul muro. A mano nell'anteprima (`Anteprima Binottoland`): telefono e
+computer, 60 immagini al secondo, il telefono non scalda; uscendo la Lobby torna.
+
+### Tappa 2: uno contro uno online
+
+**Cosa si vede.** Dal menù «Gioca online»: si entra in una partita Tutti contro tutti sulla mappa del deserto con
+un'altra persona. Si vede l'altro soldato muoversi e sparare, la salute, chi ha eliminato chi, la rinascita dopo 3
+secondi, il conto alla rovescia dei 5 minuti e la classifica finale. Le armi a terra spariscono quando qualcuno le
+prende e tornano dopo 20 secondi.
+
+**File.** `zona-server.js` (classe `ZonaRoom`: collegamenti, passo di 20 al secondo, salute, colpi con il ritorno
+indietro, armi a terra, tempo), `worker.js` (crearla e indirizzarle i messaggi), `public/zona/net.js` (collegamento,
+previsione e correzione, altri giocatori nel passato), `public/zona/map-deserto.js`, `public/zona/models/deserto.glb`
+e `public/zona/models/soldato.glb` (da Blender, due colori).
+
+**Prove.** `tests/zona-server.test.mjs`: due giocatori finti, il colpo conta solo se il raggio arriva, la salute
+scende, l'eliminazione e la rinascita, il ritorno indietro non oltre 0,2 s, il tempo finisce e c'è un vincitore; un
+giocatore che manda tasti impossibili (troppo veloce, attraverso i muri) viene corretto. A mano: due persone su
+staging, telefono contro computer.
+
+### Tappa 3: fino a 8, squadre e bot
+
+**Cosa si vede.** Il menù della partita: chi la apre è l'ospite e sceglie modalità (Tutti contro tutti o A
+squadre), tempo e bot. Gli altri scelgono Rossa o Blu (o «automatica»). Fino a 8 persone; i posti vuoti li
+prendono i bot, che girano per la mappa e sparano (sul server). Classifica con Tab, divisa per squadra; fuoco
+amico spento. La partita si annuncia sulla bacheca della Lobby come gli altri giochi.
+
+**File.** `zona-server.js` (squadre, bot, impostazioni dell'ospite), `public/zona/bots.js` o dentro
+`rules.js` se serve anche al telefono, `public/zona/menu.js`, eventualmente un avviso in `turn-notices.js`.
+
+**Prove.** `tests/zona-server.test.mjs` allargato: squadre equilibrate, i bot escono quando entra una persona e
+rientrano quando esce, niente danni tra compagni, punteggio di squadra; `tests/zona-bots.test.mjs`: un bot non
+attraversa i muri e non vede attraverso i muri. A mano: il gruppo intero una sera.
+
+### Tappa 4: rifiniture
+
+Da decidere con il proprietario dopo la tappa 3. Idee: personaggi e animazioni migliori, suoni di passi e di
+ambiente, mappa seconda, coltello con animazione, statistiche della serata, mirino e sensibilità salvati per
+persona, altre modalità.
+
+## Controlli prima di ogni rilascio
+
+Oltre a `docs/controlli-prima-del-rilascio.md`: entrare dal corridoio della Lobby, giocare, uscire con Esci e
+ritrovarsi nel corridoio con la Lobby normale; sul telefono la partita non scalda e non scatta.
