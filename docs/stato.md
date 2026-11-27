@@ -72,7 +72,15 @@ lungo le due mani, mira con il tasto destro per tutte le armi camminando. Tutto 
 nell'anteprima con messaggi finti; i bot veri si vedono solo su staging. `main` resta 1.0.71 finché poligono e partita
 online non sono provati nell'app di staging.
 
+**F1 on paper! con i bot** (`docs/f1-on-paper.md`, voce «Bot»): «Contro l'IA» da 1 a 7 bot, online persone più bot
+fino a 8, bot cambiabili in sala d'attesa da chi crea. Scelte del proprietario: bot in tutti e due i modi, posti
+liberi vuoti al via, bravi come l'IA di oggi; nomi «Bot 1, Bot 2…». Provato con le prove automatiche (anche il server
+vero) e nell'anteprima contro 3 bot; non ancora in un commit.
+
 ## Da provare
+
+- F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
+  pensare?); online su staging la sala d'attesa con i tasti dei bot, l'avviso nella campanella e una gara con un bot.
 
 - Zona Operativa, poligono di tiro, nel computer e nel telefono: muoversi, prendere le armi al bancone, sparare,
   ricaricare, mirino del Falco, sfida di 60 secondi, suoni, Esci. Guardare se le braccia e le armi stanno bene in
@@ -130,6 +138,8 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 - La pista è approvata se sulla linea verde c'è posto per tutte le auto affiancate; non conta la larghezza.
 - Niente colline, niente replay a fine gara, niente doppio tocco per muovere, niente griglia di partenza sfalsata.
 - Niente avviso Telegram «tocca a te»: si gioca insieme, con il minuto per mossa.
+- Bot sia «Contro l'IA» sia online, fino a 8 auto; online li sceglie chi crea e li cambia in sala d'attesa, i posti
+  liberi restano vuoti al via; guidano come l'IA di oggi.
 - Due marchi distinti: «Binotto Corsa Competizione» (uno sponsor tra gli altri) e «Binottoland». Mai foto di
   persone come loghi.
 

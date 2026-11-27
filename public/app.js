@@ -30,7 +30,7 @@ import {createMotoLink} from './moto-link.js?v=7ca29f05f4';
 import {createZonaLink} from './zona-link.js?v=b8e8ed14d4';
 import {createGolfLink} from './golf-link.js?v=3f3958e0a2';
 import {createArcadeLink} from './arcade-link.js?v=a4ce33c363';
-import {createF1Link} from './f1-link.js?v=8cf05cfcd5';
+import {createF1Link} from './f1-link.js?v=6c4819bd26';
 import {createBiliardoLink} from './biliardo-link.js?v=2b2c975586';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
 import {initBackupPanel} from './backup-panel.js?v=916a596819';
@@ -226,7 +226,7 @@ function renderLobby(){
    const card=document.createElement('article'),title=document.createElement('strong'),info=document.createElement('p'),enter=document.createElement('button');
    card.className='table-card';info.className='turn-note';
    title.textContent='F1 on paper! · sala '+game.number;
-   info.textContent=game.players.length+'/'+game.capacity+' piloti · '+game.laps+(game.laps===1?' giro':' giri')+(game.phase==='waiting'?' · In attesa':' · In gara');
+   info.textContent=game.players.length+'/'+game.capacity+' piloti'+(game.bots?' + '+game.bots+' bot':'')+' · '+game.laps+(game.laps===1?' giro':' giri')+(game.phase==='waiting'?' · In attesa':' · In gara');
    const mine=game.players.some(p=>p.id===identity?.player);
    enter.disabled=!identity;
    enter.textContent=mine?'Riprendi':game.phase==='waiting'&&game.players.length<game.capacity?'Entra':'Guarda';

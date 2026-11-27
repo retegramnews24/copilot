@@ -233,7 +233,7 @@ async function route(req, env) {
       new Request(u.origin + '/biliardo/' + bil[2] + u.search, req)
     );
   const f1 = u.pathname.match(
-    /^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|start|play|close|abandon)$/
+    /^\/api\/f1\/([a-f0-9-]{36})\/(state|track|join|leave|bots|start|play|close|abandon)$/
   );
   if (f1)
     return env.ROOMS.get(env.ROOMS.idFromName('f1:' + f1[1])).fetch(

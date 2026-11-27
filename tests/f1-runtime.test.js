@@ -148,8 +148,33 @@ try {
   assert.equal((await call(8001, '/api/f1/' + room + '/close', {})).status, 200);
   assert.equal((await call(8001, '/api/f1/' + room + '/state')).status, 404);
   assert.ok(!(await call(8002, '/api/lobby')).data.games.some(g => g.room === room));
+  // con un bot: chi crea lo sceglie, lo cambia in sala d'attesa; il bot mette l'auto e sceglie da solo
+  const withBot = await call(8001, '/api/create', { game: 'f1', track, laps: 1, bots: 1 });
+  assert.equal(withBot.status, 200, JSON.stringify(withBot.data));
+  const room2 = withBot.data.state.room;
+  assert.equal(withBot.data.state.bots, 1);
+  const inLobby = (await call(8002, '/api/lobby')).data.games.find(g => g.room === room2);
+  assert.equal(inLobby.capacity, 1, 'for the Lobby the seats are the people’s');
+  assert.equal(inLobby.bots, 1);
+  assert.equal((await call(8002, '/api/f1/' + room2 + '/join', {})).status, 409, 'full with the bot');
+  assert.equal((await call(8002, '/api/f1/' + room2 + '/bots', { bots: 0 })).status, 409, 'only the creator');
+  const noBot = await call(8001, '/api/f1/' + room2 + '/bots', { bots: 0 });
+  assert.equal(noBot.status, 200, JSON.stringify(noBot.data));
+  assert.equal(noBot.data.state.bots, 0);
+  await call(8001, '/api/f1/' + room2 + '/bots', { bots: 1 });
+  const go = await call(8001, '/api/f1/' + room2 + '/start', {});
+  assert.deepEqual(go.data.state.seats, ['tg:8001', 'bot:1']);
+  const slot3 = R.placeable({ ...go.data.state.race, track: t })[0];
+  const onLine = await call(8001, '/api/f1/' + room2 + '/play', { x: slot3.x, y: slot3.y });
+  assert.equal(onLine.data.state.phase, 'race', 'the bot has put its car on the line');
+  assert.deepEqual(onLine.data.state.chosen, [false, true], 'the bot has already chosen');
+  const o = R.roundOptions({ ...onLine.data.state.race, track: t }, 0).find(x => !x.crash);
+  const mine = await call(8001, '/api/f1/' + room2 + '/play', { x: o.x, y: o.y });
+  assert.equal(mine.status, 200, JSON.stringify(mine.data));
+  assert.equal(mine.data.state.moves.at(-1).kind, 'round', 'the creator chooses: the cars move');
+  assert.equal((await call(8001, '/api/f1/' + room2 + '/close', {})).status, 200);
   console.log(
-    'PASS F1 runtime: big track create, small limit for others, notice, join, auto start, moves together, close.'
+    'PASS F1 runtime: big track create, small limit for others, notice, join, auto start, moves together, bots, close.'
   );
 } finally {
   await mf.dispose();

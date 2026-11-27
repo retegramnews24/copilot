@@ -5,7 +5,7 @@
 // cars move together once the last one has chosen. Who does not choose in time is driven by the autopilot, so the
 // race never stops. The clients replay the move list, so every phone shows the same race.
 import * as R from './public/gara/rules.js';
-import { distField } from './public/gara/ai.js';
+import { distField, AiDriver } from './public/gara/ai.js';
 import { internalHeaders, failure, userOf, lobbyHub, json } from './worker-shared.js';
 import { MSG } from './public/messages.js';
 
@@ -98,11 +98,52 @@ export function autoPlace(race) {
   return slots.slice().sort((a, b) => d(a) - d(b))[0];
 }
 
+// Bot: posti guidati dall'IA del gioco (la stessa di «Contro l'IA»), scelti da chi crea la gara. Stanno in fondo ai
+// posti (dopo chi ha creato la gara), si chiamano «Bot 1», «Bot 2»… e scelgono subito, a inizio di ogni giro di mosse.
+export const botId = k => 'bot:' + (k + 1);
+export const isBot = id => typeof id === 'string' && id.startsWith('bot:');
+const botCount = m => m.bots || 0;
+// il piano di ogni bot resta in memoria (per pista): dopo un riavvio del server lo rifà
+const DRIVERS = new WeakMap();
+function botDriver(m, track, i) {
+  let byCar = DRIVERS.get(track);
+  if (!byCar) DRIVERS.set(track, (byCar = new Map()));
+  const k = m.room + ':' + m.created + ':' + i;
+  if (!byCar.has(k)) byCar.set(k, new AiDriver(track, m.laps));
+  return byCar.get(k);
+}
+// the bots put their cars on the line as soon as it is their turn
+function botsPlace(m, race) {
+  while (race.phase === 'place' && isBot(m.seats[race.turn])) {
+    const car = race.turn,
+      p = autoPlace(race);
+    if (!p || R.placeCar(race, p).error) break;
+    m.moves.push({ kind: 'place', car, x: p.x, y: p.y });
+  }
+}
+// at the start of each round the bots choose (they do not stop where another bot has chosen to stop)
+function botsChoose(m, race) {
+  if (race.phase !== 'race') return;
+  const avoid = [];
+  for (const i of active(race)) {
+    if (!isBot(m.seats[i]) || m.pending[i]) continue;
+    const opts = R.roundOptions(race, i, avoid);
+    const o =
+      (opts.length && botDriver(m, race.track, i).choose(race, i, avoid, opts)) || roundOpts(race, i)[0];
+    m.pending[i] = o;
+    m.picked[i] = 'bot';
+    avoid.push(o.stop);
+  }
+}
+
 // --- the race (pure: used by the Durable Object and by the tests)
 export function makeRace(room, number, user, now, body, track) {
   const laps = body.laps,
     time = TIMES.includes(body.time) ? body.time : 'day';
   if (!Number.isInteger(laps) || laps < 1 || laps > 9) throw Error('Da 1 a 9 giri.');
+  const bots = body.bots ?? 0;
+  if (!Number.isInteger(bots) || bots < 0 || bots > track.players - 1)
+    throw Error('Da 0 a ' + (track.players - 1) + ' bot.');
   return {
     room,
     number,
@@ -110,7 +151,8 @@ export function makeRace(room, number, user, now, body, track) {
     phase: 'waiting',
     created: now,
     revision: 1,
-    capacity: track.players,
+    capacity: track.players, // auto in tutto: persone più bot
+    bots,
     laps,
     time,
     owner: user.player,
@@ -129,8 +171,19 @@ export function makeRace(room, number, user, now, body, track) {
 export function joinRace(m, user) {
   if (m.players.some(p => p.id === user.player)) return false;
   if (m.phase !== 'waiting') throw Error('La gara è già partita.');
-  if (m.players.length >= m.capacity) throw Error('Gara al completo.');
+  if (m.players.length + botCount(m) >= m.capacity) throw Error('Gara al completo.');
   m.players.push({ id: user.player, name: String(user.name || 'Pilota').slice(0, 40) });
+  m.revision++;
+  return true;
+}
+// Chi ha creato la gara cambia i bot in sala d'attesa, finché non parte: solo nei posti non presi dalle persone
+export function setBots(m, player, n) {
+  if (m.phase !== 'waiting') throw Error('La gara è già partita.');
+  if (player !== m.owner) throw Error('I bot li sceglie chi ha creato la gara.');
+  const max = m.capacity - m.players.length;
+  if (!Number.isInteger(n) || n < 0 || n > max) throw Error('Da 0 a ' + max + ' bot.');
+  if (n === botCount(m)) return false;
+  m.bots = n;
   m.revision++;
   return true;
 }
@@ -144,16 +197,18 @@ export function leaveRace(m, player) {
   m.revision++;
   return true;
 }
-// Start: the cars go on the line in order, the guests first and the creator last (like on the same phone).
+// Start: the cars go on the line in order, the guests first, then the creator, then the bots (like the AI on the
+// same phone). The seats nobody took stay empty: the race has the people plus the bots chosen.
 export function startRace(m, player, now, track) {
   if (m.phase !== 'waiting') throw Error('La gara è già partita.');
   if (player !== m.owner) throw Error('Solo chi ha creato la gara la fa partire.');
-  if (m.players.length < 2) throw Error('Serve almeno un altro pilota.');
-  m.seats = [...m.players.filter(p => p.id !== m.owner), m.players.find(p => p.id === m.owner)].map(
-    p => p.id
-  );
+  if (m.players.length + botCount(m) < 2) throw Error('Serve almeno un altro pilota o un bot.');
+  m.seats = [
+    ...[...m.players.filter(p => p.id !== m.owner), m.players.find(p => p.id === m.owner)].map(p => p.id),
+    ...Array.from({ length: botCount(m) }, (_, k) => botId(k))
+  ];
   m.race = R.newRace(track, m.laps, m.seats.length);
-  m.race.track = null;
+  m.race.track = null; // the first car on the line is always a person's (the bots go last)
   m.phase = 'place';
   m.turnAt = now + TURN;
   m.revision++;
@@ -174,8 +229,11 @@ function playRound(m, race) {
   };
   R.applyRound(race, entry.moves);
   m.moves.push(entry);
-  // rounds driven only by the autopilot: when nobody plays any more (three rounds), the race ends
-  m.idle = m.picked.some(a => a === 'me') ? 0 : (m.idle || 0) + 1;
+  // rounds driven only by the autopilot: when nobody plays any more (three rounds), the race ends.
+  // The bots do not count, nor the rounds where every person's car is stopped after a crash.
+  const people = race.cars.some((c, i) => entry.moves[i] && !isBot(m.seats[i]));
+  if (m.picked.some(a => a === 'me')) m.idle = 0;
+  else if (people) m.idle = (m.idle || 0) + 1;
   m.pending = race.cars.map(() => null);
   m.picked = race.cars.map(() => null);
 }
@@ -197,12 +255,15 @@ export function playRace(m, player, action, now, track, auto = false) {
     entry = { kind: 'place', car, x: p.x, y: p.y };
     if (auto) entry.auto = true;
     m.moves.push(entry);
+    botsPlace(m, race);
     if (race.phase === 'race') {
       m.phase = 'race';
       m.pending = race.cars.map(() => null);
       m.picked = race.cars.map(() => null);
+      botsChoose(m, race);
     }
   } else {
+    botsChoose(m, race);
     if (auto) {
       for (const i of active(race))
         if (!m.pending[i]) {
@@ -222,8 +283,14 @@ export function playRace(m, player, action, now, track, auto = false) {
     }
     entry = { kind: 'chosen' };
     // the last one has chosen: everybody moves (rounds where every car is stopped go by at once)
-    for (let guard = 0; guard < 8 && race.phase === 'race' && active(race).every(i => m.pending[i]); guard++)
+    for (
+      let guard = 0;
+      guard < 8 && race.phase === 'race' && active(race).every(i => m.pending[i]);
+      guard++
+    ) {
       playRound(m, race);
+      botsChoose(m, race);
+    }
   }
   race.track = null;
   m.race = race;
@@ -321,7 +388,9 @@ export class F1Room {
     return id => !!m.gone?.includes(id) || now - (this.seen.get(id) ?? this.boot) >= AWAY;
   }
   summary(m) {
-    const { room, number, game, phase, created, revision, capacity, laps } = m;
+    const { room, number, game, phase, created, revision, laps } = m;
+    // per la Lobby i posti sono quelli delle persone; i bot stanno in fondo ai posti, quindi i numeri delle persone
+    // restano gli stessi
     return {
       room,
       number,
@@ -329,12 +398,14 @@ export class F1Room {
       phase: phase === 'waiting' ? 'waiting' : phase === 'finished' ? 'finished' : 'playing',
       created,
       revision,
-      capacity,
+      capacity: m.capacity - botCount(m),
+      bots: botCount(m),
       laps,
       turn: raceTurn(m),
-      players: (m.seats.length ? m.seats.map(id => m.players.find(p => p.id === id)) : m.players).map(
-        ({ id, name }) => ({ id, name })
-      ),
+      players: (m.seats.length
+        ? m.seats.filter(id => !isBot(id)).map(id => m.players.find(p => p.id === id))
+        : m.players
+      ).map(({ id, name }) => ({ id, name })),
       expires: null
     };
   }
@@ -432,8 +503,9 @@ export class F1Room {
         if (action === 'join') {
           changed = joinRace(m, user);
           // all the seats taken: the race starts by itself
-          if (changed && m.players.length >= m.capacity) startRace(m, m.owner, now, track);
-        } else if (action === 'leave') changed = leaveRace(m, user.player);
+          if (changed && m.players.length + botCount(m) >= m.capacity) startRace(m, m.owner, now, track);
+        } else if (action === 'bots') changed = setBots(m, user.player, body.bots);
+        else if (action === 'leave') changed = leaveRace(m, user.player);
         else if (action === 'start') startRace(m, user.player, now, track);
         else if (action === 'play') playRace(m, user.player, body, now, track);
         else if (action === 'abandon') changed = abandonRace(m, user.player);

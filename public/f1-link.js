@@ -184,7 +184,8 @@ export function createF1Link({
           game: 'f1',
           track: data.track,
           laps: data.laps,
-          time: data.time
+          time: data.time,
+          bots: data.bots
         });
         clock(result);
         await loadTrack(result.state.room);
@@ -200,7 +201,7 @@ export function createF1Link({
       }
     } else if (
       data?.type === 'f1:action' &&
-      ['start', 'play', 'close', 'leave', 'join', 'abandon'].includes(data.kind)
+      ['start', 'play', 'close', 'leave', 'join', 'abandon', 'bots'].includes(data.kind)
     ) {
       const selected = room;
       if (!selected) return;

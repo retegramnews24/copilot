@@ -34,6 +34,7 @@
     </div>
     <div id="banner" class="banner"></div>
     <div class="bar bottom">
+      <div class="row" id="netBots" hidden><span>Bot nei posti liberi</span><span class="sp"></span><button class="ico" id="netBotM" aria-label="Meno bot">−</button><b id="netBotN" class="num">0</b><button class="ico" id="netBotP" aria-label="Più bot">+</button></div>
       <div class="row"><button id="grid" class="on">Griglia</button><button id="view">Vista alta</button><button id="center">Centra</button><span class="sp"></span><button id="netGo" class="pri" hidden>Parti ora</button><button id="snd" class="ico" aria-label="Togli audio">🔊</button><button id="menuB" class="ico" aria-label="Menu">☰</button></div>
     </div>
   </section>
@@ -46,6 +47,7 @@
       <div class="row"><button class="seg on" data-m="ai">Contro l'IA</button><button class="seg" data-m="local">Stesso telefono</button><button class="seg" data-m="net" hidden>Multiplayer</button></div>
       <div id="modeInfo" class="muted"></div>
       <div class="row" id="carRow"><span>Auto in gara</span><span class="sp"></span><button class="ico" id="carM" aria-label="Meno auto">−</button><b id="carN" class="num">2</b><button class="ico" id="carP" aria-label="Più auto">+</button></div>
+      <div class="row" id="botRow"><span>Bot</span><span class="sp"></span><button class="ico" id="botM" aria-label="Meno bot">−</button><b id="botN" class="num">1</b><button class="ico" id="botP" aria-label="Più bot">+</button></div>
       <div id="carDots" class="dots"></div>
       <div class="row"><span>Ora</span><span class="sp"></span><button class="seg on" data-t="day">Giorno</button><button class="seg" data-t="sunset">Tramonto</button><button class="seg" data-t="night">Notte</button></div>
       <div id="setupInfo" class="muted"></div>
@@ -90,6 +92,6 @@
   </div>
 </div>
 <script type="importmap">{ "imports": { "three": "../vendor/three/three.module.min.js" } }</script>
-<script type="module" src="main.js?v=5da27c5067"></script>
+<script type="module" src="main.js?v=4c037d9e71"></script>
 </body>
 </html>
