@@ -1,7 +1,7 @@
 // Anteprima locale: piccolo server per la cartella public/ (il browser non apre le pagine file://).
 //   node scripts/anteprima.mjs            -> http://localhost:8788
 //   node scripts/anteprima.mjs 8791       -> su un'altra porta
-// Nelle sessioni di Claude parte da .claude/launch.json («giulio-static»).
+// Nelle sessioni di Claude parte da .claude/launch.json («Anteprima Binottoland»).
 import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, resolve, sep } from 'node:path';

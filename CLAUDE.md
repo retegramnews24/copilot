@@ -70,7 +70,7 @@ questo file si carica da solo. Non tenere decisioni solo nelle note di Claude: v
   (due sovrapposti nello stesso taglio si annullano). Esportare in GLB con gli oggetti all'origine, `export_yup=True`;
   il davanti dei modelli guarda verso -Y (diventa +z in three).
 - Anteprima locale: mai `file://`, sempre il piccolo server `node scripts/anteprima.mjs` sulla cartella `public/`
-  (nelle sessioni di Claude: `giulio-static` in `.claude/launch.json`, porta 8788).
+  (nelle sessioni di Claude: `Anteprima Binottoland` in `.claude/launch.json`, porta 8788).
 - Il repo è pubblico: niente token, indirizzi email o dati di persone nei file.
 
 ## Dove sta cosa

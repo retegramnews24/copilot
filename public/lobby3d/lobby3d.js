@@ -25,8 +25,14 @@ import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea710
 import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb1ca41c';
 import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
 import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
+import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 
 const H = 3.4; // altezza delle stanze
+// sala cinema più lunga e più alta delle altre: parete dello schermo a z 20,55, tetto a 5,5 m. Si entra in piano
+// dalla Lobby e le file scendono verso lo schermo: la prima fila e il fondo sala sono 60 cm più in basso
+// (CINEMA_DROP). Schermo 7 × 3,94 m con il bordo basso a 1,3 m dal pavimento davanti, sopra le poltrone
+const CINEMA_H = 5.5, CINEMA_END = 20.55, CINEMA_DROP = 0.6;
+const SCREEN_W = 7, SCREEN_H = 3.9375, SCREEN_Y = -CINEMA_DROP + 1.3 + SCREEN_H / 2;
 const DOOR = 1.3, DOOR_H = 2.5; // mezza larghezza e altezza delle porte
 const R = 0.3; // ingombro del personaggio
 // cabinati della sala arcade: chiave del gioco nel catalogo (games-catalog.js), nome, colore
@@ -216,12 +222,16 @@ export function createLobby3D(app) {
     let cuts = [[a, b]];
     for (const [c, w] of gaps)
       cuts = cuts.flatMap(([s, e]) => (c + w <= s || c - w >= e ? [[s, e]] : [[s, c - w], [c + w, e]].filter(([p, q]) => q - p > 0.05)));
+    // T.base: dove parte la parete (nel cinema il pavimento davanti è più in basso della Lobby)
+    const base = T.base ?? 0;
     const put = (m, len, h, depth, y, at, out) =>
-      axis === 'x' ? trimPiece(m, len, h, depth, at, y, face + n * out) : trimPiece(m, depth, h, len, face + n * out, y, at);
+      axis === 'x'
+        ? trimPiece(m, len, h, depth, at, y + base, face + n * out)
+        : trimPiece(m, depth, h, len, face + n * out, y + base, at);
     for (const [s, e] of cuts) {
       const len = e - s, mid = (s + e) / 2, low = (T.railH - 0.14) / 2 + 0.14;
       put(T.skirt, len, 0.14, 0.035, 0.07, mid, 0.0175);
-      put(T.crown, len, 0.1, 0.07, H - 0.05, mid, 0.035);
+      put(T.crown, len, 0.1, 0.07, (T.top ?? H) - base - 0.05, mid, 0.035);
       if (T.neon) { put(T.neon, len, 0.035, 0.02, T.railH, mid, 0.01); continue; }
       put(T.lower, len, T.railH - 0.14, 0.02, low, mid, 0.01);
       put(T.rail, len, 0.05, 0.045, T.railH, mid, 0.0225);
@@ -820,6 +830,7 @@ export function createLobby3D(app) {
     const frame=box(1.25,1.66,.055,brassTrim,x,y,z);frame.rotation.y=angle;
     frameFor(frameName,frame,x,y,z,angle,.055);
     plane(1.19,1.59,new THREE.MeshBasicMaterial({map}),x+.033*Math.sin(angle),y,z+.033*Math.cos(angle),angle);
+    return map;
   }
   poster(0,-18.09,0,'SALA TAVOLI','BINOTTOLAND',['#263e38','#efcf98','#bd6749'],'cards');
   doorSign('Sala tavoli','#f5ce86',0,0).position.set(0,2.92,-5.96);
@@ -856,15 +867,26 @@ export function createLobby3D(app) {
   poster(-16.7,-5.95,0,'INSERT COIN','ARCADE CLUB',['#18182e','#8bd9d5','#d16699'],'vector','cornice_neon');
   poster(16.2,5.94,Math.PI,'CARAMBOLA','SALA BILIARDO',['#23433d','#eadaad','#bd8f50'],'pool','cornice_dorata',2.15);
   // The south auditorium opens onto a centre aisle, with five pairs of loveseats.
-  const velvet=std('#6f2033',.97), piping=std('#a5535f',.89), cinemaWall=std('#1b1e2a',.98);
-  plane(14,12.4,std('#4c2935',.98),0,0,12.26,0,-Math.PI/2);
-  plane(14,12.4,std('#101118',1),0,H,12.26,0,Math.PI/2);
-  wallZ(6.12,18.55,-7.15,cinemaWall);wallZ(6.12,18.55,7.15,cinemaWall);
-  wallX(-7.3,7.3,18.55,cinemaWall);
+  // Sala buia: i materiali del cinema sono più scuri (CINEMA_DIM) invece di abbassare la luce di tutta la scena
+  // quando si entra; così la sala è buia uguale vista dalla Lobby e da dentro. È la luce che si aveva abbassando, solo
+  // dentro, luce d'ambiente (0,55 → 0,1) e riflesso della scena (0,35 → 0,12): un quarto, e lampade di sala
+  // quattro volte più forti per compensare. Col film i materiali scendono ancora (cinemaShade).
+  const CINEMA_DIM=.18,darkened=new Map();
+  // anche il riflesso dell'ambiente scende: i riflessi non dipendono dal colore e la sala sembrava lucida
+  const dark=m=>{if(m?.color&&!darkened.has(m)){darkened.set(m,m.color.clone());m.color.multiplyScalar(CINEMA_DIM);if('envMapIntensity' in m)m.envMapIntensity=CINEMA_DIM}return m};
+  const cinemaShade=k=>{for(const [m,base] of darkened)m.color.copy(base).multiplyScalar(CINEMA_DIM*k)};
+  const velvet=dark(std('#6f2033',.97)), piping=dark(std('#a5535f',.89)), cinemaWall=dark(std('#1b1e2a',.98));
+  const cinemaLen=CINEMA_END-6.06,cinemaMid=(CINEMA_END+6.06)/2;
+  plane(14,cinemaLen,dark(std('#4c2935',.98)),0,-CINEMA_DROP,cinemaMid,0,-Math.PI/2);
+  plane(14,cinemaLen,cinemaWall,0,CINEMA_H,cinemaMid,0,Math.PI/2); // tetto dello stesso colore delle pareti
+  // pareti dal pavimento più basso fino al tetto del cinema (wallZ e wallX sono alte H)
+  const wallTall=CINEMA_H+CINEMA_DROP,wallMidY=(CINEMA_H-CINEMA_DROP)/2;
+  for(const x of [-7.15,7.15]){wallMeshes.push(box(.3,wallTall,CINEMA_END-6.12,cinemaWall,x,wallMidY,(CINEMA_END+6.12)/2));solid(x-.15,x+.15,6.12,CINEMA_END)}
+  wallMeshes.push(box(14.6,wallTall,.3,cinemaWall,0,wallMidY,CINEMA_END));solid(-7.3,7.3,CINEMA_END-.15,CINEMA_END+.15);
   doorSign('Sala cinema','#ffd496',0,Math.PI).position.set(0,2.92,5.96);
   // A pleated velvet panel, gathered halfway up and fuller at the hem.
   const curtains=[],doorCurtains=[];
-  const curtainMat=new THREE.MeshStandardMaterial({color:'#791e38',roughness:.94,side:THREE.DoubleSide});
+  const curtainMat=dark(new THREE.MeshStandardMaterial({color:'#791e38',roughness:.94,side:THREE.DoubleSide}));
   for(const side of [-1,1]){
     const fabric=new THREE.PlaneGeometry(1,1,44,12),vertices=fabric.attributes.position;
     for(let n=0;n<vertices.count;n++){
@@ -884,9 +906,15 @@ export function createLobby3D(app) {
   // Dark acoustic lining on the entrance wall, either side of the passage.
   for(const side of [-1,1]){
     box(5.35,H,.07,cinemaWall,side*4.325,H/2,6.34);
-    for(let row=0;row<5;row++)box(.09,1.72,1.35,std('#241e29',1),side*6.94,1.85,8.3+row*1.92);
+    for(let row=0;row<5;row++)box(.09,1.72,1.35,dark(std('#241e29',1)),side*6.94,1.85,8.3+row*1.92);
   }
   box(3.30,H-DOOR_H,.07,cinemaWall,0,(H+DOOR_H)/2,6.34);
+  // sopra l'atrio la parete d'ingresso sale fino al tetto del cinema, con il vano della cabina di proiezione
+  // (models/proiettore.glb, più sotto): l'apertura è ±0,8 m e da BOOTH_Y-0,5 a BOOTH_Y+0,6, la chiude la cabina
+  const BOOTH_Y=4.3,boothLow=BOOTH_Y-.5,boothHigh=BOOTH_Y+.6;
+  box(14.6,boothLow-H,.07,cinemaWall,0,(boothLow+H)/2,6.34);
+  box(14.6,CINEMA_H-boothHigh,.07,cinemaWall,0,(CINEMA_H+boothHigh)/2,6.34);
+  for(const side of [-1,1])box(6.5,boothHigh-boothLow,.07,cinemaWall,side*4.05,(boothLow+boothHigh)/2,6.34);
   const rugMap=canvasTex(256,512,(g,w,h)=>{
     g.fillStyle='#502030';g.fillRect(0,0,w,h);
     for(const x of [9,17,w-18,w-10]){g.fillStyle='#b08b59';g.fillRect(x,0,2,h)}
@@ -894,32 +922,38 @@ export function createLobby3D(app) {
     for(let j=-1;j<9;j++)for(let i=0;i<4;i++){const x=35+i*61,y=j*64+(i%2)*32;g.beginPath();g.moveTo(x,y-17);g.lineTo(x+12,y);g.lineTo(x,y+17);g.lineTo(x-12,y);g.closePath();g.stroke()}
   });
   rugMap.wrapT=THREE.RepeatWrapping;rugMap.repeat.y=5;
-  const aisleMat=new THREE.MeshStandardMaterial({map:rugMap,roughness:1});
-  const tierRise=.15;
+  const aisleMat=dark(new THREE.MeshStandardMaterial({map:rugMap,roughness:1}));
+  // Si entra in piano dalla Lobby (pianerottolo a quota 0), poi una rampa continua, senza gradini, scende di
+  // CINEMA_DROP fino alla prima fila; davanti allo schermo il pavimento è in piano
+  const RAMP0=7.285,RAMP1=15.44,rampLen=Math.hypot(RAMP1-RAMP0,CINEMA_DROP),rampTilt=Math.atan2(CINEMA_DROP,RAMP1-RAMP0);
+  const rampMid=(RAMP0+RAMP1)/2;
   function cinemaFloor(x,z){
-    if(Math.abs(x)>=7||z<=6.4||z>=15.44)return 0;
-    if(z<7.285)return 4*tierRise*(z-6.4)/.885;
-    return Math.max(0,(4-Math.floor((z-7.285)/1.63))*tierRise);
+    if(Math.abs(x)>=7||z<RAMP0)return 0;
+    if(z>=RAMP1)return -CINEMA_DROP;
+    return -CINEMA_DROP*(z-RAMP0)/(RAMP1-RAMP0);
   }
-  const tierCarpet=std('#482435',.98);
-  for(let i=0;i<6;i++){
-    const h=(i+1)*4*tierRise/6,z=6.4+(i+.5)*.1475;
-    box(13.95,h,.148,tierCarpet,0,h/2,z);
-    box(1.85,.012,.021,brassTrim,0,h+.006,z-.06);
+  const tierCarpet=dark(std('#482435',.98));
+  box(13.95,CINEMA_DROP,RAMP0-6.06,tierCarpet,0,-CINEMA_DROP/2,(6.06+RAMP0)/2); // pianerottolo d'ingresso
+  plane(13.94,rampLen,tierCarpet,0,-CINEMA_DROP/2,rampMid,0,-Math.PI/2+rampTilt); // rampa
+  // corsie: sul pianerottolo, sulla rampa e in piano davanti allo schermo
+  for(const x of [0,-5.12,5.12]){
+    const w=x===0?2.13:1.27;
+    plane(w,RAMP0-6.55,aisleMat,x,.008,(6.55+RAMP0)/2,0,-Math.PI/2);
+    plane(w,rampLen,aisleMat,x,.008-CINEMA_DROP/2,rampMid,0,-Math.PI/2+rampTilt);
+    plane(w,17.35-RAMP1,aisleMat,x,.008-CINEMA_DROP,(RAMP1+17.35)/2,0,-Math.PI/2);
   }
-  for(const x of [0,-5.12,5.12])plane(x===0?2.13:1.27,10.8,aisleMat,x,.008,11.95,0,-Math.PI/2);
   const amber=glow('#ffbb6b',1.5);
-  for(const x of [-1.06,1.06])box(.028,.015,9.6,amber,x,.014,11.15);
+  for(const x of [-1.06,1.06]){
+    box(.028,.015,RAMP0-6.35,amber,x,.014,(6.35+RAMP0)/2);
+    box(.028,.015,rampLen,amber,x,.014-CINEMA_DROP/2,rampMid).rotation.x=rampTilt;
+  }
   const cinemaSofas=[];
   for(let row=0;row<5;row++){
-    const z=8.1+row*1.63,level=(4-row)*tierRise;
-    if(level)box(13.94,level,1.631,tierCarpet,0,level/2,z);
-    for(const x of [-5.12,0,5.12]){
-      plane(x===0?2.13:1.27,1.626,aisleMat,x,level+.009,z,0,-Math.PI/2);
-      box(x===0?1.96:1.12,.014,.025,amber,x,level+.014,z+.79);
-    }
-    for(const side of [-1,1]){
-      const x=side*2.66;
+    const z=8.1+row*1.63;
+    // per fila due divanetti doppi a sinistra e due a destra (4 posti per parte), vicini alla corsia centrale;
+    // ognuno in piano, all'altezza della rampa
+    for(const x of [-3.37,-1.85,1.85,3.37]){
+      const level=cinemaFloor(x,z);
       const sofa=new THREE.Group();sofa.position.set(x,level,z);scene.add(sofa);cinemaSofas.push(sofa);
       // finché non arriva il divanetto in pelle nera fatto in Blender, una sagoma semplice
       const standIn=new THREE.Group();sofa.add(standIn);
@@ -929,20 +963,47 @@ export function createLobby3D(app) {
       solid(x-.74,x+.74,z-.56,z+.51);
       spots.push({x,z,hx:.74,hz:.5,pad:.68,label:'Siediti · Cinema',sit:true,act:()=>app.sit?app.sit(app.projection()?.id):app.open('cinema-streamer')});
     }
-    for(const side of [-1,1]){
-      box(.11,.54,.20,brassTrim,side*6.94,1.9,z);
-      box(.13,.37,.15,amber,side*6.86,1.91,z);
-    }
   }
+  // Applique del cinema di Blender (blender/applique_cinema.blend → models/applique_cinema.glb): mezzo cilindro di
+  // bronzo con anelli d'ottone, luce che esce sopra e sotto; una tra ogni coppia di pannelli fonoassorbenti, 5 per
+  // parete, a istanze. Sul muro un ventaglio di luce calda sopra e uno sotto; col film si abbassano.
+  const sconceSpots=[];
+  for(const z of [9.26,11.18,13.1,15.02,16.94])for(const side of [-1,1])sconceSpots.push([side*7.0,2.05,z,-side*Math.PI/2]);
+  const washMat=new THREE.MeshBasicMaterial({
+    map:canvasTex(64,128,(g,w,h)=>{const r=g.createRadialGradient(w/2,h,0,w/2,h,h);r.addColorStop(0,'rgba(255,190,120,.9)');r.addColorStop(.45,'rgba(255,160,90,.28)');r.addColorStop(1,'rgba(255,150,80,0)');g.fillStyle=r;g.fillRect(0,0,w,h)}),
+    transparent:true,opacity:.165,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false
+  });
+  for(const [x,y,z,yaw] of sconceSpots){
+    const off=Math.sign(x)*-.012;
+    plane(.7,.9,washMat,x+off,y+.71,z,yaw);
+    const down=plane(.7,.9,washMat,x+off,y-.71,z,yaw);down.rotation.z=Math.PI;
+  }
+  let sconceLight=null;
+  new GLTFLoader().load(new URL('models/applique_cinema.glb',import.meta.url).href,gltf=>{
+    gltf.scene.updateMatrixWorld(true);
+    const up=new THREE.Vector3(0,1,0),one=new THREE.Vector3(1,1,1),q=new THREE.Quaternion(),m=new THREE.Matrix4();
+    gltf.scene.traverse(o=>{
+      if(!o.isMesh)return;
+      if(o.material.name==='luce_applique'){sconceLight=o.material;o.material.toneMapped=false}
+      const set=new THREE.InstancedMesh(o.geometry,o.material,sconceSpots.length);
+      sconceSpots.forEach(([x,y,z,yaw],i)=>set.setMatrixAt(i,m.compose(new THREE.Vector3(x,y,z),q.setFromAxisAngle(up,yaw),one).multiply(o.matrixWorld)));
+      scene.add(set);
+    });
+    setProjector(filmOn);
+  });
   // divanetti reclinabili in pelle nera fatti in Blender (blender/divanetto.blend → models/divanetto.glb):
   // due posti con cuciture a canali, poggiatesta, braccioli con portabicchiere cromato e tasto di regolazione
   new GLTFLoader().load(new URL('models/divanetto.glb',import.meta.url).href,gltf=>{
-    gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='tasto'){o.material.emissive=new THREE.Color('#3a8cff');o.material.emissiveIntensity=.9}});
+    gltf.scene.traverse(o=>{if(!o.isMesh)return;dark(o.material);
+      // pelle opaca: niente macchie di luce delle lampade di sala (le parti di metallo restano come sono)
+      if(o.material.metalness<.5)o.material.roughness=Math.max(o.material.roughness,.85);
+      if(o.material.name==='tasto'){o.material.emissive=new THREE.Color('#3a8cff');o.material.emissiveIntensity=.9}});
     for(const sofa of cinemaSofas){sofa.clear();sofa.add(gltf.scene.clone())}
   });
-  point('#ffb782',3.2,0,2.55,10,11);point('#bac9f0',4.1,0,2.7,16,9);
+  // luci di sala basse, da cinema; col film in proiezione si abbassano ancora (setProjector)
+  const hallLights=[point('#ffb782',2.4,0,2.55,10,11),point('#bac9f0',2.8,0,2.7,16,9)];
   const screenPleats=[];
-  for(const side of [-1,1])for(let i=0;i<8;i++)screenPleats.push(box(.18,H,.18,velvet,side*(4.06+i*.32),H/2,18.13+(i%2)*.12));
+  for(const side of [-1,1])for(let i=0;i<8;i++)screenPleats.push(box(.18,wallTall,.18,velvet,side*(4.06+i*.32),wallMidY,CINEMA_END-.42+(i%2)*.12));
   new GLTFLoader().load(new URL('models/tende.glb',import.meta.url).href,gltf=>{
     const door=gltf.scene.getObjectByName('tenda_porta'),wide=gltf.scene.getObjectByName('tenda_schermo');
     gltf.scene.traverse(o=>{if(o.isMesh){o.material.side=THREE.DoubleSide;o.material.color?.multiplyScalar(1.15)}});
@@ -970,15 +1031,125 @@ export function createLobby3D(app) {
     }
     // ai lati dello schermo: una tenda larga per parte al posto delle pieghe a blocchi
     for(const b of screenPleats)b.removeFromParent();
-    for(const side of [-1,1]){const m=wide.clone();m.position.set(side*6.42,.02,18.2);m.scale.x=-side;scene.add(m)}
+    // alte fino al tetto del cinema (il modello è alto quanto le altre stanze)
+    // Tende ai lati dello schermo: velluto a pieghe alto dal pavimento al tetto, contro la parete dello schermo, dal
+    // bordo dello schermo al muro. Fatte qui (il modello tenda_schermo era alto come le altre stanze e andava stirato).
+    const wideMat=wide.material.clone();wideMat.side=THREE.DoubleSide;dark(wideMat);
+    const curtainW=7-(SCREEN_W/2+.12),folds=11;
+    const cloth=new THREE.PlaneGeometry(curtainW,wallTall,folds*10,30),cp=cloth.attributes.position;
+    for(let k=0;k<cp.count;k++){
+      const u=cp.getX(k)/curtainW+.5,v=cp.getY(k)/wallTall+.5;
+      // pieghe più fitte in alto (arricciate al bastone), più morbide e larghe in basso; orlo appena mosso
+      const depth=.07+.06*(1-v),wave=Math.sin(u*folds*2*Math.PI+.6*Math.sin(v*3.1))*depth;
+      cp.setZ(k,wave+.02*Math.sin(u*37+v*5)*(1-v));
+      if(v<.02)cp.setY(k,cp.getY(k)+.03*Math.sin(u*23));
+    }
+    cloth.computeVertexNormals();
+    for(const side of [-1,1]){
+      const m=new THREE.Mesh(cloth,wideMat),cx=side*(SCREEN_W/2+.12+curtainW/2);
+      m.position.set(cx,wallMidY,CINEMA_END-.3);m.rotation.y=Math.PI;scene.add(m);
+      solid(cx-curtainW/2,cx+curtainW/2,CINEMA_END-.55,CINEMA_END); // stanno contro il muro: non ci si entra
+    }
   });
-  box(5.16,2.97,.12,darkWood,0,1.77,18.08);
-  const standby=new THREE.MeshBasicMaterial({map:neonText('BINOTTOLAND CINEMA','#f3c485',1024,576,'bold 69px Georgia'),color:0xccb99b});
-  const screenMesh=plane(5.04,2.835,standby,0,1.77,17.99,Math.PI);
+  box(SCREEN_W+.12,SCREEN_H+.135,.12,darkWood,0,SCREEN_Y,CINEMA_END-.47);
+  // cinema spento: insegna con sipario di velluto e cornice déco dorata (cinema-sign.js)
+  const standby=new THREE.MeshBasicMaterial({map:canvasTex(1024,576,drawCinemaSign),color:new THREE.Color(.85,.85,.85)});
+  const screenMesh=plane(SCREEN_W,SCREEN_H,standby,0,SCREEN_Y,CINEMA_END-.56,Math.PI);
   const aperture=new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0,blending:THREE.NoBlending,depthWrite:false});
   const projection=document.createElement('div');
   projection.style.cssText='position:absolute;left:0;top:0;width:960px;height:540px;background:black;overflow:hidden;transform-origin:0 0;pointer-events:none';
   projection.hidden=true;host.prepend(projection);
+  // Cabina di proiezione incassata sopra l'ingresso (blender/proiettore.blend → models/proiettore.glb): vano buio con
+  // la finestrella e il vetro, dentro il proiettore digitale, inclinato verso il centro dello schermo. Col film in
+  // proiezione (setProjector) si accendono obiettivo e lucina e parte il fascio di luce, largo quanto lo schermo.
+  const lensPos=new THREE.Vector3(0,BOOTH_Y,6.375-.25),screenZ=CINEMA_END-.57;
+  const lensTilt=Math.atan2(BOOTH_Y-SCREEN_Y,screenZ-lensPos.z);
+  const beam=(()=>{
+    const a=.04,b=.025,sw=SCREEN_W/2,sh=SCREEN_H/2,near=.3,far=.025;
+    const lens=[[-a,-b],[a,-b],[a,b],[-a,b]].map(([x,y])=>[lensPos.x+x,lensPos.y+y,lensPos.z]);
+    const wall=[[-sw,-sh],[sw,-sh],[sw,sh],[-sw,sh]].map(([x,y])=>[x,SCREEN_Y+y,screenZ]);
+    const pos=[],col=[];
+    for(let i=0;i<4;i++){
+      const j=(i+1)%4;
+      for(const [p,c] of [[lens[i],near],[wall[i],far],[wall[j],far],[lens[i],near],[wall[j],far],[lens[j],near]]){pos.push(...p);col.push(c*.85,c*.9,c)}
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+    // disegnato prima dello schermo (renderOrder 5): sul film non si vede, il video resta pulito
+    const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({vertexColors:true,transparent:true,opacity:.28,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide,toneMapped:false}));
+    m.visible=false;m.renderOrder=4;scene.add(m);return m;
+  })();
+  let filmOn=false,lensMat=null,ledMat=null;
+  // Il film anima il proiettore: 10 volte al secondo il video si copia in piccolo (128 × 72) su un canvas, specchiato,
+  // che si vede dentro l'obiettivo (lensScreen); dal canvas si ricava il colore medio della scena, che dà colore e
+  // forza al fascio, con passaggi morbidi e un leggero tremolio. Se il video non si può leggere (YouTube, o un
+  // indirizzo di un altro sito) il fascio tremola da solo con una luce calda e l'obiettivo resta solo acceso.
+  const lensCanvas=document.createElement('canvas');lensCanvas.width=128;lensCanvas.height=72;
+  const lensCtx=lensCanvas.getContext('2d',{willReadFrequently:true});
+  const lensTexture=new THREE.CanvasTexture(lensCanvas);lensTexture.colorSpace=THREE.SRGBColorSpace;
+  const lensScreen=new THREE.Mesh(new THREE.CircleGeometry(.08,32),new THREE.MeshBasicMaterial({map:lensTexture,toneMapped:false}));
+  lensScreen.visible=false;
+  const beamTarget=new THREE.Color(1,.95,.85),beamNow=new THREE.Color(1,.95,.85);
+  let filmVideo=null,filmReadable=false,lastSample=0,nextFlicker=0;
+  function sampleFilm(){
+    lensCtx.save();lensCtx.scale(-1,1);lensCtx.drawImage(filmVideo,-128,0,128,72);lensCtx.restore();
+    const d=lensCtx.getImageData(0,0,128,72).data;
+    let r=0,g=0,b=0;
+    for(let i=0;i<d.length;i+=64){r+=d[i];g+=d[i+1];b+=d[i+2]}
+    const n=d.length/64,lum=(r+g+b)/(3*255*n);
+    // colore della scena, schiarito (la luce del proiettore è bianca) e più forte nelle scene chiare
+    const k=.45+1.1*lum;beamTarget.setRGB((.55+.45*r/(255*n))*k,(.55+.45*g/(255*n))*k,(.55+.45*b/(255*n))*k);
+    lensTexture.needsUpdate=true;
+  }
+  function projectorTick(now){
+    if(!filmOn){loc.last=0;return}
+    locandinaTick(now);
+    if(now-lastSample>100){
+      lastSample=now;
+      if(filmVideo&&filmReadable&&filmVideo.readyState>=2){
+        try{sampleFilm()}catch{filmReadable=false;lensScreen.visible=false}
+      }else if(now>nextFlicker){
+        // senza video leggibile: luce calda che cambia ogni tanto, come i cambi di scena
+        nextFlicker=now+400+Math.random()*1200;const k=.6+Math.random()*.7;
+        beamTarget.setRGB(k,k*(.9+Math.random()*.08),k*(.78+Math.random()*.15));
+      }
+    }
+    beamNow.lerp(beamTarget,.18);
+    const f=.96+Math.random()*.08; // tremolio della lampada
+    beam.material.color.copy(beamNow).multiplyScalar(f);
+    if(lensMat)lensMat.emissive.copy(beamNow);
+  }
+  function useFilm(video){
+    filmVideo=video||null;filmReadable=false;lensScreen.visible=false;
+    if(!filmVideo)return;
+    try{lensCtx.drawImage(filmVideo,0,0,4,4);lensCtx.getImageData(0,0,1,1);filmReadable=true;lensScreen.visible=true}catch{}
+  }
+  // col film le luci di sala si abbassano ancora (la sala è già buia per i suoi materiali, vedi CINEMA_DIM)
+  function setProjector(on){
+    filmOn=on;beam.visible=on;if(!on)useFilm(null);
+    if(lensMat)lensMat.emissiveIntensity=on?2.5:0;
+    if(ledMat)ledMat.emissiveIntensity=on?2:.4;
+    hallLights[0].intensity=on?1:2.4;hallLights[1].intensity=on?1.2:2.8;
+    cinemaShade(on?.55:1); // col film, come quando la luce d'ambiente scendeva da 0,1 a 0,05
+    washMat.opacity=on?.075:.165;if(sconceLight)sconceLight.emissiveIntensity=on?.15:.3; // applique basse (−70%)
+  }
+  new GLTFLoader().load(new URL('models/proiettore.glb',import.meta.url).href,gltf=>{
+    const booth=gltf.scene;booth.position.set(0,BOOTH_Y,6.375);
+    const pivot=new THREE.Group();pivot.position.set(0,0,-.25);pivot.rotation.x=lensTilt;booth.add(pivot);
+    for(const name of ['proiettore_corpo','proiettore_lente','proiettore_led']){
+      const part=booth.getObjectByName(name);if(!part)continue;part.position.z+=.25;pivot.add(part);
+    }
+    lensScreen.position.z=.006;pivot.add(lensScreen); // il film in piccolo, davanti alla lente
+    booth.traverse(o=>{
+      if(!o.isMesh)return;
+      const n=o.material.name;
+      if(n==='vetro'){o.material.transparent=true;o.material.opacity=.18;o.material.depthWrite=false}
+      if(n==='cabina_interno')o.material=cinemaWall; // la cabina ha lo stesso colore delle pareti: niente riquadro
+      if(n==='lente')lensMat=o.material;
+      if(n==='led')ledMat=o.material;
+    });
+    scene.add(booth);setProjector(filmOn);
+  });
   let previewKey='',hls=null,previewVideo=null,yt=null,disposeYT=null;
   let soundEnabled=true, audioContext=null, mediaNodes=[], audibleZone=false, mixEligible=false, cinemaGain=null;
   function unlockCinemaSound(){
@@ -1044,7 +1215,7 @@ export function createLobby3D(app) {
   function stopProjection(){
     mixEligible=false;disposeYT?.();disposeYT=null;yt=null;
     mediaNodes.forEach(node=>node.disconnect());mediaNodes=[];projection.style.zIndex='';
-    lastYT=-1;previewKey='';screenMesh.material=standby;projection.hidden=true;
+    lastYT=-1;previewKey='';screenMesh.material=standby;projection.hidden=true;setProjector(false);
     hls?.destroy();hls=null;
     if(previewVideo){previewVideo.pause();previewVideo.srcObject=null;previewVideo.removeAttribute('src');previewVideo.load();previewVideo=null}
     projection.replaceChildren();
@@ -1096,7 +1267,7 @@ export function createLobby3D(app) {
     playbackVersion='';
     stopProjection();if(!key)return;
     previewKey=key;
-    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5;projectionReady=key}};
+    const ready=()=>{if(previewKey===key){projection.hidden=false;screenMesh.material=aperture;screenMesh.renderOrder=5;projectionReady=key;setProjector(true);useFilm(previewVideo)}};
     if(p.youtube&&/^[\w-]{11}$/.test(p.youtube)){
       disposeYT=embedYouTube(projection,p.youtube,{
         ready(player){
@@ -1125,21 +1296,79 @@ export function createLobby3D(app) {
     if(projection.hidden)return;
     const w=host.clientWidth/2,h=host.clientHeight/2;
     screenMesh.getWorldPosition(tmp);tmp.project(camera);
-    const inset=pos.z>6.15 && (tmp.z>1||tmp.z< -1||Math.abs(tmp.x)>.94||Math.abs(tmp.y)>.94);
-    projection.style.zIndex=inset?'1':'';
-    if(inset){
-      const width=Math.min(220,w*.72),scale=width/960;
-      projection.style.transform='translate('+Math.max(0,2*w-width-10)+'px,64px) scale('+scale+')';
-      return;
-    }
-    pixelPlane.set(5.04/960,0,0,-2.52,0,-2.835/540,0,1.4175,0,0,1,0,0,0,0,1);
+    // schermo alle spalle: il film continua (si sente) ma non si vede da nessuna parte (niente riquadro piccolo)
+    const behind=tmp.z>1||tmp.z< -1;
+    projection.style.visibility=behind?'hidden':'';
+    if(behind)return;
+    pixelPlane.set(SCREEN_W/960,0,0,-SCREEN_W/2,0,-SCREEN_H/540,0,SCREEN_H/2,0,0,1,0,0,0,0,1);
     viewport.set(w,0,0,w,0,-h,0,h,0,0,1,0,0,0,0,1);
     camera.updateMatrixWorld();screenMesh.updateMatrixWorld();
     mediaTransform.copy(viewport).multiply(camera.projectionMatrix).multiply(camera.matrixWorldInverse).multiply(screenMesh.matrixWorld).multiply(pixelPlane);
     projection.style.transform='matrix3d('+mediaTransform.elements.join(',')+')';
   }
 
-  poster(-6.94,12,Math.PI/2,'CINEMA','PROIEZIONE IN SALA',['#442333','#ffe2ab','#c58461'],'film');
+  // Locandina fuori dal cinema, nell'atrio (parete della porta del cinema, tra la porta e l'applique). Mostra il
+  // titolo di quello che si proietta (canale, file, finestra condivisa) e, dopo 10 secondi di film continui sullo
+  // stesso canale, un fotogramma preso dal video (con YouTube la copertina, se il sito la lascia leggere). Resta così
+  // anche uscendo dal cinema; torna quella di base quando non si proietta niente.
+  const locMap=poster(3.3,5.94,Math.PI,'CINEMA','PROIEZIONE IN SALA',['#442333','#ffe2ab','#c58461'],'film');
+  const loc={key:'',title:null,youtube:null,played:0,shot:false,last:0};
+  function drawLocandina(image){
+    const g=locMap.image.getContext('2d'),w=384,h=512,cream='#ffe2ab';
+    g.fillStyle='#442333';g.fillRect(0,0,w,h);g.strokeStyle=cream;g.lineWidth=3;g.strokeRect(14,14,w-28,h-28);
+    g.textAlign='center';g.textBaseline='alphabetic';
+    if(image){
+      const bx=32,by=78,bw=320,bh=180,iw=image.videoWidth||image.naturalWidth||image.width,ih=image.videoHeight||image.naturalHeight||image.height;
+      const s=Math.max(bw/iw,bh/ih);
+      g.save();g.beginPath();g.rect(bx,by,bw,bh);g.clip();g.drawImage(image,bx+(bw-iw*s)/2,by+(bh-ih*s)/2,iw*s,ih*s);g.restore();
+      g.strokeStyle='#c58461';g.lineWidth=4;g.strokeRect(bx,by,bw,bh);
+    }else{
+      // bobine, come la locandina di prima
+      g.save();g.translate(192,loc.title?170:210);g.rotate(-.17);
+      for(const x of [-61,61]){g.fillStyle=cream;g.beginPath();g.arc(x,-22,54,0,7);g.fill();for(let i=0;i<5;i++){g.fillStyle='#442333';g.beginPath();g.arc(x+28*Math.cos(i*1.256),-22+28*Math.sin(i*1.256),9,0,7);g.fill()}}
+      g.fillStyle='#c58461';g.fillRect(-90,39,177,66);g.restore();
+    }
+    g.fillStyle=cream;
+    if(!loc.title){g.font='900 44px Arial';g.fillText('CINEMA',192,378,338);g.font='bold 21px monospace';g.fillText('PROIEZIONE IN SALA',192,430,338)}
+    else{
+      g.font='bold 20px monospace';g.fillText('ORA IN PROIEZIONE',192,image?56:62,338);
+      // titolo su due righe al massimo, il più grande che ci sta
+      const words=String(loc.title).split(/\s+/);let size=40,lines;
+      for(;size>=20;size-=2){
+        g.font='900 '+size+'px Arial';lines=[''];
+        for(const word of words){const t=(lines.at(-1)+' '+word).trim();if(g.measureText(t).width<=330)lines[lines.length-1]=t;else lines.push(word)}
+        if(lines.length<=2&&lines.every(l=>g.measureText(l).width<=330))break;
+      }
+      lines=lines.slice(0,2);lines.forEach((l,i)=>g.fillText(l,192,330+i*(size+6)+(lines.length===1?18:0),338));
+      g.font='bold 18px monospace';g.fillText('SALA CINEMA · BINOTTOLAND',192,450,338);
+    }
+    locMap.needsUpdate=true;
+  }
+  function locandina(data){
+    const key=data?JSON.stringify([data.id,data.channel,data.screenId,data.projection?.url,data.projection?.youtube]):'';
+    if(key===loc.key)return;
+    loc.key=key;loc.title=data?(data.channel||'Proiezione in sala'):null;loc.youtube=data?.projection?.youtube||null;
+    loc.played=0;loc.shot=false;loc.last=0;drawLocandina(null);
+  }
+  // chiamata da projectorTick mentre il film è in proiezione: conta i secondi continui, poi il fotogramma
+  function locandinaTick(now){
+    if(loc.shot||!loc.key){loc.last=0;return}
+    if(loc.last)loc.played+=Math.min(now-loc.last,250);
+    loc.last=now;
+    if(loc.played<10000)return;
+    loc.shot=true;
+    if(filmVideo&&filmReadable&&filmVideo.readyState>=2){try{drawLocandina(filmVideo)}catch{drawLocandina(null)}return}
+    if(/^[\w-]{11}$/.test(loc.youtube||'')){
+      const img=new Image(),key=loc.key;img.crossOrigin='anonymous';
+      // prima su una tela a parte: se l'immagine non si lascia leggere non tocca la locandina (resterebbe bloccata)
+      img.onload=()=>{
+        if(loc.key!==key)return;
+        try{const t=document.createElement('canvas').getContext('2d');t.drawImage(img,0,0,2,2);t.getImageData(0,0,1,1);drawLocandina(img)}catch{}
+      };
+      img.src='https://i.ytimg.com/vi/'+loc.youtube+'/hqdefault.jpg';
+    }
+  }
+  drawLocandina(null);
   // Reception counter and tabletop receiver on the east side of the atrium.
   const counterX=5.95,counterZ=-3.35;
   // il mobile della radio: credenza di noce anni '60 con ante a doghe, gambe affusolate e filo d'ottone
@@ -1399,7 +1628,7 @@ export function createLobby3D(app) {
     // sala giochi: niente legno, una riga di neon azzurro a metà parete e lo zoccolo che brilla
     arcade: { neon: glow('#33e1ff', 1.6), skirt: glow('#ff4fd8', 1.3), crown: std('#0b0a18', 0.6), railH: 1.0 },
     // cinema: pannelli in velluto come le poltrone, lucine di cortesia nello zoccolo
-    cinema: { lower: std('#6f2033', 0.97), rail: std('#a5535f', 0.89), skirt: std('#14161f', 0.8), crown: std('#14161f', 0.8), railH: 1.0, lights: glow('#e7b866', 1.4) }
+    cinema: { lower: dark(std('#6f2033', 0.97)), rail: dark(std('#a5535f', 0.89)), skirt: dark(std('#14161f', 0.8)), crown: dark(std('#14161f', 0.8)), railH: 1.0, lights: glow('#e7b866', 1.4), top: CINEMA_H, base: -CINEMA_DROP }
   };
   // atrio (x -7…7): porte a nord (sala tavoli), a sud (cinema), a est (biliardo) e a ovest (giochi)
   trimWall(TRIM.atrium, 'x', -6.84, 6.84, -6.0, 1, [[0, DOOR]]);
@@ -1421,10 +1650,10 @@ export function createLobby3D(app) {
   trimWall(TRIM.cards, 'z', -18.13, -6.3, 7.0, -1);
   trimWall(TRIM.cards, 'x', -7.0, 7.0, -18.13, 1);
   trimWall(TRIM.cards, 'x', -7.0, 7.0, -6.3, -1, [[0, DOOR]]);
-  // cinema (z 6…18): pareti laterali e quella d'ingresso; la parete dello schermo resta libera
-  trimWall(TRIM.cinema, 'z', 6.375, 18.4, -7.0, 1);
-  trimWall(TRIM.cinema, 'z', 6.375, 18.4, 7.0, -1);
-  trimWall(TRIM.cinema, 'x', -7.0, 7.0, 6.375, 1, [[0, 1.65]]);
+  // cinema (z 6…20,5): pareti laterali e quella d'ingresso; la parete dello schermo resta libera
+  trimWall(TRIM.cinema, 'z', 6.375, CINEMA_END - 0.15, -7.0, 1);
+  trimWall(TRIM.cinema, 'z', 6.375, CINEMA_END - 0.15, 7.0, -1);
+  trimWall({ ...TRIM.cinema, base: 0 }, 'x', -7.0, 7.0, 6.375, 1, [[0, 1.65]]); // l'ingresso è in piano
   // un oggetto per materiale
   for (const [m, list] of trimGeo) {
     const mesh = new THREE.Mesh(mergeGeometries(list), m);
@@ -1971,8 +2200,7 @@ export function createLobby3D(app) {
     const hit = ray.intersectObjects(wallMeshes, false)[0];
     const d = hit ? Math.max(0.6, hit.distance - 0.25) : cam.dist;
     camera.position.copy(tgt).addScaledVector(tmp, d);
-    camera.position.y = Math.min(H - 0.15, camera.position.y);
-    if(pos.z>6.45)camera.position.z=Math.max(6.43,camera.position.z);
+    camera.position.y = Math.min(H - 0.15, camera.position.y); // stessa altezza in tutte le sale, anche nel cinema più alto
     camera.lookAt(tgt);
     if(seating){
       standButton.hidden=!touch;seatActions.hidden=!touch&&enterButton.hidden;
@@ -2024,7 +2252,7 @@ export function createLobby3D(app) {
     for(const panel of curtains)panel.scale.x=THREE.MathUtils.lerp(panel.scale.x,1-opening*.67,1-Math.exp(-dt*7));
     for(const d of doorCurtains)for(const p of d.panels)p.scale.x=.33; // tende delle sale sempre aperte (raccolte ai lati)
     const inRange=pos.z>6.15 || (pos.z>0 && Math.abs(pos.x)<1.65);
-    clubInRange=inRange && Math.abs(pos.x)<7 && pos.z<18.3;
+    clubInRange=inRange && Math.abs(pos.x)<7 && pos.z<CINEMA_END-.25;
     const depth=pos.z-6.23;
     const signedDistance=depth>0 && Math.abs(pos.x)<7 ? depth : -Math.hypot(Math.max(0,Math.abs(pos.x)-1.45),Math.min(0,depth));
     const blend=THREE.MathUtils.clamp((signedDistance+1)/2,0,1);
@@ -2045,7 +2273,7 @@ export function createLobby3D(app) {
       if(previewVideo)previewVideo.muted=!(audible&&soundEnabled);
       if(yt){if(audible&&soundEnabled)yt.unMute();else yt.mute()}
     }
-    playProjection(app.projection?.());
+    locandina(app.projection?.());playProjection(app.projection?.());
     const insideArcade=pos.x< -7&&Math.abs(pos.z)<6.15;
     const doorDepth=insideArcade?-7-pos.x:-Math.hypot(Math.max(0,pos.x+7),Math.max(0,Math.abs(pos.z)-1.3));
     const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);
@@ -2082,7 +2310,7 @@ export function createLobby3D(app) {
     if(!helpPanel.hidden)renderHelp(); // l'elenco segue quello che stai facendo
     topBar.style.visibility=touch&&playing()?'hidden':''; // da telefono al calcio balilla e al flipper la barra in alto sparisce
     if(lookStick.hidden!==stick.hidden){lookStick.hidden=stick.hidden;if(stick.hidden){lookJoy.id=null;lookJoy.x=lookJoy.y=0;lookKnob.style.transform=''}}
-    if(boardOpen)focusBoard();alignProjection();renderer.render(scene, camera);
+    if(boardOpen)focusBoard();alignProjection();projectorTick(now);renderer.render(scene, camera);
     if(camWas.distanceToSquared(camera.position)>1e-8||1-Math.abs(camLook.dot(camera.quaternion))>1e-8){camWas.copy(camera.position);camLook.copy(camera.quaternion);stillSince=now}
     const busy=playing()||pinball.active||tableFootball.active||!!monitor||boardOpen||!projection.hidden||joy.id!==null||keys.size>0;
     frameGap=slowPhone||(!busy&&now-stillSince>1500)?1000/30:1000/60;
@@ -2270,7 +2498,7 @@ export function createLobby3D(app) {
     statsBox.textContent=`${fps} fps · max ${Math.round(1000/(frameGap||16.7))}${slowPhone?' (telefono lento)':''}\ndisegni ${i.render.calls} · triangoli ${Math.round(i.render.triangles/1000)}k\ntexture ${i.memory.textures} · geometrie ${i.memory.geometries} · programmi ${i.programs?.length??'?'}\nluci accese ${roomLights.filter(r=>r.light.visible).length} · ${litRoom||'-'}`;
   }
   // place(): sposta il personaggio (per le prove), near(): cosa si può aprire adesso
-  const place = (x, z, yaw = cam.yaw) => { pos.x = x; pos.z = z; cam.yaw = yaw; collide(pos); };
+  const place = (x, z, yaw = cam.yaw, pitch = cam.pitch) => { pos.x = x; pos.z = z; cam.yaw = yaw; cam.pitch = pitch; collide(pos); };
   // Luci per stanza: ogni luce in più pesa su ogni oggetto disegnato (sui telefoni si sente). Si accendono solo
   // quelle della stanza dove sei e dell'atrio; dall'atrio, che vede tutte le porte, la luce principale di ogni sala.
   // Le combinazioni si preparano subito dopo l'apertura, così cambiare stanza non dà scatti.
