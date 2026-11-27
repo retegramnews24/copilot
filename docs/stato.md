@@ -7,13 +7,14 @@ Aggiornato il 26 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.69**: Lobby 3D nuova (dalla 1.0.68) e backup dall'app per il proprietario. Le 8 prove passate.
-- `staging`: 1.0.69, uguale a `main` (`branch-diff`: nessuna differenza).
+- `main`: **1.0.70**: sala cinema nuova della Lobby 3D. Le 8 prove passate. (1.0.69: backup dall'app; 1.0.68:
+  Lobby 3D nuova.)
+- `staging`: 1.0.70, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
 
-**Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario (solo in locale, non ancora in un
-commit): sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
+**Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario. Nella 1.0.70 (staging e main), da
+guardare con un film vero nell'app: sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
 ingresso in piano con la Lobby, poi una rampa continua (niente gradini) che scende di 60 cm fino alla prima fila,
 tenda d'ingresso com'era (si apre da sola avvicinandosi; la prova di una tenda «viva» che si sposta come stoffa
 è stata tolta su richiesta del proprietario), 5 file con due divanetti doppi per parte (4 posti a sinistra e 4 a destra della corsia centrale, 20 divanetti),
@@ -29,7 +30,7 @@ Applique del cinema di Blender (`blender/applique_cinema.blend` → `models/appl
 pannelli, con un ventaglio di luce sopra e sotto. Locandina nell'atrio accanto alla porta del cinema: titolo di
 quello che si proietta e, dopo 10 secondi di film continui sullo stesso canale, un fotogramma del video (con
 YouTube la copertina, se si lascia leggere). Girandosi il film non compare più in un riquadro piccolo.
-Pagina di prova solo locale: `public/_prova-proiettore.html` (film finto, tasti per spostarsi). Cinema spento: sullo schermo l'insegna «BINOTTOLAND
+Le pagine di prova solo locali (`public/_prova-*`) restano fuori da git (`.gitignore`). Cinema spento: sullo schermo l'insegna «BINOTTOLAND
 PLAYGROUND CINEMA» su sipario rosso con cornice déco dorata, ferma (`public/lobby3d/cinema-sign.js`; scelta del
 proprietario tra quattro proposte, anche rispetto a una versione con le lampadine animate).
 
