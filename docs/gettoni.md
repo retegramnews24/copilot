@@ -77,7 +77,7 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
 - **Prezzi:** caffè, bevande e snack 1 BTN, hot dog 1, popcorn 1, Binotto Cola 1, **popcorn e cola insieme 2**. Il
   tasto paga solo se il saldo basta, altrimenti il display dice «SALDO · serve 1 BTN» e suona l'errore. Chi guarda
   un altro che ordina non paga niente.
-- **Macchinetta** (`public/lobby3d/gettoni.js`, `createCoinChanger`; in `lobby3d.js` `COIN` x 5,95, z -4,0, sul
+- **Macchinetta** (`public/lobby3d/gettoni.js`, `createCoinChanger`; in `lobby3d.js` `COIN` x 5,95, z -3,57; la radio è passata più a destra, a z -2,9, sul
   mobile a 1 m, girata verso la stanza): «Usa · Gettoni (E)», la visuale va davanti. Si tocca 1, 5 o 10 BTN: la
   prima moneta arriva col pagliaccio verso di te, si gira ed entra nella fessura (con 5 e 10 ne entrano tre), il
   display conta, i gettoni cadono uno alla volta nella vaschetta, poi «FATTO! +N GETTONI». I gettoni vanno subito

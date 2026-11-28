@@ -1482,8 +1482,9 @@ function buildLobby3D(app, life) {
   // Macchinetta cambia-gettoni (docs/gettoni.md, gettoni.js, models/gettoni.glb): sul mobile della radio (credenza a
   // x 5,95, z -3,35, piano a 1 m), a sinistra della radio guardando dall'atrio, girata verso la stanza (-x) come la
   // radio. Si sceglie 1, 5 o 10 BTN: 5 gettoni per BTN, che cadono nella vaschetta e vanno nel saldo.
-  const COIN={x:5.95,z:-4.0,y:1.0};
-  spots.push({x:COIN.x-.64,z:COIN.z,hx:.05,hz:.25,pad:.88,label:'Gettoni',where:'Lobby',vend:true,machine:'coin',act:()=>{}});
+  // (al posto della metà sinistra della radio, che è passata più a destra: scelta del proprietario)
+  const COIN={x:5.95,z:-3.57,y:1.0}; // larga 35 cm: tra -3,75 e -3,39, la radio comincia a -3,35
+  spots.push({x:COIN.x-.64,z:COIN.z,hx:.05,hz:.22,pad:.88,label:'Gettoni',where:'Lobby',vend:true,machine:'coin',act:()=>{}});
   new GLTFLoader().load(new URL('models/gettoni.glb',import.meta.url).href,gltf=>{
     coinBox=createCoinChanger(gltf,{sound:nearSound(COIN),pay:k=>spend(k,{type:'wallet-change',btn:k},k*COIN_RATE)});
     coinBox.root.position.set(COIN.x,COIN.y,COIN.z);coinBox.root.rotation.y=-Math.PI/2;scene.add(coinBox.root);
@@ -1682,7 +1683,8 @@ function buildLobby3D(app, life) {
     scene.add(credenza);for(const o of counterStandIn)scene.remove(o);
   });
   solid(counterX-.63,counterX+.63,counterZ-1.15,counterZ+1.15);
-  const receiver=new THREE.Group();receiver.position.set(counterX,1.00,counterZ);receiver.rotation.y=-Math.PI/2;scene.add(receiver);
+  // la radio sta verso la parte z -2,9 del mobile: a sinistra, guardando dall'atrio, c'è la macchinetta dei gettoni
+  const receiver=new THREE.Group();receiver.position.set(counterX,1.00,counterZ+.45);receiver.rotation.y=-Math.PI/2;scene.add(receiver);
   // radio vintage fatta in Blender (blender/radio.blend → models/radio.glb): cupola in legno, griglia in stoffa,
   // quadrante illuminato, manopole godronate e antenna; finché non arriva, una sagoma semplice
   const radioStandIn=box(.89,.44,.25,walnut,0,.22,0,receiver);
@@ -1690,8 +1692,8 @@ function buildLobby3D(app, life) {
     gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='rd_dial'){o.material.emissive=new THREE.Color('#ffa040');o.material.emissiveIntensity=1.4;o.material.toneMapped=false}});
     receiver.remove(radioStandIn);receiver.add(gltf.scene);
   });
-  // (la parte del mobile verso z -4 è della macchinetta dei gettoni)
-  spots.push({x:counterX-.64,z:counterZ+.25,hx:.05,hz:.7,pad:.88,label:'Radio del bancone',radio:true,act:()=>app.tune?.()});
+  // (la parte del mobile verso z -3,5 è della macchinetta dei gettoni)
+  spots.push({x:counterX-.64,z:counterZ+.5,hx:.05,hz:.5,pad:.88,label:'Radio del bancone',radio:true,act:()=>app.tune?.()});
   // ========== SALA ARCADE (x -19…-7) ==========
   const list = ARCADE.filter(([k]) => avail.has(k));
   list.push(['ruggine-89','Ruggine 89','#ffb448']);
