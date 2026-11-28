@@ -18,6 +18,13 @@ Aggiornato il 28 novembre 2026.
 
 ## In corso
 
+**Binottocoin e macchinetta cambia-gettoni** (`docs/gettoni.md`), solo su `staging`, niente commit ancora: modello
+(`blender/gettoni.blend` → `models/gettoni.glb`, cromata e arancio da sala giochi, sul mobile della radio a sinistra
+della radio; moneta BTN col pagliaccio in rilievo e la B con tre aste). Saldo sul server (`club-wallet.js`): 100 BTN
+a testa, cambio 1 · 5 · 10 BTN (5 gettoni per BTN), cibo a 1 BTN (popcorn e cola insieme 2). Suoni delle monete,
+«INSERT COIN» che lampeggia su cabinati e flipper. Provato nell'anteprima con un portafoglio finto; da provare
+nell'app di prova. Dopo: prezzi dei giochi in gettoni, fessure su cabinati e macchinette in Blender.
+
 **Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,
 anche con due giocatori.

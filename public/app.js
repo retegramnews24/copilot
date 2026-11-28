@@ -86,6 +86,8 @@ function clubVisibility(){sendPresence();clubAudio()}
 document.addEventListener('visibilitychange',clubVisibility);
 // flipper: inizio e punteggio della partita. Se in quel momento la Lobby è scollegata restano in coda (lobby-link.js)
 // e partono appena si ricollega, poco dopo la presenza; prima andavano persi.
+// portafoglio (club-wallet.js, docs/gettoni.md): saldo in BTN e gettoni, l'ultimo arrivato dal server
+let walletState=null;
 function pinballSend(msg){lobbyLink.send(msg,m=>m.type===msg.type&&m.table===msg.table)}
 // la Lobby 3D si prepara (modelli, texture, luci) anche nascosta: parte già durante lo splash, poi si mostra
 async function makeLobby3D(){
@@ -95,10 +97,10 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=b37ded7e6d');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=784285cc29');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
+}),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),wallet:()=>walletState,walletSend:msg=>lobbyLink.send(msg,()=>false),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
  return lobby3d;
 }
 // Zona operativa (corridoio della sala giochi, public/lobby3d/corridor.js): in fondo la Lobby 3D si spegne davvero
@@ -452,7 +454,7 @@ const lobbyLink=createLobbyLink({
   created:socket=>{lobbyWS=socket},
   // il server dimentica sgabello e posto al balilla del collegamento vecchio: il telefono si rimette d'accordo
   dropped:()=>lobby3d?.stoolDisconnected(),
-  opened:()=>{$('lobby-connection').textContent='● In diretta';trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();lobby3d?.lobbyReconnected?.();lobby3d?.connection?.(true);renderSocial()},
+  opened:()=>{$('lobby-connection').textContent='● In diretta';lobbyLink.send({type:'wallet'});trace('WS','Sala partite collegata');$('lobby-connection').dataset.live='true';sendPresence();lobby3d?.lobbyReconnected?.();lobby3d?.connection?.(true);renderSocial()},
   message:lobbyMessage,
   error:()=>trace('ERROR','Connessione sala partite'),
   closed:()=>{lobby3d?.stoolDisconnected();lobby3d?.connection?.(false);clubStation=null;clubAudio();trace('WS','Sala disconnessa · nuovo tentativo tra 4 s');$('lobby-connection').textContent='Riconnessione…';$('lobby-connection').dataset.live='false';renderSocial()},
@@ -461,7 +463,7 @@ const lobbyLink=createLobbyLink({
 });
 const lobbyAlive=()=>lobbyLink.alive(),connectLobby=()=>lobbyLink.connect();
 function lobbyMessage(raw){
- const e={data:raw};try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}
+ const e={data:raw};try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='wallet'){walletState=data;lobby3d?.wallet?.(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>{show3DStats();selectPage('debug')};

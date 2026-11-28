@@ -1,6 +1,7 @@
 # Macchinetta caffè e snack (Lobby 3D)
 
-Solo visiva: niente soldi, niente punti. Si prende un prodotto e lo si consuma con il personaggio.
+Si prende un prodotto e lo si consuma con il personaggio. Dal 28 novembre 2026 ogni prodotto costa 1 BTN
+(Binottocoin; popcorn e cola insieme 2): saldo e prezzi in `docs/gettoni.md`.
 
 ## Decisioni del proprietario (27 novembre 2026)
 

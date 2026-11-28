@@ -1,5 +1,5 @@
 // Macchinetta automatica degli hot dog della Lobby 3D (docs/macchinetta.md, «Macchinetta automatica degli hot dog»).
-// Solo visiva: niente soldi. Modello di Blender: blender/hotdog.blend → models/hotdog.glb (davanti verso +z, base a
+// L'hot dog costa 1 BTN (pay, docs/gettoni.md). Modello di Blender: blender/hotdog.blend → models/hotdog.glb (davanti verso +z, base a
 // terra, larga 1,15 m). I pezzi che si muovono arrivano già al loro posto, con l'origine dove girano o si attaccano.
 // createHotdog(gltf) restituisce la macchinetta (root) e i comandi:
 //   hit(object)  → che cosa è stato toccato: un tasto ({type:'key', key}) e lo esegue, o l'hot dog pronto ({type:'item'})
@@ -168,7 +168,9 @@ const DOG_GRIP = 0.055; // il würstel dritto si tiene 5,5 cm sopra il centro
 const DOG_IN = 0.08; // centro del würstel infilato, sopra la base del panino
 const BOTTLE_GRIP = 0.05; // il flacone si prende 5 cm sopra il centro; capovolto, il beccuccio è 6,5 cm sotto la pinza
 
-export function createHotdog(gltf, { sound = () => {} } = {}) {
+// pay(BTN): paga l'hot dog di chi la usa (docs/gettoni.md, 1 BTN); false se il saldo non basta.
+// Le scelte viste da un altro (play) non pagano.
+export function createHotdog(gltf, { sound = () => {}, pay = () => true } = {}) {
   const root = new THREE.Group();
   const fixed = ['macchina', 'vetro', 'insegna', 'display', 'griglia_vegana', 'punzone', 'panini_scorta', 'sportello'];
   for (const n of fixed) root.add(piece(gltf, n));
@@ -591,8 +593,12 @@ export function createHotdog(gltf, { sound = () => {} } = {}) {
       const s = SAUCES.find(x => x.key === v.key);
       if (v.key === 'classico' || v.key === 'vegano') choice = (v.key === 'vegano' ? 'v' : 'c') + choice.slice(1);
       else if (s) choice = choice.includes(s.c, 1) ? choice.replace(s.c, '') : choice + s.c;
-      if (v.key === 'prepara') play(choice);
-      else idle();
+      if (v.key !== 'prepara') idle();
+      else if (pay(1)) play(choice);
+      else {
+        show('SALDO', 'serve 1 BTN');
+        sound('errore');
+      }
     }
     return v;
   }

@@ -1,6 +1,7 @@
 import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
 import { heldDrink, heldSnack, machineOrders, machineUse } from './club-machines.js';
 import { recordPinball, startPinball, removePinball } from './club-pinball.js';
+import { readWallet, useWallet, walletMessage } from './club-wallet.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -804,6 +805,21 @@ export class Room extends DurableObject {
           await changeStool(this.ctx, ws, b);
           await this.lobbyHub.lobbyBroadcast(false);
         });
+      // portafoglio (club-wallet.js): saldo, cambio in gettoni e pagamento del cibo, solo per te
+      if (b.type === 'wallet' && a.user?.id != null) {
+        const w = await readWallet(this.ctx, a);
+        ws.send(JSON.stringify(walletMessage(w)));
+        return;
+      }
+      if ((b.type === 'wallet-change' || b.type === 'wallet-pay') && a.inClub && !a.closed) {
+        const w = await this.ctx.blockConcurrencyWhile(() => useWallet(this.ctx, a, b));
+        ack();
+        if (w)
+          ws.send(
+            JSON.stringify(walletMessage(w, { ok: w.ok, ...(Number.isInteger(b.ref) ? { ref: b.ref } : {}) }))
+          );
+        return;
+      }
       if (b.type !== 'presence') return;
       // App nascosta (away): sgabello e posto al balilla restano tuoi per un po' (il balilla libera il posto da solo
       // se il telefono tace, club-stools.js lo sgabello). Uscire dal club invece li libera subito.

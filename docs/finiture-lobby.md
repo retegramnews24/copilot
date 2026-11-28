@@ -33,6 +33,9 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 - Carrello dei popcorn e della Binotto Cola (`blender/popcorn.blend` → `public/lobby3d/models/popcorn.glb`, circa
   1 MB): nell'angolo dell'atrio tra cinema e sala giochi, contro la parete della sala giochi. Funzionamento e scelte in
   `docs/macchinetta.md`.
+- Macchinetta cambia-gettoni (`blender/gettoni.blend` → `public/lobby3d/models/gettoni.glb`, circa 800 KB): sul
+  mobile della radio, a sinistra della radio, codice in `public/lobby3d/gettoni.js`. Scelte e funzionamento in
+  `docs/gettoni.md`.
 - Macchinetta automatica degli hot dog (`blender/hotdog.blend` → `public/lobby3d/models/hotdog.glb`, circa 740 KB):
   sulla parete della sala giochi tra la porta e l'applique, codice in `public/lobby3d/hotdog.js`. Scelte e
   funzionamento in `docs/macchinetta.md`.

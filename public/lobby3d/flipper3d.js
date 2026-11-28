@@ -829,17 +829,19 @@ export function buildFlipper(
         else if (g.rank <= 10 && g.score > 0) say('Sei in classifica!');
       }
       // in attesa: la classifica a rotazione (1. NOME · punti), poi "E PER GIOCARE"
+      // (dopo la classifica «INSERT COIN» che lampeggia, scelta del proprietario 28 novembre 2026)
       if (!g && tt - (art.lastTop || 0) > 2.2) {
         art.lastTop = tt;
-        const list = top();
-        art.topIndex = ((art.topIndex ?? -1) + 1) % (list.length + 1);
-        const e = list[art.topIndex];
+        art.topIndex = ((art.topIndex ?? -1) + 1) % (top().length + 1);
+      }
+      if (!g) {
+        const e = top()[art.topIndex ?? 0];
         if (e)
           drawDmd(
             e.score.toLocaleString('it-IT'),
             art.topIndex + 1 + '. ' + e.name.toUpperCase().slice(0, 20)
           );
-        else drawDmd(list.length ? 'CLASSIFICA' : T.title, PLAY_TEXT + ' · 5 PALLINE');
+        else drawDmd(Math.floor(tt * 2.5) % 2 ? 'INSERT COIN' : '', PLAY_TEXT + ' · 5 PALLINE');
       }
       // display
       const now = performance.now();

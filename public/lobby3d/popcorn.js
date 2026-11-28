@@ -169,7 +169,10 @@ const TRAY = new THREE.Vector3(0.25, 0.866, 0.18); // dove si riempie il bicchie
 const NOZZLE_Y = 1.035;
 const MOUND = 0.13; // il bordo del cartoccio
 
-export function createPopcorn(gltf, { sound = () => {} } = {}) {
+// pay(BTN): paga la scelta di chi lo usa (docs/gettoni.md: popcorn 1 BTN, cola 1, tutti e due 2); false se il
+// saldo non basta. Le scelte viste da un altro (play) non pagano.
+export const POPCORN_PRICE = { popcorn: 1, cola: 1, tutti: 2 };
+export function createPopcorn(gltf, { sound = () => {}, pay = () => true } = {}) {
   const root = new THREE.Group();
   for (const n of ['carrello', 'tetto', 'vetro', 'pila_cartocci']) root.add(piece(gltf, n));
   const glass = root.getObjectByName('vetro');
@@ -373,7 +376,14 @@ export function createPopcorn(gltf, { sound = () => {} } = {}) {
       o.position.z = 0.206; // il tasto si abbassa
       sound('tasto');
       setTimeout(() => (o.position.z = 0.214), 140);
-      if (state === 'scegli') play(v.key);
+      if (state === 'scegli') {
+        const price = POPCORN_PRICE[v.key] || 1;
+        if (pay(price, v.key)) play(v.key);
+        else {
+          show('SALDO', 'serve ' + price + ' BTN');
+          sound('errore');
+        }
+      }
     }
     return v;
   }

@@ -3,7 +3,7 @@
 // dietro di te si spengono uno dopo l'altro; in fondo la Lobby 3D si spegne davvero e parte il gioco (lobby3d.js,
 // app.js). Tornando dal gioco i neon si riaccendono dal fondo verso la porta.
 import * as THREE from 'three';
-import { canvasTex, neonText } from './textures.js?v=6d79d0e827';
+import { canvasTex, neonText } from './textures.js?v=0545bdbd8d';
 
 export const ZONE = {
   x: -15.95, // centro della porta e del corridoio

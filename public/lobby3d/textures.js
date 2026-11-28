@@ -138,9 +138,17 @@ export function cabinetScreen(title, color) {
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = `bold ${title.length > 12 ? 24 : 30}px "Arial Black", Arial, sans-serif`;
     g.shadowColor = color; g.shadowBlur = 12; g.fillText(title.toUpperCase(), w / 2, 32);
-    g.shadowBlur = 0; g.font = 'bold 18px monospace'; g.fillText('▶ PREMI APRI', w / 2, h - 22);
+    g.shadowBlur = 0; // in basso «INSERT COIN» che lampeggia (insertCoin, un piano a parte sopra lo schermo)
     for (let y = 0; y < h; y += 3) { g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(0, y, w, 1); }
   });
+}
+// «INSERT COIN» dei cabinati: scritta gialla con l'alone, su fondo trasparente (lampeggia in lobby3d.js)
+let insertCoinTex = null;
+export function insertCoin() {
+  return insertCoinTex || (insertCoinTex = canvasTex(256, 40, (g, w, h) => {
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 24px "Courier New", monospace';
+    g.shadowColor = '#ff9a1a'; g.shadowBlur = 10; g.fillStyle = '#ffe14a'; g.fillText('INSERT COIN', w / 2, h / 2 + 1);
+  }));
 }
 export function nameTag(text) {
   return canvasTex(512, 96, (g, w, h) => {
