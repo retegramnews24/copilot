@@ -12,6 +12,7 @@ import {
   tuneField,
   TARGETS
 } from './public/lobby3d/balilla-rules.js';
+import { prize } from './club-wallet.js';
 
 const TICK = 33; // ms tra un aggiornamento e l'altro (30 al secondo)
 export const IDLE_STOP = 5 * 60000; // tavolo fermo dopo 5 minuti senza comandi
@@ -327,9 +328,32 @@ export class BalillaHub {
         this.swap = this.field.swap;
         if (this.mode === 4) this.changeSides();
       }
-      if (this.field.finished) this.stop();
+      if (this.field.finished) {
+        this.stop();
+        this.payWinners();
+      }
       this.broadcast();
     }, TICK);
+  }
+  // fine partita: 1 BTN a chi è seduto dalla parte che ha vinto (club-wallet.js, docs/gettoni.md)
+  payWinners() {
+    const f = this.field,
+      team = f.games.findIndex(g => g > f.bestOf / 2);
+    if (team < 0 || !this.ctx?.storage || typeof this.ctx.blockConcurrencyWhile !== 'function') return;
+    const ids = new Set();
+    for (const [ws, m] of this.viewers)
+      if (m.slot >= 0 && m.slot >> 1 === team) {
+        try {
+          const id = ws.deserializeAttachment?.()?.user?.id;
+          if (id != null) ids.add(String(id));
+        } catch {}
+      }
+    if (ids.size)
+      this.ctx
+        .blockConcurrencyWhile(async () => {
+          for (const id of ids) await prize(this.ctx, id, 1);
+        })
+        .catch(() => {});
   }
   stop() {
     clearInterval(this.timer);

@@ -46,7 +46,16 @@ const mf = new Miniflare(
     }
   })
 );
+const leagued = new Set(); // tavoli: prima l'iscrizione alla Lega Giochi (docs/gettoni.md)
 async function call(id, path, body) {
+  if (body !== undefined && (path === '/api/create' || /\/claim$/.test(path)) && !leagued.has(id)) {
+    leagued.add(id);
+    await mf.dispatchFetch('https://unit.test/api/league', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token(id), 'Content-Type': 'application/json' },
+      body: '{}'
+    });
+  }
   const res = await mf.dispatchFetch('https://unit.test' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { Authorization: 'Bearer ' + token(id), 'Content-Type': 'application/json' },

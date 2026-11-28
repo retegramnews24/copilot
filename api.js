@@ -293,6 +293,27 @@ async function route(req, env) {
     return lobby.fetch(new Request(u.origin + '/lobby/list'));
   if (u.pathname === '/api/lobby/ws' && req.method === 'GET')
     return lobby.fetch(new Request(u.origin + '/lobby/ws', req));
+  // Lega Giochi Binottoland: iscrizione (1 BTN a settimana) per giocare ai tavoli (docs/gettoni.md)
+  if (req.method === 'POST' && u.pathname === '/api/league')
+    return lobby.fetch(
+      new Request(u.origin + '/lobby/league', {
+        method: 'POST',
+        body: '{}',
+        headers: { 'X-Checkmate-User': JSON.stringify(user) }
+      })
+    );
+  // record personale di un gioco da soli: {game, score} (1 BTN se batte il record, docs/gettoni.md)
+  if (req.method === 'POST' && u.pathname === '/api/record') {
+    const raw = await req.text();
+    if (raw.length > 512) return json({ error: MSG.tooBig }, 413);
+    return lobby.fetch(
+      new Request(u.origin + '/lobby/record', {
+        method: 'POST',
+        body: raw,
+        headers: { 'X-Checkmate-User': JSON.stringify(user) }
+      })
+    );
+  }
   if (req.method === 'POST' && u.pathname === '/api/create') {
     const raw = await req.text();
     // F1 on paper! sends the drawn track with the race (up to 400 kB); every other game a few settings.

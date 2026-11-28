@@ -773,6 +773,8 @@ function win() {
   for (let i = 0; i < 90; i++) { const a = Math.random() * Math.PI * 2, v = 0.5 + Math.random() * 1.5; spawn(b.x, 0.05, b.z, Math.cos(a) * v, 3 + Math.random() * 2, Math.sin(a) * v, 2); }
   const got = stars.filter(s => s.lit).length, secs = Math.round((now - t0) / 1000);
   if (!ICON && !params.has('dev')) store({ level: Math.max(saved.level || 1, level + 1) });   // si riparte dal livello successivo
+  // record personale (livello finito più alto): se lo batti, 1 BTN (docs/gettoni.md)
+  if (embedded && !ICON && !params.has('dev')) parent.postMessage({ type: 'arcade:record', game: 'acquedotto', score: level }, location.origin);
   document.getElementById('winStars').textContent = stars.length ? '💧'.repeat(got) + '○'.repeat(stars.length - got) : '';
   document.getElementById('winTxt').textContent = `Gocce d'oro ${got}/${stars.length} · ${moves} mosse · ${secs} s`;
   setTimeout(() => { document.getElementById('win').hidden = false; }, 1400);

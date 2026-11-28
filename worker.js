@@ -1,7 +1,7 @@
 import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
 import { heldDrink, heldSnack, machineOrders, machineUse } from './club-machines.js';
 import { recordPinball, startPinball, removePinball } from './club-pinball.js';
-import { readWallet, useWallet, walletMessage } from './club-wallet.js';
+import { readWallet, serverRecord, useWallet, walletMessage } from './club-wallet.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -794,9 +794,19 @@ export class Room extends DurableObject {
       }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
         const table = b.table === 'gt' ? 'gt' : 'gp';
-        const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score, table));
+        // record personale battuto: 1 BTN (club-wallet.js); il primo punteggio fissa il record
+        let won = 0;
+        const better = await this.ctx.blockConcurrencyWhile(() =>
+          recordPinball(this.ctx, a, b.score, table, async score => {
+            won = await serverRecord(this.ctx, a.user?.id, 'flipper-' + table, score);
+          })
+        );
         ws.serializeAttachment(a);
         ack();
+        if (won)
+          ws.send(
+            JSON.stringify(walletMessage(await readWallet(this.ctx, a), { prize: won, game: 'flipper' }))
+          );
         if (better) await this.lobbyHub.lobbyBroadcast();
         return;
       }
@@ -811,7 +821,11 @@ export class Room extends DurableObject {
         ws.send(JSON.stringify(walletMessage(w)));
         return;
       }
-      if ((b.type === 'wallet-change' || b.type === 'wallet-pay') && a.inClub && !a.closed) {
+      if (
+        ['wallet-change', 'wallet-pay', 'wallet-play', 'wallet-league', 'wallet-record'].includes(b.type) &&
+        a.inClub &&
+        !a.closed
+      ) {
         const w = await this.ctx.blockConcurrencyWhile(() => useWallet(this.ctx, a, b));
         ack();
         if (w)

@@ -5,12 +5,31 @@
 - **Binottocoin (BTN):** la moneta ufficiale del circolo. È una **moneta d'oro, piena (senza foro), con la B in
   rilievo**. Serve nelle macchinette del cibo: hot dog, Binotto Cola, popcorn, caffè, tè e le altre bevande, patatine
   e tutti gli snack costano **1 BTN** ciascuno.
-- **100 BTN a testa:** a ognuno si danno 100 BTN da usare.
+- **50 BTN a testa:** a ognuno si danno 50 BTN da usare (erano 100, abbassati il 28 novembre 2026).
 - **Gettoni:** servono per gli arcade, il biliardo e i vari cabinati a gettone (coin-op), non per il cibo.
   Sono **d'ottone, con il foro in mezzo e la scanalatura** ad anello sulle due facce, come i gettoni di una volta.
 - **Cambio:** **1 BTN = 5 gettoni**.
-- **Ordine dei lavori:** prima l'economia (i 100 BTN a tutti e il cambio nella macchinetta); i prezzi dei giochi in
+- **Ordine dei lavori:** prima l'economia (i BTN a tutti e il cambio nella macchinetta); i prezzi dei giochi in
   gettoni si decidono dopo.
+
+## Regole dei giochi (scelte del proprietario, 28 novembre 2026)
+
+- **Soldi iniziali: 50 BTN** a testa (prima 100).
+- **Si pagano 1 gettone a partita:** cabinati della sala giochi (Pong, Moto Trial, Acquedotto!, Lunar Lander, Number
+  Connect, F1 on paper!, Golf, Giulio e Binotto Simulator, Ruggine 89), i due flipper, biliardo, calcio balilla e la
+  Zona Operativa (**1 gettone a ogni entrata** dalla porta blindata, poi si gioca quanto si vuole). Finita la
+  partita, per rigiocare si paga di nuovo. Nelle partite in più **ognuno mette il suo gettone**.
+- **Senza gettoni non si gioca:** il gioco dice «INSERT COIN · servono gettoni» e manda alla macchinetta dei gettoni.
+  Guardare resta gratis.
+- **Premi: chi vince prende sempre 1 BTN**, da solo o in più, contro persone o contro bot e IA: arcade, biliardo,
+  calcio balilla, flipper, Zona Operativa e tavoli. **Nessun tetto** ai premi.
+- **Vincere nei giochi da soli** (flipper, Acquedotto!, Lunar Lander, Number Connect, Moto Trial…): battere il
+  **proprio record personale** in quel gioco.
+- **Cinema: sempre gratis.**
+- **Sala tavoli: Lega Giochi Binottoland.** Per giocare ai tavoli ci si iscrive alla Lega: **1 BTN a settimana**,
+  pagato in anticipo, **rinnovo automatico ogni 7 giorni**, poi tutti i giochi della sala tavoli senza limiti (le
+  vittorie danno lo stesso 1 BTN). Al rinnovo, **se non hai 1 BTN, una settimana di credito** (il saldo va a -1 e lo
+  paghi col prossimo BTN che arriva); alla settimana dopo, se sei ancora sotto, l'iscrizione si sospende.
 
 ## La macchinetta cambia-gettoni
 
@@ -50,7 +69,7 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
 ## Codice (28 novembre 2026)
 
 - **Saldo sul server** (`club-wallet.js`, chiave `wallet:<id>` nello spazio della Lobby): chi non ce l'ha parte con
-  100 BTN e 0 gettoni. Messaggi della Lobby: `wallet` (chiedi il saldo), `wallet-change` (`btn` 1, 5 o 10: +5 gettoni
+  50 BTN e 0 gettoni (erano 100 all'inizio). Messaggi della Lobby: `wallet` (chiedi il saldo), `wallet-change` (`btn` 1, 5 o 10: +5 gettoni
   per BTN), `wallet-pay` (`m` vend, dog o pop, `k` la scelta del popcorn). Il telefono li tiene in coda finché il
   server conferma (`ack`); un numero (`ref`) già visto non si paga due volte; il saldo non va mai sotto zero. La
   risposta `{type:'wallet', btn, gettoni, ok}` rimette il saldo giusto sul telefono. Prova:
@@ -72,8 +91,34 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
 - Prova locale: `public/_prova-gettoni.html` (fuori da git, portafoglio finto). Provato nell'anteprima: 10 BTN →
   90 BTN e 50 gettoni, moneta col rilievo che entra.
 
+## Codice dei giochi (28 novembre 2026)
+
+- **Gettoni all'avvio** (`payGame` in `lobby3d.js`, `wallet-play` in `club-wallet.js`): nella Lobby 3D si paga 1
+  gettone aprendo un cabinato, il biliardo, una partita al flipper, accendendo Pong sul monitor, sedendosi al calcio
+  balilla (e a ogni «di nuovo» a fine partita) e a ogni entrata nella Zona Operativa. Senza gettoni: «INSERT COIN ·
+  servono gettoni» e il gioco non parte (dalla Zona si torna indietro). Ogni partita pagata lascia un biglietto per
+  quel gioco (al massimo 5), che serve al premio del record.
+- **Premi dal server:** `/lobby/result` (tavoli, biliardo, F1 on paper!, Golf) dà 1 BTN a ogni vincitore che non è un
+  bot, una volta sola per risultato; il calcio balilla a chi è seduto dalla parte che vince (`balilla-hub.js`); il
+  flipper al record personale battuto (punteggio già controllato dal server, `club-pinball.js`); Number Connect al
+  record personale (partita rifatta dal server).
+- **Record e vittorie dai giochi da soli** (messaggio `arcade:record` dal gioco → `/api/record`, serve il biglietto
+  della partita pagata): Acquedotto! (livello finito più alto), Lunar Lander 3D (somma dei migliori atterraggi),
+  Ruggine 89 (gara vinta), Pong contro il computer (partita vinta). Il primo punteggio fissa il record, poi ogni record
+  battuto vale 1 BTN.
+- **Lega Giochi** (`/api/league`, `/lobby/league`): creare un tavolo o sedersi a un tavolo della sala tavoli senza
+  Lega risponde 402; l'app chiede «Ti iscrivi?» (1 BTN, rinnovo automatico ogni 7 giorni) e riprova. Il rinnovo
+  si fa quando il portafoglio si legge (`renewLeague`). Le prove dei tavoli iscrivono prima i giocatori finti.
+- Quando arriva un premio, nella Lobby 3D compare «+1 BTN». Il saldo si aggiorna a ogni giro di presenza (25 s).
+
 ## Da fare
 
-- Provare nell'app di prova con due giocatori: l'altro vede il cambio? Il saldo resta giusto dopo una riapertura?
-- Quanti gettoni costano arcade, biliardo e cabinati (per ora i giochi non li chiedono).
+- Provare nell'app di prova con due giocatori.
+- Premi ancora da collegare: Pong online, Moto Trial, Zona Operativa (squadra che vince), Giulio Simulator, Binotto
+  Simulator.
+- Dentro un gioco, rigiocare senza uscire (Acquedotto! livello dopo, Ruggine gara dopo) non chiede un altro gettone:
+  si paga a ogni apertura del cabinato.
+- Sedersi da soli al balilla per allenarsi costa un gettone come una partita.
+- I giochi aperti dalla pagina Giochi della Lobby classica non chiedono gettoni (solo dalla Lobby 3D).
+- Disdire la Lega Giochi (per ora si rinnova sempre) e far vedere la scadenza anche nella Lobby classica.
 - Fessure per le monete sui cabinati e sulle macchinette, rifatte in Blender una alla volta (idea del proprietario).

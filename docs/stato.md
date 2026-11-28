@@ -22,8 +22,10 @@ Aggiornato il 28 novembre 2026.
 (`blender/gettoni.blend` → `models/gettoni.glb`, cromata e arancio da sala giochi, sul mobile della radio a sinistra
 della radio; moneta BTN col pagliaccio in rilievo e la B con tre aste). Saldo sul server (`club-wallet.js`): 100 BTN
 a testa, cambio 1 · 5 · 10 BTN (5 gettoni per BTN), cibo a 1 BTN (popcorn e cola insieme 2). Suoni delle monete,
-«INSERT COIN» che lampeggia su cabinati e flipper. Provato nell'anteprima con un portafoglio finto; da provare
-nell'app di prova. Dopo: prezzi dei giochi in gettoni, fessure su cabinati e macchinette in Blender.
+«INSERT COIN» che lampeggia su cabinati e flipper. Regole dei giochi (non ancora committate): 50 BTN iniziali,
+1 gettone a partita (cabinati, flipper, biliardo, balilla, Zona a ogni entrata), 1 BTN a chi vince o batte il record
+personale, Lega Giochi a 1 BTN a settimana per la sala tavoli, cinema gratis. Da provare nell'app di prova; premi
+ancora da collegare per Pong online, Moto Trial, Zona, Giulio e Binotto Simulator (elenco in `docs/gettoni.md`).
 
 **Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,

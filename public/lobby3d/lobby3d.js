@@ -3,7 +3,7 @@
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
 import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4b254beeea';
-import {buildBalilla} from './balilla.js?v=d09a655c05';
+import {buildBalilla} from './balilla.js?v=704a972fe3';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {helpFor, helpList} from './help.js?v=d35882a376';
 import {soundAllowed} from '../sound-pref.js';
@@ -580,7 +580,7 @@ function buildLobby3D(app, life) {
     if (game.pins) Table3D.prototype.setPins.call(view, game.pins);
     const hx = T.L + T.cush + T.rail, hz = T.W + T.cush + T.rail;
     solid(x - hx, x + hx, z - hz, z + hz);
-    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => app.open('biliardo') });
+    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => payGame('biliardo') && app.open('biliardo') });
     // lampada sopra il tavolo
     const lampW = hx * 1.6;
     box(lampW, 0.065, 0.095, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
@@ -1432,13 +1432,28 @@ function buildLobby3D(app, life) {
   walletChip.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 10px);left:50%;transform:translateX(-50%);padding:5px 12px;border-radius:14px;background:rgba(20,12,4,.78);color:#ffd27a;font:600 14px system-ui,sans-serif;white-space:nowrap;pointer-events:none;z-index:5';
   el.append(walletChip);
   function walletShow(){
-    walletChip.textContent=Number.isInteger(wallet?.btn)?'Saldo: '+wallet.btn+' BTN · '+(wallet.gettoni||0)+' gettoni':'Saldo in arrivo…';
+    walletChip.textContent=Number.isInteger(wallet?.btn)?'Saldo: '+wallet.btn+' BTN · '+(wallet.gettoni||0)+' gettoni'+(wallet.lega?' · Lega Giochi ✓':''):'Saldo in arrivo…';
     coinBox?.wallet(wallet);
   }
-  function walletUpdate(w){if(w&&Number.isInteger(w.btn)){wallet={btn:w.btn,gettoni:w.gettoni|0};walletShow()}}
+  // premio arrivato (vittoria o record personale): «+1 BTN»
+  function walletUpdate(w){
+    if(!w||!Number.isInteger(w.btn))return;
+    const before=wallet?.btn;
+    wallet={btn:w.btn,gettoni:w.gettoni|0,lega:w.lega||0};walletShow();
+    if(Number.isInteger(before)&&w.btn>before)notice('+'+(w.btn-before)+' BTN · '+(w.game==='flipper'||w.prize?'hai battuto il tuo record!':'premio per la vittoria'),'info');
+  }
+  // giochi a gettone (come COIN_GAMES in club-wallet.js): 1 gettone a partita. Senza gettoni non si gioca: «INSERT
+  // COIN» e la strada per la macchinetta dei gettoni. Il cinema e la sala tavoli (Lega Giochi) non usano gettoni.
+  const COIN_GAMES=new Set(['pong','moto-trial','acquedotto','lunar-lander-3d','number-connect','f1-on-paper','golf-with-your-gay-friends','giulio-simulator','binotto-simulator','ruggine-89','flipper-gp','flipper-gt','biliardo','balilla','zona']);
+  function payGame(game){
+    if(!COIN_GAMES.has(game))return true;
+    if(spend(0,{type:'wallet-play',game},-1))return true;
+    notice(Number.isInteger(wallet?.btn)?'INSERT COIN · servono gettoni: cambiali alla macchinetta sul mobile della radio':'Saldo in arrivo… riprova tra un attimo','info');
+    vendSound('errore');return false;
+  }
   function spend(btn,msg,gettoni=0){
-    if(!Number.isInteger(wallet?.btn)||wallet.btn<btn)return false;
-    wallet={btn:wallet.btn-btn,gettoni:(wallet.gettoni|0)+gettoni};
+    if(!Number.isInteger(wallet?.btn)||wallet.btn<btn||(wallet.gettoni|0)+gettoni<0)return false;
+    wallet={...wallet,btn:wallet.btn-btn,gettoni:(wallet.gettoni|0)+gettoni};
     app.walletSend?.(msg);walletShow();return true;
   }
   // i suoni di una macchinetta usata da un altro si sentono solo da vicino
@@ -1731,7 +1746,7 @@ function buildLobby3D(app, life) {
       hit(1300,6,.03,.12,0);hit(1200,6,.03,.09,.06);hit(800,3,.18,.06,.1);
     }else hit(900,4,.04,.15*p);
   }
-  const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
+  const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound,()=>payGame('balilla'));
   // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
   // due flipper uno accanto all'altro: Grand Prix (F1) e Binotto GT (endurance), ognuno con la sua classifica.
   // "pinball" è quello a cui stai giocando (o il Grand Prix se non giochi): il resto della Lobby parla con lui
@@ -1875,7 +1890,7 @@ function buildLobby3D(app, life) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - half - .03, z + half + .03); else solid(x - half - .03, x + half + .03, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => payGame(key) && app.open(key), mq });
   };
   // lungo le pareti, rivolti verso il centro della sala: a nord i grandi a 4 e 5 posti, a sud gli altri
   const byKey = new Map(list.map(e => [e[0], e]));
@@ -2253,6 +2268,8 @@ function buildLobby3D(app, life) {
     if(j.h===0&&j.v<0){c.jumping=null;c.landBend=.28;return}
     c.root.position.y+=j.h;
   }
+  // Pong sul monitor del cabinato: la partita vinta contro il computer vale 1 BTN (docs/gettoni.md)
+  addEventListener('message',e=>{if(e.origin===location.origin&&monitor&&e.source===monitor.frame.contentWindow&&e.data?.type==='arcade:record')app.record?.(e.data)});
   function resetMovement() {
     tableFootball.blur();
     crouching = false; guarding = false; // finestra persa (Alt+Tab): nessun tasto resta premuto
@@ -2526,8 +2543,12 @@ function buildLobby3D(app, life) {
     if(zoneDepth<.3)zoneArmed=true; // tornando dal gioco si parte già in fondo: si riparte solo dopo essere tornati indietro
     if(!zoneLeaving)zoneFade.style.opacity=zoneArmed?String(Math.max(0,zoneDepth-.55)/.45*.75):'0';
     if(!zoneLeaving&&zoneArmed&&pos.z<ZONE.end&&inZone(pos.x,pos.z)&&app.enterZone){
-      zoneLeaving=true;resetMovement();zoneFade.style.transition='opacity .9s';zoneFade.style.opacity='1';
-      zoneFade.textContent='Spengo la Lobby…';setTimeout(()=>app.enterZone(),950);
+      // 1 gettone a ogni entrata (docs/gettoni.md); senza gettoni la porta non ti fa passare: si torna indietro
+      if(!payGame('zona')){zoneArmed=false;zoneFade.style.opacity='0';}
+      else{
+        zoneLeaving=true;resetMovement();zoneFade.style.transition='opacity .9s';zoneFade.style.opacity='1';
+        zoneFade.textContent='Spengo la Lobby…';setTimeout(()=>app.enterZone(),950);
+      }
     }
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
@@ -2783,9 +2804,10 @@ function buildLobby3D(app, life) {
     if(seating||playing())return;
     saveActivityView();
     if (s.board) { s.act(); return; }
-    if(s.balilla){resetMovement();tableFootball.open(s.team,s.pair);return}
-    if(s.pinball){resetMovement();pinballKind=s.pinball;pinball.open();near=null;return} // al flipper: si gioca dalla barra
-    if(s.pong){toggleMonitor(s);return}
+    // giochi a gettone: 1 gettone per sedersi al balilla, per una partita al flipper, per accendere Pong
+    if(s.balilla){if(!payGame('balilla'))return;resetMovement();tableFootball.open(s.team,s.pair);return}
+    if(s.pinball){if(!payGame('flipper-'+s.pinball))return;resetMovement();pinballKind=s.pinball;pinball.open();near=null;return} // al flipper: si gioca dalla barra
+    if(s.pong){if(!monitor&&!payGame('pong'))return;toggleMonitor(s);return}
     if(s.seat){
       // divani dell'atrio e sedie dei tavoli: ci si siede (se il posto è libero), "Alzati" per tornare a camminare
       const taken=(app.peers?.()||[]).some(u=>u.clubPose?.station==='seat'&&Math.abs(u.clubPose.x-s.px)<.15&&Math.abs(u.clubPose.z-s.pz)<.15);

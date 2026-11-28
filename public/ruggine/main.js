@@ -418,6 +418,9 @@ function showResults() {
     .join('');
   // vinto: si sblocca il livello dopo (salvato sul telefono); perso: si riprova lo stesso
   const won = order[0] === player && LEVEL < MAX_LEVEL;
+  // gara vinta: 1 BTN (docs/gettoni.md)
+  if (order[0] === player && window.parent !== window)
+    parent.postMessage({ type: 'arcade:record', game: 'ruggine-89', win: true }, location.origin);
   if (won)
     try {
       localStorage.setItem(LEVEL_KEY, String(LEVEL + 1));
