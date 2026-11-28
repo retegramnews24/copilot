@@ -15,6 +15,8 @@ const SIGHT = {
   falco: [0, 0.13, 0.15]
 };
 const sight = new THREE.Vector3();
+// la canna senza mirare punta al mirino a questa distanza (metri davanti agli occhi)
+const HIP_CONVERGE = 15;
 
 // bocca della canna nelle coordinate dell'arma (da Blender: x, z, -y)
 
@@ -125,6 +127,32 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
   let flashT = 0;
   let base = null;
 
+  // Raddrizzare l'arma: nella posa fatta in Blender la canna non punta dritta verso il centro. Per ogni arma si
+  // misura una volta (posa «tiene_», arma ferma) dove punta la canna, e si tengono due rotazioni dell'arma in mano:
+  // mirando la canna sta dritta lungo lo sguardo (così tacca e mirino sono in fila con il centro); senza mirare la
+  // canna punta al mirino, HIP_CONVERGE metri più avanti.
+  const straight = {};
+  function measure(n) {
+    const m = MUZZLE[n];
+    if (!m || !guns[n]) return null;
+    const pos = holder.position.clone();
+    const quat = holder.quaternion.clone();
+    holder.position.set(0, 0, 0);
+    holder.quaternion.identity();
+    mixer.update(0);
+    holder.updateMatrixWorld(true);
+    const back = guns[n].localToWorld(new THREE.Vector3(m[0], m[1], m[2] - 0.3));
+    const tip = guns[n].localToWorld(new THREE.Vector3(...m));
+    const dir = tip.clone().sub(back).normalize();
+    const want = new THREE.Vector3(0, 0, -HIP_CONVERGE).sub(tip).normalize();
+    holder.position.copy(pos);
+    holder.quaternion.copy(quat);
+    return {
+      hip: new THREE.Quaternion().setFromUnitVectors(dir, want),
+      aim: new THREE.Quaternion().setFromUnitVectors(dir, new THREE.Vector3(0, 0, -1))
+    };
+  }
+
   function playIdle(fade = 0.15) {
     const a = mixer.clipAction(clips['tiene_' + current]);
     a.setLoop(THREE.LoopRepeat, Infinity);
@@ -168,6 +196,7 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
       for (const [n, g] of Object.entries(guns)) g.visible = n === name;
       current = name;
       playIdle(0);
+      if (!(name in straight)) straight[name] = measure(name);
       // l'arma entra dal basso
       holder.position.y = -0.25;
     },
@@ -200,6 +229,11 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
       let tx = Math.sin(t * 9) * bob - lookDelta.x * 0.6 * (1 - aim * 0.7);
       let ty = -Math.abs(Math.cos(t * 9)) * bob - lookDelta.y * 0.6 * (1 - aim * 0.7);
       const g = guns[current];
+      // l'arma raddrizzata: verso il mirino senza mirare, dritta lungo lo sguardo mirando
+      const s = straight[current];
+      if (s) holder.quaternion.copy(s.hip).slerp(s.aim, aim);
+      else holder.quaternion.identity();
+      holder.updateMatrixWorld(true);
       if (aim > 0 && g && SIGHT[current]) {
         // il punto di mira (senza lo spostamento attuale) va al centro della vista
         g.localToWorld(sight.set(...SIGHT[current])).sub(holder.position);

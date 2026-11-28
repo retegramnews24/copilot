@@ -5,7 +5,7 @@ import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { WEAPONS, AIM_SPREAD, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=d4fc18028a';
 import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=4f0b9d8f55';
 import { createControls } from './controls.js?v=87c4fd76d3';
-import { createViewmodel } from './viewmodel.js?v=346e311811';
+import { createViewmodel } from './viewmodel.js?v=2afebbe580';
 import * as sfx from './audio.js?v=337aee686c';
 import { createNet } from './net.js?v=ba2d34e023';
 import { createSoldiers, ARMI } from './soldiers.js?v=a121bc0992';

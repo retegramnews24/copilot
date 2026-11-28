@@ -32,6 +32,7 @@ medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 | Telefono | **Due levette, mira libera** (nessun aiuto): levetta a sinistra per camminare, trascinare a destra per girarsi, tasto Spara |
 | Computer | **WASD e mouse**: si cammina, **Maiusc tenuto corre** (come nella Lobby 3D; scelta del 28 novembre), mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
 | Velocità | (28 novembre) **camminata 5,2 m/s** (la corsa di prima), **corsa 7 m/s**, mirando 2,6 m/s, accucciati 2 m/s. Sul telefono si corre con la levetta spinta fino in fondo. I bot camminano |
+| Arma in mano | (28 novembre) Senza mirare la canna punta al mirino a 15 m; mirando l'arma si raddrizza lungo lo sguardo con la tacca (o il punto rosso) al centro, così si vede il punto di mira attraverso l'arma (`viewmodel.js`, rotazioni misurate dalla posa `tiene_` di ogni arma) |
 | Salto | Circa 1 m. **Si sale saltando su pietre, casse e ostacoli bassi** fino a circa 1,4 m: se durante il salto i piedi arrivano a mezzo metro dalla cima, si sale sopra (`PLAYER.climb` in `rules.js`). I muri più alti no |
 | Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
 
@@ -418,6 +419,18 @@ attraversa i muri e non vede attraverso i muri. A mano: il gruppo intero una ser
 Da decidere con il proprietario dopo la tappa 3. Idee: personaggi e animazioni migliori, suoni di passi e di
 ambiente, mappa seconda, coltello con animazione, statistiche della serata, mirino e sensibilità salvati per
 persona, altre modalità.
+
+**Mappa e ambiente più belli** (scelte del proprietario, 28 novembre). Si comincia dalla mappa in Blender, guardata
+dal proprietario in Blender; poi l'ambiente nel codice.
+- Mappa (Blender, `zona_deserto.blend`): **vita del borgo** (bancarelle con teli, carretti, giare, panni stesi,
+  tappeti, lanterne); **piante e acqua** (palme, cespugli secchi, fichi d'India, oasi col pozzo vicino alla partenza
+  Blu, erba secca ai bordi delle strade); **rovine e ripari nuovi** (case diroccate, carcasse di camion e jeep, sacchi
+  di sabbia, con le scatole per gli urti); **dettagli sui muri** (crepe, intonaco caduto, pietre a vista, scritte e
+  manifesti nostri, tende alle porte).
+- Ambiente (codice): **vento e polvere** (folate di sabbia, polvere dai passi e dai colpi, teli e bandiere che si
+  muovono); **suoni d'ambiente** (vento, uccelli, cane lontano, passi diversi su sabbia, pietra e legno); **luce più
+  bella** (ombre nei vicoli, interni più scuri, luce calda «cotta» in Blender). L'ora della partita non è stata
+  scelta: resta il pomeriggio.
 
 ## Controlli prima di ogni rilascio
 

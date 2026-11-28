@@ -21,7 +21,7 @@ import {
 } from './rules.js?v=d4fc18028a';
 import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
 import { createControls } from './controls.js?v=87c4fd76d3';
-import { createViewmodel } from './viewmodel.js?v=346e311811';
+import { createViewmodel } from './viewmodel.js?v=2afebbe580';
 import { createNet, DT } from './net.js?v=ba2d34e023';
 import * as sfx from './audio.js?v=337aee686c';
 

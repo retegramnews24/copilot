@@ -87,6 +87,10 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
   Dopo, su staging (non ancora su `main`): camminata alla velocità della corsa di prima (5,2 m/s), corsa più
   veloce (7 m/s), sul telefono si corre con la levetta in fondo, saltando si sale su pietre, casse e ostacoli bassi
   (fino a circa 1,4 m). Da provare nell'app: velocità giuste? il salto sulle pietre riesce bene?
+- Zona Operativa, arma in mano (su staging, non ancora su `main`): senza mirare la canna punta al mirino, mirando l'arma si
+  raddrizza e la tacca sta al centro. Vista nell'anteprima solo con la pistola: guardare anche le altre armi.
+- Zona Operativa, mappa e ambiente: scelte del proprietario in `docs/zona-operativa.md` (Tappa 4, «Mappa e ambiente
+  più belli»). Si comincia dalla mappa in Blender.
 
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,
