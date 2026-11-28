@@ -93,9 +93,10 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
   più belli»). Mappa in Blender (non in un commit, approvata passo passo dal proprietario): ripari nuovi, vita del
   borgo, trame con rilievo su tutto, case e torri meno da prefabbricato, terremoto (56 case su 84 mezze crollate),
   rocce arrotondate, sabbia ai muri, ai massi e dune al muro di cinta; GLB compresso con Draco (7,8 MB, lettore in
-  `public/vendor/three/addons/`), urti rigenerati, prove della mappa passate. Da fare: provarla sul telefono
-  (scalda? scatta? quanto ci mette a caricare), poi piante e acqua (palme, cespugli, fichi d'India, oasi col pozzo
-  alla partenza Blu, erba secca).
+  `public/vendor/three/addons/`), urti rigenerati, prove della mappa passate. Piante e acqua fatte (non in un
+  commit): due oasi uguali col pozzo, palme, cespugli, fichi d'India, erba secca; GLB 8,2 MB, circa 750.000
+  triangoli. Da fare: provarla sul telefono (scalda? scatta? quanto ci mette a caricare); se scatta, togliere
+  l'ombra a erba e cespugli o diradarli. Restano i dettagli sui muri (scritte, manifesti, tende alle porte).
 - Zona Operativa, mirare (non in un commit): tacche di mira vere su Baretta (tre puntini), Calabrone (diottra e palo)
   e Tuono (perline), lente ×2 per il Ruggito. Nell'anteprima provata la Baretta mirando (lama al centro della
   tacca); da provare giocando Calabrone, Tuono e la lente del Ruggito, anche sul telefono.

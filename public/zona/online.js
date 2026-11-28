@@ -20,7 +20,7 @@ import {
   pelletDirs,
   rng
 } from './rules.js?v=d4fc18028a';
-import { BOXES, GROUND } from './map-deserto.js?v=2b70c80d39';
+import { BOXES, GROUND } from './map-deserto.js?v=8b1e6b7d98';
 import { createControls } from './controls.js?v=87c4fd76d3';
 import { createViewmodel } from './viewmodel.js?v=5821919d41';
 import { createNet, DT } from './net.js?v=ba2d34e023';
@@ -154,6 +154,7 @@ function addInstanced(root) {
     if (!o.isMesh) return;
     // colori pieni e opachi, come la Lobby: niente lucido di plastica
     for (const m of [o.material].flat()) {
+      if (m.name === 'm_acqua') continue; // l'acqua delle oasi resta lucida
       m.roughness = 0.92;
       m.metalness = 0;
     }

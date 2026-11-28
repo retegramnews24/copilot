@@ -465,7 +465,14 @@ dal proprietario in Blender; poi l'ambiente nel codice.
   ai piedi dei massi (`sabbia_massi`), lungo la base di muri, case e muretti (`sabbia_muri`), e dune contro il muro di
   cinta dentro e fuori (`sabbia_mura`, alte 1-3 m; quella dentro si calpesta: entra nell'altezza del terreno del
   gioco). Niente sabbia sui punti e sulle due partenze.
-- **Peso**: circa 516.000 triangoli in tutto. Il GLB è compresso con Draco (da 42 MB a 7,8 MB): `online.js` lo legge
+- Fatto: **piante e acqua** (scelte del proprietario: due oasi uguali, tante piante, nessuna pianta con gli urti,
+  acqua bassa in cui si cammina). Due oasi col pozzo, una per partenza, simmetriche (verso -57, 37 e 57, -37):
+  pozza con l'acqua (materiale `m_acqua`, lucido: `online.js` non lo rende opaco), bordo di sabbia bagnata e sassi,
+  canne, 4 palme, erba e cespugli; il pozzo (parapetto di pietra, castello, rullo, secchio) è solido (`ripari`). La
+  duna e la sabbia ai muri lì sono abbassate. Raccolta `piante`: 17 palme (slarghi e fuori), 60 cespugli secchi,
+  30 fichi d'India, 470 ciuffi d'erba secca lungo i muri e fuori; mai nelle case, sui punti, sulle partenze, nelle
+  oasi o addosso agli oggetti del borgo. Sabbia abbassata intorno a sassi e massi (non li copre più).
+- **Peso**: circa 750.000 triangoli in tutto (230.000 delle piante). Il GLB è compresso con Draco (da 42 MB a 7,8 MB): `online.js` lo legge
   con il `DRACOLoader` di three.js 0.170.0 (`public/vendor/three/addons/loaders/DRACOLoader.js` e
   `libs/draco/gltf/`). Esportazione: scena «Scene», extras, niente luci, Y in alto, colori dai materiali, immagini
   JPEG 82, Draco livello 7. Da provare sul telefono che non scaldi e non scatti.
