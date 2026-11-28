@@ -22,7 +22,7 @@ import {
 } from './rules.js?v=d4fc18028a';
 import { BOXES, GROUND } from './map-deserto.js?v=2b70c80d39';
 import { createControls } from './controls.js?v=87c4fd76d3';
-import { createViewmodel } from './viewmodel.js?v=2afebbe580';
+import { createViewmodel } from './viewmodel.js?v=5821919d41';
 import { createNet, DT } from './net.js?v=ba2d34e023';
 import * as sfx from './audio.js?v=337aee686c';
 
@@ -641,6 +641,7 @@ function updateHud(dt) {
   $('m-b').style.top = gap + 'px';
   const scoped = aiming() && current === 'falco';
   $('cannocchiale').hidden = !scoped;
+  $('lente').hidden = !(aimT > 0.5 && current === 'ruggito' && alive);
   // mirando le mire dell'arma prendono il posto del mirino
   $('mirino').classList.toggle('nascosto', aimT > 0.5 || w.melee || !alive);
   $('t-mira').hidden = w.melee || !controls.touch;
@@ -782,14 +783,14 @@ function frame(now) {
   const aim = aiming();
   aimT += ((aim ? 1 : 0) - aimT) * Math.min(1, dt * 14);
   const scoped = aim && current === 'falco';
-  // Falco: cannocchiale ×4 subito; le altre armi stringono la vista poco a poco (×1,35)
-  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + 0.35 * aimT);
+  // Falco: cannocchiale ×4 subito; Ruggito: lente ×2; le altre armi stringono la vista poco a poco (×1,35)
+  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + (current === 'ruggito' ? 1 : 0.35) * aimT);
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
   controls.zoom = camera.fov / BASE_FOV;
-  vm.setVisible(!scoped && alive);
+  vm.setVisible(!scoped && !(aimT > 0.5 && current === 'ruggito') && alive);
   const look = { x: angleDiff(controls.yaw, prevLook.yaw), y: controls.pitch - prevLook.pitch };
   prevLook = { yaw: controls.yaw, pitch: controls.pitch };
   vm.update(

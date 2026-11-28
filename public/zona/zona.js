@@ -5,7 +5,7 @@ import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
 import { WEAPONS, AIM_SPREAD, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=d4fc18028a';
 import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=4f0b9d8f55';
 import { createControls } from './controls.js?v=87c4fd76d3';
-import { createViewmodel } from './viewmodel.js?v=2afebbe580';
+import { createViewmodel } from './viewmodel.js?v=5821919d41';
 import * as sfx from './audio.js?v=337aee686c';
 import { createNet } from './net.js?v=ba2d34e023';
 import { createSoldiers, ARMI } from './soldiers.js?v=a121bc0992';
@@ -374,6 +374,7 @@ function updateHud() {
   $('m-b').style.top = gap + 'px';
   const scoped = aiming() && current === 'falco';
   $('cannocchiale').hidden = !scoped;
+  $('lente').hidden = !(aimT > 0.5 && current === 'ruggito');
   $('mirino').classList.toggle('nascosto', aimT > 0.5 || w.melee);
   $('t-mira').hidden = w.melee || !controls.touch;
   $('t-mira').classList.toggle('on', controls.aim);
@@ -397,13 +398,14 @@ function frame(now) {
   if (aimBlock > 0) aimBlock -= dt;
   aimT += ((aiming() ? 1 : 0) - aimT) * Math.min(1, dt * 14);
   const scoped = aiming() && current === 'falco';
-  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + 0.35 * aimT);
+  // Ruggito: lente ×2; le altre armi ×1,35 poco a poco
+  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + (current === 'ruggito' ? 1 : 0.35) * aimT);
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
   }
   controls.zoom = camera.fov / BASE_FOV;
-  vm.setVisible(!scoped);
+  vm.setVisible(!scoped && !(aimT > 0.5 && current === 'ruggito'));
   const look = { x: angleDiff(controls.yaw, prevLook.yaw), y: controls.pitch - prevLook.pitch };
   prevLook = { yaw: controls.yaw, pitch: controls.pitch };
   vm.update(dt, Math.min(1, Math.hypot(body.vx, body.vz) / 5) * (body.onGround ? 1 : 0), { x: -Math.max(-0.05, Math.min(0.05, look.x)), y: Math.max(-0.05, Math.min(0.05, look.y)) }, time, current === 'falco' ? 0 : aimT);

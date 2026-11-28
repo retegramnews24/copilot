@@ -32,6 +32,8 @@ html,body{margin:0;height:100%;background:#0d0f11;color:#e8e2d2;font:15px/1.35 s
 #cannocchiale::before,#cannocchiale::after{content:"";position:absolute;background:#000}
 #cannocchiale::before{left:0;right:0;top:50%;height:1px}
 #cannocchiale::after{top:0;bottom:0;left:50%;width:1px}
+/* Ruggito mirando: lente ×2 del punto rosso, tubo scuro intorno, vetro appena colorato */
+#lente{position:fixed;inset:0;pointer-events:none;background:radial-gradient(circle at 50% 50%,rgba(120,170,200,.06) 0,rgba(120,170,200,.06) min(40vw,40vh),rgba(0,0,0,.55) calc(min(40vw,40vh) + 1px),#14161a calc(min(40vw,40vh) + 7px),#0b0c0e calc(min(40vw,40vh) + 9px),#000 calc(min(46vw,46vh)))}
 .schermo{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,9,10,.82);padding:16px;box-sizing:border-box}
 .pannello{width:min(440px,100%);max-height:100%;overflow:auto;background:#16181b;border:1px solid #2c2f34;border-radius:14px;padding:20px;box-sizing:border-box}
 .pannello h1{margin:0 0 2px;font:900 26px/1 "Arial Black",Arial,sans-serif;letter-spacing:.04em;color:#ff3b30}

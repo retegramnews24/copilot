@@ -6,11 +6,12 @@ import * as THREE from 'three';
 export const WEAPON_NAMES = ['baretta', 'calabrone', 'tuono', 'ruggito', 'falco', 'coltello'];
 
 // punto di mira di ogni arma (tacca, mirino o lente del punto rosso), nelle coordinate dell'arma come MUZZLE
-// (misurati in blender/zona_armi.blend): mirando va al centro della vista
+// (misurati in blender/zona_armi.blend): mirando va al centro della vista. Baretta: altezza dei tre puntini;
+// Calabrone: centro dell'anello della diottra (e cima del mirino a palo); Tuono: centro della perlina in punta
 const SIGHT = {
-  baretta: [0, 0.088, 0],
-  calabrone: [0, 0.095, 0],
-  tuono: [0, 0.064, 0.3],
+  baretta: [0, 0.0868, 0],
+  calabrone: [0, 0.0935, 0],
+  tuono: [0, 0.0605, 0.3],
   ruggito: [0, 0.1, 0.05],
   falco: [0, 0.13, 0.15]
 };
