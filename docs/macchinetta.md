@@ -89,6 +89,49 @@ tasto, cartoccio, quattro chicchi, bicchierone, coperchio, cola, lampadine; i pe
 codice in `public/lobby3d/popcorn.js` (`createPopcorn`, `makeHeldPopcorn`, `makeHeldCola`), suoni in `vending.js`
 (scoppio, sfrigolio, versa). Prova del server in `tests/expedition-runtime.test.js`.
 
+## Macchinetta automatica degli hot dog
+
+Decisioni del proprietario (28 novembre 2026):
+
+- **Posto:** nell'atrio, sulla parete della sala giochi (x -6,84), dal lato del cinema, verso l'angolo dei popcorn:
+  tra l'applique (z 3,3) e la pianta (z 5,4), circa z 4,25, girata verso l'atrio.
+- **Aspetto:** acciaio inox da street food, grande come la macchinetta caffè e snack (1,15 × 1,95 m, profonda 0,72).
+  Insegna rossa in piedi sopra la vetrina, cornice gialla luminosa attorno al vetro davanti, striscia rossa sotto.
+- **Vetro su tutti i lati:** la camera dove si prepara è una vetrina con vetro davanti, ai fianchi e sopra; dietro
+  resta l'acciaio, contro il muro.
+- **Si vedono tutti i passaggi:** il braccio robot prende il panino dalla mensola e lo infilza sul punzone che scalda;
+  il würstel scalda e gira sui rulli; il braccio prende i flaconi delle salse scelte, li capovolge e le mette nel
+  panino; infila il würstel, mette l'hot dog sul foglio di carta, la carta lo avvolge, la botola del vassoio si apre e
+  l'hot dog scende allo sportello di ritiro.
+- **Salse:** maionese, senape e ketchup, a scelta (anche più di una). Le prende un **braccio robot** appeso a un
+  carrello su un binario sotto il tetto.
+- **Hot dog vegano:** würstel vegani su una **griglia a parte**, più in alto e dietro quella normale, con la
+  targhetta e la bandierina verdi. Salse uguali per tutti e due (niente maionese vegana).
+- **Tasti:** sul mobile basso, a sinistra dello sportello: display, **Classico** e **Vegano**, poi **Maionese**,
+  **Senape**, **Ketchup**, e il tasto grande **Prepara**.
+
+Fatto: `blender/hotdog.blend` → `public/lobby3d/models/hotdog.glb` (circa 740 KB, 13.500 triangoli). Lo script che
+lo costruisce è dentro il file (testo `hotdog_build.py`). Davanti verso -Y in Blender (+z in three), base a terra,
+centro in x e y. I pezzi che si muovono sono oggetti a parte, **già al loro posto nella macchina**, con l'origine nel
+punto dove girano o si attaccano (il codice legge da lì la posizione di riposo):
+
+- `rullo_0…4` e `rullo_vegano_0…2` girano attorno a X; `wurstel_0…3` e `wurstel_vegano_0…1` nelle scanalature
+  (origine al centro, rotolano);
+- `panino` infilzato su `punzone` (origine alla base), `panini_scorta` (tre sulla mensola), `salsa_maionese`,
+  `salsa_senape`, `salsa_ketchup` (tre archi attorno al buco, origine in cima al panino);
+- `flacone_maionese`, `flacone_senape`, `flacone_ketchup` (origine a metà corpo, dove li prende la pinza);
+- braccio: `carrello` (scorre lungo X) → `braccio_base` (gira attorno a Z) → `braccio_spalla` → `braccio_gomito` →
+  `braccio_polso` (girano attorno a Y) → `dito_sx`, `dito_dx` (si aprono lungo X);
+- `rotolo_carta` (gira attorno a X), `carta` (foglio sul vassoio), `carta_avvolta` (attorno all'hot dog finito,
+  nascosta in Blender), `botola` (cerniera dietro, gira attorno a X), `sportello` (cerniera in alto);
+- `tasto_classico`, `tasto_vegano`, `tasto_maionese`, `tasto_senape`, `tasto_ketchup`, `tasto_prepara` (origine
+  dietro, si premono verso +Y), `display`, `insegna`: la faccia davanti ha UV da 0 a 1 per le scritte;
+- materiali a parte per far brillare il calore: `resistenza_griglia`, `resistenza_vegano`, `resistenza_punzone`.
+
+Da fare: il codice nella Lobby (terza macchinetta in `club-machines.js` e nel blocco «Macchinette» di `lobby3d.js`),
+con le stesse regole: una persona alla volta e tutti vedono. Da decidere: scritte di insegna, display e tasti; come si
+tiene in mano e quanti morsi.
+
 ## Da fare
 
 Provarle nell'app di prova con due giocatori: si vede il prodotto in mano all'altro? Quando uno usa una macchinetta,

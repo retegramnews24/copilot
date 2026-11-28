@@ -19,6 +19,11 @@ Aggiornato il 28 novembre 2026.
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,
 anche con due giocatori.
 
+**Macchinetta degli hot dog della Lobby 3D** (`docs/macchinetta.md`, «Macchinetta automatica degli hot dog»):
+modello approvato dal proprietario (`blender/hotdog.blend` → `models/hotdog.glb`, non in un commit): inox street
+food, vetrina di vetro su tre lati e sopra, braccio robot per le salse, griglia vegana a parte. Da fare: il codice,
+come terza macchinetta, sulla parete della sala giochi verso l'angolo dei popcorn.
+
 **Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario. Nella 1.0.70 (staging e main), da
 guardare con un film vero nell'app: sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
 ingresso in piano con la Lobby, poi una rampa continua (niente gradini) che scende di 60 cm fino alla prima fila,

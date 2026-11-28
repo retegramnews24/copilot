@@ -33,6 +33,8 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 - Carrello dei popcorn e della Binotto Cola (`blender/popcorn.blend` → `public/lobby3d/models/popcorn.glb`, circa
   1 MB): nell'atrio a sinistra della porta del cinema, tra la pianta e il divano. Funzionamento e scelte in
   `docs/macchinetta.md`.
+- Macchinetta automatica degli hot dog (`blender/hotdog.blend` → `public/lobby3d/models/hotdog.glb`, circa 740 KB):
+  solo il modello, per la parete della sala giochi verso l'angolo dei popcorn. Scelte in `docs/macchinetta.md`.
 - Zona operativa (`public/lobby3d/corridor.js`): porta blindata industriale sulla parete nord della sala giochi
   (centro x -15,95, vano 1,2 × 2,3 m, insegna rossa «ZONA OPERATIVA»; il quadro «INSERT COIN» è stato spostato a
   x -17,85 per farle posto). Si apre scorrendo avvicinandosi. Dietro, un tunnel di cemento di 12 m (z -6,3…-18,3,
