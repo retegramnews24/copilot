@@ -108,8 +108,35 @@ assert.equal(rayBox({ x: 0, y: 3, z: 0 }, { x: 0, y: 0, z: 1 }, { min: [-1, 0, 5
   run(body, { fwd: 0, side: 0, yaw: s.yaw, pitch: 0 }, 0.5, POLIGONO.boxes);
   assert.ok(body.onGround && Math.abs(body.y) < 1e-6, 'si sta in piedi sul pavimento');
   const walker = newBody(-5, 0, -7, s.yaw);
-  run(walker, { fwd: 0, side: -1, yaw: s.yaw, pitch: 0 }, 1, POLIGONO.boxes);
-  assert.ok(walker.x > -0.5 && walker.x < 0.5, 'in un secondo si fanno circa 5 m: ' + walker.x);
+  run(walker, { fwd: 0, side: -1, walk: true, yaw: s.yaw, pitch: 0 }, 1, POLIGONO.boxes);
+  assert.ok(walker.x > -0.5 && walker.x < 0.5, 'camminando in un secondo si fanno circa 5 m: ' + walker.x);
+  const runner = newBody(-5, 0, -7, s.yaw);
+  run(runner, { fwd: 0, side: -1, yaw: s.yaw, pitch: 0 }, 1, POLIGONO.boxes);
+  assert.ok(runner.x > 1.2 && runner.x < 2.2, 'correndo in un secondo si fanno circa 7 m: ' + runner.x);
+  // saltando contro una pietra di 1,2 m si sale sopra, anche sbattendo contro il bordo mentre si sale
+  for (const from of [0.4, 0.9, 1.4]) {
+    const rock = [{ min: [-1, 0, -3], max: [1, 1.2, -2] }];
+    const r = newBody(0, 0, -2 + PLAYER.radius + from, 0);
+    r.onGround = true;
+    let landed = false;
+    for (let i = 0; i < 90 && !landed; i++) {
+      moveStep(r, { fwd: 1, side: 0, walk: true, jump: i === 0, yaw: 0, pitch: 0 }, 1 / 60, rock);
+      landed = r.onGround && Math.abs(r.y - 1.2) < 0.01;
+    }
+    assert.ok(landed, 'sulla pietra saltando a ' + from + ' m dal bordo: ' + r.y);
+  }
+  // un muro di 1,6 m invece non si sale
+  {
+    const wall = [{ min: [-1, 0, -3], max: [1, 1.6, -2] }];
+    const r = newBody(0, 0, -2 + PLAYER.radius + 0.6, 0);
+    r.onGround = true;
+    let top = 0;
+    for (let i = 0; i < 90; i++) {
+      moveStep(r, { fwd: 1, side: 0, walk: true, jump: i === 0, yaw: 0, pitch: 0 }, 1 / 60, wall);
+      if (r.onGround) top = Math.max(top, r.y);
+    }
+    assert.ok(top < 0.01 && r.z > -2, 'un muro di 1,6 m non si sale: ' + top);
+  }
   run(body, { fwd: 1, side: 0, yaw: s.yaw, pitch: 0 }, 8, POLIGONO.boxes);
   assert.ok(Math.abs(body.z - (-5.4 - PLAYER.radius)) < 0.01, 'il bancone delle armi ferma: ' + body.z);
   const lane = newBody(5.6, 0, -1.2, s.yaw);

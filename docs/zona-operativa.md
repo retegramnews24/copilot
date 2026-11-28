@@ -31,11 +31,18 @@ medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 | Grafica | **Low-poly come la Lobby 3D**: forme semplici, colori pieni, modelli Blender leggeri |
 | Telefono | **Due levette, mira libera** (nessun aiuto): levetta a sinistra per camminare, trascinare a destra per girarsi, tasto Spara |
 | Computer | **WASD e mouse**: si cammina, **Maiusc tenuto corre** (come nella Lobby 3D; scelta del 28 novembre), mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
+| Velocità | (28 novembre) **camminata 5,2 m/s** (la corsa di prima), **corsa 7 m/s**, mirando 2,6 m/s, accucciati 2 m/s. Sul telefono si corre con la levetta spinta fino in fondo. I bot camminano |
+| Arma in mano | (28 novembre) Senza mirare la canna punta al mirino a 15 m; mirando l'arma si raddrizza lungo lo sguardo con la tacca (o il punto rosso) al centro, così si vede il punto di mira attraverso l'arma (`viewmodel.js`, rotazioni misurate dalla posa `tiene_` di ogni arma). Tacche di mira vere, in misura (scelta del proprietario, al posto di un segno a schermo; la prima versione, grossa e colorata, «faceva ridere»): Baretta con tacca a coda di rondine, fessura e tre puntini bianchi; Calabrone con diottra ad anello e mirino a palo con due alette; Tuono con perlina d'ottone in punta e perlina avorio a metà (`zona_armi.blend`, altezze in `SIGHT` di `viewmodel.js`). **Ruggito: lente ×1,5 dentro il mirino** (28 novembre, il proprietario: niente schermo nero come il cecchino): la vista resta normale e l'arma in mano, e solo dentro la finestrella del mirino a punto rosso la scena si ridisegna ingrandita ×1,5 (`lensRect` in `viewmodel.js`, `drawLens` in `zona.js` e `online.js`); il punto rosso al centro. Mirando a fondo l'arma sta ferma (niente dondolio né ritardo quando si gira la vista) |
+| Salto | Circa 1 m. **Si sale saltando su pietre, casse e ostacoli bassi** fino a circa 1,4 m: se durante il salto i piedi arrivano a mezzo metro dalla cima, si sale sopra (`PLAYER.climb` in `rules.js`). I muri più alti no |
 | Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
 
 Aggiornamento del 28 novembre (scelte del proprietario): la partita sul deserto è **sempre a squadre**, Rossa contro
-Blu, 4 contro 4, al massimo 8 persone; i posti vuoti li prendono i **bot**, livello **medi**; **all'inizio si
-sceglie la squadra** (Rossa, Blu o automatica). Si mira **tenendo premuto il tasto destro** con tutte le armi, e
+Blu, 4 contro 4, al massimo 8 persone; i posti vuoti li prendono i **bot**, livello **medi**, poi (28 novembre, più
+tardi) **un po' più facili** (reagiscono in circa 0,7 s, sbagliano di più da lontano, si girano più piano, vedono fino a
+55 m: `BOT` in `zona-bots.js`); **all'inizio si sceglie la squadra** (Rossa, Blu o automatica). **Armi a rotazione**
+(28 novembre): a ogni rinascita, oltre a pistola e coltello, l'arma principale successiva del giro Calabrone → Tuono →
+Ruggito → Falco, con un punto di partenza a caso per ognuno (`SPAWN_ROTATION`); i bot girano fra Calabrone, Ruggito e
+Tuono. Le armi a terra restano. Si mira **tenendo premuto il tasto destro** con tutte le armi, e
 mirando **si cammina soltanto**. Il poligono di tiro è condiviso (ci si vede, niente fuoco amico).
 
 ### Ancora da decidere (domande a scelta al proprietario, quando serve)
@@ -416,6 +423,63 @@ attraversa i muri e non vede attraverso i muri. A mano: il gruppo intero una ser
 Da decidere con il proprietario dopo la tappa 3. Idee: personaggi e animazioni migliori, suoni di passi e di
 ambiente, mappa seconda, coltello con animazione, statistiche della serata, mirino e sensibilità salvati per
 persona, altre modalità.
+
+**Mappa e ambiente più belli** (scelte del proprietario, 28 novembre). Si comincia dalla mappa in Blender, guardata
+dal proprietario in Blender; poi l'ambiente nel codice.
+- Mappa (Blender, `zona_deserto.blend`): **vita del borgo** (bancarelle con teli, carretti, giare, panni stesi,
+  tappeti, lanterne); **piante e acqua** (palme, cespugli secchi, fichi d'India, oasi col pozzo vicino alla partenza
+  Blu, erba secca ai bordi delle strade); **rovine e ripari nuovi** (case diroccate, carcasse di camion e jeep, sacchi
+  di sabbia, con le scatole per gli urti); **dettagli sui muri** (crepe, intonaco caduto, pietre a vista, scritte e
+  manifesti nostri, tende alle porte).
+- Ambiente (codice): **vento e polvere** (folate di sabbia, polvere dai passi e dai colpi, teli e bandiere che si
+  muovono); **suoni d'ambiente** (vento, uccelli, cane lontano, passi diversi su sabbia, pietra e legno); **luce più
+  bella** (ombre nei vicoli, interni più scuri, luce calda «cotta» in Blender). L'ora della partita non è stata
+  scelta: resta il pomeriggio.
+- **Qualità prima del peso** (28 novembre): i ripari fatti a scatole sono stati scartati («sembra un gioco da 20
+  centesimi»). Gli oggetti nuovi si fanno curati (spigoli smussati, ruote rotonde, pezzi veri); il limite dei
+  triangoli non è più 60.000 ma quanto regge un telefono moderno (le copie uguali a istanze), da provare sul telefono.
+  Al server i triangoli non pesano: usa solo le scatole degli urti.
+- Fatto: **rovine e ripari** (raccolta `ripari`, con gli urti): un camion nell'angolo nord-est vuoto (cabina, cassone
+  a tavole con una sponda rotta, una ruota mancante), 2 jeep vicino alle mura est e ovest, 6 postazioni di sacchi di
+  sabbia a C alte circa 1 m su una montagnola, 2 case diroccate a L con porta e architrave, pietre a vista e travi;
+  stile ruggine e sabbia. Tutto a coppie simmetriche (il camion sulla diagonale, a uguale distanza dalle due
+  partenze), almeno 2,2 m liberi intorno. Macerie e trave caduta nella raccolta `arredi`, senza urti. Le scatole
+  degli urti di questi oggetti stanno in mesh a parte (`<nome>_urti`, proprietà `urti` della mesh), non nel GLB.
+  Circa 11.700 triangoli contando le copie.
+- Fatto: **vita del borgo** (colori caldi e sbiaditi, tanti oggetti): mercato di 6 bancarelle sulla diagonale verso
+  (-22, -30), altre 4 bancarelle e 8 carretti a coppie simmetriche (raccolta `ripari`, con gli urti), 67 giare, 55
+  lanterne, 16 fili di panni tra i muri dei vicoli, tappeti stesi, appesi e arrotolati (raccolta `arredi`, senza
+  urti). Tutto contro i muri delle case, mai davanti a porte e finestre, a 1,2 m dai punti, con 3 m liberi davanti
+  agli oggetti grandi. I tetti di stoffa delle bancarelle sono oggetti a parte (`telo_…`), per farli muovere col
+  vento nel codice. Oggetti `b_…`.
+- Fatto: **trame su tutto**, cotte dalle trame procedurali di Blender (Noise, Voronoi, Brick, Wave) in immagini
+  1024 ripetibili, in grigio, moltiplicate per i colori dei vertici: intonaco, pietra a corsi, roccia, sabbia, legno,
+  metallo, stoffa, cotto (materiali `m_…`, immagini `trama_…`), ognuna con la sua mappa di rilievo (`rilievo_…`).
+- Fatto: **case e torri meno da prefabbricato**: muri irregolari (gonfi e incavi di qualche centimetro, piede più
+  largo, appena rastremati), spigoli con una smussatura sola e ombreggiatura morbida, sporco alla base, travi di legno
+  sotto i tetti delle case di fango, cupola liscia a file di piastrelle. La pietra (mura, muri alti, torre centrale,
+  case D) ha un trattamento più leggero (il proprietario: «un po' troppo»). Ogni casa ha la sua sfumatura: è una
+  copia (`tinta_…`) della mesh del suo tipo, che resta la sorgente (proprietà `tipo_casa`).
+- Fatto: **terremoto** (scelto dal proprietario al posto di una simulazione con la fisica): 56 case su 84 (2 su 3,
+  dentro e fuori dalle mura) hanno la parte alta tagliata (Boolean esatto) da un angolo o da un lato, mai sotto
+  2,3 m, così le porte restano libere; macerie, blocchi e sabbia ai piedi (`crollo_…`). Torre centrale, mura e case
+  con il Falco restano intere. Gli urti delle case crollate sono le scatole del tipo, abbassate nella zona crollata
+  (`urti_crollo_…`). Scelto il terremoto numero 1, forza 2,2, quota 0,67.
+- Fatto: **massi e sassi** rifatti come rocce arrotondate e irregolari (stessi posti, stesse scatole); **sabbia**
+  ai piedi dei massi (`sabbia_massi`), lungo la base di muri, case e muretti (`sabbia_muri`), e dune contro il muro di
+  cinta dentro e fuori (`sabbia_mura`, alte 1-3 m; quella dentro si calpesta: entra nell'altezza del terreno del
+  gioco). Niente sabbia sui punti e sulle due partenze.
+- Fatto: **piante e acqua** (scelte del proprietario: due oasi uguali, tante piante, nessuna pianta con gli urti,
+  acqua bassa in cui si cammina). Due oasi col pozzo, una per partenza, simmetriche (verso -57, 37 e 57, -37):
+  pozza con l'acqua (materiale `m_acqua`, lucido: `online.js` non lo rende opaco), bordo di sabbia bagnata e sassi,
+  canne, 4 palme, erba e cespugli; il pozzo (parapetto di pietra, castello, rullo, secchio) è solido (`ripari`). La
+  duna e la sabbia ai muri lì sono abbassate. Raccolta `piante`: 17 palme (slarghi e fuori), 60 cespugli secchi,
+  30 fichi d'India, 470 ciuffi d'erba secca lungo i muri e fuori; mai nelle case, sui punti, sulle partenze, nelle
+  oasi o addosso agli oggetti del borgo. Sabbia abbassata intorno a sassi e massi (non li copre più).
+- **Peso**: circa 750.000 triangoli in tutto (230.000 delle piante). Il GLB è compresso con Draco (da 42 MB a 7,8 MB): `online.js` lo legge
+  con il `DRACOLoader` di three.js 0.170.0 (`public/vendor/three/addons/loaders/DRACOLoader.js` e
+  `libs/draco/gltf/`). Esportazione: scena «Scene», extras, niente luci, Y in alto, colori dai materiali, immagini
+  JPEG 82, Draco livello 7. Da provare sul telefono che non scaldi e non scatti.
 
 ## Controlli prima di ogni rilascio
 

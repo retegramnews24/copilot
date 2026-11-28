@@ -18,7 +18,7 @@ import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=6d79d0e827';
-import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a262b27013';
+import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a5078a2ed5';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea7100a3a8';
@@ -26,7 +26,9 @@ import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb
 import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
 import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
 import { createTableLive } from './table-live.js?v=df2df46159';
-import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=278b8afd1b';
+import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=eef1f7fde9';
+import { createPopcorn, makeHeldPopcorn, makeHeldCola } from './popcorn.js?v=476f889a23';
+import { createHotdog, makeHeldHotdog } from './hotdog.js?v=e76ce4b98f';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 import { buildCorridor, inZone, ZONE } from './corridor.js?v=0fb346722b';
 
@@ -538,7 +540,7 @@ function buildLobby3D(app, life) {
     leaves.position.set(x,0,z);scene.add(leaves);groundTint(x,z,.85,.85,contact);
     solid(x - 0.3, x + 0.3, z - 0.3, z + 0.3);
   };
-  plant(-6.4, -5.4); plant(6.4, -5.4); plant(-6.4, 5.4);
+  plant(-6.4, -5.4); plant(6.4, -5.4); plant(-5.475, 5.55); // la terza accanto al divano, l'angolo è dei popcorn
   // cartelli sopra le porte
   function doorSign(title,color,x,yaw){
     const group=new THREE.Group();group.position.set(x,2.92,0);group.rotation.y=yaw;scene.add(group);
@@ -1405,77 +1407,218 @@ function buildLobby3D(app, life) {
   }
   drawLocandina(null);
 
-  // Macchinetta caffè e snack (docs/macchinetta.md; vending.js, models/macchinetta.glb), nell'atrio contro la parete
-  // del cinema, a destra della porta, girata verso l'atrio. «Usa (E)»: la visuale va davanti al pannello e si toccano
-  // i tasti; il prodotto pronto si prende toccandolo e passa in mano al personaggio; «Mangia / Bevi» (F) per consumarlo
-  // in tre volte. Gli altri lo vedono: il prodotto in mano viaggia nella posa (snack: id, quanti ne restano, morsi).
-  const VEND={x:6.15,z:5.22},HELD_SCALE=2.2; // in mano più grande del vero: i personaggi sono a blocchi
-  let vend=null,vendGltf=null,vendMode=false,held=null,heldBites=0;
+  // Macchinette dell'atrio (docs/macchinetta.md): contro la parete del cinema, a destra della porta, caffè e snack
+  // (vending.js, models/macchinetta.glb); nell'angolo, sulla parete della sala giochi, il carrello dei popcorn e della
+  // Binotto Cola (popcorn.js, models/popcorn.glb). «Usa (E)»: la visuale va davanti e si toccano i tasti; il prodotto pronto si
+  // prende toccandolo. Una persona alla volta: chi la usa lo dice nella posa (use: macchinetta, scelta, ordini, prese),
+  // il server la lascia al primo (club-machines.js) e tutti vedono sulla loro macchinetta quello che fa.
+  // In mano: lo snack o il cartoccio nella destra («Mangia»), la cola nella sinistra («Bevi»); tutto con la F, prima
+  // quello nella destra, poi la cola; seduti al cinema
+  // la cola sta nel portabicchiere del bracciolo. Anche questo viaggia nella posa (snack, drink).
+  // sulla stessa parete (x -6,84), tra l'applique e la porta, la macchinetta degli hot dog (hotdog.js,
+  // models/hotdog.glb): larga 1,15 m, profonda 0,72. Tutte e due girate verso l'atrio (+x); POP e DOG sono i centri.
+  const VEND={x:6.15,z:5.22},POP={x:-6.46,z:4.4},DOG={x:-6.45,z:2.3},HELD_SCALE=2.2,CUP_SCALE=1.4; // in mano più grandi del vero: i personaggi sono a blocchi
+  let dog=null,dogGltf=null;
+  let vend=null,vendGltf=null,pop=null,popGltf=null,vendMode=false,atMachine=null,held=null,heldBites=0,drink=null,drinkSips=0,mySip=9;
+  let useN=0,useT=0,useK=''; // alla macchinetta che stai usando: ordini fatti, prodotti presi, ultima scelta
   const vendSound=vendingSounds(()=>soundAllowed()&&audioContext?.state==='running'?audioContext:null);
+  // i suoni di una macchinetta usata da un altro si sentono solo da vicino
+  const nearSound=at=>name=>{if(vendMode||Math.hypot(pos.x-at.x,pos.z-at.z)<7)vendSound(name)};
   solid(VEND.x-.57,VEND.x+.57,VEND.z,6.0);
-  spots.push({x:VEND.x,z:VEND.z-.3,hx:.55,hz:.2,pad:.7,label:'Macchinetta',where:'Lobby',vend:true,act:()=>{}});
+  spots.push({x:VEND.x,z:VEND.z-.3,hx:.55,hz:.2,pad:.7,label:'Macchinetta',where:'Lobby',vend:true,machine:'vend',act:()=>{}});
+  solid(-6.84,POP.x+.3,POP.z-.43,POP.z+.43);
+  spots.push({x:POP.x+.42,z:POP.z,hx:.14,hz:.45,pad:.7,label:'Popcorn',where:'Lobby',vend:true,machine:'pop',act:()=>{}});
   new GLTFLoader().load(new URL('models/macchinetta.glb',import.meta.url).href,gltf=>{
-    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:vendSound});
+    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:nearSound(VEND)});
     vend.root.position.set(VEND.x,0,VEND.z);vend.root.rotation.y=Math.PI;scene.add(vend.root);
+    vend.onChange(e=>{if(atMachine==='vend'&&e.state==='scende'){useN++;useK=e.order||'';myPlay={m:'vend',k:useK,n:useN}}});
   });
-  const vendExit=document.createElement('button'),eatButton=document.createElement('button');
-  vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=true;
-  // sul computer «Mangia / Bevi» sta sopra il tasto d'azione, così non si coprono
-  for(const [b,up] of [[vendExit,8],[eatButton,60]])b.style.cssText=touch?'order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + '+up+'px);left:50%;transform:translateX(-50%);white-space:nowrap';
-  (touch?dock:el).append(vendExit,eatButton);
-  function enterVend(){
-    if(!vend||held)return;
+  new GLTFLoader().load(new URL('models/popcorn.glb',import.meta.url).href,gltf=>{
+    popGltf=gltf;pop=createPopcorn(gltf,{sound:nearSound(POP)});
+    pop.root.position.set(POP.x,0,POP.z);pop.root.rotation.y=Math.PI/2;scene.add(pop.root);
+    pop.onChange(e=>{if(atMachine==='pop'&&e.state==='prepara'){useN++;useK=e.key||'';myPlay={m:'pop',k:useK,n:useN}}});
+  });
+  solid(-6.84,DOG.x+.38,DOG.z-.58,DOG.z+.58);
+  spots.push({x:DOG.x+.5,z:DOG.z,hx:.16,hz:.55,pad:.7,label:'Hot dog',where:'Lobby',vend:true,machine:'dog',act:()=>{}});
+  new GLTFLoader().load(new URL('models/hotdog.glb',import.meta.url).href,gltf=>{
+    dogGltf=gltf;dog=createHotdog(gltf,{sound:nearSound(DOG)});
+    dog.root.position.set(DOG.x,0,DOG.z);dog.root.rotation.y=Math.PI/2;scene.add(dog.root);
+    dog.onChange(e=>{if(atMachine==='dog'&&e.state==='prepara'){useN++;useK=e.code||'';myPlay={m:'dog',k:useK,n:useN}}});
+  });
+  const machineOf=m=>m==='pop'?pop:m==='dog'?dog:vend;
+  const vendExit=document.createElement('button'),eatButton=document.createElement('button'),drinkButton=document.createElement('button');
+  vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=drinkButton.hidden=true;
+  // sul computer «Mangia» e «Bevi» stanno sopra il tasto d'azione, così non si coprono
+  for(const [b,up] of [[vendExit,8],[eatButton,60],[drinkButton,112]])b.style.cssText=touch?'order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + '+up+'px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  (touch?dock:el).append(vendExit,eatButton,drinkButton);
+  // chi sta usando una macchinetta (un altro): il suo nome, o null
+  function machineBusy(m){for(const c of peers.values())if(c.useWanted?.m===m)return c.userName||'un amico';return null}
+  // ordini lasciati (scelta del proprietario, 28 novembre 2026): si può andare via mentre la macchinetta prepara;
+  // l'ordine resta nella posa (orders) finché sei nel club, la macchinetta finisce per tutti e chiunque passi può
+  // ritirare il prodotto. Se esci dal club il prodotto si butta e la macchinetta torna libera.
+  const myOrders=new Map(); // macchinetta → {k, n} dei tuoi ordini lasciati
+  let myPlay=null; // l'ultimo ordine fatto alla macchinetta che stai usando
+  function enterMachine(m){
+    const machine=machineOf(m);
+    if(!machine||machineBusy(m)||(m!=='pop'&&held))return;
     if(document.pointerLockElement)document.exitPointerLock?.();
+    atMachine=m;useK='';myPlay=null;
     vendMode=true;resetMovement();me.root.visible=false;actB.hidden=true;stick.hidden=true;vendExit.hidden=false;near=null;
   }
   function exitVend(){
     if(!vendMode)return;
-    vendMode=false;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
+    // andando via mentre prepara (o col prodotto pronto) l'ordine resta: la macchinetta finisce e lo tiene lì
+    const machine=machineOf(atMachine);
+    if(machine&&machine.state()!=='scegli'&&myPlay?.m===atMachine)myOrders.set(atMachine,{k:myPlay.k,n:myPlay.n});
+    vendMode=false;atMachine=null;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
   }
   vendExit.onclick=exitVend;
-  // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto (vano, sportello o bicchiere)
+  // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto
   const vendRay=new THREE.Raycaster(),vendNDC=new THREE.Vector2();
   el.addEventListener('pointerdown',e=>{
-    if(!vendMode||!vend||e.target.tagName!=='CANVAS')return;
+    const machine=machineOf(atMachine);
+    if(!vendMode||!machine||e.target.tagName!=='CANVAS')return;
     e.stopPropagation();e.preventDefault();
     const b=host.getBoundingClientRect();vendNDC.set(2*(e.clientX-b.left)/b.width-1,1-2*(e.clientY-b.top)/b.height);
     vendRay.setFromCamera(vendNDC,camera);
-    const hit=vendRay.intersectObject(vend.root,true)[0];if(!hit)return;
+    const hit=vendRay.intersectObject(machine.root,true)[0];if(!hit)return;
+    if(atMachine==='pop'){
+      // le mani: il cartoccio va nella destra, la cola nella sinistra; se sono già piene, il tasto non parte
+      let o=hit.object;while(o&&!o.userData.popcorn)o=o.parent;
+      const v=o?.userData.popcorn;if(!v)return;
+      if(v.type==='key'&&pop.state()==='scegli'&&((v.key!=='cola'&&held)||(v.key!=='popcorn'&&drink))){vendSound('errore');return}
+      // un ordine lasciato da un altro: si ritira solo con la mano giusta libera
+      if(v.type==='item'&&pop.ready().some(p=>p.id==='popcorn'?held:drink)){vendSound('errore');return}
+      pop.hit(hit.object);
+      if(v.type==='item'){const got=pop.take();if(got){useT++;for(const p of got)p.id==='popcorn'?holdPopcorn():holdCola();exitVend()}}
+      return;
+    }
+    if(atMachine==='dog'){
+      // l'hot dog pronto nello sportello: si tocca e va nella mano destra
+      const v=dog.hit(hit.object);
+      if(v?.type==='item'){const got=dog.take();if(got){useT++;holdProduct(makeHeldHotdog(dogGltf,got.k));exitVend()}}
+      return;
+    }
     const readyMesh=vend.ready()?.mesh;let onReady=false;
     for(let q=hit.object;q;q=q.parent)if(q===readyMesh)onReady=true;
     const v=vend.hit(hit.object);
-    if(onReady||v?.type==='flap'||v?.type==='cup'){const product=vend.take();if(product){holdProduct(product);exitVend()}}
+    if(onReady||v?.type==='flap'||v?.type==='cup'){const product=vend.take();if(product){useT++;holdProduct(makeHeld(vendGltf,product));exitVend()}}
   },true);
-  function holdProduct(product){
-    held=makeHeld(vendGltf,product);heldBites=0;held.group.scale.setScalar(HELD_SCALE);scene.add(held.group);
-    eatButton.textContent=(product.pack?'Mangia':'Bevi')+' · '+product.name+(touch?'':' (F)');eatButton.hidden=false;
+  function holdProduct(item){
+    held=item;heldBites=0;held.group.scale.setScalar(HELD_SCALE);scene.add(held.group);
+    const product=item.product;
+    eatButton.textContent=(product.pack?'Mangia':'Bevi')+' · '+product.name+(touch?'':' (F)');eatButton.hidden=false;drinkLabel();
   }
+  const holdPopcorn=()=>popGltf&&holdProduct(makeHeldPopcorn(popGltf));
+  function holdCola(){
+    if(!popGltf)return;
+    drink=makeHeldCola(popGltf);drinkSips=0;drink.group.scale.setScalar(HELD_SCALE);scene.add(drink.group);
+    drinkButton.hidden=false;drinkLabel();
+  }
+  // tutto con la F (scelta del proprietario): prima quello che hai nella destra, poi la cola
+  function drinkLabel(){if(drink)drinkButton.textContent='Bevi · '+drink.product.name+(touch||held?'':' (F)')}
   function eat(){
     if(!held||!held.left())return;
     const left=held.bite();heldBites++;vendSound(held.product.pack?'morso':'sorso');
     (me.fx||(me.fx={crouch:0,guard:0,punch:9,starsUntil:0})).bite=0;
-    if(!left){const done=held;held=null;eatButton.hidden=true;setTimeout(()=>done.group.removeFromParent(),450)}
+    if(!left){const done=held;held=null;eatButton.hidden=true;setTimeout(()=>done.group.removeFromParent(),450);drinkLabel()}
   }
   eatButton.onclick=eat;
-  // il prodotto segue la mano destra del personaggio (in piedi, dritto, girato come lui)
+  function drinkCola(){
+    if(!drink||!drink.left())return;
+    const left=drink.bite();drinkSips++;vendSound('sorso');mySip=0;
+    (me.fx||(me.fx={crouch:0,guard:0,punch:9,starsUntil:0})).sip=0;
+    if(!left){const done=drink;drink=null;drinkButton.hidden=true;setTimeout(()=>done.group.removeFromParent(),700)}
+  }
+  drinkButton.onclick=drinkCola;
+  // il prodotto segue la mano del personaggio (0 la destra, 1 la sinistra): in piedi, dritto, girato come lui
   const handPoint=new THREE.Vector3();
-  function toHand(c,group){
-    c.elbows[0].updateWorldMatrix(true,false);
-    handPoint.set(0,-.3,.12);c.elbows[0].localToWorld(handPoint);
+  function toHand(c,group,hand=0){
+    c.elbows[hand].updateWorldMatrix(true,false);
+    handPoint.set(0,-.3,.12);c.elbows[hand].localToWorld(handPoint);
     group.position.set(handPoint.x,handPoint.y-.1,handPoint.z);group.rotation.set(0,c.root.rotation.y,0);
     group.visible=c.root.visible;
   }
-  const heldPose=()=>held&&held.left()?{snack:{id:held.product.id,left:held.left(),n:heldBites}}:{};
+  // portabicchiere del divanetto del cinema più vicino, dalla parte del posto (models/divanetto.glb: braccioli a
+  // ±0,665 m, 64 cm d'altezza, 18 cm verso lo schermo)
+  const holderPoint=new THREE.Vector3();
+  function holderAt(x,z){
+    let best=null,bd=1e9;
+    for(const s of cinemaSofas){const d=Math.hypot(s.position.x-x,s.position.z-z);if(d<bd){bd=d;best=s}}
+    if(!best||bd>1.2)return null;
+    return holderPoint.set(best.position.x+(x>=best.position.x?.665:-.665),best.position.y+.632,best.position.z+.18);
+  }
+  // la cola nel portabicchiere; a ogni sorso sale per un attimo verso la bocca (sip = secondi dal sorso)
+  const mouth=new THREE.Vector3();
+  function cupInHolder(group,at,sip,head){
+    group.scale.setScalar(CUP_SCALE);group.rotation.set(0,Math.PI,0);group.position.copy(at);group.visible=true;
+    if(sip<1.2&&head){const k=Math.sin(Math.min(1,sip/1.2)*Math.PI);group.position.lerp(head,k*.85)}
+  }
+  const seatedCup=()=>!!(seating&&seating.sit&&drink);
+  const heldPose=()=>({
+    ...(held&&held.left()?{snack:{id:held.product.id,left:held.left(),n:heldBites}}:{}),
+    ...(drink&&drink.left()?{drink:{id:'cola',left:drink.left(),n:drinkSips,...(seatedCup()?{cup:1}:{})}}:{}),
+    ...(myOrders.size?{orders:[...myOrders].map(([m,o])=>({m,k:o.k,n:o.n}))}:{}),
+    ...(atMachine?{use:{m:atMachine,k:atMachine==='vend'&&vend?.state()==='scegli'?vend.typed():atMachine==='dog'&&dog?.state()==='scegli'?dog.typed():useK,n:useN,t:useT}}:{})
+  });
   const PRODUCTS=new Map([...SNACKS,...DRINKS].map(p=>[p.id,p]));
+  const heldFor=id=>id==='popcorn'?(popGltf?makeHeldPopcorn(popGltf):null):id.startsWith('hotdog-')?(dogGltf?makeHeldHotdog(dogGltf,id.slice(7)):null):PRODUCTS.has(id)&&vendGltf?makeHeld(vendGltf,PRODUCTS.get(id)):null;
   // gli altri: il prodotto in mano come nella loro posa; a ogni morso nuovo il braccio sale alla bocca
   function peerSnack(c){
-    const want=c.snackWanted,product=want&&vendGltf?PRODUCTS.get(want.id):null;
-    if(c.snack&&(!product||c.snack.product!==product)){c.snack.group.removeFromParent();c.snack=null}
-    if(product&&!c.snack){c.snack=makeHeld(vendGltf,product);c.snack.group.scale.setScalar(HELD_SCALE);scene.add(c.snack.group);c.snackN=want.n}
+    const want=c.snackWanted;
+    if(c.snack&&(!want||c.snack.product.id!==want.id)){c.snack.group.removeFromParent();c.snack=null}
+    if(want&&!c.snack){c.snack=heldFor(want.id);if(c.snack){c.snack.group.scale.setScalar(HELD_SCALE);scene.add(c.snack.group);c.snackN=want.n}}
     if(!c.snack)return;
     if(want.n!==c.snackN){c.snackN=want.n;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).bite=0}
     while(c.snack.left()>want.left)c.snack.bite();
     c.snack.update(peerDt);toHand(c,c.snack.group);
+  }
+  function peerDrink(c){
+    const want=c.drinkWanted;
+    if(c.drink&&!want){c.drink.group.removeFromParent();c.drink=null}
+    if(want&&!c.drink&&popGltf){c.drink=makeHeldCola(popGltf);scene.add(c.drink.group);c.drinkN=want.n;c.sip=9}
+    if(!c.drink)return;
+    if(want.n!==c.drinkN){c.drinkN=want.n;c.sip=0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).sip=0}
+    c.sip=(c.sip??9)+peerDt;
+    while(c.drink.left()>want.left)c.drink.bite();
+    c.drink.update(peerDt);
+    const at=want.cup&&c.pose?.station==='seat'?holderAt(c.pose.x,c.pose.z):null;
+    if(at){c.head.updateWorldMatrix(true,false);c.head.getWorldPosition(mouth);mouth.y-=.05;cupInHolder(c.drink.group,at,c.sip,mouth)}
+    else{c.drink.group.scale.setScalar(HELD_SCALE);toHand(c,c.drink.group,1)}
+  }
+  // le macchinette usate dagli altri: la tua fa quello che fa la loro (scelte, prodotto che scende, preso)
+  // Gli ordini lasciati (orders nella posa) finiscono anche qui: se l'hai visto partire continua, se no parte adesso.
+  const remote={vend:null,pop:null,dog:null},seenOrders=new Set(); // ordini già partiti qui: 'chi:n'
+  function peerMachines(){
+    for(const m of ['vend','pop','dog']){
+      const machine=machineOf(m);if(!machine)continue;
+      let user=null,userId=null,order=null;
+      for(const [id,c] of peers){
+        if(!user&&c.useWanted?.m===m){user=c;userId=id}
+        const o=!order&&c.ordersWanted?.find(x=>x.m===m);if(o)order={id,...o};
+      }
+      // il tuo ordine lasciato è stato ritirato (da te o da un altro): la macchinetta è tornata a «scegli»
+      if(myOrders.has(m)&&atMachine!==m&&machine.state()==='scegli')myOrders.delete(m);
+      if(atMachine===m){
+        remote[m]=null;
+        // l'ha presa un altro un attimo prima: si lascia a lui
+        if(user){exitVend();notice('La sta usando '+(user.userName||'un amico'),'info')}
+        continue;
+      }
+      const u=user?.useWanted,r=remote[m];
+      if(!u){
+        remote[m]=null;
+        const key=order&&order.id+':'+order.n;
+        if(order&&!seenOrders.has(key)){seenOrders.add(key);if(machine.state()==='scegli')machine.play(order.k)}
+        // nessuno la usa e nessun ordine lasciato (chi aveva ordinato è uscito dal club): torna libera
+        else if(!order&&!myOrders.has(m)&&machine.state()!=='scegli')machine.reset();
+        continue;
+      }
+      if(!r||r.who!==user){remote[m]={who:user,n:u.n,t:u.t};continue} // si comincia a guardare da adesso
+      if(u.n!==r.n){r.n=u.n;seenOrders.add(userId+':'+u.n);if(machine.state()!=='scegli')machine.reset();machine.play(u.k)}
+      else if(m!=='pop'&&machine.state()==='scegli')machine.typing(u.k);
+      if(u.t!==r.t){r.t=u.t;machine.take()}
+    }
   }
   // Reception counter and tabletop receiver on the east side of the atrium.
   const counterX=5.95,counterZ=-3.35;
@@ -1839,7 +1982,7 @@ function buildLobby3D(app, life) {
   const keys = new Set();
   let firstPerson=false,parked=null,pongAnchor=null,localPose=null,lastPoseKey='',lastPoseSent=0,peerList=null;
   // azioni (solo visive): Ctrl sinistro abbassato, clic sinistro colpo col braccio destro, tasto destro parata
-  let crouching=false,guarding=false,punchCount=0,hitN=0,lastHit=null,fxNoise=null;
+  let crouching=false,guarding=false,punchCount=0,jumpCount=0,hitN=0,lastHit=null,fxNoise=null;
   const peers=new Map(),downArm=new THREE.Vector3(0,-1,0);
   const viewButton=document.createElement('button');
   $('.l3d-top').append(viewButton);
@@ -1876,7 +2019,7 @@ function buildLobby3D(app, life) {
     }
     // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
     const r=v=>Math.round(v*20)/20;
-    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(lastHit?{hit:lastHit}:{}),...heldPose()};
+    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(jumpCount?{jump:jumpCount}:{}),...(lastHit?{hit:lastHit}:{}),...heldPose()};
   }
   function descriptor(){
     const pose=currentPose();if(!pose)return null;
@@ -1897,7 +2040,8 @@ function buildLobby3D(app, life) {
     for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1}
     c.lookYaw=Number(p.look)||0;c.lookPitch=0;
     animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
-    actCharacter(c,{crouch:p.crouch,guard:p.guard,hold:!!p.snack},peerDt,t);
+    actCharacter(c,{crouch:p.crouch,guard:p.guard,hold:!!p.snack,hold2:!!p.drink&&!p.drink.cup},peerDt,t);
+    peerJump(c);
     return {x:w.x,z:w.z,yaw:w.yaw};
   }
   function seatPose(c,p){
@@ -2037,18 +2181,21 @@ function buildLobby3D(app, life) {
         c.pose=pose;if(user.clubPose)setLook(c,user.clubPose);
         // un colpo nuovo di questo giocatore: si vede il braccio; se ha preso qualcuno, stelline e suono
         const cp=user.clubPose||{};
-        if(c.seenPunch===undefined){c.seenPunch=cp.punch||0;c.seenHit=cp.hit?.n||0}
+        if(c.seenPunch===undefined){c.seenPunch=cp.punch||0;c.seenHit=cp.hit?.n||0;c.seenJump=cp.jump||0}
+        if((cp.jump||0)!==c.seenJump){c.seenJump=cp.jump||0;if(!c.jumping)c.jumping={prep:.12,h:0,v:0};c.landBend=.28}
         if((cp.punch||0)!==c.seenPunch){c.seenPunch=cp.punch||0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0}
         if(cp.hit&&cp.hit.n!==c.seenHit){c.seenHit=cp.hit.n;struck(String(cp.hit.id),!!cp.hit.blocked,c)}
-        c.snackWanted=cp.snack||null; // prodotto della macchinetta in mano (peerSnack)
+        c.snackWanted=cp.snack||null; // prodotto della macchinetta o cartoccio in mano (peerSnack)
+        c.drinkWanted=cp.drink||null;c.useWanted=cp.use||null;c.ordersWanted=cp.orders||null;c.userName=user.name||''; // cola (peerDrink), macchinetta in uso (peerMachines)
       }
       for(const [id,c] of peers)if(!present.has(id)){
-        c.root.removeFromParent();c.snack?.group.removeFromParent();
+        c.root.removeFromParent();c.snack?.group.removeFromParent();c.drink?.group.removeFromParent();
         const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh||o.isSprite){geometries.add(o.geometry);materials.add(o.material)}});
         for(const g of geometries)g.dispose();for(const m of materials){m.map?.dispose();m.dispose()}peers.delete(id);
       }
     }
-    for(const c of peers.values()){c.root.visible=!!modelPose(c,c.pose);peerSnack(c)}
+    for(const c of peers.values()){c.root.visible=!!modelPose(c,c.pose);peerSnack(c);peerDrink(c)}
+    peerMachines();
   }
   let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0, jumpPrep = 0;
   // salto: prima le ginocchia si piegano un poco (0,12 s, la spinta) e poi si stacca da terra
@@ -2056,6 +2203,15 @@ function buildLobby3D(app, life) {
     if (seating || jumpHeight !== 0 || verticalSpeed !== 0 || jumpPrep > 0) return;
     jumpPrep = 0.12;
     me.landBend = 0.28;
+    jumpCount++; // gli altri lo vedono saltare (peerJump)
+  }
+  // gli altri che saltano: alla notizia di un salto nuovo il loro personaggio fa lo stesso salto (spinta, volo, atterraggio)
+  function peerJump(c){
+    const j=c.jumping;if(!j)return;
+    if(j.prep>0){j.prep-=peerDt;if(j.prep<=0)j.v=4.1;return}
+    j.h=Math.max(0,j.h+j.v*peerDt-.5*13*peerDt*peerDt);j.v-=13*peerDt;
+    if(j.h===0&&j.v<0){c.jumping=null;c.landBend=.28;return}
+    c.root.position.y+=j.h;
   }
   function resetMovement() {
     tableFootball.blur();
@@ -2075,7 +2231,7 @@ function buildLobby3D(app, life) {
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     // davanti alla macchinetta si usano solo i tasti sul pannello; Esc per andare via
     if (vendMode) { if (e.type === 'keydown' && e.code === 'Escape') exitVend(); e.preventDefault(); return; }
-    if (held && e.code === 'KeyF') { if (e.type === 'keydown' && !e.repeat) eat(); e.preventDefault(); return; }
+    if ((held || drink) && e.code === 'KeyF') { if (e.type === 'keydown' && !e.repeat) held ? eat() : drinkCola(); e.preventDefault(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
     if(e.code==='KeyH'){if(e.type==='keydown'&&!e.repeat)toggleHelp();e.preventDefault();return} // i comandi
@@ -2266,7 +2422,7 @@ function buildLobby3D(app, life) {
     animateCharacter(me, moving, dt, t);
     // un passo a ogni appoggio del piede (più piano abbassati, più forte correndo)
     { const foot = Math.floor(me.phase / Math.PI); if (foot !== lastFoot) { lastFoot = foot; if (moving > 0.4 && !seating && jumpHeight === 0) fxSound('step', Math.min(1.2, moving / SPEED) * (crouching ? 0.45 : 1)); } }
-    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating, hold: !!held }, dt, t);
+    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating, hold: !!held, hold2: !!drink && !seatedCup() }, dt, t);
     if (jumpPrep > 0 && (jumpPrep -= dt) <= 0) { jumpPrep = 0; if (!seating) verticalSpeed = 4.1; } // finita la spinta: si salta
     if (verticalSpeed !== 0 || jumpHeight > 0) {
       const gravity = 13, inAir = jumpHeight > 0;
@@ -2304,6 +2460,8 @@ function buildLobby3D(app, life) {
       else if (near?.balilla) actB.textContent = near.label + (touch ? ' · Gioca' : ' · Gioca (E)');
       else if (near) actB.textContent = (near.sit||near.seat?'':near.vend?'Usa · ':'Apri · ') + near.label + (touch ? '' : '  (E)') + (near.stool!=null&&!touch ? ' · Prendi (G)' : '');
     }
+    // macchinetta che sta usando un altro: si vede chi, e non si può usare
+    if (near?.machine) { const who = machineBusy(near.machine), text = who ? near.label + ' · la sta usando ' + who : (machineOf(near.machine)?.state() === 'pronto' ? 'Ritira · ' : 'Usa · ') + near.label + (touch ? '' : '  (E)'); if (actB.textContent !== text) actB.textContent = text; }
     if (vendMode) { near = null; actB.hidden = true; } // davanti alla macchinetta c'è solo «Esci»
     ring.visible = !!near && !!near.mq;
     for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
@@ -2343,10 +2501,28 @@ function buildLobby3D(app, life) {
       // abbastanza lontano da vedere tutta la larghezza (1,1 m) anche su uno schermo stretto, almeno 1,15 m
       const half=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect);
       const d=Math.max(1.15,.62/Math.tan(half));
-      camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z);
+      if(atMachine==='pop'){
+        // carrello: largo 0,9 m col tetto, alto 1,9 m
+        const dp=Math.max(1.25,.5/Math.tan(half));
+        camera.position.set(POP.x+dp,1.32,POP.z);camera.lookAt(POP.x,1.08,POP.z);
+      }else if(atMachine==='dog'){
+        // hot dog: larga 1,15 m, dai tasti (60 cm) al tetto della vetrina (1,74 m); si guarda da +x
+        const dd=Math.max(1.85,.68/Math.tan(half));
+        camera.position.set(DOG.x+dd,1.35,DOG.z);camera.lookAt(DOG.x,1.22,DOG.z);
+      }else{camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z)}
     }
-    if(vend&&(vendMode||Math.hypot(pos.x-VEND.x,pos.z-VEND.z)<9))vend.update(dt,performance.now());
+    // da vicino si animano; mentre preparano vanno avanti anche da lontano (un ordine lasciato finisce lo stesso)
+    if(vend&&(atMachine==='vend'||vend.state()!=='scegli'||Math.hypot(pos.x-VEND.x,pos.z-VEND.z)<9))vend.update(dt,performance.now());
+    if(pop&&(atMachine==='pop'||pop.state()!=='scegli'||Math.hypot(pos.x-POP.x,pos.z-POP.z)<10))pop.update(dt);
+    if(dog&&(atMachine==='dog'||dog.state()!=='scegli'||Math.hypot(pos.x-DOG.x,pos.z-DOG.z)<10))dog.update(dt);
     if(held){held.update(dt);toHand(me,held.group)}
+    if(drink){
+      drink.update(dt);mySip+=dt;
+      // seduti al cinema la cola sta nel portabicchiere e a ogni sorso sale verso di te; se no in mano (sinistra)
+      const at=seatedCup()?holderAt(pos.x,pos.z):null;
+      if(at){mouth.copy(camera.position).y-=.18;cupInHolder(drink.group,at,mySip,mouth)}
+      else{drink.group.scale.setScalar(HELD_SCALE);toHand(me,drink.group,1)}
+    }
     if(seating){
       standButton.hidden=!touch;seatActions.hidden=!touch&&enterButton.hidden;
       actB.hidden=true;
@@ -2582,7 +2758,7 @@ function buildLobby3D(app, life) {
       return;
     }
     if(s.radio){resetMovement();s.act();return}
-    if(s.vend){enterVend();return} // macchinetta: visuale davanti al pannello, la 3D resta aperta
+    if(s.vend){enterMachine(s.machine);return} // macchinetta: visuale davanti al pannello, la 3D resta aperta
     if(s.station)parked={station:s.station,slot:freeSeat(s)};
     hide();
     s.act();

@@ -1,24 +1,27 @@
 // Zona Operativa, tappa 3: i bot che riempiono i posti vuoti (docs/zona-operativa.md). Girano sul server dentro
 // ZonaRoom e si muovono con gli stessi comandi dei giocatori veri (stesse regole, stessi muri). Livello scelto dal
-// proprietario: «medi» (reagiscono in circa mezzo secondo, mirano al corpo, sbagliano spesso da lontano).
+// proprietario: «medi», poi (28 novembre) un po' più facili: reagiscono in circa 0,7 s, mirano al corpo, sbagliano
+// di più, soprattutto da lontano, si girano più piano e vedono un po' meno.
 import { eyeHeight, WEAPONS } from './public/zona/rules.js';
 
 export const BOT = {
-  react: 450, // ms prima di sparare a un nemico appena visto (± reactVar)
-  reactVar: 200,
-  see: 70, // m: oltre non si vede
-  fov: 1.15, // rad da ogni lato dello sguardo (circa 130° in tutto)
-  hear: 9, // m: più vicino di così si sente anche alle spalle
-  turn: 6, // rad/s al massimo per girarsi
-  errBase: 0.025, // errore di mira (rad) che cambia ogni errEvery ms, più grande da lontano
-  errDist: 0.0011,
+  react: 700, // ms prima di sparare a un nemico appena visto (± reactVar)
+  reactVar: 250,
+  see: 55, // m: oltre non si vede
+  fov: 1.0, // rad da ogni lato dello sguardo (circa 115° in tutto)
+  hear: 8, // m: più vicino di così si sente anche alle spalle
+  turn: 4.2, // rad/s al massimo per girarsi
+  errBase: 0.04, // errore di mira (rad) che cambia ogni errEvery ms, più grande da lontano
+  errDist: 0.0018,
   errEvery: 350,
-  think: 200, // ms tra un controllo della vista e l'altro
+  think: 250, // ms tra un controllo della vista e l'altro
   memory: 4000, // ms: dove si è visto un nemico l'ultima volta
   close: { tuono: 6, calabrone: 12, ruggito: 18 } // m: più vicino si sta fermi e ci si sposta di lato
 };
 export const BOT_NAMES = ['Aldo', 'Bruna', 'Ciro', 'Dora', 'Ezio', 'Fede', 'Gino', 'Lia'];
 export const BOT_WEAPONS = ['calabrone', 'ruggito', 'tuono'];
+// a ogni rinascita l'arma principale successiva di questo giro (le persone; i bot girano fra BOT_WEAPONS)
+export const SPAWN_ROTATION = ['calabrone', 'tuono', 'ruggito', 'falco'];
 
 // ---------- mappa dei passaggi ----------
 

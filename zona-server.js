@@ -27,7 +27,7 @@ import {
   fromBehind
 } from './public/zona/rules.js';
 import { BOXES, GROUND, POINTS } from './public/zona/map-deserto.js';
-import { createNav, botThink, BOT_NAMES, BOT_WEAPONS } from './zona-bots.js';
+import { createNav, botThink, BOT_NAMES, BOT_WEAPONS, SPAWN_ROTATION } from './zona-bots.js';
 import { userOf, json } from './worker-shared.js';
 import { MSG } from './public/messages.js';
 
@@ -381,15 +381,15 @@ export class ZonaRoom {
     p.alive = true;
     p.guns = { baretta: newGun('baretta'), coltello: newGun('coltello') };
     p.slot1 = null;
-    p.current = 'baretta';
-    // i bot non raccolgono armi da terra: partono con una delle tre principali
-    if (p.bot) {
-      const w = BOT_WEAPONS[Math.floor(this.random() * BOT_WEAPONS.length)];
-      p.guns[w] = newGun(w);
-      p.slot1 = w;
-      p.current = w;
-      p.ai = null;
-    }
+    // arma principale a rotazione (scelta del proprietario, 28 novembre): a ogni rinascita la successiva del giro,
+    // partendo per ognuno da un punto a caso; i bot girano fra le loro tre (col Falco si muovono male)
+    const rot = p.bot ? BOT_WEAPONS : SPAWN_ROTATION;
+    p.spawnN = (p.spawnN ?? Math.floor(this.random() * rot.length)) + 1;
+    const w = rot[p.spawnN % rot.length];
+    p.guns[w] = newGun(w);
+    p.slot1 = w;
+    p.current = w;
+    if (p.bot) p.ai = null;
     p.fireHeld = false;
     p.history = [];
     this.event({ e: 'nasce', id: p.id, x: s.x, y: p.body.y, z: s.z, yaw: s.yaw });
@@ -418,7 +418,8 @@ export class ZonaRoom {
         bot.view = now;
         for (let k = 0; k < 3; k++) {
           const fire = c.fire && (c.auto || k === 0);
-          const bits = (c.jump && k === 0 ? BIT.jump : 0) | (fire ? BIT.fire : 0);
+          // i bot camminano (la velocità che fino alla 1.0.73 era la corsa)
+          const bits = (c.jump && k === 0 ? BIT.jump : 0) | (fire ? BIT.fire : 0) | BIT.walk;
           this.command(bot, [c.fwd, c.side, bits, c.yaw, c.pitch, ARMI.indexOf(bot.current)], now);
         }
       }
@@ -566,7 +567,7 @@ export class ZonaRoom {
       p.current = want;
       p.scoped = false;
     }
-    // mira (tasto destro): meno dispersione, e mirando si cammina soltanto
+    // mira (tasto destro): meno dispersione, e mirando si va piano
     p.scoped = bit('scope') && !WEAPONS[p.current].melee;
     const input = {
       fwd: num(fwd, -1, 1),
@@ -574,6 +575,7 @@ export class ZonaRoom {
       jump: bit('jump'),
       crouch: bit('crouch'),
       walk: bit('walk') || p.scoped,
+      aim: p.scoped,
       yaw: Number.isFinite(yaw) ? yaw : p.body.yaw,
       pitch: num(pitch, -1.5, 1.5)
     };

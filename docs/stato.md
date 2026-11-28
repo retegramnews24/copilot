@@ -7,17 +7,30 @@ Aggiornato il 28 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.73**: in Zona Operativa al computer si cammina e si corre tenendo Maiusc. 1.0.72: Zona Operativa (poligono, online sul deserto, squadre con i bot), porta blindata e corridoio,
-  Forza 4 vero sul tavolo 3D, F1 on paper! con i bot (1.0.71: macchinetta caffè e snack; 1.0.70: sala cinema nuova).
-  Le 8 prove passate. Portata su richiesta del proprietario prima dei controlli a mano su staging: le voci di «Da
-  provare» qui sotto valgono ora anche per l'app vera.
-- `staging`: 1.0.73, uguale a `main` (`branch-diff`: nessuna differenza).
+- `main`: **1.0.74**: macchinetta degli hot dog, carrello dei popcorn e della Binotto Cola, popcorn nell'angolo,
+  uscire mentre le macchinette preparano (chiunque ritira), tutto con la F, gli amici ti vedono saltare; Zona
+  Operativa: deserto più vero con borgo e oasi, mira con tacche e lente del Ruggito, camminata più veloce, bot più
+  facili e armi a rotazione. Portata su richiesta del proprietario prima dei controlli a mano su staging: le voci di
+  «Da provare» qui sotto valgono ora anche per l'app vera. 1.0.73: in Zona Operativa al computer si cammina e si corre
+  tenendo Maiusc (1.0.72: Zona Operativa, F1 on paper! con i bot, Forza 4 vero sul tavolo 3D; 1.0.71: macchinetta
+  caffè e snack).
+- `staging`: 1.0.74, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
 
 **Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,
 anche con due giocatori.
+
+**Macchinetta degli hot dog della Lobby 3D** (`docs/macchinetta.md`, «Macchinetta automatica degli hot dog»):
+nella 1.0.74 (`blender/hotdog.blend` → `models/hotdog.glb`): inox street food, vetrina di vetro su tre lati e sopra,
+braccio robot per le salse, griglia vegana a parte. Terza macchinetta sulla parete della sala giochi, tra la porta e l'applique; il carrello dei popcorn è
+passato nell'angolo (parete della sala giochi, girato verso l'atrio) e la pianta al suo vecchio posto accanto al
+divano. Nuove regole per tutte le macchinette: si può uscire mentre preparano (finiscono e tengono il prodotto finché
+chi ha ordinato è nel club, chiunque lo può ritirare) e sul computer si mangia e si beve tutto con la F (prima la
+mano destra, poi la cola). Tutti i passaggi animati
+(circa 20 secondi), hot dog in mano in 4 morsi, una persona alla volta. Provato nell'anteprima locale; da provare in
+due nell'app di prova.
 
 **Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario. Nella 1.0.70 (staging e main), da
 guardare con un film vero nell'app: sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
@@ -83,7 +96,41 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 
 ## Da provare
 
+- Lobby 3D, carrello dei popcorn e della Binotto Cola (nella 1.0.74; `docs/macchinetta.md`): nell'atrio a
+  sinistra della porta del cinema; popcorn che scoppiano, cartoccio in mano (6 manciate), cola in mano o nel
+  portabicchiere del divanetto al cinema. Nuova regola per tutte le macchinette: una persona alla volta e gli altri
+  vedono quello che fa (`club-machines.js`). Provato nell'anteprima locale con amici finti; da provare in due
+  nell'app di prova (anche il telefono: il modello pesa circa 1 MB e i chicchi che scoppiano sono 48 pezzi).
+
+- Lobby 3D tra amici (nella 1.0.74): il salto ora si vede anche dagli altri (contatore `jump` nella posa, come i
+  colpi; il server lo lascia passare, `worker.js`; chi guarda fa lo stesso salto, `peerJump`). Abbassarsi, parata e
+  colpi arrivavano già: controllati con la prova `test:multiplayer-runtime`. Da provare in due nell'app.
+- Zona Operativa (nella 1.0.74): bot un po' più facili e arma principale a rotazione a ogni rinascita
+  (Calabrone → Tuono → Ruggito → Falco). Da provare giocando.
+
 - Zona Operativa al computer: ora si cammina e si corre tenendo Maiusc (prima era il contrario). Nella 1.0.73.
+  Dopo, nella 1.0.74: camminata alla velocità della corsa di prima (5,2 m/s), corsa più
+  veloce (7 m/s), sul telefono si corre con la levetta in fondo, saltando si sale su pietre, casse e ostacoli bassi
+  (fino a circa 1,4 m). Da provare nell'app: velocità giuste? il salto sulle pietre riesce bene?
+- Zona Operativa, arma in mano (nella 1.0.74): senza mirare la canna punta al mirino, mirando l'arma si
+  raddrizza e la tacca sta al centro. Vista nell'anteprima solo con la pistola: guardare anche le altre armi.
+- Zona Operativa, mappa e ambiente: scelte del proprietario in `docs/zona-operativa.md` (Tappa 4, «Mappa e ambiente
+  più belli»). Mappa in Blender (nella 1.0.74, approvata passo passo dal proprietario): ripari nuovi, vita del
+  borgo, trame con rilievo su tutto, case e torri meno da prefabbricato, terremoto (56 case su 84 mezze crollate),
+  rocce arrotondate, sabbia ai muri, ai massi e dune al muro di cinta; GLB compresso con Draco (7,8 MB, lettore in
+  `public/vendor/three/addons/`), urti rigenerati, prove della mappa passate. Piante e acqua fatte (non in un
+  commit): due oasi uguali col pozzo, palme, cespugli, fichi d'India, erba secca; GLB 8,2 MB, circa 750.000
+  triangoli. Da fare: provarla sul telefono (scalda? scatta? quanto ci mette a caricare); se scatta, togliere
+  l'ombra a erba e cespugli o diradarli. Restano i dettagli sui muri (scritte, manifesti, tende alle porte).
+- Zona Operativa, mirare (nella 1.0.74): tacche di mira vere su Baretta (tre puntini), Calabrone (diottra e palo)
+  e Tuono (perline), lente ×2 per il Ruggito. Nell'anteprima provata la Baretta mirando (lama al centro della
+  tacca); da provare giocando Calabrone, Tuono e la lente del Ruggito, anche sul telefono.
+- Zona Operativa, mirare (nella 1.0.74): Ruggito con la lente ×1,5 dentro il mirino (prima lente ×2 a schermo
+  nero, scartata); mirando a fondo l'arma sta ferma (il Calabrone «un po' storto»: i numeri dicono che da fermo è
+  dritto e centrato, ondeggiava muovendo la vista). Da provare giocando.
+- Zona Operativa, richieste del proprietario per il codice (28 novembre, da fare quando si lavora sul codice): **più armi
+  a terra** (più punti di raccolta: i punti stanno nella mappa, raccolta `punti`), **si deve capire da dove arriva uno
+  sparo** (segno a schermo e/o suono che viene dalla sua direzione), **audio migliore** («fa pena»).
 
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,
@@ -163,6 +210,9 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 
 - Stile A «Circolo italiano anni '60» per pareti e finiture; i mobili della sala tavoli invece sono moderni.
 - Modanature lunghe fatte in codice, oggetti singoli in Blender.
+- Macchinette (caffè e snack, carrello dei popcorn, hot dog): tutto quello che succede si vede da tutti, e una
+  macchinetta la usa una persona alla volta (`docs/macchinetta.md`). Si può uscire mentre prepara: finisce e tiene
+  il prodotto finché chi ha ordinato è nel club, e chiunque lo può ritirare. Sul computer si mangia e si beve con la F.
 
 **Altri giochi**
 

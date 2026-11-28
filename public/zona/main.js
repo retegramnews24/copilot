@@ -1,4 +1,4 @@
 // Zona Operativa: la pagina parte nel poligono di tiro (zona.js, da soli) oppure, con ?online, nella partita online
 // sul deserto (online.js). Si passa dall'uno all'altro ricaricando la pagina, così in memoria c'è una mappa sola.
-if (new URLSearchParams(location.search).has('online')) import('./online.js?v=0795c4daf4');
-else import('./zona.js?v=985b4b93ad');
+if (new URLSearchParams(location.search).has('online')) import('./online.js?v=c5073f2c43');
+else import('./zona.js?v=8aa40fc7a8');

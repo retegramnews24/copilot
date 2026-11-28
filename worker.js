@@ -1,4 +1,5 @@
 import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
+import { heldDrink, heldSnack, machineOrders, machineUse } from './club-machines.js';
 import { recordPinball, startPinball, removePinball } from './club-pinball.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
@@ -873,22 +874,26 @@ export class Room extends DurableObject {
                       : 0
                   }
                 : {}),
-              // prodotto della macchinetta in mano (solo visivo): quale, quanti morsi o sorsi restano, quanti fatti
-              ...((pose.station === 'walk' || pose.station === 'seat') &&
-              pose.snack &&
-              typeof pose.snack.id === 'string' &&
-              /^[a-z0-9-]{1,16}$/i.test(pose.snack.id) &&
-              Number.isInteger(pose.snack.left) &&
-              pose.snack.left >= 1 &&
-              pose.snack.left <= 3
-                ? {
-                    snack: {
-                      id: pose.snack.id,
-                      left: pose.snack.left,
-                      n: Number.isInteger(pose.snack.n) ? Math.max(0, pose.snack.n) % 1e9 : 0
-                    }
-                  }
+              // prodotto della macchinetta o del carrello in mano e la bibita nell'altra (club-machines.js)
+              ...((pose.station === 'walk' || pose.station === 'seat') && heldSnack(pose.snack)
+                ? { snack: heldSnack(pose.snack) }
                 : {}),
+              ...((pose.station === 'walk' || pose.station === 'seat') && heldDrink(pose.drink)
+                ? { drink: heldDrink(pose.drink) }
+                : {}),
+              // ordini lasciati alle macchinette (finiscono di preparare, chiunque può ritirare)
+              ...((pose.station === 'walk' || pose.station === 'seat') && machineOrders(pose.orders)
+                ? { orders: machineOrders(pose.orders) }
+                : {}),
+              // macchinetta in uso: una persona alla volta, gli altri vedono quello che fa
+              ...(() => {
+                const use = machineUse(
+                  pose,
+                  a,
+                  this.ctx.getWebSockets().map(s => (s === ws ? a : s.deserializeAttachment()))
+                );
+                return use ? { use } : {};
+              })(),
               // azioni solo visive mentre si cammina: abbassato, in parata, colpi dati e a chi (niente salute)
               ...(pose.station === 'walk'
                 ? {
@@ -898,6 +903,8 @@ export class Room extends DurableObject {
                     ...(pose.crouch ? { crouch: 1 } : {}),
                     ...(pose.guard ? { guard: 1 } : {}),
                     ...(Number.isInteger(pose.punch) && pose.punch > 0 ? { punch: pose.punch % 1e9 } : {}),
+                    // salti fatti (contatore): chi guarda fa saltare il personaggio a ogni numero nuovo
+                    ...(Number.isInteger(pose.jump) && pose.jump > 0 ? { jump: pose.jump % 1e9 } : {}),
                     ...(pose.hit &&
                     typeof pose.hit.id === 'string' &&
                     /^[\w:-]{1,64}$/.test(pose.hit.id) &&

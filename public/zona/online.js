@@ -3,6 +3,7 @@
 // (zona-server.js). Il collegamento passa dall'app (zona-link.js), il movimento si prevede con net.js.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from '../vendor/three/addons/loaders/DRACOLoader.js';
 import { Sky } from '../vendor/three/addons/objects/Sky.js';
 import {
   WEAPONS,
@@ -18,11 +19,11 @@ import {
   spreadFor,
   pelletDirs,
   rng
-} from './rules.js?v=b7541a7935';
-import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
-import { createControls } from './controls.js?v=04ee1def20';
-import { createViewmodel } from './viewmodel.js?v=346e311811';
-import { createNet, DT } from './net.js?v=7e8e01c5e4';
+} from './rules.js?v=d4fc18028a';
+import { BOXES, GROUND } from './map-deserto.js?v=8b1e6b7d98';
+import { createControls } from './controls.js?v=87c4fd76d3';
+import { createViewmodel } from './viewmodel.js?v=7fef4bb686';
+import { createNet, DT } from './net.js?v=ba2d34e023';
 import * as sfx from './audio.js?v=337aee686c';
 
 const $ = id => document.getElementById(id);
@@ -115,7 +116,10 @@ function resize() {
 addEventListener('resize', resize);
 
 // ---------- caricamento ----------
-const loader = new GLTFLoader();
+// la mappa del deserto è compressa (Draco): il lettore sta in vendor/three/addons/libs/draco/gltf/
+const loader = new GLTFLoader().setDRACOLoader(
+  new DRACOLoader().setDecoderPath(new URL('../vendor/three/addons/libs/draco/gltf/', import.meta.url).href)
+);
 const load = name =>
   new Promise((ok, ko) =>
     loader.load(
@@ -150,6 +154,7 @@ function addInstanced(root) {
     if (!o.isMesh) return;
     // colori pieni e opachi, come la Lobby: niente lucido di plastica
     for (const m of [o.material].flat()) {
+      if (m.name === 'm_acqua') continue; // l'acqua delle oasi resta lucida
       m.roughness = 0.92;
       m.metalness = 0;
     }
@@ -289,12 +294,21 @@ function uiRefs() {
     btnTake: $('t-prendi')
   };
 }
+// rinascendo: pistola, coltello e l'arma principale del giro (quella che il server ha appena dato, serverSlot1)
+let serverSlot1 = null;
 function resetGuns() {
   guns = { baretta: newGun('baretta'), coltello: newGun('coltello') };
   slot1 = null;
   current = null;
-  select('baretta', true);
-  last = 'coltello';
+  if (serverSlot1) {
+    slot1 = serverSlot1;
+    guns[slot1] = newGun(slot1);
+    select(slot1, true);
+    last = 'baretta';
+  } else {
+    select('baretta', true);
+    last = 'coltello';
+  }
 }
 function select(name, quiet) {
   if (!name || name === current || !guns[name]) return;
@@ -371,6 +385,7 @@ function onMessage(m) {
     alive = m.me.al;
     respawnIn = m.me.ru;
     // l'arma del posto 1 la decide il server (presa, rinascita)
+    serverSlot1 = m.me.s1 || null;
     if (m.me.s1 !== slot1) {
       if (m.me.s1) giveSlot1(m.me.s1);
       else {
@@ -501,8 +516,8 @@ function showMenu(show) {
   }
 }
 $('comandi').innerHTML = matchMedia('(pointer: coarse)').matches
-  ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (mirando si cammina), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
-  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc tenuto corre · Tab classifica · Esc menù (la partita continua)';
+  ? 'Levetta a sinistra per muoverti (spinta fino in fondo corri), trascina a destra per guardare. SPARA, MIRA (mirando si va piano), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
+  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si va piano) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc tenuto corre · Tab classifica · Esc menù (la partita continua)';
 $('sens').value = settings.sens;
 $('volume').value = settings.volume;
 $('sens').oninput = e => {
@@ -712,10 +727,11 @@ function fixedStep() {
     }
     if (controls.take('prendi')) bits |= BIT.take;
     if (controls.fire) bits |= BIT.fire;
-    // mirando si cammina soltanto (lo controlla anche il server)
+    // mirando si va piano (lo controlla anche il server)
     if (aiming()) {
       bits |= BIT.scope | BIT.walk;
       input.walk = true;
+      input.aim = true;
     }
   } else controls.pressed.clear();
   // l'arma in mano, come farà il server con lo stesso comando
@@ -777,8 +793,9 @@ function frame(now) {
   const aim = aiming();
   aimT += ((aim ? 1 : 0) - aimT) * Math.min(1, dt * 14);
   const scoped = aim && current === 'falco';
-  // Falco: cannocchiale ×4 subito; le altre armi stringono la vista poco a poco (×1,35)
-  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + 0.35 * aimT);
+  // Falco: cannocchiale ×4 subito; Ruggito: vista normale, lente ×1,5 dentro il mirino; le altre armi stringono la
+  // vista poco a poco (×1,35)
+  const fov = scoped ? BASE_FOV / WEAPONS.falco.zoom : BASE_FOV / (1 + (current === 'ruggito' ? 0 : 0.35) * aimT);
   if (Math.abs(camera.fov - fov) > 0.01) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
@@ -806,7 +823,24 @@ function frame(now) {
   renderer.clear();
   renderer.render(scene, camera);
   renderer.clearDepth();
-  if (alive) renderer.render(vm.scene, vm.camera);
+  if (alive) {
+    renderer.render(vm.scene, vm.camera);
+    drawLens();
+  }
+}
+// Ruggito mirando: dentro la finestrella del mirino la scena ingrandita ×1,5 (solo quel rettangolo dello schermo)
+const lensCam = new THREE.PerspectiveCamera();
+function drawLens() {
+  const r = vm.lensRect(innerWidth, innerHeight);
+  if (!r) return;
+  lensCam.copy(camera);
+  lensCam.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / 1.5));
+  lensCam.updateProjectionMatrix();
+  renderer.setScissorTest(true);
+  renderer.setScissor(r.x, r.y, r.w, r.h);
+  renderer.clear();
+  renderer.render(scene, lensCam);
+  renderer.setScissorTest(false);
 }
 const angleDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
 
