@@ -84,6 +84,9 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 ## Da provare
 
 - Zona Operativa al computer: ora si cammina e si corre tenendo Maiusc (prima era il contrario). Nella 1.0.73.
+  Dopo, su staging (non ancora su `main`): camminata alla velocità della corsa di prima (5,2 m/s), corsa più
+  veloce (7 m/s), sul telefono si corre con la levetta in fondo, saltando si sale su pietre, casse e ostacoli bassi
+  (fino a circa 1,4 m). Da provare nell'app: velocità giuste? il salto sulle pietre riesce bene?
 
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,

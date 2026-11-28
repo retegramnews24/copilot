@@ -418,7 +418,8 @@ export class ZonaRoom {
         bot.view = now;
         for (let k = 0; k < 3; k++) {
           const fire = c.fire && (c.auto || k === 0);
-          const bits = (c.jump && k === 0 ? BIT.jump : 0) | (fire ? BIT.fire : 0);
+          // i bot camminano (la velocità che fino alla 1.0.73 era la corsa)
+          const bits = (c.jump && k === 0 ? BIT.jump : 0) | (fire ? BIT.fire : 0) | BIT.walk;
           this.command(bot, [c.fwd, c.side, bits, c.yaw, c.pitch, ARMI.indexOf(bot.current)], now);
         }
       }
@@ -566,7 +567,7 @@ export class ZonaRoom {
       p.current = want;
       p.scoped = false;
     }
-    // mira (tasto destro): meno dispersione, e mirando si cammina soltanto
+    // mira (tasto destro): meno dispersione, e mirando si va piano
     p.scoped = bit('scope') && !WEAPONS[p.current].melee;
     const input = {
       fwd: num(fwd, -1, 1),
@@ -574,6 +575,7 @@ export class ZonaRoom {
       jump: bit('jump'),
       crouch: bit('crouch'),
       walk: bit('walk') || p.scoped,
+      aim: p.scoped,
       yaw: Number.isFinite(yaw) ? yaw : p.body.yaw,
       pitch: num(pitch, -1.5, 1.5)
     };

@@ -31,6 +31,8 @@ medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 | Grafica | **Low-poly come la Lobby 3D**: forme semplici, colori pieni, modelli Blender leggeri |
 | Telefono | **Due levette, mira libera** (nessun aiuto): levetta a sinistra per camminare, trascinare a destra per girarsi, tasto Spara |
 | Computer | **WASD e mouse**: si cammina, **Maiusc tenuto corre** (come nella Lobby 3D; scelta del 28 novembre), mouse bloccato per guardare, clic sinistro spara, R ricarica, 1-4 armi, Spazio salta, Tab classifica, Esc menù |
+| Velocità | (28 novembre) **camminata 5,2 m/s** (la corsa di prima), **corsa 7 m/s**, mirando 2,6 m/s, accucciati 2 m/s. Sul telefono si corre con la levetta spinta fino in fondo. I bot camminano |
+| Salto | Circa 1 m. **Si sale saltando su pietre, casse e ostacoli bassi** fino a circa 1,4 m: se durante il salto i piedi arrivano a mezzo metro dalla cima, si sale sopra (`PLAYER.climb` in `rules.js`). I muri più alti no |
 | Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
 
 Aggiornamento del 28 novembre (scelte del proprietario): la partita sul deserto è **sempre a squadre**, Rossa contro

@@ -18,11 +18,11 @@ import {
   spreadFor,
   pelletDirs,
   rng
-} from './rules.js?v=b7541a7935';
+} from './rules.js?v=d4fc18028a';
 import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
-import { createControls } from './controls.js?v=04ee1def20';
+import { createControls } from './controls.js?v=87c4fd76d3';
 import { createViewmodel } from './viewmodel.js?v=346e311811';
-import { createNet, DT } from './net.js?v=7e8e01c5e4';
+import { createNet, DT } from './net.js?v=ba2d34e023';
 import * as sfx from './audio.js?v=337aee686c';
 
 const $ = id => document.getElementById(id);
@@ -501,8 +501,8 @@ function showMenu(show) {
   }
 }
 $('comandi').innerHTML = matchMedia('(pointer: coarse)').matches
-  ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (mirando si cammina), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
-  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc tenuto corre · Tab classifica · Esc menù (la partita continua)';
+  ? 'Levetta a sinistra per muoverti (spinta fino in fondo corri), trascina a destra per guardare. SPARA, MIRA (mirando si va piano), RIC. ricarica, ARMA cambia arma, PRENDI vicino a un’arma a terra. La partita continua anche con il menù aperto.'
+  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si va piano) · R ricarica · E prendi un’arma a terra · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc tenuto corre · Tab classifica · Esc menù (la partita continua)';
 $('sens').value = settings.sens;
 $('volume').value = settings.volume;
 $('sens').oninput = e => {
@@ -712,10 +712,11 @@ function fixedStep() {
     }
     if (controls.take('prendi')) bits |= BIT.take;
     if (controls.fire) bits |= BIT.fire;
-    // mirando si cammina soltanto (lo controlla anche il server)
+    // mirando si va piano (lo controlla anche il server)
     if (aiming()) {
       bits |= BIT.scope | BIT.walk;
       input.walk = true;
+      input.aim = true;
     }
   } else controls.pressed.clear();
   // l'arma in mano, come farà il server con lo stesso comando

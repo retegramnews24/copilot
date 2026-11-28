@@ -8,8 +8,9 @@ export const PLAYER = {
   crouchHeight: 1.25,
   eye: 1.65,
   crouchEye: 1.12,
-  run: 5.2, // m/s
-  walk: 2.6, // al computer di base (si corre tenendo Maiusc) e mirando
+  run: 7.0, // m/s: corsa (Maiusc tenuto al computer, levetta in fondo sul telefono)
+  walk: 5.2, // camminata, di base (era la corsa fino alla 1.0.73)
+  aim: 2.6, // mirando col tasto destro si va piano
   crouch: 2.0,
   accel: 40,
   friction: 10,
@@ -17,6 +18,7 @@ export const PLAYER = {
   gravity: 20,
   jump: 6.2, // salto di circa 1 m
   step: 0.4, // gradino che si sale da soli
+  climb: 0.5, // saltando, se i piedi arrivano a questa distanza dalla cima di una pietra o di un muretto si sale sopra
   stairs: 0.65, // più gradini di fila nello stesso passo (scala presa di lato, il corpo tocca due gradini)
   health: 100
 };
@@ -265,7 +267,7 @@ export function makeWorld(rawBoxes, ground = null, cell = 4) {
   return { boxes, near, height, ray };
 }
 
-// input: {fwd, side (-1..1), jump, crouch, walk, yaw, pitch}. boxes: elenco di scatole oppure un mondo (makeWorld).
+// input: {fwd, side (-1..1), jump, crouch, walk, aim, yaw, pitch}. boxes: elenco di scatole oppure un mondo (makeWorld).
 export function moveStep(b, input, dt, where) {
   const world = where && where.near ? where : null;
   const boxes = world ? world.near(b.x, b.z, 1.2) : where;
@@ -275,7 +277,7 @@ export function moveStep(b, input, dt, where) {
   const wantCrouch = !!input.crouch;
   if (!wantCrouch && b.crouch && blocked(b, boxes, PLAYER.height)) b.crouch = true;
   else b.crouch = wantCrouch;
-  const speed = b.crouch ? PLAYER.crouch : input.walk ? PLAYER.walk : PLAYER.run;
+  const speed = b.crouch ? PLAYER.crouch : input.aim ? PLAYER.aim : input.walk ? PLAYER.walk : PLAYER.run;
   // direzione voluta (avanti = -z quando yaw = 0, come la camera di three.js)
   const sin = Math.sin(b.yaw);
   const cos = Math.cos(b.yaw);
@@ -356,7 +358,10 @@ function slide(b, axis, delta, boxes, h) {
     }
     // gradino: se la scatola finisce poco sopra i piedi e sopra c'è posto, si sale
     const rise = c.max[1] - b.y;
-    if (rise > 0 && rise <= PLAYER.step && (b.onGround || b.vy <= 0)) {
+    // per terra si salgono i gradini bassi; in aria (saltando) anche una pietra o un muretto se la cima è vicina ai
+    // piedi: così il salto riesce anche sbattendo contro il bordo mentre si sale
+    const reach = b.onGround ? PLAYER.step : Math.max(PLAYER.step, PLAYER.climb);
+    if (rise > 0 && rise <= reach) {
       const oldY = b.y;
       // si sale; se lì sopra si tocca un altro gradino basso, si sale anche su quello (al massimo 3, PLAYER.stairs in tutto)
       let top = c.max[1];

@@ -347,7 +347,7 @@ assert.equal(fresh.players.size, 1, 'ricostruito');
   const x0 = P(s).body.x;
   drive(s, 60, { fwd: 1, yaw: -Math.PI / 2, bits: BIT.scope });
   const walked = Math.abs(P(s).body.x - x0);
-  assert.ok(walked < PLAYER.walk * 1.1 && walked > PLAYER.walk * 0.6, 'mirando in 1 s: ' + walked.toFixed(2) + ' m');
+  assert.ok(walked < PLAYER.aim * 1.1 && walked > PLAYER.aim * 0.6, 'mirando in 1 s: ' + walked.toFixed(2) + ' m');
   s.readyState = 3;
   room.close(s);
 }
