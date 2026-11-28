@@ -726,6 +726,15 @@ export function vendingSounds(ctx) {
     ),
     sfrigolio: (ac, t) => hiss(ac, t, 'highpass', 4200, 0.7, 0.025, 0.6, 3.4, 0.5),
     versa: (ac, t) => hiss(ac, t, 'bandpass', 2600, 0.8, 0.05, 0.05, 0.7, 0.4, 1200),
+    // macchinetta degli hot dog: il motorino del braccio (un ronzio che sale) e la salsa spremuta dal flacone
+    servo: (ac, t) => (
+      tone(ac, t, 'sawtooth', 210, 0.012, 0.32, 300),
+      hiss(ac, t, 'bandpass', 1800, 4, 0.008, 0.03, 0.2, 0.1)
+    ),
+    spremi: (ac, t) => (
+      hiss(ac, t, 'bandpass', 500, 2, 0.06, 0.02, 0.35, 0.3, 260),
+      tone(ac, t + 0.1, 'sine', 140, 0.025, 0.3, 90)
+    ),
     sorso: (ac, t) => (
       hiss(ac, t, 'bandpass', 350, 3, 0.07, 0.03, 0.12, 0.12, 900),
       tone(ac, t + 0.2, 'sine', 160, 0.03, 0.12, 110)

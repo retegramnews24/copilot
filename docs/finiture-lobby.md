@@ -31,10 +31,11 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 - Sala tavoli, tavoli e sedie moderni (`blender/sala_tavoli.blend` → `public/lobby3d/models/sala_tavoli.glb`, 80 KB): tavolo con il piano di noce dagli angoli arrotondati su una colonna centrale scura con il disco a terra; sedia girevole a quattro razze con seduta e schienale imbottiti in pelle, lo schienale staccato su un montante di metallo. Stesse misure di prima (piano a 80,5 cm, seduta a 48,5 cm): pedine e posti a sedere non cambiano. A istanze, un oggetto per materiale.
 - Applique dell'atrio spostate dove non coprono quadri e lavagna.
 - Carrello dei popcorn e della Binotto Cola (`blender/popcorn.blend` → `public/lobby3d/models/popcorn.glb`, circa
-  1 MB): nell'atrio a sinistra della porta del cinema, tra la pianta e il divano. Funzionamento e scelte in
+  1 MB): nell'angolo dell'atrio tra cinema e sala giochi, contro la parete della sala giochi. Funzionamento e scelte in
   `docs/macchinetta.md`.
 - Macchinetta automatica degli hot dog (`blender/hotdog.blend` → `public/lobby3d/models/hotdog.glb`, circa 740 KB):
-  solo il modello, per la parete della sala giochi verso l'angolo dei popcorn. Scelte in `docs/macchinetta.md`.
+  sulla parete della sala giochi tra la porta e l'applique, codice in `public/lobby3d/hotdog.js`. Scelte e
+  funzionamento in `docs/macchinetta.md`.
 - Zona operativa (`public/lobby3d/corridor.js`): porta blindata industriale sulla parete nord della sala giochi
   (centro x -15,95, vano 1,2 × 2,3 m, insegna rossa «ZONA OPERATIVA»; il quadro «INSERT COIN» è stato spostato a
   x -17,85 per farle posto). Si apre scorrendo avvicinandosi. Dietro, un tunnel di cemento di 12 m (z -6,3…-18,3,

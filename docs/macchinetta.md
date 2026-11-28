@@ -61,14 +61,25 @@ Vale per tutte le macchinette della Lobby 3D. Chi usa una macchinetta lo dice ne
 il codice che sta scrivendo, ordini fatti, prodotti presi); il server (`club-machines.js`) la lascia solo al primo,
 collegato e nel club. Gli altri vedono «la sta usando …» al posto di «Usa», e sulla loro macchinetta succede quello
 che fa lui: tasti scritti sul display, spirale e caduta, caffè, popcorn che scoppiano, cartoccio e bicchiere, presa.
-Chi va via senza prendere il prodotto lo perde, e la macchinetta torna libera.
+~~Chi va via senza prendere il prodotto lo perde.~~ Cambiato il 28 novembre 2026 (scelta del proprietario):
+
+**Si può andare via mentre prepara.** Uscendo («Esci») con il prodotto in preparazione o già pronto, l'ordine resta
+nella tua posa (`orders`: macchinetta, scelta, numero dell'ordine; `machineOrders` in `club-machines.js`) finché sei
+nel club. La macchinetta finisce di preparare per tutti (anche da lontano) e tiene il prodotto; vicino compare
+«Ritira · …». **Chiunque** passi lo può ritirare (con la mano giusta libera), anche chi l'ha ordinato; poi la
+macchinetta torna libera e l'ordine sparisce dalla posa di chi l'aveva fatto. Se chi ha ordinato esce dal club (o
+dalla Lobby 3D) prima che qualcuno lo ritiri, il prodotto si butta e la macchinetta torna libera. Vale per tutte e
+tre le macchinette. Chi arriva dopo che l'ordine è partito lo vede preparare da capo. Provato nell'anteprima con un
+amico finto (hot dog, popcorn, caffè e snack) e nella prova del server.
 
 ## Carrello dei popcorn e della Binotto Cola
 
 Decisioni del proprietario (28 novembre 2026):
 
-- **Posto:** nell'atrio, contro la parete del cinema, a sinistra della porta, tra la pianta e il divano petrolio e
-  senape (x -5,475; il tettuccio passa davanti alla parte bassa del quadro del panorama).
+- **Posto:** nell'atrio, nell'angolo tra la parete del cinema e quella della sala giochi, contro la parete della sala
+  giochi e girato verso l'atrio, a metà tra l'applique (z 3,3) e la cassa acustica dell'angolo (z 5,5): centro
+  x -6,46, z 4,4. Spostato lì il 28 novembre 2026 (prima era sulla parete del
+  cinema, x -5,475, dove ora c'è la pianta, accanto al divano petrolio e senape).
 - **Aspetto:** carrello rosso e oro dei popcorn con le ruote, la vetrina col pentolino appeso, il tettuccio a strisce
   rosse e bianche con l'insegna «POPCORN» e le lampadine; accanto la colonnina della **Binotto Cola** (niente marchi
   veri), con il rubinetto e i bicchieri impilati. Vetro molto trasparente.
@@ -78,7 +89,9 @@ Decisioni del proprietario (28 novembre 2026):
   sul banco e si riempie. La cola scende dal rubinetto nel bicchierone, poi arriva il coperchio con la cannuccia.
   Si tocca il prodotto pronto per prenderlo.
 - **In mano:** il cartoccio nella mano destra, si mangia in sei manciate («Mangia», F) e si svuota a vista; la cola
-  nella sinistra, quattro sorsi («Bevi», B). Con le mani già piene il tasto non parte.
+  nella sinistra, quattro sorsi («Bevi»). Con le mani già piene il tasto non parte. Sul computer si mangia e si beve
+  tutto con la **F** (scelta del 28 novembre 2026): prima quello che hai nella destra, poi la cola (il tasto B non c'è
+  più).
 - **Al cinema:** seduti sul divanetto la cola va da sola nel portabicchiere del bracciolo; a ogni sorso sale verso la
   bocca e torna giù. Il cartoccio resta in mano.
 - **Gli altri vedono** cartoccio, manciate, cola in mano o nel portabicchiere e i sorsi (posa: `snack` con 6 manciate
@@ -93,8 +106,8 @@ codice in `public/lobby3d/popcorn.js` (`createPopcorn`, `makeHeldPopcorn`, `make
 
 Decisioni del proprietario (28 novembre 2026):
 
-- **Posto:** nell'atrio, sulla parete della sala giochi (x -6,84), dal lato del cinema, verso l'angolo dei popcorn:
-  tra l'applique (z 3,3) e la pianta (z 5,4), circa z 4,25, girata verso l'atrio.
+- **Posto:** nell'atrio, sulla parete della sala giochi (x -6,84), dal lato del cinema, tra la porta della sala
+  giochi e l'applique (z 3,3): centro z 2,3, girata verso l'atrio. Nell'angolo accanto c'è il carrello dei popcorn.
 - **Aspetto:** acciaio inox da street food, grande come la macchinetta caffè e snack (1,15 × 1,95 m, profonda 0,72).
   Insegna rossa in piedi sopra la vetrina, cornice gialla luminosa attorno al vetro davanti, striscia rossa sotto.
 - **Vetro su tutti i lati:** la camera dove si prepara è una vetrina con vetro davanti, ai fianchi e sopra; dietro
@@ -128,9 +141,26 @@ punto dove girano o si attaccano (il codice legge da lì la posizione di riposo)
   dietro, si premono verso +Y), `display`, `insegna`: la faccia davanti ha UV da 0 a 1 per le scritte;
 - materiali a parte per far brillare il calore: `resistenza_griglia`, `resistenza_vegano`, `resistenza_punzone`.
 
-Da fare: il codice nella Lobby (terza macchinetta in `club-machines.js` e nel blocco «Macchinette» di `lobby3d.js`),
-con le stesse regole: una persona alla volta e tutti vedono. Da decidere: scritte di insegna, display e tasti; come si
-tiene in mano e quanti morsi.
+Altre scelte (28 novembre 2026): insegna **«HOT DOG»** gialla col bordo bianco su strisce rosse, con un hot dog
+disegnato ai lati; **4 morsi** («Mangia», F, mano destra), l'hot dog si accorcia dall'alto e la carta resta fino
+alla fine; preparazione di **circa 20 secondi** (11 senza salse, 21 con due, 25 con tre); senza salse va bene
+(hot dog liscio).
+
+Uso: «Usa · Hot dog (E)», la visuale va davanti alla macchinetta. Si sceglie Classico o Vegano (uno dei due resta
+acceso) e si accendono o spengono le salse; il display dice la scelta. «Prepara»: il braccio prende il panino dalla
+mensola e lo infilza sul punzone (la resistenza si accende), poi per ogni salsa prende il flacone, lo capovolge tra
+le dita sopra il panino e la spreme (getto e salsa che cresce), lo rimette a posto; prende il würstel (vegano dalla
+griglia di sopra), lo raddrizza e lo infila nel panino; il foglio esce dal rotolo, l'hot dog va sul foglio, la carta
+lo avvolge, la botola si apre e scende nel vano; si apre lo sportello e «PRONTO!». Si tocca l'hot dog per prenderlo.
+Con qualcosa già in mano la macchinetta non si usa (come quella del caffè).
+
+Codice: `public/lobby3d/hotdog.js` (`createHotdog`, `makeHeldHotdog`); in `lobby3d.js` blocco «Macchinette»
+(`DOG` x -6,45, z 2,3, girata verso +x); suoni `servo` e `spremi` in `vending.js`. Posa: `use.m = 'dog'`, `use.k`
+è il codice della scelta (`c` o `v` più `m`, `s`, `k`), `snack.id` è `hotdog-` più il codice, 4 morsi
+(`club-machines.js`, prova in `tests/expedition-runtime.test.js`). Prova locale: `public/_prova-hotdog.html`
+(fuori da git).
+
+Da provare nell'app con due giocatori: l'altro vede la scelta, il braccio che lavora e l'hot dog in mano?
 
 ## Da fare
 

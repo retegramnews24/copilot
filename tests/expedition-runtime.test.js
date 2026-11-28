@@ -60,9 +60,20 @@ try{
  spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:4.6,yaw:0,snack:{id:'espresso',left:6},drink:{id:'acqua',left:2}}}));
  walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.6))).users.find(u=>u.id==='21').clubPose;
  assert.equal(walker.snack,undefined,'sei morsi solo per i popcorn');assert.equal(walker.drink,undefined,'nell\'altra mano solo la cola');
+ // macchinetta degli hot dog: quattro morsi, tipo e salse nell'id; anche lei una persona alla volta
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.9,z:4.25,yaw:0,snack:{id:'hotdog-vsk',left:4,n:0},use:{m:'dog',k:'vsk',n:1,t:1}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.25))).users.find(u=>u.id==='21').clubPose;
+ assert.deepEqual(walker.snack,{id:'hotdog-vsk',left:4,n:0});assert.deepEqual(walker.use,{m:'dog',k:'vsk',n:1,t:1},'la macchinetta degli hot dog passa agli altri');
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.9,z:4.3,yaw:0,snack:{id:'hotdog-c',left:5}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.3))).users.find(u=>u.id==='21').clubPose;
+ assert.equal(walker.snack,undefined,'l\'hot dog ha quattro morsi');
+ // ordini lasciati: chi va via mentre prepara lascia l'ordine (uno per macchinetta, solo macchinette vere)
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-4,z:3.1,yaw:0,orders:[{m:'dog',k:'csk',n:3},{m:'dog',k:'v',n:4},{m:'tv',k:'x',n:1},{m:'pop',k:'<b>',n:2}]}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===3.1))).users.find(u=>u.id==='21').clubPose;
+ assert.deepEqual(walker.orders,[{m:'dog',k:'csk',n:3}],'ordine lasciato alla macchinetta degli hot dog');
  // macchinette: una persona alla volta; chi la usa lo dice nella posa e gli altri vedono le sue scelte
  spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.4,z:5.05,yaw:0,use:{m:'pop',k:'tutti',n:2,t:1}}}));
- walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.use))).users.find(u=>u.id==='21').clubPose;
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.use?.m==='pop'))).users.find(u=>u.id==='21').clubPose;
  assert.deepEqual(walker.use,{m:'pop',k:'tutti',n:2,t:1});
  const otherRes=await mf.dispatchFetch('https://unit.test/api/lobby/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(23)}});assert.equal(otherRes.status,101);
  const other={ws:otherRes.webSocket,packets:[],waiters:[]};other.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);other.packets.push(p);for(const fn of [...other.waiters])fn(p)});other.ws.accept();sockets.push(other.ws);

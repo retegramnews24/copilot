@@ -1,5 +1,5 @@
 import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
-import { heldDrink, heldSnack, machineUse } from './club-machines.js';
+import { heldDrink, heldSnack, machineOrders, machineUse } from './club-machines.js';
 import { recordPinball, startPinball, removePinball } from './club-pinball.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
@@ -880,6 +880,10 @@ export class Room extends DurableObject {
                 : {}),
               ...((pose.station === 'walk' || pose.station === 'seat') && heldDrink(pose.drink)
                 ? { drink: heldDrink(pose.drink) }
+                : {}),
+              // ordini lasciati alle macchinette (finiscono di preparare, chiunque può ritirare)
+              ...((pose.station === 'walk' || pose.station === 'seat') && machineOrders(pose.orders)
+                ? { orders: machineOrders(pose.orders) }
                 : {}),
               // macchinetta in uso: una persona alla volta, gli altri vedono quello che fa
               ...(() => {

@@ -20,9 +20,15 @@ porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche
 anche con due giocatori.
 
 **Macchinetta degli hot dog della Lobby 3D** (`docs/macchinetta.md`, «Macchinetta automatica degli hot dog»):
-modello approvato dal proprietario (`blender/hotdog.blend` → `models/hotdog.glb`, non in un commit): inox street
-food, vetrina di vetro su tre lati e sopra, braccio robot per le salse, griglia vegana a parte. Da fare: il codice,
-come terza macchinetta, sulla parete della sala giochi verso l'angolo dei popcorn.
+modello approvato dal proprietario (`blender/hotdog.blend` → `models/hotdog.glb`, su staging): inox street food,
+vetrina di vetro su tre lati e sopra, braccio robot per le salse, griglia vegana a parte. Codice fatto (non in un
+commit): terza macchinetta sulla parete della sala giochi, tra la porta e l'applique; il carrello dei popcorn è
+passato nell'angolo (parete della sala giochi, girato verso l'atrio) e la pianta al suo vecchio posto accanto al
+divano. Nuove regole per tutte le macchinette: si può uscire mentre preparano (finiscono e tengono il prodotto finché
+chi ha ordinato è nel club, chiunque lo può ritirare) e sul computer si mangia e si beve tutto con la F (prima la
+mano destra, poi la cola). Tutti i passaggi animati
+(circa 20 secondi), hot dog in mano in 4 morsi, una persona alla volta. Provato nell'anteprima locale; da provare in
+due nell'app di prova.
 
 **Sala cinema della Lobby 3D**, un passo per volta con l'ok del proprietario. Nella 1.0.70 (staging e main), da
 guardare con un film vero nell'app: sala 2 m più lunga (parete dello schermo a z 20,55), tetto a 5,5 m dello stesso colore delle pareti,
@@ -202,8 +208,9 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 
 - Stile A «Circolo italiano anni '60» per pareti e finiture; i mobili della sala tavoli invece sono moderni.
 - Modanature lunghe fatte in codice, oggetti singoli in Blender.
-- Macchinette (caffè e snack, carrello dei popcorn): tutto quello che succede si vede da tutti, e una macchinetta la
-  usa una persona alla volta (`docs/macchinetta.md`).
+- Macchinette (caffè e snack, carrello dei popcorn, hot dog): tutto quello che succede si vede da tutti, e una
+  macchinetta la usa una persona alla volta (`docs/macchinetta.md`). Si può uscire mentre prepara: finisce e tiene
+  il prodotto finché chi ha ordinato è nel club, e chiunque lo può ritirare. Sul computer si mangia e si beve con la F.
 
 **Altri giochi**
 
