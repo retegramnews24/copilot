@@ -9,7 +9,7 @@ export const PLAYER = {
   eye: 1.65,
   crouchEye: 1.12,
   run: 5.2, // m/s
-  walk: 2.6, // con Maiusc
+  walk: 2.6, // al computer di base (si corre tenendo Maiusc) e mirando
   crouch: 2.0,
   accel: 40,
   friction: 10,

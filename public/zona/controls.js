@@ -1,6 +1,6 @@
 // Zona Operativa: comandi. Computer: W A S D, mouse (puntatore bloccato), clic sinistro spara, clic destro mirino
-// (Falco), R ricarica, E prendi, 1-2-3 armi, rotella cambia arma, Spazio salta, Ctrl o C accucciato, Maiusc passo
-// lento, Esc menù. Telefono: levetta a sinistra, trascinare a destra per guardare (mira libera), tasti.
+// (Falco), R ricarica, E prendi, 1-2-3 armi, rotella cambia arma, Spazio salta, Ctrl o C accucciato, si cammina e
+// Maiusc tenuto corre (come nella Lobby 3D), Esc menù. Telefono: levetta a sinistra, trascinare a destra per guardare (mira libera), tasti.
 import { isTouchDevice } from '../touch-device.js';
 
 export function createControls(canvas, ui, { onMenu }) {
@@ -236,7 +236,8 @@ export function createControls(canvas, ui, { onMenu }) {
     return {
       fwd,
       side,
-      walk: k('ShiftLeft') || k('ShiftRight'),
+      // al computer si cammina e si corre tenendo Maiusc; sul telefono la levetta corre come prima
+      walk: !touch && !(k('ShiftLeft') || k('ShiftRight')),
       crouch: k('ControlLeft') || k('KeyC') || s.touchCrouch,
       jump: s.take('salta'),
       yaw: s.yaw,

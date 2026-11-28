@@ -3,7 +3,7 @@
 //   quando arriva la posizione vera, riparte da lì rifacendo i comandi non ancora confermati (correzione).
 // - Gli altri si disegnano un attimo nel passato (100 ms), a metà tra due fotografie del server: scorrono lisci.
 // - Al server si dice anche quale momento si sta guardando, così i colpi si controllano dove si vedevano gli altri.
-import { moveStep } from './rules.js?v=6b60391eb6';
+import { moveStep } from './rules.js?v=b7541a7935';
 
 export const DT = 1 / 60; // un comando ogni 1/60 di secondo, come sul server
 const DELAY = 100; // ms nel passato per gli altri

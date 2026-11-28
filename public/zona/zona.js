@@ -2,12 +2,12 @@
 // con le regole di rules.js (le stesse che userà il server dalla tappa 2).
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
-import { WEAPONS, AIM_SPREAD, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=6b60391eb6';
+import { WEAPONS, AIM_SPREAD, damage, rng, newGun, tickGun, tryFire, startReload, pelletDirs, rayWorld, newBody, moveStep, eyeHeight, lookDir, targetHit } from './rules.js?v=b7541a7935';
 import { POLIGONO, TAKE_RADIUS } from './map-poligono.js?v=4f0b9d8f55';
-import { createControls } from './controls.js?v=3e96426e5e';
+import { createControls } from './controls.js?v=04ee1def20';
 import { createViewmodel } from './viewmodel.js?v=346e311811';
 import * as sfx from './audio.js?v=337aee686c';
-import { createNet } from './net.js?v=fca50b11d7';
+import { createNet } from './net.js?v=7e8e01c5e4';
 import { createSoldiers, ARMI } from './soldiers.js?v=a121bc0992';
 
 const $ = id => document.getElementById(id);
@@ -308,7 +308,7 @@ function showMenu(show) {
 
 $('comandi').innerHTML = matchMedia('(pointer: coarse)').matches
   ? 'Levetta a sinistra per muoverti, trascina a destra per guardare. SPARA, MIRA (mirando si cammina), RIC. ricarica, ARMA cambia arma, PRENDI vicino al bancone.'
-  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un\'arma dal bancone · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc passo lento · Esc menù';
+  : 'W A S D muoversi · mouse guardare · clic sinistro sparare · tasto destro tenuto mira (mirando si cammina) · R ricarica · E prendi un\'arma dal bancone · 1 2 3 armi, rotella, Q ultima · Spazio salta · Ctrl o C accucciato · Maiusc tenuto corre · Esc menù';
 $('sens').value = settings.sens;
 $('volume').value = settings.volume;
 $('sens').oninput = e => {
