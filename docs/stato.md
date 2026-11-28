@@ -90,7 +90,15 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 - Zona Operativa, arma in mano (su staging, non ancora su `main`): senza mirare la canna punta al mirino, mirando l'arma si
   raddrizza e la tacca sta al centro. Vista nell'anteprima solo con la pistola: guardare anche le altre armi.
 - Zona Operativa, mappa e ambiente: scelte del proprietario in `docs/zona-operativa.md` (Tappa 4, «Mappa e ambiente
-  più belli»). Si comincia dalla mappa in Blender.
+  più belli»). Mappa in Blender (non in un commit, approvata passo passo dal proprietario): ripari nuovi, vita del
+  borgo, trame con rilievo su tutto, case e torri meno da prefabbricato, terremoto (56 case su 84 mezze crollate),
+  rocce arrotondate, sabbia ai muri, ai massi e dune al muro di cinta; GLB compresso con Draco (7,8 MB, lettore in
+  `public/vendor/three/addons/`), urti rigenerati, prove della mappa passate. Da fare: provarla sul telefono
+  (scalda? scatta? quanto ci mette a caricare), poi piante e acqua (palme, cespugli, fichi d'India, oasi col pozzo
+  alla partenza Blu, erba secca).
+- Zona Operativa, richieste del proprietario per il codice (28 novembre, da fare quando si lavora sul codice): **più armi
+  a terra** (più punti di raccolta: i punti stanno nella mappa, raccolta `punti`), **si deve capire da dove arriva uno
+  sparo** (segno a schermo e/o suono che viene dalla sua direzione), **audio migliore** («fa pena»).
 
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,

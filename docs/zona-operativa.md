@@ -431,6 +431,44 @@ dal proprietario in Blender; poi l'ambiente nel codice.
   muovono); **suoni d'ambiente** (vento, uccelli, cane lontano, passi diversi su sabbia, pietra e legno); **luce più
   bella** (ombre nei vicoli, interni più scuri, luce calda «cotta» in Blender). L'ora della partita non è stata
   scelta: resta il pomeriggio.
+- **Qualità prima del peso** (28 novembre): i ripari fatti a scatole sono stati scartati («sembra un gioco da 20
+  centesimi»). Gli oggetti nuovi si fanno curati (spigoli smussati, ruote rotonde, pezzi veri); il limite dei
+  triangoli non è più 60.000 ma quanto regge un telefono moderno (le copie uguali a istanze), da provare sul telefono.
+  Al server i triangoli non pesano: usa solo le scatole degli urti.
+- Fatto: **rovine e ripari** (raccolta `ripari`, con gli urti): un camion nell'angolo nord-est vuoto (cabina, cassone
+  a tavole con una sponda rotta, una ruota mancante), 2 jeep vicino alle mura est e ovest, 6 postazioni di sacchi di
+  sabbia a C alte circa 1 m su una montagnola, 2 case diroccate a L con porta e architrave, pietre a vista e travi;
+  stile ruggine e sabbia. Tutto a coppie simmetriche (il camion sulla diagonale, a uguale distanza dalle due
+  partenze), almeno 2,2 m liberi intorno. Macerie e trave caduta nella raccolta `arredi`, senza urti. Le scatole
+  degli urti di questi oggetti stanno in mesh a parte (`<nome>_urti`, proprietà `urti` della mesh), non nel GLB.
+  Circa 11.700 triangoli contando le copie.
+- Fatto: **vita del borgo** (colori caldi e sbiaditi, tanti oggetti): mercato di 6 bancarelle sulla diagonale verso
+  (-22, -30), altre 4 bancarelle e 8 carretti a coppie simmetriche (raccolta `ripari`, con gli urti), 67 giare, 55
+  lanterne, 16 fili di panni tra i muri dei vicoli, tappeti stesi, appesi e arrotolati (raccolta `arredi`, senza
+  urti). Tutto contro i muri delle case, mai davanti a porte e finestre, a 1,2 m dai punti, con 3 m liberi davanti
+  agli oggetti grandi. I tetti di stoffa delle bancarelle sono oggetti a parte (`telo_…`), per farli muovere col
+  vento nel codice. Oggetti `b_…`.
+- Fatto: **trame su tutto**, cotte dalle trame procedurali di Blender (Noise, Voronoi, Brick, Wave) in immagini
+  1024 ripetibili, in grigio, moltiplicate per i colori dei vertici: intonaco, pietra a corsi, roccia, sabbia, legno,
+  metallo, stoffa, cotto (materiali `m_…`, immagini `trama_…`), ognuna con la sua mappa di rilievo (`rilievo_…`).
+- Fatto: **case e torri meno da prefabbricato**: muri irregolari (gonfi e incavi di qualche centimetro, piede più
+  largo, appena rastremati), spigoli con una smussatura sola e ombreggiatura morbida, sporco alla base, travi di legno
+  sotto i tetti delle case di fango, cupola liscia a file di piastrelle. La pietra (mura, muri alti, torre centrale,
+  case D) ha un trattamento più leggero (il proprietario: «un po' troppo»). Ogni casa ha la sua sfumatura: è una
+  copia (`tinta_…`) della mesh del suo tipo, che resta la sorgente (proprietà `tipo_casa`).
+- Fatto: **terremoto** (scelto dal proprietario al posto di una simulazione con la fisica): 56 case su 84 (2 su 3,
+  dentro e fuori dalle mura) hanno la parte alta tagliata (Boolean esatto) da un angolo o da un lato, mai sotto
+  2,3 m, così le porte restano libere; macerie, blocchi e sabbia ai piedi (`crollo_…`). Torre centrale, mura e case
+  con il Falco restano intere. Gli urti delle case crollate sono le scatole del tipo, abbassate nella zona crollata
+  (`urti_crollo_…`). Scelto il terremoto numero 1, forza 2,2, quota 0,67.
+- Fatto: **massi e sassi** rifatti come rocce arrotondate e irregolari (stessi posti, stesse scatole); **sabbia**
+  ai piedi dei massi (`sabbia_massi`), lungo la base di muri, case e muretti (`sabbia_muri`), e dune contro il muro di
+  cinta dentro e fuori (`sabbia_mura`, alte 1-3 m; quella dentro si calpesta: entra nell'altezza del terreno del
+  gioco). Niente sabbia sui punti e sulle due partenze.
+- **Peso**: circa 516.000 triangoli in tutto. Il GLB è compresso con Draco (da 42 MB a 7,8 MB): `online.js` lo legge
+  con il `DRACOLoader` di three.js 0.170.0 (`public/vendor/three/addons/loaders/DRACOLoader.js` e
+  `libs/draco/gltf/`). Esportazione: scena «Scene», extras, niente luci, Y in alto, colori dai materiali, immagini
+  JPEG 82, Draco livello 7. Da provare sul telefono che non scaldi e non scatti.
 
 ## Controlli prima di ogni rilascio
 

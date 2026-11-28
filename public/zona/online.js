@@ -3,6 +3,7 @@
 // (zona-server.js). Il collegamento passa dall'app (zona-link.js), il movimento si prevede con net.js.
 import * as THREE from 'three';
 import { GLTFLoader } from '../vendor/three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from '../vendor/three/addons/loaders/DRACOLoader.js';
 import { Sky } from '../vendor/three/addons/objects/Sky.js';
 import {
   WEAPONS,
@@ -19,7 +20,7 @@ import {
   pelletDirs,
   rng
 } from './rules.js?v=d4fc18028a';
-import { BOXES, GROUND } from './map-deserto.js?v=e3be3291bf';
+import { BOXES, GROUND } from './map-deserto.js?v=2b70c80d39';
 import { createControls } from './controls.js?v=87c4fd76d3';
 import { createViewmodel } from './viewmodel.js?v=2afebbe580';
 import { createNet, DT } from './net.js?v=ba2d34e023';
@@ -115,7 +116,10 @@ function resize() {
 addEventListener('resize', resize);
 
 // ---------- caricamento ----------
-const loader = new GLTFLoader();
+// la mappa del deserto è compressa (Draco): il lettore sta in vendor/three/addons/libs/draco/gltf/
+const loader = new GLTFLoader().setDRACOLoader(
+  new DRACOLoader().setDecoderPath(new URL('../vendor/three/addons/libs/draco/gltf/', import.meta.url).href)
+);
 const load = name =>
   new Promise((ok, ko) =>
     loader.load(

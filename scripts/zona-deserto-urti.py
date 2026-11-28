@@ -68,12 +68,17 @@ def world_box(o, mn, mx, shrink=1.0):
 
 
 boxes = []
-for o in bpy.data.collections['case'].objects:
-    for mn, mx in local_boxes(o.data):
-        boxes.append(world_box(o, mn, mx))
+# case e ripari nuovi (carcasse, sacchi di sabbia, case diroccate): copie con la stessa mesh, una scatola per pezzo.
+# La raccolta «arredi» (macerie e oggetti piccoli) resta senza urti. Se la mesh ha la proprietà «urti», le scatole
+# vengono da quella mesh a parte (scatole semplici, non usate da nessun oggetto e quindi fuori dal GLB).
+for col in ('case', 'ripari'):
+    for o in bpy.data.collections[col].objects:
+        me = bpy.data.meshes.get(o.data.get('urti', '')) or o.data
+        for mn, mx in local_boxes(me):
+            boxes.append(world_box(o, mn, mx))
 for name in SOLID:
     o = scene.objects[name]
-    for mn, mx in local_boxes(o.data):
+    for mn, mx in local_boxes(bpy.data.meshes.get(o.data.get('urti', '')) or o.data):
         boxes.append(world_box(o, mn, mx, SHRINK.get(name, 1.0)))
 # via le scatole minuscole (schegge sotto i 5 cm)
 boxes = [b for b in boxes if b[3] - b[0] > 0.05 and b[4] - b[1] > 0.05 and b[5] - b[2] > 0.05]
@@ -89,7 +94,9 @@ boxes += [
 STEP = 1.0
 X0 = -66.0
 N = 133
-ground_objs = [scene.objects[n] for n in ('terreno', 'partenza_blu', 'partenza_rossa')]
+# anche la sabbia ammucchiata contro il muro di cinta (si calpesta)
+ground_objs = [scene.objects[n] for n in ('terreno', 'partenza_blu', 'partenza_rossa', 'sabbia_mura')
+               if n in scene.objects]
 heights = []
 for iz in range(N):
     z3 = X0 + iz * STEP
