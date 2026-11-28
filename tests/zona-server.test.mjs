@@ -277,6 +277,22 @@ drive(a, 1, { arma: ARMI.indexOf('falco') });
 assert.equal(P(a).current, 'ruggito', 'il Falco non ce l’ha');
 drive(a, 1, { arma: ARMI.indexOf('coltello') });
 assert.equal(P(a).current, 'coltello');
+// rinascendo: pistola, coltello e l'arma principale successiva del giro (Calabrone, Tuono, Ruggito, Falco)
+{
+  const giro = ['calabrone', 'tuono', 'ruggito', 'falco'];
+  const pos = { x: P(a).body.x, y: P(a).body.y, z: P(a).body.z };
+  const viste = [];
+  for (let k = 0; k < 4; k++) {
+    room.spawn(P(a));
+    viste.push(P(a).current);
+    assert.ok(P(a).guns.baretta && P(a).guns.coltello && P(a).guns[P(a).current], 'pistola, coltello e principale');
+  }
+  assert.equal(new Set(viste).size, 4, 'quattro rinascite, quattro armi diverse: ' + viste.join(', '));
+  assert.equal(giro.indexOf(viste[1]), (giro.indexOf(viste[0]) + 1) % 4, 'in ordine di giro');
+  place(a, pos.x, pos.z);
+  P(a).body.y = pos.y;
+  tick(1);
+}
 
 // ---------- casse mediche ----------
 const med = room.items.find(i => i.kind === 'cassa_medica');

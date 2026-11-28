@@ -1839,7 +1839,7 @@ function buildLobby3D(app, life) {
   const keys = new Set();
   let firstPerson=false,parked=null,pongAnchor=null,localPose=null,lastPoseKey='',lastPoseSent=0,peerList=null;
   // azioni (solo visive): Ctrl sinistro abbassato, clic sinistro colpo col braccio destro, tasto destro parata
-  let crouching=false,guarding=false,punchCount=0,hitN=0,lastHit=null,fxNoise=null;
+  let crouching=false,guarding=false,punchCount=0,jumpCount=0,hitN=0,lastHit=null,fxNoise=null;
   const peers=new Map(),downArm=new THREE.Vector3(0,-1,0);
   const viewButton=document.createElement('button');
   $('.l3d-top').append(viewButton);
@@ -1876,7 +1876,7 @@ function buildLobby3D(app, life) {
     }
     // in giro per il club: posizione e direzione (arrotondate), così gli altri ti vedono camminare
     const r=v=>Math.round(v*20)/20;
-    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(lastHit?{hit:lastHit}:{}),...heldPose()};
+    return {station:'walk',x:r(pos.x),z:r(pos.z),yaw:Math.round(heading*20)/20,...(Math.abs(me.lookYaw||0)>.05?{look:r(me.lookYaw)}:{}),...(crouching?{crouch:1}:{}),...(guarding?{guard:1}:{}),...(punchCount?{punch:punchCount}:{}),...(jumpCount?{jump:jumpCount}:{}),...(lastHit?{hit:lastHit}:{}),...heldPose()};
   }
   function descriptor(){
     const pose=currentPose();if(!pose)return null;
@@ -1898,6 +1898,7 @@ function buildLobby3D(app, life) {
     c.lookYaw=Number(p.look)||0;c.lookPitch=0;
     animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
     actCharacter(c,{crouch:p.crouch,guard:p.guard,hold:!!p.snack},peerDt,t);
+    peerJump(c);
     return {x:w.x,z:w.z,yaw:w.yaw};
   }
   function seatPose(c,p){
@@ -2037,7 +2038,8 @@ function buildLobby3D(app, life) {
         c.pose=pose;if(user.clubPose)setLook(c,user.clubPose);
         // un colpo nuovo di questo giocatore: si vede il braccio; se ha preso qualcuno, stelline e suono
         const cp=user.clubPose||{};
-        if(c.seenPunch===undefined){c.seenPunch=cp.punch||0;c.seenHit=cp.hit?.n||0}
+        if(c.seenPunch===undefined){c.seenPunch=cp.punch||0;c.seenHit=cp.hit?.n||0;c.seenJump=cp.jump||0}
+        if((cp.jump||0)!==c.seenJump){c.seenJump=cp.jump||0;if(!c.jumping)c.jumping={prep:.12,h:0,v:0};c.landBend=.28}
         if((cp.punch||0)!==c.seenPunch){c.seenPunch=cp.punch||0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0}
         if(cp.hit&&cp.hit.n!==c.seenHit){c.seenHit=cp.hit.n;struck(String(cp.hit.id),!!cp.hit.blocked,c)}
         c.snackWanted=cp.snack||null; // prodotto della macchinetta in mano (peerSnack)
@@ -2056,6 +2058,15 @@ function buildLobby3D(app, life) {
     if (seating || jumpHeight !== 0 || verticalSpeed !== 0 || jumpPrep > 0) return;
     jumpPrep = 0.12;
     me.landBend = 0.28;
+    jumpCount++; // gli altri lo vedono saltare (peerJump)
+  }
+  // gli altri che saltano: alla notizia di un salto nuovo il loro personaggio fa lo stesso salto (spinta, volo, atterraggio)
+  function peerJump(c){
+    const j=c.jumping;if(!j)return;
+    if(j.prep>0){j.prep-=peerDt;if(j.prep<=0)j.v=4.1;return}
+    j.h=Math.max(0,j.h+j.v*peerDt-.5*13*peerDt*peerDt);j.v-=13*peerDt;
+    if(j.h===0&&j.v<0){c.jumping=null;c.landBend=.28;return}
+    c.root.position.y+=j.h;
   }
   function resetMovement() {
     tableFootball.blur();

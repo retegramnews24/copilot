@@ -37,8 +37,12 @@ medica; `poligono.glb`; `deserto.glb`; `soldati.glb`).
 | Menù | **Struttura come nei giochi del genere, grafica nostra**: scelta squadra, impostazioni dell'ospite (modalità, tempo, bot), classifica con Tab, menù di pausa; disegni, colori e scritte di Binottoland |
 
 Aggiornamento del 28 novembre (scelte del proprietario): la partita sul deserto è **sempre a squadre**, Rossa contro
-Blu, 4 contro 4, al massimo 8 persone; i posti vuoti li prendono i **bot**, livello **medi**; **all'inizio si
-sceglie la squadra** (Rossa, Blu o automatica). Si mira **tenendo premuto il tasto destro** con tutte le armi, e
+Blu, 4 contro 4, al massimo 8 persone; i posti vuoti li prendono i **bot**, livello **medi**, poi (28 novembre, più
+tardi) **un po' più facili** (reagiscono in circa 0,7 s, sbagliano di più da lontano, si girano più piano, vedono fino a
+55 m: `BOT` in `zona-bots.js`); **all'inizio si sceglie la squadra** (Rossa, Blu o automatica). **Armi a rotazione**
+(28 novembre): a ogni rinascita, oltre a pistola e coltello, l'arma principale successiva del giro Calabrone → Tuono →
+Ruggito → Falco, con un punto di partenza a caso per ognuno (`SPAWN_ROTATION`); i bot girano fra Calabrone, Ruggito e
+Tuono. Le armi a terra restano. Si mira **tenendo premuto il tasto destro** con tutte le armi, e
 mirando **si cammina soltanto**. Il poligono di tiro è condiviso (ci si vede, niente fuoco amico).
 
 ### Ancora da decidere (domande a scelta al proprietario, quando serve)

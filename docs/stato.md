@@ -83,6 +83,12 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 
 ## Da provare
 
+- Lobby 3D tra amici (non in un commit): il salto ora si vede anche dagli altri (contatore `jump` nella posa, come i
+  colpi; il server lo lascia passare, `worker.js`; chi guarda fa lo stesso salto, `peerJump`). Abbassarsi, parata e
+  colpi arrivavano già: controllati con la prova `test:multiplayer-runtime`. Da provare in due nell'app.
+- Zona Operativa (non in un commit): bot un po' più facili e arma principale a rotazione a ogni rinascita
+  (Calabrone → Tuono → Ruggito → Falco). Da provare giocando.
+
 - Zona Operativa al computer: ora si cammina e si corre tenendo Maiusc (prima era il contrario). Nella 1.0.73.
   Dopo, su staging (non ancora su `main`): camminata alla velocità della corsa di prima (5,2 m/s), corsa più
   veloce (7 m/s), sul telefono si corre con la levetta in fondo, saltando si sale su pietre, casse e ostacoli bassi

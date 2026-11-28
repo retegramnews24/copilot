@@ -898,6 +898,8 @@ export class Room extends DurableObject {
                     ...(pose.crouch ? { crouch: 1 } : {}),
                     ...(pose.guard ? { guard: 1 } : {}),
                     ...(Number.isInteger(pose.punch) && pose.punch > 0 ? { punch: pose.punch % 1e9 } : {}),
+                    // salti fatti (contatore): chi guarda fa saltare il personaggio a ogni numero nuovo
+                    ...(Number.isInteger(pose.jump) && pose.jump > 0 ? { jump: pose.jump % 1e9 } : {}),
                     ...(pose.hit &&
                     typeof pose.hit.id === 'string' &&
                     /^[\w:-]{1,64}$/.test(pose.hit.id) &&

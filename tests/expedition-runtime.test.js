@@ -53,6 +53,10 @@ try{
  spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:4.5,yaw:0,snack:{id:'<b>',left:9}}}));
  walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.5))).users.find(u=>u.id==='21').clubPose;
  assert.equal(walker.snack,undefined,'snack non valido scartato');
+ // i movimenti si vedono anche dagli altri: abbassato, parata, colpi e salti (contatori)
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:5,yaw:0,crouch:1,guard:1,punch:3,jump:7}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===5))).users.find(u=>u.id==='21').clubPose;
+ assert.equal(walker.crouch,1);assert.equal(walker.guard,1);assert.equal(walker.punch,3);assert.equal(walker.jump,7,'il salto arriva agli altri');
  spectator.ws.send(JSON.stringify({type:'presence',room:null,away:false,pose:null}));await until(spectator,p=>p.users?.some(u=>u.id==='21'&&!u.clubPose));
  spectator.ws.send(JSON.stringify({type:'presence',room:dama.data.state.room,away:true}));await until(spectator,p=>p.users&&!p.users.some(u=>u.id==='21'));
  console.log('PASS spectator presence: live chess/checkers table changes, unique identity, Lobby return and away removal.');

@@ -294,12 +294,21 @@ function uiRefs() {
     btnTake: $('t-prendi')
   };
 }
+// rinascendo: pistola, coltello e l'arma principale del giro (quella che il server ha appena dato, serverSlot1)
+let serverSlot1 = null;
 function resetGuns() {
   guns = { baretta: newGun('baretta'), coltello: newGun('coltello') };
   slot1 = null;
   current = null;
-  select('baretta', true);
-  last = 'coltello';
+  if (serverSlot1) {
+    slot1 = serverSlot1;
+    guns[slot1] = newGun(slot1);
+    select(slot1, true);
+    last = 'baretta';
+  } else {
+    select('baretta', true);
+    last = 'coltello';
+  }
 }
 function select(name, quiet) {
   if (!name || name === current || !guns[name]) return;
@@ -376,6 +385,7 @@ function onMessage(m) {
     alive = m.me.al;
     respawnIn = m.me.ru;
     // l'arma del posto 1 la decide il server (presa, rinascita)
+    serverSlot1 = m.me.s1 || null;
     if (m.me.s1 !== slot1) {
       if (m.me.s1) giveSlot1(m.me.s1);
       else {
