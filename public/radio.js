@@ -976,6 +976,8 @@
         setPlain(fxLevel * fallbackLevel);
       }
     },
+    // la scelta della radio del bancone è aperta (la Lobby 3D fa vedere il volume solo allora)
+    choosing: () => !!selector,
     choose(send) {
       if (!allowed() || !sharedMode || selector) return;
       selector = send;

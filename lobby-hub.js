@@ -9,7 +9,7 @@ import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './t
 import { gameTitle } from './public/game-info.js';
 import { makeRoomFor } from './socket-limits.js';
 import { MSG } from './public/messages.js';
-import { hasLeague, prize, prizeWinners, useWallet, walletMessage } from './club-wallet.js';
+import { hasLeague, prize, prizeWinners, readJackpot, useWallet, walletMessage } from './club-wallet.js';
 
 // tavoli della sala tavoli: servono l'iscrizione alla Lega Giochi Binottoland (docs/gettoni.md)
 const LEAGUE_GAMES = [
@@ -137,6 +137,7 @@ export class LobbyHub {
       pinballTop: (await this.ctx.storage.get('pinballTop')) ?? [],
       pinballTopGT: (await this.ctx.storage.get('pinballTopGT')) ?? [],
       tableVolume: (await this.ctx.storage.get('tableVolume')) ?? 80,
+      slotJackpot: (await readJackpot(this.ctx)).btn, // jackpot delle slot della sala giochi (docs/slot.md)
       users,
       // Chat: messages only (notices stored there by 1.0.41 are dropped).
       messages: ((await this.ctx.storage.get('chat')) || []).filter(m => !m.notice),

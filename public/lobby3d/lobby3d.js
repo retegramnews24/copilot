@@ -2,7 +2,7 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4b254beeea';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4ee5124e52';
 import {buildBalilla} from './balilla.js?v=704a972fe3';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {helpFor, helpList} from './help.js?v=d35882a376';
@@ -17,6 +17,7 @@ import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtil
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
+import { marqueeArt, sideArt, panelArt } from './cabinet-art.js?v=534de2857c';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, insertCoin, nameTag, blobTex } from './textures.js?v=0545bdbd8d';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a5078a2ed5';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
@@ -30,7 +31,8 @@ import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vendin
 import { createPopcorn, makeHeldPopcorn, makeHeldCola } from './popcorn.js?v=6d7cb70a80';
 import { createHotdog, makeHeldHotdog } from './hotdog.js?v=9f2b0aba6a';
 import { COIN_GAMES as COIN_LIST, INSERT_COIN } from '../coin-games.js?v=af1bf21f7d';
-import { createCoinChanger, COIN_RATE } from './gettoni.js?v=2759aad45e';
+import { createCoinChanger, COIN_RATE } from './gettoni.js?v=84a976be52';
+import { createSlots } from './slot.js?v=2c8864fda6';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 import { buildCorridor, inZone, ZONE } from './corridor.js?v=a5eb759f5c';
 
@@ -68,7 +70,7 @@ const CSS = `
 .l3d-top{position:absolute;left:calc(var(--ui-safe-left,0px) + 10px);right:calc(var(--ui-safe-right,0px) + 10px);top:calc(var(--ui-safe-top,0px) + 10px);display:flex;gap:8px;align-items:center;pointer-events:none}
 .l3d-top>*{pointer-events:auto;flex:none;width:auto;margin:0}
 @media (max-width:520px){.l3d-top{gap:5px}.l3d-top>*{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:clamp(12px,3.3vw,14px)!important;padding:7px 9px!important}.l3d-where{padding:6px 8px!important}}
-.l3d button{font:inherit;color:#fff;background:rgba(18,14,28,.72);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer}
+.l3d button{width:auto;max-width:90vw;font:inherit;color:#fff;background:rgba(18,14,28,.72);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:9px 13px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);cursor:pointer}
 /* telefono: tutti i tasti uguali, gialli trasparenti al 50% e a pillola o tondi, il più piccoli possibile; al tocco
    diventano gialli pieni. Niente sfocatura dietro (con la scena che cambia andrebbe rifatta a ogni fotogramma) */
 .l3d-touch button{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(255,200,40,.5);border:1px solid rgba(255,200,40,.75);color:#2a1600;font-weight:600;text-shadow:0 0 2px rgba(255,230,150,.8);border-radius:999px;min-width:38px;min-height:38px;width:auto;margin:0;padding:0 12px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;transition:background .2s,color .2s}
@@ -1427,7 +1429,7 @@ function buildLobby3D(app, life) {
   // Portafoglio (docs/gettoni.md, club-wallet.js): Binottocoin (BTN) e gettoni. Il saldo vero è sul server; qui si
   // scala subito (spend) e si manda il messaggio, che resta in coda finché il server conferma. La risposta del
   // server ({type:'wallet'}) rimette il saldo giusto. Il cibo costa 1 BTN (popcorn e cola insieme 2).
-  let wallet=app.wallet?.()||null,coinBox=null;
+  let wallet=app.wallet?.()||null,coinBox=null,slots=null,slotJackpotT=0,slotUi=false;
   const walletChip=document.createElement('div');
   // sempre in vista (scelta del proprietario): quanti BTN e gettoni hai, sotto la barra in alto
   walletChip.className='club-wallet';
@@ -1436,13 +1438,41 @@ function buildLobby3D(app, life) {
   walletShow();
   function walletShow(){
     walletChip.textContent=Number.isInteger(wallet?.btn)?wallet.btn+' BTN · '+(wallet.gettoni||0)+' gettoni'+(wallet.lega?' · Lega ✓':''):'Saldo in arrivo…';
-    coinBox?.wallet(wallet);
+    coinBox?.wallet(wallet);coinBox?.fill(wallet?.vassoio?.coin);
+    if(slots)for(const [k,m] of Object.entries(slots.machines)){m.wallet(wallet);m.fill(wallet?.vassoio?.['slot-'+k])}
+    if(slotUi)slotButtons();
+  }
+  // Vassoi (docs/gettoni.md, docs/slot.md): quello che esce dalla macchinetta dei gettoni e le vincite delle slot
+  // restano nel vassoio di quella macchina, solo per te, finché non li prendi (tocco sul vassoio o «Prendi», P)
+  function trayAdd(m,gettoni,btn){
+    const v={...(wallet?.vassoio||{})},t=v[m]||{gettoni:0,btn:0};
+    v[m]={gettoni:t.gettoni+gettoni,btn:t.btn+btn};wallet={...wallet,vassoio:v};walletShow();return true;
+  }
+  const trayOf=m=>wallet?.vassoio?.[m]||null;
+  function takeTray(m){
+    const t=trayOf(m);if(!t||!(t.gettoni||t.btn))return false;
+    const v={...wallet.vassoio};delete v[m];
+    wallet={...wallet,btn:wallet.btn+t.btn,gettoni:(wallet.gettoni|0)+t.gettoni,vassoio:v};
+    machineOf(m)?.collect();app.walletSend?.({type:'wallet-take',m});vendSound('cambio');walletShow();
+    notice('Presi: '+[t.gettoni?t.gettoni+' gettoni':'',t.btn?t.btn+' BTN':''].filter(Boolean).join(' e '),'info');
+    return true;
   }
   // premio arrivato (vittoria o record personale): «+1 BTN»
+  let slotWallet=null; // saldo arrivato col giro della slot: si fa vedere quando i rulli si fermano
   function walletUpdate(w){
     if(!w||!Number.isInteger(w.btn))return;
+    if(w.slot&&slots){
+      if(slots.machines[w.slot.m]?.result(w.slot)){
+        const pending=slotWallet={m:w.slot.m,w};
+        // se intanto vai via e la macchina non si anima più, il saldo arriva lo stesso
+        setTimeout(()=>{if(slotWallet===pending){slotWallet=null;walletUpdate({...w,slot:null})}},9000);
+        return;
+      }
+    }
+    // giro rifiutato dal server (gettoni finiti): la slot che aspettava si ferma
+    if(w.ok===false&&slots)for(const m of Object.values(slots.machines))if(m.waiting())m.reset();
     const before=wallet?.btn;
-    wallet={btn:w.btn,gettoni:w.gettoni|0,lega:w.lega||0};walletShow();
+    wallet={btn:w.btn,gettoni:w.gettoni|0,lega:w.lega||0,vassoio:w.vassoio||{}};walletShow();
     if(Number.isInteger(before)&&w.btn>before)notice('+'+(w.btn-before)+' BTN · '+(w.game==='flipper'||w.prize?'hai battuto il tuo record!':'premio per la vittoria'),'info');
   }
   // giochi a gettone (come COIN_GAMES in club-wallet.js): 1 gettone a partita. Senza gettoni non si gioca: «INSERT
@@ -1490,18 +1520,75 @@ function buildLobby3D(app, life) {
   const COUNTER_THIRD=2.29/6,COIN={x:5.95,z:-3.35-COUNTER_THIRD,y:1.0};
   spots.push({x:COIN.x-.64,z:COIN.z,hx:.05,hz:.22,pad:.88,label:'Gettoni',where:'Lobby',vend:true,machine:'coin',act:()=>{}});
   new GLTFLoader().load(new URL('models/gettoni.glb',import.meta.url).href,gltf=>{
-    coinBox=createCoinChanger(gltf,{sound:nearSound(COIN),pay:k=>spend(k,{type:'wallet-change',btn:k},k*COIN_RATE)});
+    // back: cambio indietro, i gettoni tornano BTN (5 gettoni = 1 BTN)
+    coinBox=createCoinChanger(gltf,{sound:nearSound(COIN),pay:(k,back)=>back?spend(0,{type:'wallet-change',btn:k,back:true},-k*COIN_RATE)&&trayAdd('coin',0,k):spend(k,{type:'wallet-change',btn:k},0)&&trayAdd('coin',k*COIN_RATE,0)}); // quello che esce resta nella vaschetta
     coinBox.root.position.set(COIN.x,COIN.y,COIN.z);coinBox.root.rotation.y=-Math.PI/2;scene.add(coinBox.root);
     coinBox.root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
     coinBox.wallet(wallet);
     coinBox.onChange(e=>{if(atMachine==='coin'&&e.state==='cambia'){useN++;useK=e.key||'';myPlay={m:'coin',k:useK,n:useN}}});
   });
-  const machineOf=m=>m==='pop'?pop:m==='dog'?dog:m==='coin'?coinBox:vend;
+  // Slot machine (docs/slot.md, slot.js, models/slot.glb): tre in fila contro la parete «ARCADE» della sala giochi
+  // (x -19), sotto la scritta, tra il quadro di Binottoland e il flipper Grand Prix, girate verso la sala (+x).
+  // Da sinistra guardandole: rossa (z 0,55), oro (z -0,3), nera (z -1,15). Profonde 55 cm (63 col vassoio), la leva
+  // sul fianco destro. Si punta 1 · 2 · 3 gettoni e si tira la leva: il giro lo fa il server (wallet-slot).
+  // ingrandite del 25% rispetto al modello (scelta del proprietario): alte 2,24 m (2,48 con la candela), larghe 79 cm,
+  // profonde 69 (79 col vassoio), a 1,06 m da centro a centro; il dietro tocca la parete
+  // dopo i flipper, verso la scritta: 10 cm dal Grand Prix alla nera e tra una slot e l'altra (come dal muro; la slot
+  // sporge 0,417 dal centro dalla parte della leva, verso i flipper). SLOT_STEP come SPACING in slot.js
+  const SLOT_SCALE=1.25,SLOT_STEP=(.732+.1/1.25)*SLOT_SCALE,SLOT_KEYS=['rossa','oro','nera'];
+  const SLOTS={x:-18.9+.275*SLOT_SCALE,z:FLIPPER_AT.z+.422+.1+.417*SLOT_SCALE+SLOT_STEP};
+  const slotZ=name=>SLOTS.z-(SLOT_KEYS.indexOf(name)-1)*SLOT_STEP;
+  const isSlot=m=>typeof m==='string'&&m.startsWith('slot-');
+  solid(-18.95,SLOTS.x+.36*SLOT_SCALE,slotZ('nera')-.44*SLOT_SCALE,slotZ('rossa')+.34*SLOT_SCALE);
+  for(const k of SLOT_KEYS)spots.push({x:SLOTS.x+.36*SLOT_SCALE+.36,z:slotZ(k),hx:.05,hz:.34,pad:.75,label:'Slot '+k,where:'Sala giochi',vend:true,machine:'slot-'+k,act:()=>{}});
+  const slotAudio=()=>soundAllowed()&&audioContext?.state==='running'&&((vendMode&&isSlot(atMachine))||Math.hypot(pos.x-SLOTS.x,pos.z-SLOTS.z)<8)?audioContext:null;
+  new GLTFLoader().load(new URL('models/slot.glb',import.meta.url).href,gltf=>{
+    slots=createSlots(gltf,{sound:nearSound({x:SLOTS.x,z:SLOTS.z}),audio:slotAudio,pay:(bet,m)=>spend(0,{type:'wallet-slot',bet,m},-bet)});
+    slots.root.position.set(SLOTS.x,0,SLOTS.z);slots.root.rotation.y=Math.PI/2;slots.root.scale.setScalar(SLOT_SCALE);scene.add(slots.root);
+    for(const [k,m] of Object.entries(slots.machines)){
+      m.wallet(wallet);
+      // il risultato del tuo giro: gli altri vedono girare la tua macchina con gli stessi simboli
+      m.onChange(e=>{
+        if(atMachine==='slot-'+k&&e.state==='risultato'){useN++;useK=e.key||'';myPlay={m:'slot-'+k,k:useK,n:useN}}
+        // rulli fermi: adesso il saldo nuovo (e l'avviso del jackpot)
+        if(e.state==='fermo'&&slotWallet?.m===k){
+          const w=slotWallet.w;slotWallet=null;
+          wallet={btn:w.btn,gettoni:w.gettoni|0,lega:w.lega||0,vassoio:w.vassoio||{}};walletShow();
+          if(Number.isInteger(w.slot.jackpot))slots.jackpot(w.slot.jackpot);
+          if(w.slot.btn)notice('JACKPOT! +'+w.slot.btn+' BTN','info');
+        }
+        slotButtons();
+      });
+    }
+    slots.jackpot(app.slotJackpot?.());
+  });
+  const machineOf=m=>isSlot(m)?slots?.machines[m.slice(5)]||null:m==='pop'?pop:m==='dog'?dog:m==='coin'?coinBox:vend;
   const vendExit=document.createElement('button'),eatButton=document.createElement('button'),drinkButton=document.createElement('button');
   vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=drinkButton.hidden=true;
   // sul computer «Mangia» e «Bevi» stanno sopra il tasto d'azione, così non si coprono
   for(const [b,up] of [[vendExit,8],[eatButton,60],[drinkButton,112]])b.style.cssText=touch?'order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + '+up+'px);left:50%;transform:translateX(-50%);white-space:nowrap';
   (touch?dock:el).append(vendExit,eatButton,drinkButton);
+  // alla slot: puntata 1 · 2 · 3 gettoni (tasti 1, 2, 3) e «Tira la leva» (Spazio); si tira anche toccando la leva
+  const slotBar=document.createElement('div');slotBar.hidden=true;
+  slotBar.style.cssText=touch?'order:2;display:flex;gap:6px;flex-wrap:wrap;justify-content:center':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 60px);left:50%;transform:translateX(-50%);display:flex;gap:6px;white-space:nowrap';
+  const betButtons=[1,2,3].map(n=>{const b=document.createElement('button');b.textContent='Punta '+n+(touch?'':' ('+n+')');b.onclick=()=>slotBet(n);return b});
+  const pullButton=document.createElement('button');pullButton.onclick=()=>slotPull();
+  slotBar.append(...betButtons,pullButton);(touch?dock:el).append(slotBar);
+  function slotBet(n){const m=isSlot(atMachine)&&machineOf(atMachine);if(m){m.bet(n);vendSound('tasto');slotButtons()}}
+  function slotPull(){const m=isSlot(atMachine)&&machineOf(atMachine);if(m&&m.state()==='scegli'&&!m.pull())notice(Number.isInteger(wallet?.btn)?INSERT_COIN:'Saldo in arrivo… riprova tra un attimo','info');slotButtons()}
+  // «Prendi»: quello che c'è nel vassoio della macchina davanti a te va nel saldo
+  const takeButton=document.createElement('button');takeButton.hidden=true;
+  takeButton.style.cssText=touch?'order:2':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + 112px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  takeButton.onclick=()=>{takeTray(atMachine);slotButtons()};
+  (touch?dock:el).append(takeButton);slotUi=true;
+  function slotButtons(){
+    const t=vendMode&&(atMachine==='coin'||isSlot(atMachine))?trayOf(atMachine):null;
+    takeButton.hidden=!(t&&(t.gettoni||t.btn));
+    if(!takeButton.hidden)takeButton.textContent='Prendi · '+[t.gettoni?t.gettoni+' gettoni':'',t.btn?t.btn+' BTN':''].filter(Boolean).join(' · ')+(touch?'':' (P)');
+    const m=isSlot(atMachine)?machineOf(atMachine):null;slotBar.hidden=!m||!vendMode;if(slotBar.hidden)return;
+    const bet=m.betNow();betButtons.forEach((b,i)=>{b.style.outline=i+1===bet?'3px solid #ffd04a':'';b.disabled=m.state()!=='scegli'});
+    pullButton.disabled=m.state()!=='scegli';pullButton.textContent='Tira la leva · '+bet+(bet>1?' gettoni':' gettone')+(touch?'':' (Spazio)');
+  }
   // chi sta usando una macchinetta (un altro): il suo nome, o null
   function machineBusy(m){for(const c of peers.values())if(c.useWanted?.m===m)return c.userName||'un amico';return null}
   // ordini lasciati (scelta del proprietario, 28 novembre 2026): si può andare via mentre la macchinetta prepara;
@@ -1511,19 +1598,21 @@ function buildLobby3D(app, life) {
   let myPlay=null; // l'ultimo ordine fatto alla macchinetta che stai usando
   function enterMachine(m){
     const machine=machineOf(m);
-    if(!machine||machineBusy(m)||(m!=='pop'&&m!=='coin'&&held))return;
+    if(!machine||machineBusy(m)||(m!=='pop'&&m!=='coin'&&!isSlot(m)&&held))return;
     if(document.pointerLockElement)document.exitPointerLock?.();
     atMachine=m;useK='';myPlay=null;
+    // alla slot che sta finendo il giro di un altro: si ferma subito, così si gioca
+    if(isSlot(m)&&machine.state()!=='scegli')machine.reset();
     vendMode=true;resetMovement();me.root.visible=false;actB.hidden=true;stick.hidden=true;vendExit.hidden=false;near=null;
-    walletShow();
+    walletShow();slotButtons();
   }
   function exitVend(){
     if(!vendMode)return;
     // andando via mentre prepara (o col prodotto pronto) l'ordine resta: la macchinetta finisce e lo tiene lì
     const machine=machineOf(atMachine);
     // (i gettoni no: sono già nel saldo, la macchinetta finisce di farli cadere e poi svuota la vaschetta)
-    if(machine&&atMachine!=='coin'&&machine.state()!=='scegli'&&myPlay?.m===atMachine)myOrders.set(atMachine,{k:myPlay.k,n:myPlay.n});
-    vendMode=false;atMachine=null;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
+    if(machine&&atMachine!=='coin'&&!isSlot(atMachine)&&machine.state()!=='scegli'&&myPlay?.m===atMachine)myOrders.set(atMachine,{k:myPlay.k,n:myPlay.n});
+    vendMode=false;atMachine=null;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();slotButtons();
   }
   vendExit.onclick=exitVend;
   // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto
@@ -1546,7 +1635,8 @@ function buildLobby3D(app, life) {
       if(v.type==='item'){const got=pop.take();if(got){useT++;for(const p of got)p.id==='popcorn'?holdPopcorn():holdCola();exitVend()}}
       return;
     }
-    if(atMachine==='coin'){coinBox.hit(hit.object);return} // tasti 1 · 5 · 10 BTN
+    if(atMachine==='coin'){if(coinBox.hit(hit.object)?.type==='tray')takeTray('coin');slotButtons();return} // tasti 1 · 5 · 10 BTN, o la vaschetta
+    if(isSlot(atMachine)){const v=machine.hit(hit.object);if(v===false)notice(INSERT_COIN,'info');else if(v?.type==='tray')takeTray(atMachine);slotButtons();return} // la leva o il vassoio
     if(atMachine==='dog'){
       // l'hot dog pronto nello sportello: si tocca e va nella mano destra
       const v=dog.hit(hit.object);
@@ -1642,9 +1732,9 @@ function buildLobby3D(app, life) {
   }
   // le macchinette usate dagli altri: la tua fa quello che fa la loro (scelte, prodotto che scende, preso)
   // Gli ordini lasciati (orders nella posa) finiscono anche qui: se l'hai visto partire continua, se no parte adesso.
-  const remote={vend:null,pop:null,dog:null,coin:null},seenOrders=new Set(); // ordini già partiti qui: 'chi:n'
+  const remote={vend:null,pop:null,dog:null,coin:null,'slot-rossa':null,'slot-oro':null,'slot-nera':null},seenOrders=new Set(); // ordini già partiti qui: 'chi:n'
   function peerMachines(){
-    for(const m of ['vend','pop','dog','coin']){
+    for(const m of Object.keys(remote)){
       const machine=machineOf(m);if(!machine)continue;
       let user=null,userId=null,order=null;
       for(const [id,c] of peers){
@@ -1663,7 +1753,8 @@ function buildLobby3D(app, life) {
       if(!u){
         remote[m]=null;
         // gettoni: nessuno la usa più, finisce di farli cadere e poi svuota la vaschetta
-        if(m==='coin'){if(machine.state()==='scegli')machine.reset();continue}
+        // (le slot uguale: finiscono il giro, poi il vassoio si svuota)
+        if(m==='coin'||isSlot(m)){if(machine.state()==='scegli')machine.reset();continue}
         const key=order&&order.id+':'+order.n;
         if(order&&!seenOrders.has(key)){seenOrders.add(key);if(machine.state()==='scegli')machine.play(order.k)}
         // nessuno la usa e nessun ordine lasciato (chi aveva ordinato è uscito dal club): torna libera
@@ -1760,7 +1851,7 @@ function buildLobby3D(app, life) {
   for(const kind of ['gp','gt'])tables[kind]=buildFlipper(scene,el,{kind,audio:()=>audioContext,allowed:soundAllowed,top:()=>app.pinballTop?.(kind)||[],sendScore:score=>app.pinballScore?.(score,kind),sendStart:()=>app.pinballStart?.(kind),me:()=>app.me?.()});
   let pinballKind='gp';
   const pinball=new Proxy({},{get:(_,k)=>{const t=tables[pinballKind];const v=t[k];return typeof v==='function'?v.bind(t):v}});
-  // volume dei flipper nel mixer (compare avvicinandosi) e, sul telefono, la X in alto a destra per lasciarli
+  // volume dei flipper nel mixer (compare solo mentre giochi) e, sul telefono, la X in alto a destra per lasciarli
   const pinballVolume=volumeControl('Flipper','club3d-flipper-volume',.8,v=>{for(const t of Object.values(tables)){t.setVolume(v);t.wake()}});
   for(const t of Object.values(tables))t.setVolume(pinballVolume.read());mixPanel.append(pinballVolume.wrap);
   const pinballExit=document.createElement('button');
@@ -1809,113 +1900,128 @@ function buildLobby3D(app, life) {
     }
   }
   const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Cabinati: uno per gioco. Per i giochi a più giocatori il cabinato è più largo, con un posto e una pulsantiera
-  // per ognuno (come i cabinati veri a 2, 4 e 5 giocatori): chi apre il gioco prende il primo posto libero
-  // e gli altri lo vedono lì, alla sua pulsantiera.
-  const SEATS = { pong: 2, 'golf-with-your-gay-friends': 4, 'f1-on-paper': 5, 'moto-trial': 5 };
-  const PLAYER_COLORS = ['#ff5252', '#4da3ff', '#ffd23f', '#3ddc84', '#c77dff'];
-  const cabWidth = n => (n >= 5 ? 2.3 : n >= 4 ? 1.9 : n >= 2 ? 1.25 : 0.8);
-  // angoli arrotondati: profilo laterale estruso con smusso morbido
+  // Cabinati: uno per gioco, fatti in Blender (docs/cabinati.md, blender/cabinati.blend → models/cabinati.glb). Anni '80
+  // laccati neri col bordo luminoso del colore del gioco, schermo a tubo dietro un vetro. Tre modelli: 1 posto, 2 posti
+  // (Pong, grande come il singolo) e 4 posti (Moto Trial, F1, Golf, largo 1,5 m); Binotto Simulator ha il muretto dei
+  // box. Chi apre il gioco prende il primo posto libero e gli altri lo vedono lì, alla sua pulsantiera; dal quinto in
+  // poi si guarda. Posti, ingombri e tasti si sanno subito; i pezzi arrivano quando il modello è caricato.
+  const SEATS = { pong: 2, 'golf-with-your-gay-friends': 4, 'f1-on-paper': 4, 'moto-trial': 4 };
+  const MURETTO = 'binotto-simulator';
+  const cabWidth = n => (n >= 4 ? 1.5 : .66);
+  const widthOf = key => key === MURETTO ? 1.4 : cabWidth(SEATS[key] || 1);
+  const cabKit = new Promise(done => new GLTFLoader().load(new URL('models/cabinati.glb', import.meta.url).href, gltf => {
+    // UV come quelle di three (v dal basso): così le tele disegnate qui e il Pong sul monitor stanno dritte
+    gltf.scene.traverse(o => { const uv = o.geometry?.attributes.uv; if (uv) { for (let i = 0; i < uv.count; i++) uv.setY(i, 1 - uv.getY(i)); uv.needsUpdate = true; } });
+    done(gltf.scene);
+  }, undefined, () => done(null)));
+  const monitorArt = kind => canvasTex(256, 160, (ctx, w, h) => {
+    ctx.fillStyle = '#05080d'; ctx.fillRect(0, 0, w, h); ctx.font = 'bold 15px monospace'; ctx.textBaseline = 'top';
+    if (kind === 'tempi') {
+      ctx.fillStyle = '#ffd236'; ctx.fillText('LAP   SETTORI      TEMPO', 10, 8);
+      for (let i = 0; i < 6; i++) { ctx.fillStyle = i === 2 ? '#c77dff' : i === 4 ? '#3ddc84' : '#d8e2ee'; ctx.fillText(`${12 + i}  ${(28 + i * .13).toFixed(2)} ${(31 - i * .07).toFixed(2)}  1:${(31 - i * .21).toFixed(3)}`, 10, 32 + i * 20); }
+    } else {
+      ctx.fillStyle = '#9ad8ff'; ctx.fillText('METEO PISTA', 10, 8);
+      ctx.fillStyle = '#ffd236'; ctx.beginPath(); ctx.arc(60, 82, 26, 0, 7); ctx.fill();
+      ctx.fillStyle = '#d8e2ee'; ctx.fillText('ARIA 24°  ASFALTO 38°', 100, 60); ctx.fillText('PIOGGIA 10%', 100, 84); ctx.fillText('VENTO 6 km/h', 100, 108);
+    }
+  });
+  // x, z: dove sta il dietro del cabinato (contro il muro); da lì si va avanti della sua profondità dietro al centro
   const cabinet = (key, title, color, x, z, ry) => {
-    const seats = SEATS[key] || 1, cw = cabWidth(seats), half = cw / 2;
-    const g = new THREE.Group();
-    const c = new THREE.Color(color), hsl = {}; c.getHSL(hsl);
-    const bodyM = new THREE.MeshPhysicalMaterial({ color: new THREE.Color().setHSL(hsl.h, 0.5, 0.13), roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.3 });
-    const outline=new THREE.Shape();
-    [[-.38,0],[.34,0],[.38,.82],[.59,.94],[.59,1.02],[.34,1.11],[.25,1.56],[.45,1.62],[.45,1.88],[.33,1.96],[-.38,1.96]].forEach(([depth,y],i)=>i?outline.lineTo(depth,y):outline.moveTo(depth,y));outline.closePath();
-    const shell=new THREE.Mesh(new THREE.ExtrudeGeometry(outline,{depth:cw-.03,bevelEnabled:true,bevelThickness:.016,bevelSize:.018,bevelSegments:3,curveSegments:8}),bodyM);
-    shell.rotation.y=-Math.PI/2;shell.position.x=half-.015;g.add(shell);
-    // fianchi in legno scuro con il bordo a T luminoso (come i cabinati veri)
-    const sideM = std('#1a1420', 0.55);
-    for (const sx of [-1, 1]) {
-      const side = new THREE.Mesh(new THREE.ExtrudeGeometry(outline, { depth: 0.02, bevelEnabled: true, bevelThickness: .006, bevelSize: .008, bevelSegments: 2 }), sideM);
-      side.rotation.y = -Math.PI / 2; side.position.x = sx * (half + 0.012) + 0.01; g.add(side);
-    }
-    const screenW = cw - (seats > 1 ? 0.22 : 0.08), screenH = seats > 2 ? 0.56 : 0.47;
-    box(screenW+.04,screenH,.10,std('#121722',.35),0,1.35,.33,g);
-    box(cw-.03,.215,.06,bodyM,0,1.78,.46,g);
-    box(cw-.1,.055,.04,glow(color,1.35),0,1.625,.45,g);
-    // porta delle monete: una fessura illuminata per ogni giocatore
-    const coinMetal=std('#343744',.38,.56);
-    const doorW = Math.min(cw - 0.2, 0.2 + 0.16 * seats);
-    box(doorW,.45,.035,coinMetal,0,.55,.386,g);
-    for (let k = 0; k < seats; k++) {
-      const cx = (k - (seats - 1) / 2) * (doorW / seats);
-      box(.07,.045,.018,glow(seats > 1 ? PLAYER_COLORS[k] : '#ed8252',1.4),cx,.66,.411,g);
-      box(.075,.06,.022,bodyM,cx,.44,.411,g);
-    }
-    box(cw-.02,.065,.15,bodyM,0,1.63,.4,g);
-    const spill = new THREE.MeshBasicMaterial({map:shadeMap,color,transparent:true,opacity:.24,blending:THREE.AdditiveBlending,depthWrite:false});
-    groundTint(x+Math.sin(ry)*.42,z+Math.cos(ry)*.42,cw+.8,1.6,spill);
-    for (const sx of [-1, 1]) box(0.025, 1.7, 0.035, glow(color, 1.6), sx * (half + 0.013), 1.0, .36, g);
-    const sideArt=canvasTex(160,320,(ctx,w,h)=>{
-      ctx.clearRect(0,0,w,h);ctx.strokeStyle=color;ctx.lineWidth=7;
-      for(let n=0;n<3;n++){ctx.beginPath();ctx.moveTo(4,276-n*16);ctx.lineTo(91,159-n*16);ctx.lineTo(49,159-n*16);ctx.lineTo(148,34-n*6);ctx.stroke()}
-      ctx.fillStyle=color;ctx.font='bold 20px monospace';ctx.textAlign='center';ctx.fillText(title.toUpperCase(),78,299,140);
-      if(seats>1){ctx.font='bold 26px monospace';ctx.fillText(seats+' GIOCATORI',78,24,150)}
-    });
-    const decal=new THREE.MeshBasicMaterial({map:sideArt,transparent:true,depthWrite:false});
-    for(const side of [-1,1]){
-      const badge=new THREE.Mesh(new THREE.PlaneGeometry(.62,1.47),decal);
-      badge.position.set(side*(half+.035),1,0);badge.rotation.y=side*Math.PI/2;g.add(badge);
-    }
-    // cornice del monitor con gli angoli arrotondati
-    const bezel = new THREE.Shape();
-    { const w = screenW / 2 + 0.035, h = screenH / 2 + 0.035, r = 0.04;
-      bezel.moveTo(-w + r, -h); bezel.lineTo(w - r, -h); bezel.quadraticCurveTo(w, -h, w, -h + r); bezel.lineTo(w, h - r); bezel.quadraticCurveTo(w, h, w - r, h);
-      bezel.lineTo(-w + r, h); bezel.quadraticCurveTo(-w, h, -w, h - r); bezel.lineTo(-w, -h + r); bezel.quadraticCurveTo(-w, -h, -w + r, -h);
-      const hole = new THREE.Path(); const iw = screenW / 2, ih = screenH / 2;
-      hole.moveTo(-iw, -ih); hole.lineTo(iw, -ih); hole.lineTo(iw, ih); hole.lineTo(-iw, ih); hole.closePath(); bezel.holes.push(hole); }
-    const bez = new THREE.Mesh(new THREE.ExtrudeGeometry(bezel, { depth: 0.012, bevelEnabled: true, bevelThickness: .004, bevelSize: .004, bevelSegments: 2 }), std('#0c0d12', 0.3, 0.4));
-    bez.position.set(0, 1.36, .41); bez.rotation.x = -.12; g.add(bez);
-    const scr = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), new THREE.MeshBasicMaterial({ map: cabinetScreen(title, color), color: new THREE.Color(1.5, 1.5, 1.5) }));
-    scr.position.set(0, 1.36, .417); scr.rotation.x = -.12; g.add(scr);
-    const sweep=new THREE.Mesh(new THREE.PlaneGeometry(screenW-.03,.011),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.32,depthWrite:false}));
-    // «INSERT COIN» in basso sullo schermo, che lampeggia (scelta del proprietario, 28 novembre 2026)
-    const coinText=new THREE.Mesh(new THREE.PlaneGeometry(Math.min(screenW-.04,.42),.066),new THREE.MeshBasicMaterial({map:insertCoin(),transparent:true,depthWrite:false,toneMapped:false}));
-    coinText.position.set(0,-screenH/2+.05,.002);scr.add(coinText);
-    sweep.position.set(0,1.36,.456);g.add(sweep);demoMaterials.push({sweep,coinText,x,z,ax:x+.48*Math.sin(ry),az:z+.48*Math.cos(ry),offset:demoMaterials.length*.31});
-    const mq = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(cw - .06, .74 + (seats - 1) * .3), 0.2), new THREE.MeshBasicMaterial({ map: neonText(title, color, 768, 208, `bold ${title.length > 12 ? 92 : 120}px "Arial Black", Arial, sans-serif`), transparent: true, color: new THREE.Color(1.8, 1.8, 1.8) }));
-    mq.position.set(0, 1.78, .497); g.add(mq);
-    // pulsantiera: un joystick e due pulsanti per giocatore, con il numero e il colore del posto
-    const pan = box(cw - 0.04, 0.06, 0.3, std('#111', 0.5), 0, 1.0, 0.48, g); pan.rotation.x = 0.28;
-    box(cw - 0.03, 0.012, 0.012, std('#bcc3cc', 0.3, 0.8), 0, 1.035, 0.625, g);
-    const gap = (cw - 0.12) / seats, handles = [];
-    for (let k = 0; k < seats; k++) {
-      const ox = (k - (seats - 1) / 2) * gap, pc = seats > 1 ? PLAYER_COLORS[k] : '#e23';
-      box(.027,.13,.027,coinMetal,ox-.13*Math.min(1,gap/.7),1.1,.50,g);
-      const knobS = new THREE.Mesh(new THREE.SphereGeometry(0.03, 14, 10), std(pc, 0.3)); knobS.position.set(ox - 0.13*Math.min(1,gap/.7), 1.175, 0.50); g.add(knobS);
-      for (let i = 0; i < 2; i++) { const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.02, 14), glow(i ? pc : '#f4f4f4', 1.4)); bt.position.set(ox + 0.03 + i * 0.075, 1.065, 0.47); bt.rotation.x = 0.28; g.add(bt); }
-      if (seats > 1) {
-        const tag = new THREE.Mesh(new THREE.PlaneGeometry(.08,.04), new THREE.MeshBasicMaterial({ map: neonText((k + 1) + 'P', pc, 256, 128, 'bold 96px "Arial Black", Arial, sans-serif'), transparent: true, depthWrite: false }));
-        tag.position.set(ox + 0.12, 1.08, 0.5); tag.rotation.x = -1.29; g.add(tag);
-      }
-      handles.push([[ox - 0.13*Math.min(1,gap/.7), 1.15], [ox + 0.07, 1.07]]);
-    }
+    const muretto = key === MURETTO;
+    const back = muretto ? .34 : .48;
+    x += Math.sin(ry) * back; z += Math.cos(ry) * back;
+    const seats = muretto ? 1 : SEATS[key] || 1, cw = widthOf(key), half = cw / 2;
+    const iw = cw / 2 - .02, g = new THREE.Group();
     g.position.set(x, 0, z); g.rotation.y = ry; scene.add(g);
+    // un po' di luce del cabinato sul pavimento: poca, perché i cabinati vicini si sommano
+    const spill = new THREE.MeshBasicMaterial({ map: shadeMap, color, transparent: true, opacity: .07, blending: THREE.AdditiveBlending, depthWrite: false });
+    groundTint(x + Math.sin(ry) * .55, z + Math.cos(ry) * .55, cw + .2, 1.1, spill);
+    // schermo, insegna, riga che scorre e «INSERT COIN»: ci sono subito (i tasti e il Pong sul monitor li usano),
+    // la loro forma arriva dal modello
+    const scr = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ map: cabinetScreen(title, color), color: new THREE.Color(1.15, 1.15, 1.15) }));
+    const mq = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ map: marqueeArt(key, title, color, 2 * iw / (muretto ? .022 : .24)) }));
+    const sweep = new THREE.Mesh(new THREE.PlaneGeometry(1, .011), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: .32, depthWrite: false }));
+    const coinText = new THREE.Mesh(new THREE.PlaneGeometry(1, .066), new THREE.MeshBasicMaterial({ map: insertCoin(), transparent: true, depthWrite: false, toneMapped: false }));
+    sweep.visible = coinText.visible = false;
+    const demo = { sweep, coinText, x, z, ax: x + .48 * Math.sin(ry), az: z + .48 * Math.cos(ry), offset: demoMaterials.length * .31, lo: 0, span: 0, ready: false };
+    if (!muretto) demoMaterials.push(demo);
+    cabKit.then(kit => {
+      const src = kit?.getObjectByName(muretto ? 'muretto' : 'cabinato_' + seats); if (!src) return;
+      const m = src.clone(true); m.position.set(0, 0, 0); g.add(m);
+      const neon = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: .75, roughness: .3 });
+      const side = new THREE.MeshStandardMaterial({ map: sideArt(key, title, color, seats), roughness: .45 });
+      m.traverse(o => {
+        if (!o.isMesh) return;
+        const n = o.name.replace(/_\d+$|_muretto$/, ''), mats = Array.isArray(o.material) ? o.material : [o.material];
+        const swap = mt => mt.name === 'neon' ? neon : mt.name === 'fianco' ? side
+          : mt.name === 'vetro' ? Object.assign(mt, { transparent: true, opacity: .14, depthWrite: false })
+          // joystick e tasti: colorati, non accesi (scelta del proprietario)
+          : /^(giocatore_\d|tasto_bianco)$/.test(mt.name) ? Object.assign(mt, { emissiveIntensity: .12 }) : mt;
+        o.material = Array.isArray(o.material) ? mats.map(swap) : swap(o.material);
+        if (n === 'pannello') o.material = new THREE.MeshStandardMaterial({ map: panelArt(key, color, seats, 2 * iw / .218), roughness: .5 });
+        if (/^schermo_(tempi|meteo)$/.test(o.name)) o.material = new THREE.MeshBasicMaterial({ map: monitorArt(o.name.slice(8)) });
+      });
+      const take = (name, mesh) => {
+        const o = m.getObjectByName(name); if (!o) return;
+        mesh.geometry.dispose(); mesh.geometry = o.geometry; mesh.position.copy(o.position); mesh.quaternion.copy(o.quaternion);
+        o.parent.add(mesh); o.removeFromParent();
+      };
+      take(muretto ? 'schermo_pista' : 'schermo_' + seats, scr);
+      take(muretto ? 'insegna_muretto' : 'insegna_' + seats, mq);
+      if (muretto) return;
+      // riga e scritta seguono il tubo (inclinato 18° più del vetro): centro, sotto e sopra presi dalle UV del modello
+      const pos = scr.geometry.attributes.position, uv = scr.geometry.attributes.uv, at = (u, v) => {
+        let best = 0, d = Infinity;
+        for (let i = 0; i < uv.count; i++) { const e = (uv.getX(i) - u) ** 2 + (uv.getY(i) - v) ** 2; if (e < d) { d = e; best = i; } }
+        return new THREE.Vector3().fromBufferAttribute(pos, best);
+      };
+      const c0 = at(.5, .5), bottom = at(.5, 0), top = at(.5, 1), left = at(0, .5), right = at(1, .5);
+      const tube = new THREE.Object3D(); tube.position.copy(c0);
+      // assi del tubo: y in su (dal basso all'alto), x verso destra, z fuori
+      const ay = top.clone().sub(bottom).normalize(), ax = right.clone().sub(left).normalize(), az = ax.clone().cross(ay).normalize();
+      tube.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(ax, ay, az));
+      scr.add(tube);
+      const tw = right.distanceTo(left), th = top.distanceTo(bottom);
+      sweep.scale.x = tw * .9; coinText.scale.x = Math.min(tw * .9, .42);
+      coinText.position.set(0, -th * .38, .002); sweep.position.z = .004;
+      tube.add(sweep, coinText);
+      demo.lo = -th * .45; demo.span = th * .9; demo.ready = true; sweep.visible = true; coinText.visible = true;
+    });
+    // pulsantiere: joystick e due tasti per posto, come nel modello (cabinati_build.py)
+    const gap = 2 * iw / seats, handles = [];
+    for (let k = 0; k < seats; k++) {
+      const ox = -iw + gap * (k + .5), jx = ox - .33 * Math.min(gap, .5) * .5;
+      handles.push(muretto ? [[-.1, 1.03], [.1, 1.03]] : [[jx, 1.12], [ox + .07, 1.05]]);
+    }
+    const depth = muretto ? .38 : .47;
     const along = Math.abs(Math.sin(ry)) > 0.5;
-    if (along) solid(x - 0.4, x + 0.4, z - half - .03, z + half + .03); else solid(x - half - .03, x + half + .03, z - 0.4, z + 0.4);
-    const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
+    if (along) solid(x - depth, x + depth, z - half - .03, z + half + .03); else solid(x - half - .03, x + half + .03, z - depth, z + depth);
+    const front = muretto ? .6 : .7;
+    const fx = x + Math.sin(ry) * front, fz = z + Math.cos(ry) * front;
     spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => app.open(key), mq });
   };
-  // lungo le pareti, rivolti verso il centro della sala: a nord i grandi a 4 e 5 posti, a sud gli altri
+  // lungo le pareti, rivolti verso il centro della sala: a nord i tre a 4 posti, a sud gli altri
   const byKey = new Map(list.map(e => [e[0], e]));
   const northKeys = ['moto-trial', 'f1-on-paper', 'golf-with-your-gay-friends'].filter(k => byKey.has(k));
-  const southKeys = ['pong', ...list.map(e => e[0]).filter(k => !['moto-trial', 'f1-on-paper', 'golf-with-your-gay-friends', 'pong'].includes(k))].filter(k => byKey.has(k));
+  // a sud, dall'angolo verso l'atrio: prima i giochi da 1, poi Pong da 2, in fondo il muretto (scelta del proprietario)
+  const southKeys = [...list.map(e => e[0]).filter(k => !['moto-trial', 'f1-on-paper', 'golf-with-your-gay-friends', 'pong', MURETTO].includes(k)), 'pong', MURETTO].filter(k => byKey.has(k));
   const row = (keys, zz, ry, from, limit) => {
     let xx = from;
     const rest = [];
     for (const k of keys) {
-      const w = cabWidth(SEATS[k] || 1);
+      const w = widthOf(k);
       if (xx - w < limit) { rest.push(k); continue; }
       const [kk, tt, cc] = byKey.get(k);
       cabinet(kk, tt, cc, xx - w / 2, zz, ry);
-      xx -= w + 0.32;
+      xx -= w + 0.25; // vicini, ma con lo spazio per vedere i fianchi disegnati (scelta del proprietario)
     }
     return rest;
   };
-  const left = [...row(northKeys, -5.55, 0, -7.9, -15.9), ...row(southKeys, 5.55, Math.PI, -7.9, -18.6)];
-  left.forEach((k, i) => { const [kk, tt, cc] = byKey.get(k); cabinet(kk, tt, cc, -18.55, -2.2 + i * 1.1, Math.PI / 2); });
+  // si parte dall'angolo verso l'atrio (parete a x -7)
+  // tutti con il dietro a 10 cm dal muro (le pareti finiscono a z ±6 e x -19), come flipper e slot
+  const WALL_GAP = .1;
+  const left = [...row(northKeys, -6 + WALL_GAP, 0, -7.2, -15.3), ...row(southKeys, 6 - WALL_GAP, Math.PI, -7.2, -18.6)];
+  left.forEach((k, i) => { const [kk, tt, cc] = byKey.get(k); cabinet(kk, tt, cc, -19 + WALL_GAP, -2.2 + i * 1.1, Math.PI / 2); });
   // pulviscolo che galleggia nella luce delle sale (gira piano attorno al centro della stanza)
   const motes = [];
   for (const [cx, cz, tint] of [[-13, 0, '#c9b6ff'], [13, 0, '#fff0d4']]) {
@@ -2293,7 +2399,16 @@ function buildLobby3D(app, life) {
     // bacheca aperta: si scrive nella chat; Esc la chiude
     if (boardOpen) { if (e.type === 'keydown' && e.code === 'Escape') closeBoard(); return; }
     // davanti alla macchinetta si usano solo i tasti sul pannello; Esc per andare via
-    if (vendMode) { if (e.type === 'keydown' && e.code === 'Escape') exitVend(); e.preventDefault(); return; }
+    if (vendMode) {
+      if (e.type === 'keydown' && e.code === 'Escape') exitVend();
+      // slot: 1 · 2 · 3 la puntata, Spazio o Invio tira la leva
+      else if (e.type === 'keydown' && e.code === 'KeyP' && (atMachine === 'coin' || isSlot(atMachine))) { takeTray(atMachine); slotButtons(); }
+      else if (e.type === 'keydown' && isSlot(atMachine) && !e.repeat) {
+        if (/^(Digit|Numpad)[123]$/.test(e.code)) slotBet(Number(e.code.slice(-1)));
+        else if (e.code === 'Space' || e.code === 'Enter') slotPull();
+      }
+      e.preventDefault(); return;
+    }
     if ((held || drink) && e.code === 'KeyF') { if (e.type === 'keydown' && !e.repeat) held ? eat() : drinkCola(); e.preventDefault(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
@@ -2535,7 +2650,7 @@ function buildLobby3D(app, life) {
     if (near?.machine) { const who = machineBusy(near.machine), text = who ? near.label + ' · la sta usando ' + who : (machineOf(near.machine)?.state() === 'pronto' ? 'Ritira · ' : 'Usa · ') + near.label + (touch ? '' : '  (E)'); if (actB.textContent !== text) actB.textContent = text; }
     if (vendMode) { near = null; actB.hidden = true; } // davanti alla macchinetta c'è solo «Esci»
     ring.visible = !!near && !!near.mq;
-    for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
+    for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 1.25 + Math.sin(t * 6) * 0.15 : 1);
     if (near && near.mq) { ring.position.set(near.x, 0.012, near.z); ring.rotation.z = t; }
     if(!reducedMotion&&pos.x < -6){
       banks[0].emissiveIntensity=.85+.22*Math.sin(t*.84);
@@ -2547,7 +2662,7 @@ function buildLobby3D(app, life) {
       if(Math.abs(pos.x-demo.x)>12)continue;
       demo.coinText.visible=reducedMotion||(t*1.25+demo.offset)%1<.62; // «INSERT COIN» lampeggia
       if(reducedMotion)continue;
-      demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
+      if(demo.ready)demo.sweep.position.y=demo.lo+((t*.29+demo.offset)%1)*demo.span;
     }
     const where = roomOf(pos.x, pos.z);
     if (whereEl.textContent !== where) whereEl.textContent = where;
@@ -2590,6 +2705,11 @@ function buildLobby3D(app, life) {
         // gettoni: larga 35 cm, alta 55, sul mobile a 1 m; si guarda da -x
         const dc=Math.max(.8,.3/Math.tan(half));
         camera.position.set(COIN.x-dc,1.42,COIN.z);camera.lookAt(COIN.x,1.27,COIN.z);
+      }else if(isSlot(atMachine)){
+        // slot: larga 68 cm con la leva, dal vassoio (70 cm) all'insegna (1,75 m); si guarda da +x
+        // un po' dall'alto, così si vedono le monete che cadono nel vassoio
+        const S=SLOT_SCALE,z=slotZ(atMachine.slice(5)),ds=Math.max(1.3*S,.42*S/Math.tan(half));
+        camera.position.set(SLOTS.x+ds,1.62*S,z-.03*S);camera.lookAt(SLOTS.x+.1*S,1.12*S,z-.03*S);
       }else{camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z)}
     }
     // da vicino si animano; mentre preparano vanno avanti anche da lontano (un ordine lasciato finisce lo stesso)
@@ -2597,6 +2717,11 @@ function buildLobby3D(app, life) {
     if(pop&&(atMachine==='pop'||pop.state()!=='scegli'||Math.hypot(pos.x-POP.x,pos.z-POP.z)<10))pop.update(dt);
     if(dog&&(atMachine==='dog'||dog.state()!=='scegli'||Math.hypot(pos.x-DOG.x,pos.z-DOG.z)<10))dog.update(dt);
     if(coinBox&&(atMachine==='coin'||coinBox.state()!=='scegli'||Math.hypot(pos.x-COIN.x,pos.z-COIN.z)<9))coinBox.update(dt);
+    if(slots){
+      if(isSlot(atMachine)||Math.hypot(pos.x-SLOTS.x,pos.z-SLOTS.z)<11)slots.update(dt);
+      // jackpot dalla Lobby (non mentre i rulli girano: non si svela prima che si fermino)
+      if((slotJackpotT-=dt)<0){slotJackpotT=1;if(!Object.values(slots.machines).some(m=>m.spinning()))slots.jackpot(app.slotJackpot?.())}
+    }
     if(held){held.update(dt);toHand(me,held.group)}
     if(drink){
       drink.update(dt);mySip+=dt;
@@ -2669,7 +2794,9 @@ function buildLobby3D(app, life) {
     if(yt&&ytLevel!==lastYT){yt.setVolume(ytLevel);lastYT=ytLevel}
     const audible=heard>.001 || target>.001;
     cinemaVolume.wrap.style.display=depth>0&&Math.abs(pos.x)<7&&previewKey?'flex':'none'; // solo dentro la Sala Cinema
-    radioVolume.wrap.style.display=(Math.hypot(pos.x-counterX,pos.z-counterZ)<3)?'flex':'none';
+    // volumi solo quando sei dentro (scelta del proprietario): la radio quando la stai scegliendo, il balilla e il
+    // flipper mentre ci giochi; passandoci vicino non compaiono
+    radioVolume.wrap.style.display=window.binottolandClubRadio?.choosing?.()?'flex':'none';
     if(avail.has('lavagna-spazio-libero')&&t>nextBoard&&Math.abs(pos.x)<7&&Math.abs(pos.z)<6.3){
       nextBoard=t+2;app.gallery?.({room:boardRoom,epoch:boardEpoch,since:boardSeq},drawGallery);
     }
@@ -2684,9 +2811,8 @@ function buildLobby3D(app, life) {
     const mix=THREE.MathUtils.clamp((doorDepth+1)/2,0,1);
     tableRoomGain=mix*mix*(3-2*mix);
     if(tableBus)tableBus.gain.value=tableLevel*tableRoomGain;
-    tableVolume.wrap.style.display=tableRoomGain>0&&!pinball.active&&!(touch&&tableFootball.active)&&Math.hypot(pos.x+13,pos.z)<3?'flex':'none'; // vicino al calcio balilla; da telefono non mentre giochi (coprirebbe il tavolo)
-    const nearPinball=Object.values(tables).some(t=>{const s=t.stand();return Math.hypot(pos.x-s.x,pos.z-s.z)<3});
-    pinballVolume.wrap.style.display=!tableFootball.active&&!(touch&&pinball.active)&&nearPinball?'flex':'none'; // vicino ai flipper
+    tableVolume.wrap.style.display=tableFootball.active&&!pinball.active?'flex':'none'; // al calcio balilla
+    pinballVolume.wrap.style.display=pinball.active&&!tableFootball.active?'flex':'none'; // al flipper
     pinballExit.style.display=touch&&pinball.active?'':'none';
     // flipper: tabellone, lampadine e display solo se sei in sala giochi lì vicino (o ci stai giocando)
     peerDt=dt;tableFootball.update(camera,dt,tableRoomGain>0);for(const t of Object.values(tables)){const s=t.stand();t.update(camera,dt,pinball.active||(tableRoomGain>0&&Math.hypot(pos.x-s.x,pos.z-s.z)<9))}placePeers();

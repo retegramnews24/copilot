@@ -26,6 +26,27 @@ il record personale, Lega Giochi a 1 BTN a settimana per la sala tavoli, cinema 
 persone; premi ancora da collegare per Pong online, Moto Trial, Zona, Giulio e Binotto Simulator (elenco in
 `docs/gettoni.md`).
 
+**Slot machine della sala giochi** (`docs/slot.md`), solo su `staging`, senza commit: tre Las Vegas classiche
+rossa, oro e nera (`blender/slot.blend` → `models/slot.glb`, rulli con ingranaggi in vista) contro la parete
+«ARCADE». Puntata 1 · 2 · 3 gettoni, vincite in gettoni, circa 110%, jackpot unico in BTN che cresce (5 BTN + 1 ogni
+25 gettoni, 1 su 3.000). Giro sul server (`wallet-slot`, `public/slot-rules.js`), rulli che vanno indietro e
+partono sfasati, suoni sintetizzati (CC0 veri non trovati). Anche il **cambio indietro gettoni → BTN** alla
+macchinetta (tasto «↔» sulla macchinetta, 5 gettoni = 1 BTN), stessa fessura e stessa bocca per BTN e gettoni, e
+**vassoi**: quello che esce e le vincite restano nel vassoio, solo per te, finché non li prendi («Prendi», P). Tasti
+della Lobby 3D larghi quanto le parole. Slot ingrandite del 25%. Volumi di radio, balilla e flipper solo quando ci sei
+dentro (scegliendo la radio, giocando), non passandoci vicino. Provato nell'anteprima locale; da provare nell'app di
+prova.
+
+**Cabinati della sala giochi rifatti in Blender** (`docs/cabinati.md`), solo su `staging`, senza commit: elenco
+giochi e posti e scelte del proprietario (un cabinato per gioco, anni '80 laccati neri col bordo luminoso, schermo a
+tubo dietro un vetro, 1 posto, Pong a 2 posti grande come il singolo, 4 posti largo 1,5 m per Moto Trial, F1 e Golf,
+muretto dei box per Binotto Simulator, niente sgabelli, posti come oggi). Modelli approvati: `blender/cabinati.blend`
+→ `models/cabinati.glb`. Messi nella Lobby 3D su richiesta del proprietario: file dall'angolo verso l'atrio, 25 cm tra
+uno e l'altro, a sud prima i giochi da 1 poi Pong e il muretto, cabinati, flipper e slot tutti a 10 cm dal muro e, sulla parete dell'ARCADE, 10 cm anche dall'angolo e tra flipper e
+slot (ora più verso l'angolo), disegni a tema per ogni gioco (`public/lobby3d/cabinet-art.js`), luci più basse, joystick non accesi.
+Provato nell'anteprima locale; da provare nell'app (Pong sul monitor, persone alle pulsantiere, telefono). Regola nuova da fare
+nel codice: le vincite in gettoni dei cabinati vanno al vassoio della macchinetta del cambio, solo per chi vince.
+
 **Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,
 anche con due giocatori.

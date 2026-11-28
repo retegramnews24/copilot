@@ -13,10 +13,13 @@ import * as GP from '../flipper/physics.js?v=fa74a615d3';
 import * as GT from '../flipper/physics-gt.js?v=99f8d6367a';
 
 // contro la parete in fondo della sala giochi, a destra della scritta ARCADE (a sinistra c'è il quadro);
-// il Binotto GT accanto, verso l'angolo
+// il Binotto GT accanto, verso l'angolo. Il dietro a 10 cm dal muro (x -19), come slot e cabinati: il Grand Prix
+// sporge 0,766 m dietro il centro, il GT 0,807 (misure dei modelli). Lungo la parete 10 cm anche dall'angolo (z -6)
+// al GT, tra i due flipper e tra il Grand Prix e le slot (scelta del proprietario): il GT è largo 1,004 m, il GP 0,844
 const now0 = () => performance.now() / 1000;
-export const FLIPPER_AT = { x: -18.05, z: -3.0, ry: Math.PI / 2 };
-export const GT_AT = { x: -18.05, z: -4.4, ry: Math.PI / 2 };
+const GAP = 0.1;
+export const GT_AT = { x: -18.9 + 0.807, z: -6 + GAP + 0.502, ry: Math.PI / 2 };
+export const FLIPPER_AT = { x: -18.9 + 0.766, z: GT_AT.z + 0.502 + GAP + 0.422, ry: Math.PI / 2 };
 const STAND = 1.15; // dove sta il personaggio, davanti alla barra (in metri dal centro del cabinet)
 const LEVER_RUN = 0.06; // quanto torna indietro la leva tirata tutta
 

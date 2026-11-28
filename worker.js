@@ -822,16 +822,36 @@ export class Room extends DurableObject {
         return;
       }
       if (
-        ['wallet-change', 'wallet-pay', 'wallet-play', 'wallet-league', 'wallet-record'].includes(b.type) &&
+        [
+          'wallet-change',
+          'wallet-pay',
+          'wallet-play',
+          'wallet-league',
+          'wallet-record',
+          'wallet-slot',
+          'wallet-take'
+        ].includes(b.type) &&
         a.inClub &&
         !a.closed
       ) {
         const w = await this.ctx.blockConcurrencyWhile(() => useWallet(this.ctx, a, b));
         ack();
+        // slot (docs/slot.md): il giro torna con i rulli; se il jackpot è cambiato lo vedono tutti
+        const slot = b.type === 'wallet-slot' && w?.ok && w.slot?.ref === b.ref ? w.slot : null;
         if (w)
           ws.send(
-            JSON.stringify(walletMessage(w, { ok: w.ok, ...(Number.isInteger(b.ref) ? { ref: b.ref } : {}) }))
+            JSON.stringify(
+              walletMessage(w, {
+                ok: w.ok,
+                ...(Number.isInteger(b.ref) ? { ref: b.ref } : {}),
+                ...(slot ? { slot } : {})
+              })
+            )
           );
+        if (slot && !w.again && (slot.btn || slot.jackpot !== this.lastJackpot)) {
+          this.lastJackpot = slot.jackpot;
+          await this.lobbyHub.lobbyBroadcast();
+        }
         return;
       }
       if (b.type !== 'presence') return;

@@ -37,7 +37,12 @@ assert.equal(await readWallet(ctx, {}), null);
 let w = await useWallet(ctx, anna, { type: 'wallet-change', btn: 5, ref: 1 });
 assert.equal(w.ok, true);
 assert.equal(w.btn, S - 5);
+// i gettoni cadono nel vassoio della macchinetta: si prendono (wallet-take) e vanno nel saldo
+assert.equal(w.gettoni, 0);
+assert.deepEqual(w.vassoio, { coin: { gettoni: 25, btn: 0 } });
+w = await useWallet(ctx, anna, { type: 'wallet-take', m: 'coin', ref: 2 });
 assert.equal(w.gettoni, 25);
+assert.deepEqual(w.vassoio, {});
 w = await useWallet(ctx, anna, { type: 'wallet-change', btn: 5, ref: 1 });
 assert.equal(w.btn, S - 5);
 for (const bad of [3, -10, '10'])

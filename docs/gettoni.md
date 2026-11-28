@@ -8,7 +8,17 @@
 - **50 BTN a testa:** a ognuno si danno 50 BTN da usare (erano 100, abbassati il 28 novembre 2026).
 - **Gettoni:** servono per gli arcade, il biliardo e i vari cabinati a gettone (coin-op), non per il cibo.
   Sono **d'ottone, con il foro in mezzo e la scanalatura** ad anello sulle due facce, come i gettoni di una volta.
-- **Cambio:** **1 BTN = 5 gettoni**.
+- **Cambio:** **1 BTN = 5 gettoni**, e anche **indietro**: la macchinetta riconverte i gettoni in BTN allo stesso
+  cambio, **5 gettoni = 1 BTN** (scelte del proprietario, 28 novembre 2026). Il **tasto «↔» sta sulla macchinetta**
+  (sulla piastra della moneta, sotto la freccia: `tasto_cambio` nel modello) e gira i tasti, che diventano azzurri
+  «5 · 25 · 50 gettoni → 1 · 5 · 10 BTN» (messaggio `wallet-change` con `back: true`).
+- **Stessa fessura, stessa bocca:** BTN e gettoni si mettono dalla **stessa fessura** e quello che esce (gettoni, o
+  BTN col cambio indietro) cade dalla **stessa bocca nella vaschetta**.
+- **Vassoi:** quello che esce dalla macchinetta e le vincite delle slot **restano nel vassoio** di quella macchina,
+  **solo per te**, e si accumulano; **ci restano anche se esci** dal circolo. Si prendono con un **tocco sul vassoio
+  o «Prendi · N gettoni» (P)** e vanno nel saldo (messaggio `wallet-take`, `m` coin o slot-rossa/oro/nera). Per
+  giocare o cambiare si usa il saldo: quello che sta nel vassoio va preso prima. Sul server: `vassoio` nel
+  portafoglio; ognuno vede nei vassoi solo le sue monete.
 - **Ordine dei lavori:** prima l'economia (i BTN a tutti e il cambio nella macchinetta); i prezzi dei giochi in
   gettoni si decidono dopo.
 

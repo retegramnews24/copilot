@@ -96,21 +96,24 @@ const plateTexture = () =>
     fitFont(g, 'scegli e inserisci', W - 40, 22, 'Arial, sans-serif');
     g.fillText('scegli e inserisci', W / 2, 176);
   });
-const keyTexture = k =>
+// back: il tasto del cambio indietro (dai i gettoni, prendi i BTN), in azzurro
+const keyTexture = (k, back = false) =>
   canvasTexture(160, 116, (g, W, H) => {
-    g.fillStyle = '#ffe2a6';
+    g.fillStyle = back ? '#bfe8ff' : '#ffe2a6';
     g.fillRect(0, 0, W, H);
-    g.strokeStyle = '#e0601a';
+    g.strokeStyle = back ? '#1a70c0' : '#e0601a';
     g.lineWidth = 6;
     g.strokeRect(6, 6, W - 12, H - 12);
-    g.fillStyle = '#3a1a04';
+    g.fillStyle = back ? '#06263f' : '#3a1a04';
     g.textAlign = 'center';
     g.textBaseline = 'middle';
-    fitFont(g, k + ' BTN', W - 24, 44);
-    g.fillText(k + ' BTN', W / 2, H * 0.42);
-    g.fillStyle = '#a04010';
-    fitFont(g, k * COIN_RATE + ' gettoni', W - 24, 24, 'Arial, sans-serif');
-    g.fillText(k * COIN_RATE + ' gettoni', W / 2, H * 0.76);
+    const top = back ? k * COIN_RATE + ' gett.' : k + ' BTN',
+      bottom = back ? '→ ' + k + ' BTN' : k * COIN_RATE + ' gettoni';
+    fitFont(g, top, W - 24, 44);
+    g.fillText(top, W / 2, H * 0.42);
+    g.fillStyle = back ? '#1a5a90' : '#a04010';
+    fitFont(g, bottom, W - 24, 24, 'Arial, sans-serif');
+    g.fillText(bottom, W / 2, H * 0.76);
   });
 
 function piece(gltf, name) {
@@ -202,7 +205,9 @@ export function createCoinChanger(gltf, { sound = () => {}, pay = () => true } =
   }
   let wallet = null;
   const idle = () =>
-    wallet && Number.isInteger(wallet.btn)
+    back
+      ? show('GETTONI → BTN', wallet && Number.isInteger(wallet.btn) ? 'HAI ' + wallet.gettoni + ' GETTONI' : '5 GETTONI = 1 BTN')
+      : wallet && Number.isInteger(wallet.btn)
       ? show('SALDO ' + wallet.btn + ' BTN', wallet.gettoni + ' GETTONI')
       : show('1 BTN = 5 GETTONI', 'scegli 1 · 5 · 10');
 
@@ -222,8 +227,49 @@ export function createCoinChanger(gltf, { sound = () => {}, pay = () => true } =
     b.userData.coin = { type: 'key', key: k };
     b.userData.rest = b.position.z;
     b.userData.mat = m;
+    b.userData.tex = [tex, keyTexture(k, true)];
     root.add(b);
     keys.push(b);
+  }
+  // cambio indietro (scelta del proprietario): il tasto «↔» sullo schermo gira i tasti, che diventano «5 gettoni →
+  // 1 BTN»; i gettoni rientrano nella bocca e le monete BTN escono dalla fessura. Stesso cambio: 5 gettoni = 1 BTN.
+  let back = false;
+  // il tasto «↔» sulla macchinetta (sulla piastra della moneta, sotto la freccia): dice verso dove si cambia
+  const flipTex = canvasTexture(160, 70, () => {});
+  function drawFlip() {
+    const g = flipTex.userData.canvas.getContext('2d'),
+      W = 160,
+      H = 70;
+    g.fillStyle = back ? '#bfe8ff' : '#ffe2a6';
+    g.fillRect(0, 0, W, H);
+    g.strokeStyle = back ? '#1a70c0' : '#e0601a';
+    g.lineWidth = 5;
+    g.strokeRect(4, 4, W - 8, H - 8);
+    g.fillStyle = back ? '#06263f' : '#3a1a04';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    const text = back ? '↔ GETT.→BTN' : '↔ BTN→GETT.';
+    fitFont(g, text, W - 16, 26, 'Arial, sans-serif');
+    g.fillText(text, W / 2, H / 2 + 1);
+    flipTex.needsUpdate = true;
+  }
+  const flipKey = piece(gltf, 'tasto_cambio');
+  const flipMat = new THREE.MeshStandardMaterial({ map: flipTex, emissiveMap: flipTex, emissive: 0xffffff, emissiveIntensity: 0.35, roughness: 0.4 });
+  setMaterial(flipKey, flipMat);
+  flipKey.userData.coin = { type: 'flip' };
+  flipKey.userData.rest = flipKey.position.z;
+  root.add(flipKey);
+  drawFlip();
+  function setBack(on) {
+    back = !!on;
+    drawFlip();
+    for (const b of keys) {
+      const t = b.userData.tex[back ? 1 : 0];
+      b.userData.mat.map = b.userData.mat.emissiveMap = t;
+      b.userData.mat.needsUpdate = true;
+    }
+    shown = '';
+    if (state === 'scegli') idle();
   }
   const press = b => {
     b.position.z = b.userData.rest - 0.006; // il tasto rientra
@@ -242,41 +288,56 @@ export function createCoinChanger(gltf, { sound = () => {}, pay = () => true } =
   root.add(tray);
   const noRay = o => o.traverse(m => (m.raycast = () => {}));
   noRay(coin);
-  noRay(tray);
 
   // stato: 'scegli' → 'cambia' → 'scegli'
   let state = 'scegli',
     job = null,
     clock = 0;
   const listeners = [];
-  const emit = () => listeners.forEach(fn => fn({ state, key: job ? String(job.k) : null }));
+  const emit = () => listeners.forEach(fn => fn({ state, key: job ? String(job.back ? -job.k : job.k) : null }));
   idle();
 
+  // k: BTN da cambiare; negativo (o '-5') per il cambio indietro
   function play(k) {
     k = Number(k);
+    const rev = k < 0;
+    k = Math.abs(k);
     if (state !== 'scegli' || !COIN_KEYS.includes(k)) return false;
+    if (rev !== back) setBack(rev);
     state = 'cambia';
     // una moneta per BTN, al massimo tre (con 5 e 10 BTN entrano tre monete e il display conta il resto)
-    job = { k, coins: Math.min(3, k), coinT: 0, coinN: 0, out: 0, next: 0, falling: [], end: 0 };
+    job = { k, back: rev, coins: Math.min(3, k), coinT: 0, coinN: 0, out: 0, next: 0, falling: [], end: 0 };
     keys.forEach(b => (b.userData.mat.emissiveIntensity = b.userData.coin.key === k ? 1 : 0.1));
-    show(k + ' BTN', 'inserisci la moneta');
+    // dalla stessa fessura entrano i BTN o i gettoni (fino a tre si vedono entrare), dalla stessa bocca escono
+    // gettoni o BTN nella vaschetta, dove restano finché non li prendi
+    if (rev) show(k * COIN_RATE + ' GETTONI', 'inserisci i gettoni');
+    else show(k + ' BTN', 'inserisci la moneta');
     emit();
     return true;
   }
   function hit(obj) {
     let o = obj;
-    while (o && !o.userData.coin) o = o.parent;
+    while (o && !o.userData.coin && o !== tray) o = o.parent;
+    if (o === tray) return { type: 'tray' }; // un tocco sulla vaschetta: prendi
     const v = o?.userData.coin;
     if (!v) return null;
     press(o);
     sound('tasto');
     if (state !== 'scegli') return v;
-    if (pay(v.key)) play(v.key);
+    if (v.type === 'flip') {
+      setBack(!back);
+      return v;
+    }
+    if (pay(v.key, back)) play(back ? -v.key : v.key);
     else {
       shown = '';
       show(
         'SALDO',
-        wallet && Number.isInteger(wallet.btn) ? 'servono ' + v.key + ' BTN' : 'saldo in arrivo…'
+        !(wallet && Number.isInteger(wallet.btn))
+          ? 'saldo in arrivo…'
+          : back
+            ? 'servono ' + v.key * COIN_RATE + ' gettoni'
+            : 'servono ' + v.key + ' BTN'
       );
       sound('errore');
     }
@@ -291,19 +352,58 @@ export function createCoinChanger(gltf, { sound = () => {}, pay = () => true } =
     keys.forEach(b => (b.userData.mat.emissiveIntensity = 0.25));
     shown = '';
     idle();
+    filled = ''; // la vaschetta torna a quello che c'è davvero per te
+    fill(mine);
     emit();
   }
   function reset() {
     coin.visible = false;
     if (job) for (const f of job.falling) f.obj.removeFromParent();
-    clearTray();
     if (state !== 'scegli') finish();
+    fill(mine, true);
   }
 
-  // un gettone che cade dalla bocca nella vaschetta
-  function drop() {
+  // la vaschetta fa vedere quello che c'è dentro per te ({gettoni, btn}); rifatta solo se cambia
+  let mine = null,
+    filled = '';
+  function fill(t, force = false) {
+    mine = t || null;
+    const g = Math.min(MAX_IN_TRAY, t?.gettoni | 0),
+      b = Math.min(12, t?.btn | 0),
+      key = g + ':' + b;
+    if (state !== 'scegli' || (!force && key === filled)) return;
+    filled = key;
+    clearTray();
+    for (let i = 0; i < g + b; i++) {
+      const o = i < b ? btnCoin() : token.clone(true);
+      o.visible = true;
+      o.position.set((Math.random() - 0.5) * 2 * TRAY.x, TRAY.y + Math.floor(i / 10) * TRAY.h, TRAY.z0 + Math.random() * (TRAY.z1 - TRAY.z0));
+      o.rotation.y = Math.random() * 6;
+      tray.add(o);
+    }
+  }
+  // moneta BTN sdraiata nella vaschetta (la moneta del modello sta in piedi con le facce verso ±x)
+  function btnCoin() {
+    const g = new THREE.Group(),
+      c = coin.clone(true);
+    c.position.set(0, 0, 0);
+    c.rotation.set(0, 0, Math.PI / 2);
+    c.visible = true;
+    g.add(c);
+    return g;
+  }
+  // prendi: tutto vola su verso di te e sparisce
+  let lifting = [];
+  function collect() {
+    for (const o of tray.children) lifting.push({ obj: o, t: -Math.random() * 0.3, from: o.position.clone() });
+    filled = '0:0';
+    mine = null;
+  }
+
+  // un gettone (o una moneta BTN, col cambio indietro) che cade dalla bocca nella vaschetta
+  function drop(isBtn = false) {
     if (tray.children.length >= MAX_IN_TRAY) tray.remove(tray.children[0]);
-    const g = token.clone(true);
+    const g = isBtn ? btnCoin() : token.clone(true);
     g.visible = true;
     g.position.copy(MOUTH);
     g.position.x += (Math.random() - 0.5) * 0.12;
@@ -333,7 +433,20 @@ export function createCoinChanger(gltf, { sound = () => {}, pay = () => true } =
       on = Math.floor(clock * fast) % 2;
     bulbs[0].emissiveIntensity = on ? 2.2 : 0.25;
     bulbs[1].emissiveIntensity = on ? 0.25 : 2.2;
+    // gettoni e monete presi: salgono verso di te e spariscono
+    for (const l of lifting) {
+      l.t += dt;
+      const t = Math.max(0, Math.min(1, l.t / 0.35));
+      l.obj.position.set(l.from.x * (1 - t), l.from.y + 0.25 * ease(t), l.from.z + 0.35 * ease(t));
+      if (t >= 1 && !l.done) {
+        l.done = true;
+        l.obj.removeFromParent();
+        if (Math.random() < 0.3) sound('gettone');
+      }
+    }
+    lifting = lifting.filter(l => !l.done);
     if (!job) return;
+    if (job.back) return updateBack(dt);
     // le monete entrano una alla volta: compaiono davanti, scorrono dentro la fessura
     if (job.coinN < job.coins) {
       job.coinT += dt;
@@ -394,15 +507,75 @@ export function createCoinChanger(gltf, { sound = () => {}, pay = () => true } =
     }
   }
 
+  // cambio indietro: i gettoni entrano dalla stessa fessura della moneta (se ne vedono entrare fino a tre), poi le
+  // monete BTN cadono dalla bocca nella vaschetta, dove restano finché non le prendi
+  const slotToken = token.clone(true);
+  slotToken.visible = false;
+  root.add(slotToken);
+  noRay(slotToken);
+  function updateBack(dt) {
+    const total = job.k * COIN_RATE;
+    if (job.coinN < job.coins) {
+      job.coinT += dt;
+      const t = Math.min(1, job.coinT / 0.55),
+        a = ease(Math.min(1, t / 0.45)),
+        b = ease(Math.min(1, Math.max(0, (t - 0.55) / 0.45)));
+      slotToken.visible = t < 1;
+      slotToken.position.copy(coinRest);
+      slotToken.position.z = coinRest.z + 0.05 * (1 - a) - (coinRest.z - SLOT_Z) * b;
+      slotToken.rotation.set(0, 0, Math.PI / 2); // in piedi, di taglio verso la fessura
+      if (job.coinT - dt <= 0.45 && job.coinT > 0.45) sound('gettone');
+      if (t >= 1) {
+        job.coinN++;
+        job.coinT = -0.1;
+        show(total + ' GETTONI', 'DENTRO ' + Math.round((total * job.coinN) / job.coins));
+        if (job.coinN === job.coins) job.next = 0.35;
+      }
+      return;
+    }
+    const n = Math.min(12, job.k);
+    if (job.out < n) {
+      job.next -= dt;
+      while (job.next <= 0 && job.out < n) {
+        drop(true);
+        job.out++;
+        job.next += 0.22;
+        show(total + ' GETTONI', '+' + Math.round((job.k * job.out) / n) + ' BTN');
+      }
+    }
+    for (const f of job.falling) {
+      f.t += dt;
+      const t = Math.min(1, f.t / 0.22);
+      f.obj.position.lerpVectors(f.from, f.to, t);
+      f.obj.position.y = f.from.y + (f.to.y - f.from.y) * t * t;
+      f.obj.rotation.set(f.spin.x * (1 - t), f.yaw * t, f.spin.z * (1 - t));
+      if (t >= 1 && f.obj.userData.falling) {
+        f.obj.userData.falling = false;
+        sound('moneta');
+      }
+    }
+    job.falling = job.falling.filter(f => f.obj.userData.falling);
+    if (job.out < n || job.falling.length) return;
+    if (!job.end) {
+      job.end = clock;
+      sound('cambio');
+      shown = '';
+      show('FATTO!', '+' + job.k + ' BTN');
+    } else if (clock - job.end > 2.2) finish();
+  }
+
   return {
     root,
     hit,
     play,
+    back: on => (on === undefined ? back : (state === 'scegli' && setBack(on), back)),
+    fill,
+    collect,
     reset,
     update,
     typing: () => {},
     take: () => null,
-    typed: () => (job ? String(job.k) : ''),
+    typed: () => (job ? String(job.back ? -job.k : job.k) : ''),
     state: () => state,
     ready: () => null,
     wallet: w => {

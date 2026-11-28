@@ -12,6 +12,27 @@
 // (public/lobby-link.js), quindi un numero già visto non si paga due volte. Il saldo va sotto zero solo per il
 // credito della Lega (al massimo -1).
 import { COIN_GAMES } from './public/coin-games.js';
+import {
+  JACKPOT_START,
+  JACKPOT_STEP,
+  SLOT_BETS,
+  SLOT_MACHINES,
+  pickSymbol,
+  slotWin
+} from './public/slot-rules.js';
+
+// slot machine (docs/slot.md): un jackpot solo per le tre macchine, in BTN; resto = gettoni giocati verso il
+// prossimo BTN
+export const JACKPOT_KEY = 'slot:jackpot';
+export async function readJackpot(ctx) {
+  const j = await ctx.storage.get(JACKPOT_KEY);
+  return {
+    btn: Number.isInteger(j?.btn) && j.btn >= JACKPOT_START ? j.btn : JACKPOT_START,
+    resto: Number.isInteger(j?.resto) && j.resto >= 0 ? j.resto : 0
+  };
+}
+// numero a caso tra 0 e 1 per i rulli (crypto, non Math.random)
+const cryptoRandom = () => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32;
 
 export const WALLET_START = 50;
 export const COIN_RATE = 5;
@@ -40,8 +61,31 @@ const clean = w => ({
       ? { until: w.lega.until, ...(w.lega.off ? { off: true } : {}) }
       : null,
   best: w?.best && typeof w.best === 'object' ? { ...w.best } : {},
-  tickets: w?.tickets && typeof w.tickets === 'object' ? { ...w.tickets } : {}
+  tickets: w?.tickets && typeof w.tickets === 'object' ? { ...w.tickets } : {},
+  slot: w?.slot && Array.isArray(w.slot.r) ? { ...w.slot } : null, // l'ultimo giro alla slot
+  vassoio: cleanTrays(w?.vassoio)
 });
+
+// Vassoi (scelte del proprietario, 28 novembre 2026): quello che esce dalla macchinetta dei gettoni (gettoni, o BTN
+// col cambio indietro) e le vincite delle slot (gettoni e jackpot in BTN) restano nel vassoio di quella macchina, solo
+// per te, finché non li prendi (wallet-take); si accumulano e ci restano anche se esci dal circolo. Per giocare o
+// cambiare si usa il saldo: quello che sta nel vassoio va preso prima.
+export const TRAYS = ['coin', 'slot-rossa', 'slot-oro', 'slot-nera'];
+function cleanTrays(v) {
+  const out = {};
+  for (const m of TRAYS) {
+    const t = v?.[m],
+      gettoni = intOr(t?.gettoni, 0),
+      btn = intOr(t?.btn, 0);
+    if (gettoni || btn) out[m] = { gettoni, btn };
+  }
+  return out;
+}
+function toTray(w, m, gettoni = 0, btn = 0) {
+  if (!gettoni && !btn) return;
+  const t = w.vassoio[m] || { gettoni: 0, btn: 0 };
+  w.vassoio[m] = { gettoni: t.gettoni + gettoni, btn: t.btn + btn };
+}
 
 // rinnovo automatico della Lega: una settimana alla volta, finché si arriva a oggi
 export function renewLeague(w, now = Date.now()) {
@@ -78,8 +122,14 @@ export async function readWallet(ctx, attachment, now = Date.now()) {
 export function walletCost(b) {
   if (b?.type === 'wallet-change') {
     if (!CHANGE_STEPS.includes(b.btn)) return null;
-    return { btn: b.btn, gettoni: b.btn * COIN_RATE };
+    // dalla stessa fessura entrano i BTN o i gettoni; quello che esce cade nel vassoio della macchinetta
+    // indietro (back): i gettoni tornano BTN, allo stesso cambio
+    if (b.back === true) return { btn: 0, gettoni: -b.btn * COIN_RATE, tray: { m: 'coin', btn: b.btn } };
+    return { btn: b.btn, gettoni: 0, tray: { m: 'coin', gettoni: b.btn * COIN_RATE } };
   }
+  if (b?.type === 'wallet-take') return TRAYS.includes(b.m) ? { take: b.m } : null;
+  if (b?.type === 'wallet-slot')
+    return SLOT_BETS.includes(b.bet) && SLOT_MACHINES.includes(b.m) ? { slot: true, bet: b.bet, m: b.m } : null;
   if (b?.type === 'wallet-pay') {
     const key = b.m === 'pop' && b.k === 'tutti' ? 'pop-tutti' : b.m;
     const price = FOOD_PRICE[key];
@@ -100,15 +150,40 @@ export function walletCost(b) {
 
 // fa il cambio, il pagamento, la partita, l'iscrizione o il record; risponde con il saldo, se è andato (ok) e se ha
 // dato un premio (prize)
-export async function useWallet(ctx, attachment, b, now = Date.now()) {
+export async function useWallet(ctx, attachment, b, now = Date.now(), rnd = cryptoRandom) {
   const id = attachment?.user?.id,
     cost = walletCost(b);
   if (id == null || !cost) return null;
   const w = await load(ctx, id, now),
     ref = Number.isFinite(b.ref) ? b.ref : null;
-  if (ref != null && w.refs.includes(ref)) return { ...w, ok: true, again: true };
+  if (ref != null && w.refs.includes(ref))
+    // un giro già fatto: si rimanda lo stesso risultato (il telefono aspetta i rulli)
+    return { ...w, ok: true, again: true, ...(cost.slot && w.slot?.ref === ref ? { slot: w.slot } : {}) };
   let prize = 0;
-  if (cost.league) {
+  if (cost.slot) {
+    if (w.gettoni < cost.bet) return { ...w, ok: false };
+    const jp = await readJackpot(ctx);
+    w.gettoni -= cost.bet;
+    jp.resto += cost.bet;
+    jp.btn += Math.floor(jp.resto / JACKPOT_STEP);
+    jp.resto %= JACKPOT_STEP;
+    const r = [0, 1, 2].map(() => pickSymbol(rnd())),
+      win = slotWin(r),
+      gettoni = win.gettoni * cost.bet,
+      btn = win.jackpot ? jp.btn : 0;
+    toTray(w, 'slot-' + cost.m, gettoni, btn); // le vincite cadono nel vassoio della slot
+    if (win.jackpot) jp.btn = JACKPOT_START;
+    await ctx.storage.put(JACKPOT_KEY, jp);
+    w.slot = { ref, m: cost.m, bet: cost.bet, r, gettoni, btn, combo: win.combo, jackpot: jp.btn };
+  } else if (cost.take) {
+    // prendi tutto quello che c'è nel vassoio: va nel saldo
+    const t = w.vassoio[cost.take];
+    if (!t) return { ...w, ok: true, taken: { gettoni: 0, btn: 0 } };
+    w.gettoni += t.gettoni;
+    w.btn += t.btn;
+    delete w.vassoio[cost.take];
+    w.taken = { m: cost.take, ...t };
+  } else if (cost.league) {
     if (leagueActive(w, now)) return { ...w, ok: true };
     if (w.btn < LEAGUE_PRICE) return { ...w, ok: false };
     w.btn -= LEAGUE_PRICE;
@@ -128,10 +203,12 @@ export async function useWallet(ctx, attachment, b, now = Date.now()) {
     if (w.btn < cost.btn || w.gettoni + cost.gettoni < 0) return { ...w, ok: false };
     w.btn -= cost.btn;
     w.gettoni += cost.gettoni;
+    if (cost.tray) toTray(w, cost.tray.m, cost.tray.gettoni, cost.tray.btn);
     if (cost.game) w.tickets[cost.game] = Math.min(TICKETS, (w.tickets[cost.game] || 0) + 1);
   }
   if (ref != null) w.refs = [...w.refs, ref].slice(-REFS);
-  await ctx.storage.put(walletKey(id), w);
+  const { taken, ...keep } = w;
+  await ctx.storage.put(walletKey(id), keep);
   return { ...w, ok: true, ...(prize ? { prize } : {}) };
 }
 
@@ -186,6 +263,7 @@ export const walletMessage = (w, extra = {}, now = Date.now()) => ({
   btn: w.btn,
   gettoni: w.gettoni,
   lega: leagueActive(w, now) ? w.lega.until : 0,
+  vassoio: w.vassoio || {}, // quello che ti aspetta nei vassoi delle macchine
   ...(w.lega?.off ? { legaSospesa: true } : {}),
   ...extra
 });

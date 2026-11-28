@@ -42,7 +42,8 @@ inspecting» nelle impostazioni avanzate di Telegram). Nella Console non devono 
 - [ ] Calcio balilla **in due** (telefono + computer): ognuno muove la sua coppia, la pallina esce con Spazio o
       con un tocco al centro, il gol conta, la riga di stato in alto è giusta. Uno esce e rientra: riprende il posto.
 - [ ] Pong sul monitor: si accende, la racchetta si muove, si spegne.
-- [ ] Volumi: compaiono vicino a radio, cinema, balilla e flipper, e cambiano davvero il volume.
+- [ ] Volumi: il cinema dentro la sala; radio, balilla e flipper solo quando ci sei dentro (scegliendo la radio,
+  giocando al balilla o al flipper), non passandoci vicino; cambiano davvero il volume.
 
 ## 5. Pagine e giochi fuori dalla 3D
 
