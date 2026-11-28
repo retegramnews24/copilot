@@ -109,6 +109,16 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
 - **Lega Giochi** (`/api/league`, `/lobby/league`): creare un tavolo o sedersi a un tavolo della sala tavoli senza
   Lega risponde 402; l'app chiede «Ti iscrivi?» (1 BTN, rinnovo automatico ogni 7 giorni) e riprova. Il rinnovo
   si fa quando il portafoglio si legge (`renewLeague`). Le prove dei tavoli iscrivono prima i giocatori finti.
+- **Saldo sempre in vista** (scelta del proprietario): nella Lobby 3D sotto la barra in alto («47 BTN · 3 gettoni ·
+  Lega ✓»), nella Lobby classica in cima alla pagina Giochi.
+- **Il tasto dice sempre il costo:** davanti a un gioco a gettone il tasto della 3D è «Gioca · Nome · 1 gettone (E)»,
+  oppure «Nome · INSERT COIN · servono gettoni»; premerlo senza gettoni fa vedere l'avviso e **resta nella 3D** (prima
+  la 3D si chiudeva lo stesso e si finiva nella Lobby classica senza avviso). Nella pagina Giochi i tasti dei giochi a
+  gettone dicono «· 1 gettone» e pagano anche lì (`setPayGate` in `games-catalog.js`); dalla 3D il gettone è già
+  pagato. Elenco dei giochi a gettone uno solo: `public/coin-games.js`.
+- **Ritorno dai giochi:** uscendo da un gioco aperto dalla 3D si torna subito nella 3D, senza vedere la Lobby classica
+  per un paio di secondi.
+- La pagina Giochi della Lobby classica verrà abbandonata e tolta più avanti (nota del proprietario).
 - Quando arriva un premio, nella Lobby 3D compare «+1 BTN». Il saldo si aggiorna a ogni giro di presenza (25 s).
 
 ## Da fare
@@ -119,6 +129,5 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
 - Dentro un gioco, rigiocare senza uscire (Acquedotto! livello dopo, Ruggine gara dopo) non chiede un altro gettone:
   si paga a ogni apertura del cabinato.
 - Sedersi da soli al balilla per allenarsi costa un gettone come una partita.
-- I giochi aperti dalla pagina Giochi della Lobby classica non chiedono gettoni (solo dalla Lobby 3D).
 - Disdire la Lega Giochi (per ora si rinnova sempre) e far vedere la scadenza anche nella Lobby classica.
 - Fessure per le monete sui cabinati e sulle macchinette, rifatte in Blender una alla volta (idea del proprietario).

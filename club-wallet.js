@@ -11,30 +11,16 @@
 // I messaggi arrivano dalla Lobby con un numero (ref): il telefono li rimanda finché non riceve la conferma
 // (public/lobby-link.js), quindi un numero già visto non si paga due volte. Il saldo va sotto zero solo per il
 // credito della Lega (al massimo -1).
+import { COIN_GAMES } from './public/coin-games.js';
+
 export const WALLET_START = 50;
 export const COIN_RATE = 5;
 export const CHANGE_STEPS = [1, 5, 10];
 export const FOOD_PRICE = { vend: 1, dog: 1, pop: 1, 'pop-tutti': 2 };
 export const LEAGUE_PRICE = 1;
 export const WEEK = 7 * 24 * 3600 * 1000;
-// giochi che si pagano con un gettone (chiavi dei cabinati della Lobby 3D, più flipper, biliardo, balilla e Zona)
-export const COIN_GAMES = [
-  'pong',
-  'moto-trial',
-  'acquedotto',
-  'lunar-lander-3d',
-  'number-connect',
-  'f1-on-paper',
-  'golf-with-your-gay-friends',
-  'giulio-simulator',
-  'binotto-simulator',
-  'ruggine-89',
-  'flipper-gp',
-  'flipper-gt',
-  'biliardo',
-  'balilla',
-  'zona'
-];
+// giochi che si pagano con un gettone: l'elenco è uno solo, in public/coin-games.js
+export { COIN_GAMES };
 const REFS = 12; // numeri recenti ricordati
 const TICKETS = 5; // biglietti tenuti per gioco
 export const walletKey = id => 'wallet:' + id;

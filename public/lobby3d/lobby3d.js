@@ -29,6 +29,7 @@ import { createTableLive } from './table-live.js?v=df2df46159';
 import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=80b5305961';
 import { createPopcorn, makeHeldPopcorn, makeHeldCola } from './popcorn.js?v=6d7cb70a80';
 import { createHotdog, makeHeldHotdog } from './hotdog.js?v=9f2b0aba6a';
+import { COIN_GAMES as COIN_LIST, INSERT_COIN } from '../coin-games.js?v=af1bf21f7d';
 import { createCoinChanger, COIN_RATE } from './gettoni.js?v=2759aad45e';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 import { buildCorridor, inZone, ZONE } from './corridor.js?v=a5eb759f5c';
@@ -580,7 +581,7 @@ function buildLobby3D(app, life) {
     if (game.pins) Table3D.prototype.setPins.call(view, game.pins);
     const hx = T.L + T.cush + T.rail, hz = T.W + T.cush + T.rail;
     solid(x - hx, x + hx, z - hz, z + hz);
-    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => payGame('biliardo') && app.open('biliardo') });
+    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => app.open('biliardo') });
     // lampada sopra il tavolo
     const lampW = hx * 1.6;
     box(lampW, 0.065, 0.095, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
@@ -1428,11 +1429,13 @@ function buildLobby3D(app, life) {
   // server ({type:'wallet'}) rimette il saldo giusto. Il cibo costa 1 BTN (popcorn e cola insieme 2).
   let wallet=app.wallet?.()||null,coinBox=null;
   const walletChip=document.createElement('div');
-  walletChip.hidden=true;walletChip.className='club-wallet';
-  walletChip.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 10px);left:50%;transform:translateX(-50%);padding:5px 12px;border-radius:14px;background:rgba(20,12,4,.78);color:#ffd27a;font:600 14px system-ui,sans-serif;white-space:nowrap;pointer-events:none;z-index:5';
+  // sempre in vista (scelta del proprietario): quanti BTN e gettoni hai, sotto la barra in alto
+  walletChip.className='club-wallet';
+  walletChip.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 50px);left:50%;transform:translateX(-50%);padding:5px 12px;border-radius:14px;background:rgba(20,12,4,.78);color:#ffd27a;font:600 14px system-ui,sans-serif;white-space:nowrap;pointer-events:none;z-index:5';
   el.append(walletChip);
+  walletShow();
   function walletShow(){
-    walletChip.textContent=Number.isInteger(wallet?.btn)?'Saldo: '+wallet.btn+' BTN · '+(wallet.gettoni||0)+' gettoni'+(wallet.lega?' · Lega Giochi ✓':''):'Saldo in arrivo…';
+    walletChip.textContent=Number.isInteger(wallet?.btn)?wallet.btn+' BTN · '+(wallet.gettoni||0)+' gettoni'+(wallet.lega?' · Lega ✓':''):'Saldo in arrivo…';
     coinBox?.wallet(wallet);
   }
   // premio arrivato (vittoria o record personale): «+1 BTN»
@@ -1444,11 +1447,11 @@ function buildLobby3D(app, life) {
   }
   // giochi a gettone (come COIN_GAMES in club-wallet.js): 1 gettone a partita. Senza gettoni non si gioca: «INSERT
   // COIN» e la strada per la macchinetta dei gettoni. Il cinema e la sala tavoli (Lega Giochi) non usano gettoni.
-  const COIN_GAMES=new Set(['pong','moto-trial','acquedotto','lunar-lander-3d','number-connect','f1-on-paper','golf-with-your-gay-friends','giulio-simulator','binotto-simulator','ruggine-89','flipper-gp','flipper-gt','biliardo','balilla','zona']);
+  const COIN_GAMES=new Set(COIN_LIST);
   function payGame(game){
     if(!COIN_GAMES.has(game))return true;
     if(spend(0,{type:'wallet-play',game},-1))return true;
-    notice(Number.isInteger(wallet?.btn)?'INSERT COIN · servono gettoni: cambiali alla macchinetta sul mobile della radio':'Saldo in arrivo… riprova tra un attimo','info');
+    notice(Number.isInteger(wallet?.btn)?INSERT_COIN:'Saldo in arrivo… riprova tra un attimo','info');
     vendSound('errore');return false;
   }
   function spend(btn,msg,gettoni=0){
@@ -1512,7 +1515,7 @@ function buildLobby3D(app, life) {
     if(document.pointerLockElement)document.exitPointerLock?.();
     atMachine=m;useK='';myPlay=null;
     vendMode=true;resetMovement();me.root.visible=false;actB.hidden=true;stick.hidden=true;vendExit.hidden=false;near=null;
-    walletChip.hidden=false;walletShow();
+    walletShow();
   }
   function exitVend(){
     if(!vendMode)return;
@@ -1520,7 +1523,7 @@ function buildLobby3D(app, life) {
     const machine=machineOf(atMachine);
     // (i gettoni no: sono già nel saldo, la macchinetta finisce di farli cadere e poi svuota la vaschetta)
     if(machine&&atMachine!=='coin'&&machine.state()!=='scegli'&&myPlay?.m===atMachine)myOrders.set(atMachine,{k:myPlay.k,n:myPlay.n});
-    vendMode=false;atMachine=null;vendExit.hidden=true;walletChip.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
+    vendMode=false;atMachine=null;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
   }
   vendExit.onclick=exitVend;
   // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto
@@ -1893,7 +1896,7 @@ function buildLobby3D(app, life) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - half - .03, z + half + .03); else solid(x - half - .03, x + half + .03, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => payGame(key) && app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => app.open(key), mq });
   };
   // lungo le pareti, rivolti verso il centro della sala: a nord i grandi a 4 e 5 posti, a sud gli altri
   const byKey = new Map(list.map(e => [e[0], e]));
@@ -2521,6 +2524,14 @@ function buildLobby3D(app, life) {
       else if (near) actB.textContent = (near.sit||near.seat?'':near.vend?'Usa · ':'Apri · ') + near.label + (touch ? '' : '  (E)') + (near.stool!=null&&!touch ? ' · Prendi (G)' : '');
     }
     // macchinetta che sta usando un altro: si vede chi, e non si può usare
+    // giochi a gettone (cabinati, biliardo, flipper, balilla, Pong): il tasto dice sempre il costo, o che mancano i
+    // gettoni (docs/gettoni.md); senza gettoni premerlo fa vedere «INSERT COIN» e non apre niente
+    const coinGame = near && !near.machine && (near.pinball ? 'flipper-' + near.pinball : near.balilla ? 'balilla' : near.pong ? 'pong' : near.station || near.key);
+    if (coinGame && COIN_GAMES.has(coinGame) && !(near.pong && monitor)) {
+      const what = near.pong ? 'Pong' : near.label,
+        text = (wallet?.gettoni | 0) > 0 ? 'Gioca · ' + what + ' · 1 gettone' + (touch ? '' : ' (E)') : what + ' · INSERT COIN · servono gettoni';
+      if (actB.textContent !== text) actB.textContent = text;
+    }
     if (near?.machine) { const who = machineBusy(near.machine), text = who ? near.label + ' · la sta usando ' + who : (machineOf(near.machine)?.state() === 'pronto' ? 'Ritira · ' : 'Usa · ') + near.label + (touch ? '' : '  (E)'); if (actB.textContent !== text) actB.textContent = text; }
     if (vendMode) { near = null; actB.hidden = true; } // davanti alla macchinetta c'è solo «Esci»
     ring.visible = !!near && !!near.mq;
@@ -2831,6 +2842,9 @@ function buildLobby3D(app, life) {
     }
     if(s.radio){resetMovement();s.act();return}
     if(s.vend){enterMachine(s.machine);return} // macchinetta: visuale davanti al pannello, la 3D resta aperta
+    // cabinati e biliardo: il gettone si paga PRIMA di chiudere la 3D; senza gettoni si resta qui e si vede «INSERT
+    // COIN» (prima la 3D si chiudeva lo stesso e si finiva nella Lobby classica senza avviso)
+    if(!payGame(s.station||s.key))return;
     if(s.station)parked={station:s.station,slot:freeSeat(s)};
     hide();
     s.act();
