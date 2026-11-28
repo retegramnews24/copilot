@@ -7,11 +7,11 @@ Aggiornato il 28 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.72**: Zona Operativa (poligono, online sul deserto, squadre con i bot), porta blindata e corridoio,
+- `main`: **1.0.73**: in Zona Operativa al computer si cammina e si corre tenendo Maiusc. 1.0.72: Zona Operativa (poligono, online sul deserto, squadre con i bot), porta blindata e corridoio,
   Forza 4 vero sul tavolo 3D, F1 on paper! con i bot (1.0.71: macchinetta caffè e snack; 1.0.70: sala cinema nuova).
   Le 8 prove passate. Portata su richiesta del proprietario prima dei controlli a mano su staging: le voci di «Da
   provare» qui sotto valgono ora anche per l'app vera.
-- `staging`: 1.0.72, uguale a `main` (`branch-diff`: nessuna differenza).
+- `staging`: 1.0.73, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
 
@@ -83,8 +83,7 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 
 ## Da provare
 
-- Zona Operativa al computer: ora si cammina e si corre tenendo Maiusc (prima era il contrario). Su staging, non
-  ancora su `main`.
+- Zona Operativa al computer: ora si cammina e si corre tenendo Maiusc (prima era il contrario). Nella 1.0.73.
 
 - F1 on paper! con i bot: «Contro l'IA» con 7 bot sul telefono (il telefono regge? i bot ci mettono troppo a
   pensare?); «Stesso telefono» con 2-3 piloti e qualche bot; online su staging la sala d'attesa con i tasti dei bot,
