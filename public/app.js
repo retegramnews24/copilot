@@ -5,7 +5,8 @@ import {safeInsets,applyInsets,viewportHeight} from './safe-area.js';
 import {campaignInfo} from './golf/courses.js?v=d38be2cad9';
 import {readAppearance} from './appearance.js?v=784dba932c';
 import './avatar-figure.js?v=723b251202';
-import {initCatalog,renderCatalog,openGame} from './games-catalog.js?v=d5e86b959d';
+import {initCatalog,renderCatalog,openGame,setPayGate,markCoinButtons} from './games-catalog.js?v=090a6bea86';
+import {COIN_GAMES,INSERT_COIN} from './coin-games.js?v=af1bf21f7d';
 import {installSwipe} from './swipe.js?v=1e6e396f97';
 import {initWindowMode} from './window-mode.js?v=4861da0434';
 import {pref,setPref,read,save} from './prefs.js?v=bd123656a4';
@@ -88,6 +89,18 @@ document.addEventListener('visibilitychange',clubVisibility);
 // e partono appena si ricollega, poco dopo la presenza; prima andavano persi.
 // portafoglio (club-wallet.js, docs/gettoni.md): saldo in BTN e gettoni, l'ultimo arrivato dal server
 let walletState=null;
+// sempre in vista anche qui (scelta del proprietario): quanti BTN e gettoni hai, in cima alla pagina Giochi
+const gamesWallet=document.createElement('p');gamesWallet.id='games-wallet';gamesWallet.className='hint';$('page-games')?.prepend(gamesWallet);
+function showWallet(){gamesWallet.textContent=Number.isInteger(walletState?.btn)?'Saldo: '+walletState.btn+' BTN · '+(walletState.gettoni|0)+' gettoni'+(walletState.lega?' · Lega Giochi ✓':''):'Saldo in arrivo…'}
+function setWallet(w){walletState=w;showWallet();lobby3d?.wallet?.(w)}
+showWallet();
+// pagina Giochi: i giochi a gettone pagano anche qui (1 gettone, scritto sui tasti); senza gettoni non partono
+setPayGate(key=>{
+ if(!COIN_GAMES.includes(key))return true;
+ if(!((walletState?.gettoni|0)>0)){const m=Number.isInteger(walletState?.btn)?INSERT_COIN+' (Lobby 3D)':'Saldo in arrivo… riprova tra un attimo';gamesWallet.textContent=m;gamesWallet.scrollIntoView?.({block:'nearest'});setTimeout(showWallet,5000);tg?.showAlert?.(m);return false}
+ setWallet({...walletState,gettoni:walletState.gettoni-1});lobbyLink.send({type:'wallet-play',game:key},()=>false);return true
+});
+markCoinButtons(key=>COIN_GAMES.includes(key));
 function pinballSend(msg){lobbyLink.send(msg,m=>m.type===msg.type&&m.table===msg.table)}
 // la Lobby 3D si prepara (modelli, texture, luci) anche nascosta: parte già durante lo splash, poi si mostra
 async function makeLobby3D(){
@@ -97,10 +110,10 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=72637dcb31');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=e8301ced43');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
-}),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),wallet:()=>walletState,walletSend:msg=>lobbyLink.send(msg,()=>false),record:d=>request('/api/record',d.win===true?{game:d.game,win:true}:{game:d.game,score:d.score}).then(w=>{walletState=w;lobby3d?.wallet?.(w)}).catch(()=>{}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
+}),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key,{paid:true}),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),wallet:()=>walletState,walletSend:msg=>lobbyLink.send(msg,()=>false),record:d=>request('/api/record',d.win===true?{game:d.game,win:true}:{game:d.game,score:d.score}).then(setWallet).catch(()=>{}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;fromGame3D=true;gameSeen3D=!lobbyIdle();sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}
  return lobby3d;
 }
 // Zona operativa (corridoio della sala giochi, public/lobby3d/corridor.js): in fondo la Lobby 3D si spegne davvero
@@ -152,7 +165,12 @@ $('lobby3d-open').onclick=()=>{lobby3dFailed=false;try{sessionStorage.removeItem
 // In 3D: ogni volta che la Lobby è libera (all'avvio dopo lo splash, uscendo da un gioco, tornando da Settings o
 // da Giochi) dopo due controlli tranquilli la 3D si riapre da sola. Appena aperto un gioco si aspetta un attimo.
 // la 3D non si riapre da sola sopra un errore appena mostrato: prima lo copriva dopo un secondo e mezzo
-setInterval(()=>{if(!want3D()||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500||Date.now()-errAt<4000)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
+// uscendo da un gioco aperto dalla 3D si torna SUBITO nella 3D (scelta del proprietario): prima si vedeva la Lobby
+// classica per un paio di secondi, finché il controllo qui sotto non la riapriva. Si guarda quando una pagina o un
+// riquadro di gioco si chiude (attributo hidden), e si riapre appena la Lobby è libera.
+// (solo dopo aver visto il gioco aperto: mentre si apre la Lobby è ancora libera)
+let fromGame3D=false,gameSeen3D=false;
+new MutationObserver(()=>{if(!fromGame3D)return;if(!lobbyIdle()){gameSeen3D=true;return}if(gameSeen3D&&want3D()&&lobby3d&&!lobby3d.active&&!document.hidden){fromGame3D=gameSeen3D=false;lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}}).observe(document.body,{subtree:true,attributes:true,attributeFilter:['hidden','open']});setInterval(()=>{if(!want3D()||lobby3d?.active||document.hidden||Date.now()-lobby3dBack<2500||Date.now()-errAt<4000)return;lobby3dIdle=lobbyIdle()?lobby3dIdle+1:0;if(lobby3dIdle>=2){lobby3dIdle=0;openLobby3D().catch(e=>err('Lobby 3D: '+e.message))}},700);
 let simSummary=null,simSummaryAt=0;
 // Binotto Simulator summary for "Adesso": at most once a minute, only with the Lobby visible.
 async function loadSimSummary(force=false){
@@ -175,7 +193,7 @@ let errAt=0;
 function err(s){$('error').textContent=s;if(s){trace('ERROR',s);errAt=Date.now();if(lobby3d?.active)lobby3d.notice?.(s)}}
 async function joinLeague(){
  if(!confirm('Per giocare ai tavoli ci si iscrive alla Lega Giochi Binottoland: 1 BTN a settimana, pagato in anticipo, con rinnovo automatico ogni 7 giorni. Ti iscrivi?'))return false;
- try{const w=await request('/api/league',{});walletState=w;lobby3d?.wallet?.(w);return true}catch(e){err(e.message);return false}
+ try{setWallet(await request('/api/league',{}));return true}catch(e){err(e.message);return false}
 }
 async function request(path,data,keepalive=false){
  if(!sessionToken)throw Error(MSG.openFromTelegram);
@@ -469,7 +487,7 @@ const lobbyLink=createLobbyLink({
 });
 const lobbyAlive=()=>lobbyLink.alive(),connectLobby=()=>lobbyLink.connect();
 function lobbyMessage(raw){
- const e={data:raw};try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='wallet'){walletState=data;lobby3d?.wallet?.(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}
+ const e={data:raw};try{const data=JSON.parse(e.data);if(data.type==='stool-result'){lobby3d?.stoolResult(data);return}if(data.type==='club-back'){if(!data.stool)lobby3d?.stoolDisconnected();lobby3d?.lobbyReconnected?.();return}if(data.type==='balilla'){lobby3d?.balillaState(data);return}if(data.type==='wallet'){setWallet(data);return}if(data.type==='users'){onlineUsers=data.users||[];if(lastLobby)lastLobby.users=onlineUsers;renderSocial();return}if(Number.isInteger(data.tableVolume)&&data.tableVolume!==sharedTableVolume){sharedTableVolume=data.tableVolume;lobby3d?.setTableVolume(sharedTableVolume)}clubStation=data.clubRadio??null;clubAudio();games=data.games;renderLeaders(data);onlineUsers=data.users||[];lastLobby=data;lastLobby=data;chat.set(data.messages);notices.set(data.notices);renderLobby();renderSocial()}catch{err('Elenco non valido.')}
 }
 function action(id,fn){$(id).onclick=async()=>{if(busy)return;busy=true;$(id).disabled=true;err('');try{await fn()}catch(e){err(e.message)}finally{busy=false;$(id).disabled=false;if(state)render(state)}}}
 $('open-debug').onclick=()=>{show3DStats();selectPage('debug')};

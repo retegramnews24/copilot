@@ -54,6 +54,25 @@ const write = value => {
 };
 const homes = new Map();
 let cards = [];
+// Giochi a gettone (docs/gettoni.md): i tasti che fanno partire il gioco («Singolo», «Multiplayer», «Gioca»…,
+// id play-… e create-…) chiedono prima il gettone a payGate(chiave); senza gettoni il tasto non fa niente.
+// Dalla Lobby 3D il gettone è già pagato: openGame(chiave, {paid: true}).
+let payGate = () => true,
+  paidKey = null;
+export function setPayGate(fn) {
+  payGate = fn;
+}
+export function markCoinButtons(isCoin) {
+  for (const card of cards)
+    if (isCoin(card.dataset.game))
+      for (const b of card.querySelectorAll('button[id^="play-"], button[id^="create-"]'))
+        if (!b.querySelector('.coin-cost')) {
+          const cost = document.createElement('small');
+          cost.className = 'coin-cost';
+          cost.textContent = ' · 1 gettone';
+          b.append(cost);
+        }
+}
 
 export function isDevMode() {
   try {
@@ -86,6 +105,19 @@ export function initCatalog() {
       renderCatalog();
     };
     card.querySelector('.catalog-card-title').append(star);
+    // gettone prima del gioco: si controlla prima che il tasto faccia partire il gioco (fase di cattura)
+    card.addEventListener(
+      'click',
+      event => {
+        if (!event.target.closest('button[id^="play-"], button[id^="create-"]')) return;
+        if (paidKey === key) return void (paidKey = null);
+        if (!payGate(key)) {
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        }
+      },
+      true
+    );
     // Any real action on the card counts as "played".
     card.addEventListener('click', event => {
       if (!event.target.closest('button') || event.target.closest('.fav-toggle')) return;
@@ -156,9 +188,10 @@ function closeSheet() {
   sheetCard = null;
 }
 // Tap on a game: one mode → start it at once; several modes (or not ready yet) → bottom sheet with the buttons.
-export function openGame(key, { options = false } = {}) {
+export function openGame(key, { options = false, paid = false } = {}) {
   const card = cards.find(c => c.dataset.game === key);
   if (!visible(card)) return;
+  paidKey = paid ? key : null;
   const list = actions(card);
   if (!options && list.length === 1 && !list[0].disabled) return list[0].click();
   closeSheet();

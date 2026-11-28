@@ -93,6 +93,12 @@ assert.deepEqual(ballColors(),['#cf514d','#529766']);
 separateColors.click();
 assert.deepEqual(ballColors(),['#e5be43','#8662b1']);
 separateColors.click();
+// i giochi a gettone partono solo con i gettoni (docs/gettoni.md): senza, il tasto non apre niente
+for(const b of ['play-number-connect','play-pong'])assert.match(get(b).textContent,/1 gettone/);
+lobbySocket.onmessage({data:JSON.stringify({type:'wallet',btn:50,gettoni:0})});
+get('play-number-connect').click();
+assert.equal(get('arcade-overlay').hidden,true);
+lobbySocket.onmessage({data:JSON.stringify({type:'wallet',btn:50,gettoni:99})});
 for(const game of ['number-connect','pong']){
  const launch=get('play-'+game),frame=get('arcade-frame'),overlay=get('arcade-overlay');
  launch.click();
