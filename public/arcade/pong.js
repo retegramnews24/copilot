@@ -153,7 +153,7 @@ function tick(now){
       const event=stepMatch(match,STEP);
       if(event)beep(event);
       if(event==='score'||modes[match.mode].solo&&event==='paddle'){
-        if(match.winner!==null){phase='over';keys.clear();}
+        if(match.winner!==null){phase='over';keys.clear();if(match.winner===0&&parent!==window)parent.postMessage({type:'arcade:record',game:'pong',win:true},location.origin);} // vinta contro il computer: 1 BTN (docs/gettoni.md)
         update();
       }
       elapsed-=STEP;

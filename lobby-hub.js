@@ -9,6 +9,21 @@ import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './t
 import { gameTitle } from './public/game-info.js';
 import { makeRoomFor } from './socket-limits.js';
 import { MSG } from './public/messages.js';
+import { hasLeague, prize, prizeWinners, useWallet, walletMessage } from './club-wallet.js';
+
+// tavoli della sala tavoli: servono l'iscrizione alla Lega Giochi Binottoland (docs/gettoni.md)
+const LEAGUE_GAMES = [
+  'chess',
+  'checkers',
+  'connect4',
+  'uno',
+  'scarabeo',
+  'scopa',
+  'naval',
+  'briscola',
+  'briscola5'
+];
+export const LEAGUE_MSG = 'Per giocare ai tavoli iscriviti alla Lega Giochi Binottoland (1 BTN a settimana).';
 
 const BILIARDO_NAMES = {
   otto: 'Palla 8',
@@ -369,6 +384,9 @@ export class LobbyHub {
       }
       const key = 'number-connect:' + user.player,
         previous = await this.ctx.storage.get(key);
+      // record personale battuto: 1 BTN (docs/gettoni.md); il primo punteggio fissa il record
+      const won = previous && game.score > previous.points ? 1 : 0;
+      if (won) await prize(this.ctx, user.id, 1);
       if (!previous || game.score > previous.points) {
         await this.ctx.storage.put(key, {
           id: user.player,
@@ -378,12 +396,27 @@ export class LobbyHub {
           at: Date.now()
         });
       }
-      return json({ leaders: await this.numberConnectLeaders() });
+      return json({ leaders: await this.numberConnectLeaders(), ...(won ? { prize: won } : {}) });
+    }
+    // record personale di un gioco da soli (Acquedotto!, Lunar Lander…): una partita pagata con un gettone, poi il
+    // punteggio; se batte il record personale 1 BTN (club-wallet.js)
+    if (path === '/lobby/record') {
+      const user = userOf(req);
+      if (!user) return json({ error: MSG.login }, 401);
+      const w = await useWallet(
+        this.ctx,
+        { user },
+        { type: 'wallet-record', game: body.game, score: body.score, win: body.win === true }
+      );
+      if (!w) return json({ error: 'Punteggio non valido.' }, 400);
+      return json(walletMessage(w, { ok: w.ok, prize: w.prize || 0 }));
     }
     if (path === '/lobby/result') {
       const old = await this.ctx.storage.get('result:' + body.key);
       if (!old) {
         await this.ctx.storage.put('result:' + body.key, body);
+        // premio: 1 BTN a ogni vincitore che non è un bot, una volta sola per risultato (club-wallet.js)
+        await prizeWinners(this.ctx, body.winners);
         this.leaders = null; // risultato nuovo: classifiche da ricalcolare
         const notice = winNotice(body);
         if (notice) {
@@ -393,11 +426,23 @@ export class LobbyHub {
       }
       return json({ ok: true });
     }
+    // iscrizione alla Lega Giochi Binottoland: 1 BTN, poi rinnovo automatico ogni 7 giorni (club-wallet.js)
+    if (path === '/lobby/league') {
+      const user = userOf(req);
+      if (!user) return json({ error: MSG.login }, 401);
+      const w = await useWallet(this.ctx, { user }, { type: 'wallet-league' });
+      if (!w?.ok)
+        return json({ error: 'Serve 1 BTN per iscriverti alla Lega Giochi.', ...walletMessage(w) }, 402);
+      return json(walletMessage(w, { ok: true }));
+    }
     if (path === '/lobby/join') {
       const user = userOf(req);
       if (!user) return json({ error: MSG.login }, 401);
       const tables = await this.lobbyList(),
         limit = seatLimit(tables, user.player, tables.find(g => g.room === body.room) || { room: body.room });
+      const joining = tables.find(g => g.room === body.room);
+      if (joining && LEAGUE_GAMES.includes(joining.game || 'chess') && !(await hasLeague(this.ctx, user.id)))
+        return json({ error: LEAGUE_MSG, league: true }, 402);
       if (limit)
         return json(
           {
@@ -478,6 +523,8 @@ export class LobbyHub {
         ].includes(body.game)
       )
         return json({ error: MSG.noGame }, 400);
+      if (LEAGUE_GAMES.includes(body.game || 'chess') && !(await hasLeague(this.ctx, user.id)))
+        return json({ error: LEAGUE_MSG, league: true }, 402);
       const active = (await this.lobbyList()).filter(activeTable);
       if (!['moto-trial', 'golf', 'pong', 'f1', 'biliardo'].includes(body.game)) {
         const limit = seatLimit(active, user.player, {

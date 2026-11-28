@@ -1,6 +1,7 @@
 import { changeStool, holdsStool, STOOL_GRACE } from './club-stools.js';
 import { heldDrink, heldSnack, machineOrders, machineUse } from './club-machines.js';
 import { recordPinball, startPinball, removePinball } from './club-pinball.js';
+import { readWallet, serverRecord, useWallet, walletMessage } from './club-wallet.js';
 import { BalillaHub } from './balilla-hub.js';
 import { SimulatorLeague } from './simulator/server.js';
 import { memberAccess, telegramAccessTag } from './auth.js';
@@ -793,9 +794,19 @@ export class Room extends DurableObject {
       }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
         const table = b.table === 'gt' ? 'gt' : 'gp';
-        const better = await this.ctx.blockConcurrencyWhile(() => recordPinball(this.ctx, a, b.score, table));
+        // record personale battuto: 1 BTN (club-wallet.js); il primo punteggio fissa il record
+        let won = 0;
+        const better = await this.ctx.blockConcurrencyWhile(() =>
+          recordPinball(this.ctx, a, b.score, table, async score => {
+            won = await serverRecord(this.ctx, a.user?.id, 'flipper-' + table, score);
+          })
+        );
         ws.serializeAttachment(a);
         ack();
+        if (won)
+          ws.send(
+            JSON.stringify(walletMessage(await readWallet(this.ctx, a), { prize: won, game: 'flipper' }))
+          );
         if (better) await this.lobbyHub.lobbyBroadcast();
         return;
       }
@@ -804,6 +815,25 @@ export class Room extends DurableObject {
           await changeStool(this.ctx, ws, b);
           await this.lobbyHub.lobbyBroadcast(false);
         });
+      // portafoglio (club-wallet.js): saldo, cambio in gettoni e pagamento del cibo, solo per te
+      if (b.type === 'wallet' && a.user?.id != null) {
+        const w = await readWallet(this.ctx, a);
+        ws.send(JSON.stringify(walletMessage(w)));
+        return;
+      }
+      if (
+        ['wallet-change', 'wallet-pay', 'wallet-play', 'wallet-league', 'wallet-record'].includes(b.type) &&
+        a.inClub &&
+        !a.closed
+      ) {
+        const w = await this.ctx.blockConcurrencyWhile(() => useWallet(this.ctx, a, b));
+        ack();
+        if (w)
+          ws.send(
+            JSON.stringify(walletMessage(w, { ok: w.ok, ...(Number.isInteger(b.ref) ? { ref: b.ref } : {}) }))
+          );
+        return;
+      }
       if (b.type !== 'presence') return;
       // App nascosta (away): sgabello e posto al balilla restano tuoi per un po' (il balilla libera il posto da solo
       // se il telefono tace, club-stools.js lo sgabello). Uscire dal club invece li libera subito.

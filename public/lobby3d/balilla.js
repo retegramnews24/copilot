@@ -23,7 +23,8 @@ import {
 const TX = -13; // posizione del tavolo nella sala giochi
 const TOP = 0.733; // piano del campo
 
-export function buildBalilla(scene, el, send, playSound) {
+// pay(): paga 1 gettone per la partita nuova (docs/gettoni.md); false se non ci sono gettoni
+export function buildBalilla(scene, el, send, playSound, pay = () => true) {
   // ---------- il tavolo ----------
   const table = new THREE.Group();
   table.position.set(TX, 0, 0);
@@ -476,7 +477,9 @@ export function buildBalilla(scene, el, send, playSound) {
   }
   function serve() {
     if (!seated()) return;
-    if (net.field.finished) post('again');
+    if (net.field.finished) {
+      if (pay()) post('again'); // un'altra partita: un altro gettone
+    }
     else if (alone() || net.field.phase === 'throw') post('ready', { pair });
   }
   function close() {

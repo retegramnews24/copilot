@@ -7,16 +7,24 @@ Aggiornato il 28 novembre 2026.
 
 ## Versioni
 
-- `main`: **1.0.74**: macchinetta degli hot dog, carrello dei popcorn e della Binotto Cola, popcorn nell'angolo,
-  uscire mentre le macchinette preparano (chiunque ritira), tutto con la F, gli amici ti vedono saltare; Zona
-  Operativa: deserto più vero con borgo e oasi, mira con tacche e lente del Ruggito, camminata più veloce, bot più
-  facili e armi a rotazione. Portata su richiesta del proprietario prima dei controlli a mano su staging: le voci di
-  «Da provare» qui sotto valgono ora anche per l'app vera. 1.0.73: in Zona Operativa al computer si cammina e si corre
-  tenendo Maiusc (1.0.72: Zona Operativa, F1 on paper! con i bot, Forza 4 vero sul tavolo 3D; 1.0.71: macchinetta
-  caffè e snack).
-- `staging`: 1.0.74, uguale a `main` (`branch-diff`: nessuna differenza).
+- `main`: **1.0.75**: Binottocoin e macchinetta cambia-gettoni sul mobile della radio, 50 BTN a testa, cibo a 1 BTN,
+  1 gettone a partita ai giochi della sala giochi, flipper, biliardo, balilla e Zona, 1 BTN a chi vince o batte il
+  record, Lega Giochi per la sala tavoli, «INSERT COIN» su cabinati e flipper. Portata su richiesta del proprietario
+  prima delle prove nell'app di prova e dei controlli a mano. 1.0.74: macchinetta degli hot dog, carrello dei popcorn,
+  uscire mentre le macchinette preparano, Zona Operativa più vera (1.0.73: in Zona Operativa si corre tenendo Maiusc;
+  1.0.72: Zona Operativa, F1 on paper! con i bot, Forza 4 vero sul tavolo 3D; 1.0.71: macchinetta caffè e snack).
+- `staging`: 1.0.75, uguale a `main` (`branch-diff`: nessuna differenza).
 
 ## In corso
+
+**Binottocoin e macchinetta cambia-gettoni** (`docs/gettoni.md`), nella 1.0.75: modello (`blender/gettoni.blend` →
+`models/gettoni.glb`, cromata e arancio da sala giochi, sul mobile della radio a sinistra della radio; moneta BTN col
+pagliaccio in rilievo e la B con tre aste). Saldo sul server (`club-wallet.js`): 50 BTN a testa, cambio 1 · 5 · 10
+BTN (5 gettoni per BTN), cibo a 1 BTN (popcorn e cola insieme 2), suoni delle monete, «INSERT COIN» su cabinati e
+flipper; 1 gettone a partita (cabinati, flipper, biliardo, balilla, Zona a ogni entrata), 1 BTN a chi vince o batte
+il record personale, Lega Giochi a 1 BTN a settimana per la sala tavoli, cinema gratis. Da provare nell'app con due
+persone; premi ancora da collegare per Pong online, Moto Trial, Zona, Giulio e Binotto Simulator (elenco in
+`docs/gettoni.md`).
 
 **Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,

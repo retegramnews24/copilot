@@ -34,7 +34,9 @@ export async function startPinball(ctx, attachment, table = 'gp', ref = null) {
   return true;
 }
 
-export async function recordPinball(ctx, attachment, score, table = 'gp') {
+// valid(score): chiamata quando il punteggio è buono (partita annunciata e punteggio possibile), anche se non entra
+// in classifica: serve al premio del record personale (club-wallet.js)
+export async function recordPinball(ctx, attachment, score, table = 'gp', valid = null) {
   const user = attachment?.user,
     key = PINBALL_KEYS[table];
   if (!key || !user?.id || !Number.isInteger(score) || score <= 0 || score > PINBALL_MAX) return false;
@@ -50,6 +52,7 @@ export async function recordPinball(ctx, attachment, score, table = 'gp') {
   // un punteggio per partita annunciata
   if (Object.keys(others).length) await ctx.storage.put(pinballStartKey(user.id), { ...others, refs });
   else await ctx.storage.delete(pinballStartKey(user.id));
+  await valid?.(score);
   const list = (await ctx.storage.get(key)) ?? [];
   const id = String(user.id),
     name = String(user.name || 'Giocatore').slice(0, 24);

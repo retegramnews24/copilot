@@ -3,7 +3,8 @@
 // scrivendo, n: ordini fatti, t: prodotti presi}. Il server lo lascia passare solo se nessun altro, collegato e nel
 // club, la sta già usando: chi arriva dopo non la ottiene e il suo telefono, vedendo l'altro, esce. Chi va via
 // mentre prepara lascia l'ordine nella posa (orders, machineOrders).
-export const MACHINES = ['vend', 'pop', 'dog'];
+// 'coin' è la macchinetta cambia-gettoni sul mobile della radio (docs/gettoni.md): k è 1, 5 o 10 (BTN cambiati)
+export const MACHINES = ['vend', 'pop', 'dog', 'coin'];
 const person = a => a?.memberId || a?.user?.id || null;
 const live = (o, now) => !!o && !o.closed && !!o.inClub && now - (o.seen || now) < 65000;
 

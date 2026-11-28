@@ -172,7 +172,9 @@ export const THEMES = {
 };
 
 // sound(nome): suoni della macchinetta (vendingSounds), se chi la usa li vuole
-export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}) {
+// pay(BTN): paga il prodotto scelto da chi la usa (docs/gettoni.md, 1 BTN); false se il saldo non basta.
+// Le scelte viste da un altro (play) non pagano.
+export function createVending(gltf, theme = 'grafite', { sound = () => {}, pay = () => true } = {}) {
   const T = THEMES[theme] || THEMES.grafite;
   const root = new THREE.Group();
   for (const n of [
@@ -386,6 +388,11 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
     show('CAFFÈ', d.name);
     emit();
   }
+  function broke(v) {
+    show('SALDO', 'serve 1 BTN');
+    sound('errore');
+    return v;
+  }
   function hit(obj) {
     let o = obj;
     while (o && !o.userData.vending) o = o.parent;
@@ -396,10 +403,16 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
       sound('tasto');
       setTimeout(() => (o.position.z = 0.006), 140);
       if (state !== 'scegli') return v;
-      if (v.type === 'drink') vendDrink(v.drink);
-      else if (v.key === 'OK') {
-        if (typed.length === 2) vendSnack(typed);
+      if (v.type === 'drink') {
+        if (!pay(1)) return broke(v);
+        vendDrink(v.drink);
+      } else if (v.key === 'OK') {
+        const code = typed;
         typed = '';
+        if (code.length === 2) {
+          if (slots.has(code) && !pay(1)) return broke(v);
+          vendSnack(code);
+        }
       } else if (/[A-D]/.test(v.key)) typed = v.key;
       else if (typed.length === 1) typed += v.key;
       if (state === 'scegli') idle();
@@ -602,7 +615,7 @@ export function makeHeld(gltf, product) {
 
 // Suoni della macchinetta, fatti al momento con Web Audio (niente file). ctx(): l'AudioContext da usare, o null se
 // i suoni sono spenti. Nomi: tasto, errore, motore, caduta, sportello, presa, bicchiere, erogazione, pronto, morso, sorso;
-// per il carrello dei popcorn anche scoppio, sfrigolio, versa
+// per il carrello dei popcorn anche scoppio, sfrigolio, versa; per la macchinetta dei gettoni moneta, gettone, cambio
 export function vendingSounds(ctx) {
   let noiseBuf = null;
   const noise = ac => {
@@ -644,6 +657,28 @@ export function vendingSounds(ctx) {
     s.connect(f).connect(env(ac, t, peak, a, d, r));
     s.start(t, Math.random());
     s.stop(t + d + r + 0.05);
+  };
+  // urto di una moneta: un clic brillante e le parziali di un disco di metallo che risuonano
+  const clink = (ac, t, f, peak, dur) => {
+    hiss(ac, t, 'highpass', 6000, 0.8, peak * 0.6, 0.001, 0.004, 0.025);
+    [
+      [1, 1],
+      [2.76, 0.7],
+      [5.4, 0.45],
+      [8.93, 0.25]
+    ].forEach(([r, v], i) => {
+      const o = ac.createOscillator(),
+        g = ac.createGain(),
+        d = dur / (1 + i * 0.6);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(f * r, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(peak * v, t + 0.002);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g).connect(ac.destination);
+      o.start(t);
+      o.stop(t + d + 0.02);
+    });
   };
   const SOUNDS = {
     tasto: (ac, t) => tone(ac, t, 'sine', 1320, 0.06, 0.07),
@@ -731,6 +766,22 @@ export function vendingSounds(ctx) {
       tone(ac, t, 'sawtooth', 210, 0.012, 0.32, 300),
       hiss(ac, t, 'bandpass', 1800, 4, 0.008, 0.03, 0.2, 0.1)
     ),
+    // macchinetta cambia-gettoni (gettoni.js): la moneta che rotola nella fessura e cade dentro, il gettone che
+    // tintinna nella vaschetta (ogni volta un po' diverso), il «din-din» di fine cambio
+    // (squillanti: ogni urto di metallo suona con le parziali di un disco, 1 · 2,76 · 5,40 · 8,93, che si spengono
+    // piano; scelta del proprietario «suoni più squillanti da monete»)
+    moneta: (ac, t) => (
+      hiss(ac, t, 'bandpass', 3600, 5, 0.03, 0.01, 0.18, 0.05, 2600), // rotola nella fessura
+      clink(ac, t + 0.22, 2350, 0.09, 0.7),
+      clink(ac, t + 0.36, 2420, 0.05, 0.45), // rimbalza dentro
+      clink(ac, t + 0.44, 2380, 0.03, 0.35)
+    ),
+    gettone: (ac, t) => clink(ac, t, 2600 + Math.random() * 1500, 0.07, 0.4 + Math.random() * 0.2),
+    cambio(ac, t) {
+      // «din-din-din» da sala giochi e una pioggia di monete
+      [1046, 1318, 1568, 2093].forEach((f, i) => tone(ac, t + i * 0.09, 'square', f, 0.03, i === 3 ? 0.35 : 0.1));
+      for (let k = 0; k < 7; k++) clink(ac, t + 0.1 + k * 0.06 + Math.random() * 0.03, 2800 + Math.random() * 1800, 0.035, 0.35);
+    },
     spremi: (ac, t) => (
       hiss(ac, t, 'bandpass', 500, 2, 0.06, 0.02, 0.35, 0.3, 260),
       tone(ac, t + 0.1, 'sine', 140, 0.025, 0.3, 90)

@@ -2,8 +2,8 @@
 // l'atrio (la lavagna apre Settings, il cartellone apre Giochi), la sala biliardo (vicino a un tavolo "Apri" apre
 // il Biliardo, con i tavoli veri del gioco) e la sala arcade (ogni cabinato apre il suo gioco).
 // Non rifà nessuna schermata: chiede all'app di aprire quelle che ci sono già, e intanto il mondo 3D si ferma.
-import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=a7281ff79e';
-import {buildBalilla} from './balilla.js?v=d09a655c05';
+import {buildFlipper, FLIPPER_AT, GT_AT} from './flipper3d.js?v=4b254beeea';
+import {buildBalilla} from './balilla.js?v=704a972fe3';
 import {playBalillaSound} from './balilla-sounds.js?v=b6a48f4677';
 import {helpFor, helpList} from './help.js?v=d35882a376';
 import {soundAllowed} from '../sound-pref.js';
@@ -17,7 +17,7 @@ import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtil
 import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
-import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=6d79d0e827';
+import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, insertCoin, nameTag, blobTex } from './textures.js?v=0545bdbd8d';
 import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a5078a2ed5';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
@@ -26,11 +26,12 @@ import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb
 import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
 import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
 import { createTableLive } from './table-live.js?v=df2df46159';
-import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=eef1f7fde9';
-import { createPopcorn, makeHeldPopcorn, makeHeldCola } from './popcorn.js?v=476f889a23';
-import { createHotdog, makeHeldHotdog } from './hotdog.js?v=e76ce4b98f';
+import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=80b5305961';
+import { createPopcorn, makeHeldPopcorn, makeHeldCola } from './popcorn.js?v=6d7cb70a80';
+import { createHotdog, makeHeldHotdog } from './hotdog.js?v=9f2b0aba6a';
+import { createCoinChanger, COIN_RATE } from './gettoni.js?v=2759aad45e';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
-import { buildCorridor, inZone, ZONE } from './corridor.js?v=0fb346722b';
+import { buildCorridor, inZone, ZONE } from './corridor.js?v=a5eb759f5c';
 
 const H = 3.4; // altezza delle stanze
 // sala cinema più lunga e più alta delle altre: parete dello schermo a z 20,55, tetto a 5,5 m. Si entra in piano
@@ -579,7 +580,7 @@ function buildLobby3D(app, life) {
     if (game.pins) Table3D.prototype.setPins.call(view, game.pins);
     const hx = T.L + T.cush + T.rail, hz = T.W + T.cush + T.rail;
     solid(x - hx, x + hx, z - hz, z + hz);
-    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => app.open('biliardo') });
+    spots.push({ x, z, hx, hz, pad: 0.85, label: 'Biliardo', key: 'biliardo', where: 'Sala biliardo', act: () => payGame('biliardo') && app.open('biliardo') });
     // lampada sopra il tavolo
     const lampW = hx * 1.6;
     box(lampW, 0.065, 0.095, std('#1d2a22', 0.35, 0.7), x, 2.25, z);
@@ -1422,6 +1423,39 @@ function buildLobby3D(app, life) {
   let vend=null,vendGltf=null,pop=null,popGltf=null,vendMode=false,atMachine=null,held=null,heldBites=0,drink=null,drinkSips=0,mySip=9;
   let useN=0,useT=0,useK=''; // alla macchinetta che stai usando: ordini fatti, prodotti presi, ultima scelta
   const vendSound=vendingSounds(()=>soundAllowed()&&audioContext?.state==='running'?audioContext:null);
+  // Portafoglio (docs/gettoni.md, club-wallet.js): Binottocoin (BTN) e gettoni. Il saldo vero è sul server; qui si
+  // scala subito (spend) e si manda il messaggio, che resta in coda finché il server conferma. La risposta del
+  // server ({type:'wallet'}) rimette il saldo giusto. Il cibo costa 1 BTN (popcorn e cola insieme 2).
+  let wallet=app.wallet?.()||null,coinBox=null;
+  const walletChip=document.createElement('div');
+  walletChip.hidden=true;walletChip.className='club-wallet';
+  walletChip.style.cssText='position:absolute;top:calc(var(--ui-safe-top,0px) + 10px);left:50%;transform:translateX(-50%);padding:5px 12px;border-radius:14px;background:rgba(20,12,4,.78);color:#ffd27a;font:600 14px system-ui,sans-serif;white-space:nowrap;pointer-events:none;z-index:5';
+  el.append(walletChip);
+  function walletShow(){
+    walletChip.textContent=Number.isInteger(wallet?.btn)?'Saldo: '+wallet.btn+' BTN · '+(wallet.gettoni||0)+' gettoni'+(wallet.lega?' · Lega Giochi ✓':''):'Saldo in arrivo…';
+    coinBox?.wallet(wallet);
+  }
+  // premio arrivato (vittoria o record personale): «+1 BTN»
+  function walletUpdate(w){
+    if(!w||!Number.isInteger(w.btn))return;
+    const before=wallet?.btn;
+    wallet={btn:w.btn,gettoni:w.gettoni|0,lega:w.lega||0};walletShow();
+    if(Number.isInteger(before)&&w.btn>before)notice('+'+(w.btn-before)+' BTN · '+(w.game==='flipper'||w.prize?'hai battuto il tuo record!':'premio per la vittoria'),'info');
+  }
+  // giochi a gettone (come COIN_GAMES in club-wallet.js): 1 gettone a partita. Senza gettoni non si gioca: «INSERT
+  // COIN» e la strada per la macchinetta dei gettoni. Il cinema e la sala tavoli (Lega Giochi) non usano gettoni.
+  const COIN_GAMES=new Set(['pong','moto-trial','acquedotto','lunar-lander-3d','number-connect','f1-on-paper','golf-with-your-gay-friends','giulio-simulator','binotto-simulator','ruggine-89','flipper-gp','flipper-gt','biliardo','balilla','zona']);
+  function payGame(game){
+    if(!COIN_GAMES.has(game))return true;
+    if(spend(0,{type:'wallet-play',game},-1))return true;
+    notice(Number.isInteger(wallet?.btn)?'INSERT COIN · servono gettoni: cambiali alla macchinetta sul mobile della radio':'Saldo in arrivo… riprova tra un attimo','info');
+    vendSound('errore');return false;
+  }
+  function spend(btn,msg,gettoni=0){
+    if(!Number.isInteger(wallet?.btn)||wallet.btn<btn||(wallet.gettoni|0)+gettoni<0)return false;
+    wallet={...wallet,btn:wallet.btn-btn,gettoni:(wallet.gettoni|0)+gettoni};
+    app.walletSend?.(msg);walletShow();return true;
+  }
   // i suoni di una macchinetta usata da un altro si sentono solo da vicino
   const nearSound=at=>name=>{if(vendMode||Math.hypot(pos.x-at.x,pos.z-at.z)<7)vendSound(name)};
   solid(VEND.x-.57,VEND.x+.57,VEND.z,6.0);
@@ -1429,23 +1463,35 @@ function buildLobby3D(app, life) {
   solid(-6.84,POP.x+.3,POP.z-.43,POP.z+.43);
   spots.push({x:POP.x+.42,z:POP.z,hx:.14,hz:.45,pad:.7,label:'Popcorn',where:'Lobby',vend:true,machine:'pop',act:()=>{}});
   new GLTFLoader().load(new URL('models/macchinetta.glb',import.meta.url).href,gltf=>{
-    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:nearSound(VEND)});
+    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:nearSound(VEND),pay:n=>spend(n,{type:'wallet-pay',m:'vend'})});
     vend.root.position.set(VEND.x,0,VEND.z);vend.root.rotation.y=Math.PI;scene.add(vend.root);
     vend.onChange(e=>{if(atMachine==='vend'&&e.state==='scende'){useN++;useK=e.order||'';myPlay={m:'vend',k:useK,n:useN}}});
   });
   new GLTFLoader().load(new URL('models/popcorn.glb',import.meta.url).href,gltf=>{
-    popGltf=gltf;pop=createPopcorn(gltf,{sound:nearSound(POP)});
+    popGltf=gltf;pop=createPopcorn(gltf,{sound:nearSound(POP),pay:(n,key)=>spend(n,{type:'wallet-pay',m:'pop',k:key})});
     pop.root.position.set(POP.x,0,POP.z);pop.root.rotation.y=Math.PI/2;scene.add(pop.root);
     pop.onChange(e=>{if(atMachine==='pop'&&e.state==='prepara'){useN++;useK=e.key||'';myPlay={m:'pop',k:useK,n:useN}}});
   });
   solid(-6.84,DOG.x+.38,DOG.z-.58,DOG.z+.58);
   spots.push({x:DOG.x+.5,z:DOG.z,hx:.16,hz:.55,pad:.7,label:'Hot dog',where:'Lobby',vend:true,machine:'dog',act:()=>{}});
   new GLTFLoader().load(new URL('models/hotdog.glb',import.meta.url).href,gltf=>{
-    dogGltf=gltf;dog=createHotdog(gltf,{sound:nearSound(DOG)});
+    dogGltf=gltf;dog=createHotdog(gltf,{sound:nearSound(DOG),pay:n=>spend(n,{type:'wallet-pay',m:'dog'})});
     dog.root.position.set(DOG.x,0,DOG.z);dog.root.rotation.y=Math.PI/2;scene.add(dog.root);
     dog.onChange(e=>{if(atMachine==='dog'&&e.state==='prepara'){useN++;useK=e.code||'';myPlay={m:'dog',k:useK,n:useN}}});
   });
-  const machineOf=m=>m==='pop'?pop:m==='dog'?dog:vend;
+  // Macchinetta cambia-gettoni (docs/gettoni.md, gettoni.js, models/gettoni.glb): sul mobile della radio (credenza a
+  // x 5,95, z -3,35, piano a 1 m), a sinistra della radio guardando dall'atrio, girata verso la stanza (-x) come la
+  // radio. Si sceglie 1, 5 o 10 BTN: 5 gettoni per BTN, che cadono nella vaschetta e vanno nel saldo.
+  const COIN={x:5.95,z:-4.0,y:1.0};
+  spots.push({x:COIN.x-.64,z:COIN.z,hx:.05,hz:.25,pad:.88,label:'Gettoni',where:'Lobby',vend:true,machine:'coin',act:()=>{}});
+  new GLTFLoader().load(new URL('models/gettoni.glb',import.meta.url).href,gltf=>{
+    coinBox=createCoinChanger(gltf,{sound:nearSound(COIN),pay:k=>spend(k,{type:'wallet-change',btn:k},k*COIN_RATE)});
+    coinBox.root.position.set(COIN.x,COIN.y,COIN.z);coinBox.root.rotation.y=-Math.PI/2;scene.add(coinBox.root);
+    coinBox.root.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});
+    coinBox.wallet(wallet);
+    coinBox.onChange(e=>{if(atMachine==='coin'&&e.state==='cambia'){useN++;useK=e.key||'';myPlay={m:'coin',k:useK,n:useN}}});
+  });
+  const machineOf=m=>m==='pop'?pop:m==='dog'?dog:m==='coin'?coinBox:vend;
   const vendExit=document.createElement('button'),eatButton=document.createElement('button'),drinkButton=document.createElement('button');
   vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=drinkButton.hidden=true;
   // sul computer «Mangia» e «Bevi» stanno sopra il tasto d'azione, così non si coprono
@@ -1460,17 +1506,19 @@ function buildLobby3D(app, life) {
   let myPlay=null; // l'ultimo ordine fatto alla macchinetta che stai usando
   function enterMachine(m){
     const machine=machineOf(m);
-    if(!machine||machineBusy(m)||(m!=='pop'&&held))return;
+    if(!machine||machineBusy(m)||(m!=='pop'&&m!=='coin'&&held))return;
     if(document.pointerLockElement)document.exitPointerLock?.();
     atMachine=m;useK='';myPlay=null;
     vendMode=true;resetMovement();me.root.visible=false;actB.hidden=true;stick.hidden=true;vendExit.hidden=false;near=null;
+    walletChip.hidden=false;walletShow();
   }
   function exitVend(){
     if(!vendMode)return;
     // andando via mentre prepara (o col prodotto pronto) l'ordine resta: la macchinetta finisce e lo tiene lì
     const machine=machineOf(atMachine);
-    if(machine&&machine.state()!=='scegli'&&myPlay?.m===atMachine)myOrders.set(atMachine,{k:myPlay.k,n:myPlay.n});
-    vendMode=false;atMachine=null;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
+    // (i gettoni no: sono già nel saldo, la macchinetta finisce di farli cadere e poi svuota la vaschetta)
+    if(machine&&atMachine!=='coin'&&machine.state()!=='scegli'&&myPlay?.m===atMachine)myOrders.set(atMachine,{k:myPlay.k,n:myPlay.n});
+    vendMode=false;atMachine=null;vendExit.hidden=true;walletChip.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
   }
   vendExit.onclick=exitVend;
   // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto
@@ -1493,6 +1541,7 @@ function buildLobby3D(app, life) {
       if(v.type==='item'){const got=pop.take();if(got){useT++;for(const p of got)p.id==='popcorn'?holdPopcorn():holdCola();exitVend()}}
       return;
     }
+    if(atMachine==='coin'){coinBox.hit(hit.object);return} // tasti 1 · 5 · 10 BTN
     if(atMachine==='dog'){
       // l'hot dog pronto nello sportello: si tocca e va nella mano destra
       const v=dog.hit(hit.object);
@@ -1588,9 +1637,9 @@ function buildLobby3D(app, life) {
   }
   // le macchinette usate dagli altri: la tua fa quello che fa la loro (scelte, prodotto che scende, preso)
   // Gli ordini lasciati (orders nella posa) finiscono anche qui: se l'hai visto partire continua, se no parte adesso.
-  const remote={vend:null,pop:null,dog:null},seenOrders=new Set(); // ordini già partiti qui: 'chi:n'
+  const remote={vend:null,pop:null,dog:null,coin:null},seenOrders=new Set(); // ordini già partiti qui: 'chi:n'
   function peerMachines(){
-    for(const m of ['vend','pop','dog']){
+    for(const m of ['vend','pop','dog','coin']){
       const machine=machineOf(m);if(!machine)continue;
       let user=null,userId=null,order=null;
       for(const [id,c] of peers){
@@ -1608,6 +1657,8 @@ function buildLobby3D(app, life) {
       const u=user?.useWanted,r=remote[m];
       if(!u){
         remote[m]=null;
+        // gettoni: nessuno la usa più, finisce di farli cadere e poi svuota la vaschetta
+        if(m==='coin'){if(machine.state()==='scegli')machine.reset();continue}
         const key=order&&order.id+':'+order.n;
         if(order&&!seenOrders.has(key)){seenOrders.add(key);if(machine.state()==='scegli')machine.play(order.k)}
         // nessuno la usa e nessun ordine lasciato (chi aveva ordinato è uscito dal club): torna libera
@@ -1639,7 +1690,8 @@ function buildLobby3D(app, life) {
     gltf.scene.traverse(o=>{if(o.isMesh&&o.material.name==='rd_dial'){o.material.emissive=new THREE.Color('#ffa040');o.material.emissiveIntensity=1.4;o.material.toneMapped=false}});
     receiver.remove(radioStandIn);receiver.add(gltf.scene);
   });
-  spots.push({x:counterX-.64,z:counterZ,hx:.05,hz:.97,pad:.88,label:'Radio del bancone',radio:true,act:()=>app.tune?.()});
+  // (la parte del mobile verso z -4 è della macchinetta dei gettoni)
+  spots.push({x:counterX-.64,z:counterZ+.25,hx:.05,hz:.7,pad:.88,label:'Radio del bancone',radio:true,act:()=>app.tune?.()});
   // ========== SALA ARCADE (x -19…-7) ==========
   const list = ARCADE.filter(([k]) => avail.has(k));
   list.push(['ruggine-89','Ruggine 89','#ffb448']);
@@ -1694,7 +1746,7 @@ function buildLobby3D(app, life) {
       hit(1300,6,.03,.12,0);hit(1200,6,.03,.09,.06);hit(800,3,.18,.06,.1);
     }else hit(900,4,.04,.15*p);
   }
-  const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound);
+  const tableFootball=buildBalilla(scene,el,app.balillaSend,tableSound,()=>payGame('balilla'));
   // flipper "Binottoland Grand Prix" (cabinet fatto in Blender, gioco in ../flipper/physics.js)
   // due flipper uno accanto all'altro: Grand Prix (F1) e Binotto GT (endurance), ognuno con la sua classifica.
   // "pinball" è quello a cui stai giocando (o il Grand Prix se non giochi): il resto della Lobby parla con lui
@@ -1813,7 +1865,10 @@ function buildLobby3D(app, life) {
     const scr = new THREE.Mesh(new THREE.PlaneGeometry(screenW, screenH), new THREE.MeshBasicMaterial({ map: cabinetScreen(title, color), color: new THREE.Color(1.5, 1.5, 1.5) }));
     scr.position.set(0, 1.36, .417); scr.rotation.x = -.12; g.add(scr);
     const sweep=new THREE.Mesh(new THREE.PlaneGeometry(screenW-.03,.011),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.32,depthWrite:false}));
-    sweep.position.set(0,1.36,.456);g.add(sweep);demoMaterials.push({sweep,x,z,ax:x+.48*Math.sin(ry),az:z+.48*Math.cos(ry),offset:demoMaterials.length*.31});
+    // «INSERT COIN» in basso sullo schermo, che lampeggia (scelta del proprietario, 28 novembre 2026)
+    const coinText=new THREE.Mesh(new THREE.PlaneGeometry(Math.min(screenW-.04,.42),.066),new THREE.MeshBasicMaterial({map:insertCoin(),transparent:true,depthWrite:false,toneMapped:false}));
+    coinText.position.set(0,-screenH/2+.05,.002);scr.add(coinText);
+    sweep.position.set(0,1.36,.456);g.add(sweep);demoMaterials.push({sweep,coinText,x,z,ax:x+.48*Math.sin(ry),az:z+.48*Math.cos(ry),offset:demoMaterials.length*.31});
     const mq = new THREE.Mesh(new THREE.PlaneGeometry(Math.min(cw - .06, .74 + (seats - 1) * .3), 0.2), new THREE.MeshBasicMaterial({ map: neonText(title, color, 768, 208, `bold ${title.length > 12 ? 92 : 120}px "Arial Black", Arial, sans-serif`), transparent: true, color: new THREE.Color(1.8, 1.8, 1.8) }));
     mq.position.set(0, 1.78, .497); g.add(mq);
     // pulsantiera: un joystick e due pulsanti per giocatore, con il numero e il colore del posto
@@ -1835,7 +1890,7 @@ function buildLobby3D(app, life) {
     const along = Math.abs(Math.sin(ry)) > 0.5;
     if (along) solid(x - 0.4, x + 0.4, z - half - .03, z + half + .03); else solid(x - half - .03, x + half + .03, z - 0.4, z + 0.4);
     const fx = x + Math.sin(ry) * 0.75, fz = z + Math.cos(ry) * 0.75;
-    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => app.open(key), mq });
+    spots.push({ x: fx, z: fz, hx: along ? 0.2 : Math.max(.2, half - .15), hz: along ? Math.max(.2, half - .15) : 0.2, pad: 0.6, label: title + (seats > 1 ? ' (' + seats + ' posti)' : ''), where: 'Sala giochi', station:key,seats,gap,handles,yaw:ry,pong:key==='pong',screen:scr,sweep,act: () => payGame(key) && app.open(key), mq });
   };
   // lungo le pareti, rivolti verso il centro della sala: a nord i grandi a 4 e 5 posti, a sud gli altri
   const byKey = new Map(list.map(e => [e[0], e]));
@@ -2213,6 +2268,8 @@ function buildLobby3D(app, life) {
     if(j.h===0&&j.v<0){c.jumping=null;c.landBend=.28;return}
     c.root.position.y+=j.h;
   }
+  // Pong sul monitor del cabinato: la partita vinta contro il computer vale 1 BTN (docs/gettoni.md)
+  addEventListener('message',e=>{if(e.origin===location.origin&&monitor&&e.source===monitor.frame.contentWindow&&e.data?.type==='arcade:record')app.record?.(e.data)});
   function resetMovement() {
     tableFootball.blur();
     crouching = false; guarding = false; // finestra persa (Alt+Tab): nessun tasto resta premuto
@@ -2473,7 +2530,9 @@ function buildLobby3D(app, life) {
     if(!reducedMotion)for(const m of motes)m.rotation.y+=dt*.012;
     if(t-boardAt>2){boardAt=t;paintBoard()}
     for(const demo of demoMaterials){
-      if(reducedMotion||Math.abs(pos.x-demo.x)>12)continue;
+      if(Math.abs(pos.x-demo.x)>12)continue;
+      demo.coinText.visible=reducedMotion||(t*1.25+demo.offset)%1<.62; // «INSERT COIN» lampeggia
+      if(reducedMotion)continue;
       demo.sweep.position.y=1.16+((t*.29+demo.offset)%1)*.39;
     }
     const where = roomOf(pos.x, pos.z);
@@ -2484,8 +2543,12 @@ function buildLobby3D(app, life) {
     if(zoneDepth<.3)zoneArmed=true; // tornando dal gioco si parte già in fondo: si riparte solo dopo essere tornati indietro
     if(!zoneLeaving)zoneFade.style.opacity=zoneArmed?String(Math.max(0,zoneDepth-.55)/.45*.75):'0';
     if(!zoneLeaving&&zoneArmed&&pos.z<ZONE.end&&inZone(pos.x,pos.z)&&app.enterZone){
-      zoneLeaving=true;resetMovement();zoneFade.style.transition='opacity .9s';zoneFade.style.opacity='1';
-      zoneFade.textContent='Spengo la Lobby…';setTimeout(()=>app.enterZone(),950);
+      // 1 gettone a ogni entrata (docs/gettoni.md); senza gettoni la porta non ti fa passare: si torna indietro
+      if(!payGame('zona')){zoneArmed=false;zoneFade.style.opacity='0';}
+      else{
+        zoneLeaving=true;resetMovement();zoneFade.style.transition='opacity .9s';zoneFade.style.opacity='1';
+        zoneFade.textContent='Spengo la Lobby…';setTimeout(()=>app.enterZone(),950);
+      }
     }
     // telecamera dietro il personaggio, che non passa i muri
     tgt.set(pos.x, floor+1.45 + jumpHeight * .42, pos.z);
@@ -2509,12 +2572,17 @@ function buildLobby3D(app, life) {
         // hot dog: larga 1,15 m, dai tasti (60 cm) al tetto della vetrina (1,74 m); si guarda da +x
         const dd=Math.max(1.85,.68/Math.tan(half));
         camera.position.set(DOG.x+dd,1.35,DOG.z);camera.lookAt(DOG.x,1.22,DOG.z);
+      }else if(atMachine==='coin'){
+        // gettoni: larga 35 cm, alta 55, sul mobile a 1 m; si guarda da -x
+        const dc=Math.max(.8,.3/Math.tan(half));
+        camera.position.set(COIN.x-dc,1.42,COIN.z);camera.lookAt(COIN.x,1.27,COIN.z);
       }else{camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z)}
     }
     // da vicino si animano; mentre preparano vanno avanti anche da lontano (un ordine lasciato finisce lo stesso)
     if(vend&&(atMachine==='vend'||vend.state()!=='scegli'||Math.hypot(pos.x-VEND.x,pos.z-VEND.z)<9))vend.update(dt,performance.now());
     if(pop&&(atMachine==='pop'||pop.state()!=='scegli'||Math.hypot(pos.x-POP.x,pos.z-POP.z)<10))pop.update(dt);
     if(dog&&(atMachine==='dog'||dog.state()!=='scegli'||Math.hypot(pos.x-DOG.x,pos.z-DOG.z)<10))dog.update(dt);
+    if(coinBox&&(atMachine==='coin'||coinBox.state()!=='scegli'||Math.hypot(pos.x-COIN.x,pos.z-COIN.z)<9))coinBox.update(dt);
     if(held){held.update(dt);toHand(me,held.group)}
     if(drink){
       drink.update(dt);mySip+=dt;
@@ -2736,9 +2804,10 @@ function buildLobby3D(app, life) {
     if(seating||playing())return;
     saveActivityView();
     if (s.board) { s.act(); return; }
-    if(s.balilla){resetMovement();tableFootball.open(s.team,s.pair);return}
-    if(s.pinball){resetMovement();pinballKind=s.pinball;pinball.open();near=null;return} // al flipper: si gioca dalla barra
-    if(s.pong){toggleMonitor(s);return}
+    // giochi a gettone: 1 gettone per sedersi al balilla, per una partita al flipper, per accendere Pong
+    if(s.balilla){if(!payGame('balilla'))return;resetMovement();tableFootball.open(s.team,s.pair);return}
+    if(s.pinball){if(!payGame('flipper-'+s.pinball))return;resetMovement();pinballKind=s.pinball;pinball.open();near=null;return} // al flipper: si gioca dalla barra
+    if(s.pong){if(!monitor&&!payGame('pong'))return;toggleMonitor(s);return}
     if(s.seat){
       // divani dell'atrio e sedie dei tavoli: ci si siede (se il posto è libero), "Alzati" per tornare a camminare
       const taken=(app.peers?.()||[]).some(u=>u.clubPose?.station==='seat'&&Math.abs(u.clubPose.x-s.px)<.15&&Math.abs(u.clubPose.z-s.pz)<.15);
@@ -2900,7 +2969,7 @@ function buildLobby3D(app, life) {
     const progress = Math.min(models, 1) * 0.8 + (lights ? 0.12 : 0) + (film ? 0.08 : 0);
     return { progress, ready: loading.idle && lights && film };
   }
-  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, stats:setStats, notice, connection, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, destroy, fromZone, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
+  const api = { loading: loadingState, stoolDisconnected(){carrying=null;requested=null;if(seating?.stool!=null)stand()}, stoolResult, setTableVolume, syncProjection:()=>playProjection(app.projection?.()), pose:descriptor, balillaState:data=>tableFootball.receive(data), lobbyReconnected(){tableFootball.reconnected?.()}, wallet:walletUpdate, stats:setStats, notice, connection, sleep(){asleep=true;sleep()}, wake(){asleep=false;wake()}, show, hide, destroy, fromZone, place, near: () => near && near.label, where: () => ({ ...pos }), dazed: () => (me.fx?.starsUntil || 0) > t, get active() { return active; }, el };
   el.lobby3d = api;
   return api;
 }
