@@ -3,8 +3,10 @@
 // - Cambio alla macchinetta dei gettoni: 1, 5 o 10 BTN, ogni BTN 5 gettoni.
 // - Macchinette del cibo: 1 BTN a prodotto (popcorn e cola insieme 2).
 // - Giochi: 1 gettone a partita (play). Ogni partita pagata lascia un «biglietto» per quel gioco: a fine partita il
-//   telefono può dire il punteggio (record) e, se batte il record personale, prende 1 BTN.
-// - Chi vince una partita (tavoli, biliardo, F1, golf, balilla, flipper…) prende 1 BTN (prize, dal server).
+//   telefono può dire il punteggio (record) e, se batte il record personale, vince il premio.
+// - Chi vince una partita (tavoli, biliardo, F1, golf, balilla, flipper…) vince il premio (prize, dal server).
+// - Premio (scelta del proprietario, 28 novembre 2026): sempre 5 gettoni, che cadono nel vassoio della macchinetta
+//   del cambio, solo per chi vince (si prendono lì e si possono cambiare in BTN). In BTN paga solo il jackpot delle slot.
 // - Lega Giochi Binottoland (sala tavoli): 1 BTN a settimana, pagato in anticipo, rinnovo automatico ogni 7 giorni.
 //   Al rinnovo senza 1 BTN, una settimana di credito (saldo a -1, si paga col prossimo BTN che arriva); se il saldo è
 //   già sotto zero l'iscrizione si sospende.
@@ -39,6 +41,8 @@ export const COIN_RATE = 5;
 export const CHANGE_STEPS = [1, 5, 10];
 export const FOOD_PRICE = { vend: 1, dog: 1, pop: 1, 'pop-tutti': 2 };
 export const LEAGUE_PRICE = 1;
+export const PRIZE_GETTONI = 5; // premio di ogni vittoria o record battuto
+export const PRIZE_TRAY = 'coin'; // nel vassoio della macchinetta del cambio
 export const WEEK = 7 * 24 * 3600 * 1000;
 // giochi che si pagano con un gettone: l'elenco è uno solo, in public/coin-games.js
 export { COIN_GAMES };
@@ -189,18 +193,20 @@ export async function useWallet(ctx, attachment, b, now = Date.now(), rnd = cryp
     w.btn -= LEAGUE_PRICE;
     w.lega = { until: now + WEEK };
   } else if (cost.record != null) {
-    // un punteggio per partita pagata; il primo fissa il record, poi ogni record battuto vale 1 BTN
+    // un punteggio per partita pagata; il primo fissa il record, poi ogni record battuto vince il premio
     if (!(w.tickets[cost.game] > 0)) return { ...w, ok: false };
     w.tickets[cost.game]--;
     const best = w.best[cost.game];
-    if (cost.win) prize = 1;
+    if (cost.win) prize = PRIZE_GETTONI;
     else {
-      if (Number.isFinite(best) && cost.record > best) prize = 1;
+      if (Number.isFinite(best) && cost.record > best) prize = PRIZE_GETTONI;
       if (!Number.isFinite(best) || cost.record > best) w.best[cost.game] = cost.record;
     }
-    w.btn += prize;
+    toTray(w, PRIZE_TRAY, prize);
   } else {
-    if (w.btn < cost.btn || w.gettoni + cost.gettoni < 0) return { ...w, ok: false };
+    // i BTN contano solo se si spendono: col saldo sotto zero (credito della Lega) si possono ancora giocare i
+    // gettoni e cambiarli in BTN, che è il modo di pagare il debito ora che i premi sono gettoni
+    if ((cost.btn > 0 && w.btn < cost.btn) || w.gettoni + cost.gettoni < 0) return { ...w, ok: false };
     w.btn -= cost.btn;
     w.gettoni += cost.gettoni;
     if (cost.tray) toTray(w, cost.tray.m, cost.tray.gettoni, cost.tray.btn);
@@ -212,21 +218,21 @@ export async function useWallet(ctx, attachment, b, now = Date.now(), rnd = cryp
   return { ...w, ok: true, ...(prize ? { prize } : {}) };
 }
 
-// dal server: premio di n BTN a una persona (id Telegram); paga anche il debito della Lega
-export async function prize(ctx, id, n = 1, now = Date.now()) {
+// dal server: il premio (5 gettoni) a una persona (id Telegram), nel vassoio della macchinetta del cambio
+export async function prize(ctx, id, gettoni = PRIZE_GETTONI, now = Date.now()) {
   if (id == null) return null;
   const w = await load(ctx, id, now);
-  w.btn += n;
+  toTray(w, PRIZE_TRAY, gettoni);
   await ctx.storage.put(walletKey(id), w);
   return w;
 }
-// i vincitori di un risultato (tavoli, biliardo, F1, golf): 1 BTN a ognuno che non è un bot
+// i vincitori di un risultato (tavoli, biliardo, F1, golf): il premio a ognuno che non è un bot
 export async function prizeWinners(ctx, winners, now = Date.now()) {
   const paid = [];
   for (const p of Array.isArray(winners) ? winners : []) {
     const id = walletId(p?.id);
     if (id && !paid.includes(id)) {
-      await prize(ctx, id, 1, now);
+      await prize(ctx, id, PRIZE_GETTONI, now);
       paid.push(id);
     }
   }
@@ -241,15 +247,15 @@ export async function payGame(ctx, id, game, now = Date.now()) {
   await ctx.storage.put(walletKey(id), w);
   return true;
 }
-// dal server: punteggio di fine partita già controllato (flipper); 1 BTN se batte il record personale
+// dal server: punteggio di fine partita già controllato (flipper); il premio (gettoni) se batte il record personale
 export async function serverRecord(ctx, id, game, score, now = Date.now()) {
   if (id == null || !Number.isFinite(score)) return 0;
   const w = await load(ctx, id, now),
     best = w.best[game];
   if (Number.isFinite(best) && score <= best) return 0;
-  const won = Number.isFinite(best) ? 1 : 0;
+  const won = Number.isFinite(best) ? PRIZE_GETTONI : 0;
   w.best[game] = score;
-  w.btn += won;
+  toTray(w, PRIZE_TRAY, won);
   await ctx.storage.put(walletKey(id), w);
   return won;
 }

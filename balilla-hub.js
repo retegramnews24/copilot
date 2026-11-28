@@ -335,7 +335,8 @@ export class BalillaHub {
       this.broadcast();
     }, TICK);
   }
-  // fine partita: 1 BTN a chi è seduto dalla parte che ha vinto (club-wallet.js, docs/gettoni.md)
+  // fine partita: il premio (5 gettoni nel vassoio della macchinetta) a chi è seduto dalla parte che ha vinto
+  // (club-wallet.js, docs/gettoni.md)
   payWinners() {
     const f = this.field,
       team = f.games.findIndex(g => g > f.bestOf / 2);
@@ -351,7 +352,7 @@ export class BalillaHub {
     if (ids.size)
       this.ctx
         .blockConcurrencyWhile(async () => {
-          for (const id of ids) await prize(this.ctx, id, 1);
+          for (const id of ids) await prize(this.ctx, id);
         })
         .catch(() => {});
   }

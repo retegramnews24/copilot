@@ -44,8 +44,9 @@ muretto dei box per Binotto Simulator, niente sgabelli, posti come oggi). Modell
 → `models/cabinati.glb`. Messi nella Lobby 3D su richiesta del proprietario: file dall'angolo verso l'atrio, 25 cm tra
 uno e l'altro, a sud prima i giochi da 1 poi Pong e il muretto, cabinati, flipper e slot tutti a 10 cm dal muro e, sulla parete dell'ARCADE, 10 cm anche dall'angolo e tra flipper e
 slot (ora più verso l'angolo), disegni a tema per ogni gioco (`public/lobby3d/cabinet-art.js`; il codice dei cabinati sta in `cabinets.js`, fuori da `lobby3d.js`), luci più basse, joystick non accesi.
-Provato nell'anteprima locale; da provare nell'app (Pong sul monitor, persone alle pulsantiere, telefono). Regola nuova da fare
-nel codice: le vincite in gettoni dei cabinati vanno al vassoio della macchinetta del cambio, solo per chi vince.
+Provato nell'anteprima locale; da provare nell'app (Pong sul monitor, persone alle pulsantiere, telefono). **Premi in gettoni** (scelta del
+proprietario): ogni vittoria o record battuto vale 5 gettoni, che cadono nel vassoio della macchinetta del cambio, solo
+per chi vince (tutti i giochi, anche tavoli e flipper); in BTN solo il jackpot delle slot. Non ancora su staging.
 
 **Macchinetta caffè e snack della Lobby 3D** (`docs/macchinetta.md`): nella 1.0.71, nell'atrio a destra della
 porta del cinema (grafite con linee arancio, suoni, prodotto in mano visto anche dagli altri). Da guardare nell'app,

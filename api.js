@@ -302,7 +302,7 @@ async function route(req, env) {
         headers: { 'X-Checkmate-User': JSON.stringify(user) }
       })
     );
-  // record personale di un gioco da soli: {game, score} (1 BTN se batte il record, docs/gettoni.md)
+  // record personale di un gioco da soli: {game, score} (premio in gettoni se batte il record, docs/gettoni.md)
   if (req.method === 'POST' && u.pathname === '/api/record') {
     const raw = await req.text();
     if (raw.length > 512) return json({ error: MSG.tooBig }, 413);

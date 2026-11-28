@@ -31,14 +31,17 @@
   partita, per rigiocare si paga di nuovo. Nelle partite in più **ognuno mette il suo gettone**.
 - **Senza gettoni non si gioca:** il gioco dice «INSERT COIN · servono gettoni» e manda alla macchinetta dei gettoni.
   Guardare resta gratis.
-- **Premi: chi vince prende sempre 1 BTN**, da solo o in più, contro persone o contro bot e IA: arcade, biliardo,
+- **Premi: chi vince prende sempre 5 gettoni**, che **cadono nel vassoio della macchinetta del cambio**, solo per lui:
+  si prendono lì («Prendi») e si possono cambiare in BTN (scelta del proprietario, 28 novembre 2026; prima era 1 BTN
+  nel saldo). **In BTN paga solo il jackpot delle slot.** Vale da soli o in più, contro persone o contro bot e IA:
+  arcade, biliardo,
   calcio balilla, flipper, Zona Operativa e tavoli. **Nessun tetto** ai premi.
 - **Vincere nei giochi da soli** (flipper, Acquedotto!, Lunar Lander, Number Connect, Moto Trial…): battere il
   **proprio record personale** in quel gioco.
 - **Cinema: sempre gratis.**
 - **Sala tavoli: Lega Giochi Binottoland.** Per giocare ai tavoli ci si iscrive alla Lega: **1 BTN a settimana**,
   pagato in anticipo, **rinnovo automatico ogni 7 giorni**, poi tutti i giochi della sala tavoli senza limiti (le
-  vittorie danno lo stesso 1 BTN). Al rinnovo, **se non hai 1 BTN, una settimana di credito** (il saldo va a -1 e lo
+  vittorie danno lo stesso premio, 5 gettoni). Al rinnovo, **se non hai 1 BTN, una settimana di credito** (il saldo va a -1 e lo
   paghi col prossimo BTN che arriva); alla settimana dopo, se sei ancora sotto, l'iscrizione si sospende.
 
 ## La macchinetta cambia-gettoni
@@ -108,14 +111,15 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
   balilla (e a ogni «di nuovo» a fine partita) e a ogni entrata nella Zona Operativa. Senza gettoni: «INSERT COIN ·
   servono gettoni» e il gioco non parte (dalla Zona si torna indietro). Ogni partita pagata lascia un biglietto per
   quel gioco (al massimo 5), che serve al premio del record.
-- **Premi dal server:** `/lobby/result` (tavoli, biliardo, F1 on paper!, Golf) dà 1 BTN a ogni vincitore che non è un
+- **Premi dal server** (5 gettoni nel vassoio `coin`, `PRIZE_GETTONI` e `prize` in `club-wallet.js`):
+  `/lobby/result` (tavoli, biliardo, F1 on paper!, Golf) dà il premio a ogni vincitore che non è un
   bot, una volta sola per risultato; il calcio balilla a chi è seduto dalla parte che vince (`balilla-hub.js`); il
   flipper al record personale battuto (punteggio già controllato dal server, `club-pinball.js`); Number Connect al
   record personale (partita rifatta dal server).
 - **Record e vittorie dai giochi da soli** (messaggio `arcade:record` dal gioco → `/api/record`, serve il biglietto
   della partita pagata): Acquedotto! (livello finito più alto), Lunar Lander 3D (somma dei migliori atterraggi),
   Ruggine 89 (gara vinta), Pong contro il computer (partita vinta). Il primo punteggio fissa il record, poi ogni record
-  battuto vale 1 BTN.
+  battuto vince il premio.
 - **Lega Giochi** (`/api/league`, `/lobby/league`): creare un tavolo o sedersi a un tavolo della sala tavoli senza
   Lega risponde 402; l'app chiede «Ti iscrivi?» (1 BTN, rinnovo automatico ogni 7 giorni) e riprova. Il rinnovo
   si fa quando il portafoglio si legge (`renewLeague`). Le prove dei tavoli iscrivono prima i giocatori finti.
@@ -129,7 +133,9 @@ oggetti a parte, già al loro posto, con l'origine nel punto dove si muovono:
 - **Ritorno dai giochi:** uscendo da un gioco aperto dalla 3D si torna subito nella 3D, senza vedere la Lobby classica
   per un paio di secondi.
 - La pagina Giochi della Lobby classica verrà abbandonata e tolta più avanti (nota del proprietario).
-- Quando arriva un premio, nella Lobby 3D compare «+1 BTN». Il saldo si aggiorna a ogni giro di presenza (25 s).
+- Quando arriva un premio, nella Lobby 3D compare «+5 gettoni · … · ritirali alla macchinetta del cambio».
+- Col saldo sotto zero (credito della Lega) si possono giocare i gettoni e cambiarli in BTN: è il modo di pagare il
+  debito, ora che i premi sono gettoni. Il saldo si aggiorna a ogni giro di presenza (25 s).
 
 ## Da fare
 

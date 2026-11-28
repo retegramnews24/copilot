@@ -1,6 +1,6 @@
 // Portafoglio del circolo (club-wallet.js, docs/gettoni.md): 50 BTN a testa all'inizio, cambio 1 · 5 · 10 BTN in
-// gettoni (5 per BTN), cibo a 1 BTN (popcorn e cola insieme 2), 1 gettone a partita, 1 BTN a chi vince o batte il
-// record personale, Lega Giochi a 1 BTN a settimana con una settimana di credito; un messaggio rimandato non si paga
+// gettoni (5 per BTN), cibo a 1 BTN (popcorn e cola insieme 2), 1 gettone a partita, 5 gettoni nel vassoio della macchinetta a chi
+// vince o batte il record personale, Lega Giochi a 1 BTN a settimana con una settimana di credito; un messaggio rimandato non si paga
 // due volte.
 import assert from 'node:assert/strict';
 import {
@@ -14,6 +14,7 @@ import {
   serverRecord,
   hasLeague,
   walletMessage,
+  PRIZE_GETTONI,
   WALLET_START,
   WEEK
 } from '../club-wallet.js';
@@ -60,7 +61,9 @@ w = await useWallet(ctx, anna, { type: 'wallet-play', game: 'acquedotto', ref: 6
 assert.equal(w.ok, true);
 assert.equal(w.gettoni, 24);
 assert.equal(await useWallet(ctx, anna, { type: 'wallet-play', game: 'cinema' }), null);
-// record: il primo punteggio fissa il record, il secondo (con un'altra partita pagata) se più alto vale 1 BTN
+// premio: 5 gettoni nel vassoio della macchinetta del cambio, solo per chi vince
+assert.equal(PRIZE_GETTONI, 5);
+// record: il primo punteggio fissa il record, il secondo (con un'altra partita pagata) se più alto vince il premio
 w = await useWallet(ctx, anna, { type: 'wallet-record', game: 'acquedotto', score: 3, ref: 7 });
 assert.equal(w.ok, true);
 assert.equal(w.prize, undefined);
@@ -70,18 +73,20 @@ w = await useWallet(ctx, anna, { type: 'wallet-record', game: 'acquedotto', scor
 assert.equal(w.ok, false);
 await useWallet(ctx, anna, { type: 'wallet-play', game: 'acquedotto', ref: 9 });
 w = await useWallet(ctx, anna, { type: 'wallet-record', game: 'acquedotto', score: 5, ref: 10 });
-assert.equal(w.prize, 1);
-assert.equal(w.btn, S - 6);
+assert.equal(w.prize, 5);
+assert.equal(w.btn, S - 7);
+assert.deepEqual(w.vassoio, { coin: { gettoni: 5, btn: 0 } });
 // punteggio più basso: niente
 await useWallet(ctx, anna, { type: 'wallet-play', game: 'acquedotto', ref: 11 });
 w = await useWallet(ctx, anna, { type: 'wallet-record', game: 'acquedotto', score: 4, ref: 12 });
 assert.equal(w.prize, undefined);
-assert.equal(w.btn, S - 6);
-// gara vinta (Ruggine 89, Pong contro il computer): 1 BTN
+assert.equal(w.vassoio.coin.gettoni, 5);
+// gara vinta (Ruggine 89, Pong contro il computer): il premio
 await useWallet(ctx, anna, { type: 'wallet-play', game: 'ruggine-89', ref: 13 });
 w = await useWallet(ctx, anna, { type: 'wallet-record', game: 'ruggine-89', win: true, ref: 14 });
-assert.equal(w.prize, 1);
-assert.equal(w.btn, S - 5);
+assert.equal(w.prize, 5);
+assert.equal(w.btn, S - 7);
+assert.equal(w.vassoio.coin.gettoni, 10);
 
 // senza gettoni non si gioca
 store.set(walletKey(12), { btn: 3, gettoni: 0 });
@@ -96,17 +101,19 @@ w = await useWallet(ctx, bruno, { type: 'wallet-change', btn: 5, ref: 21 });
 assert.equal(w.ok, false);
 assert.equal(w.btn, 3);
 
-// vincitori dei tavoli, biliardo, F1, golf: 1 BTN a ognuno, i bot no
+// vincitori dei tavoli, biliardo, F1, golf: il premio a ognuno, i bot no
 assert.equal(walletId('tg:12'), '12');
 assert.equal(walletId('bot:1'), null);
 const paid = await prizeWinners(ctx, [{ id: 'tg:12' }, { id: 'bot:1' }, { id: 'tg:12' }]);
 assert.deepEqual(paid, ['12']);
-assert.equal((await readWallet(ctx, bruno)).btn, 4);
+assert.equal((await readWallet(ctx, bruno)).btn, 3);
+assert.deepEqual((await readWallet(ctx, bruno)).vassoio, { coin: { gettoni: 5, btn: 0 } });
 // flipper: record personale controllato dal server
 assert.equal(await serverRecord(ctx, 12, 'flipper-gp', 1000), 0);
 assert.equal(await serverRecord(ctx, 12, 'flipper-gp', 900), 0);
-assert.equal(await serverRecord(ctx, 12, 'flipper-gp', 2000), 1);
-assert.equal((await readWallet(ctx, bruno)).btn, 5);
+assert.equal(await serverRecord(ctx, 12, 'flipper-gp', 2000), 5);
+assert.equal((await readWallet(ctx, bruno)).btn, 3);
+assert.equal((await readWallet(ctx, bruno)).vassoio.coin.gettoni, 10);
 
 // Lega Giochi: 1 BTN per 7 giorni, rinnovo automatico, una settimana di credito, poi sospesa
 const t0 = Date.UTC(2026, 10, 30),
@@ -124,15 +131,23 @@ assert.equal((await readWallet(ctx, carla, t0 + WEEK + 1)).btn, 0);
 // due settimane dopo: senza BTN, una settimana di credito (saldo a -1)
 assert.equal(await hasLeague(ctx, 13, t0 + 2 * WEEK + 1), true);
 assert.equal((await readWallet(ctx, carla, t0 + 2 * WEEK + 1)).btn, -1);
-// col credito non si compra niente; un premio paga il debito
+// col credito non si compra niente
 assert.equal((await useWallet(ctx, carla, { type: 'wallet-pay', m: 'vend' }, t0 + 2 * WEEK + 2)).ok, false);
 // tre settimane dopo, ancora sotto zero: sospesa
 assert.equal(await hasLeague(ctx, 13, t0 + 3 * WEEK + 1), false);
 assert.equal((await readWallet(ctx, carla, t0 + 3 * WEEK + 1)).btn, -1);
 // riscriversi serve 1 BTN vero
 assert.equal((await useWallet(ctx, carla, { type: 'wallet-league' }, t0 + 3 * WEEK + 2)).ok, false);
+// i premi sono gettoni nel vassoio: presi e cambiati in BTN pagano il debito e la Lega
 await prizeWinners(ctx, [{ id: 'tg:13' }, { id: 'tg:13' }]);
 await prizeWinners(ctx, [{ id: 'tg:13' }]);
+assert.equal((await readWallet(ctx, carla, t0 + 3 * WEEK + 2)).btn, -1);
+await useWallet(ctx, carla, { type: 'wallet-take', m: 'coin', ref: 30 }, t0 + 3 * WEEK + 2);
+await useWallet(ctx, carla, { type: 'wallet-change', btn: 1, back: true, ref: 31 }, t0 + 3 * WEEK + 2);
+await useWallet(ctx, carla, { type: 'wallet-change', btn: 1, back: true, ref: 32 }, t0 + 3 * WEEK + 2);
+w = await useWallet(ctx, carla, { type: 'wallet-take', m: 'coin', ref: 33 }, t0 + 3 * WEEK + 2);
+assert.equal(w.btn, 1);
+assert.equal(w.gettoni, 0);
 w = await useWallet(ctx, carla, { type: 'wallet-league' }, t0 + 3 * WEEK + 3);
 assert.equal(w.ok, true);
 assert.equal(w.btn, 0);

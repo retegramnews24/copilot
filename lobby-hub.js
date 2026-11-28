@@ -9,7 +9,15 @@ import { tableSummary, isArcade, seatLimit, longLimitText, concluded } from './t
 import { gameTitle } from './public/game-info.js';
 import { makeRoomFor } from './socket-limits.js';
 import { MSG } from './public/messages.js';
-import { hasLeague, prize, prizeWinners, readJackpot, useWallet, walletMessage } from './club-wallet.js';
+import {
+  PRIZE_GETTONI,
+  hasLeague,
+  prize,
+  prizeWinners,
+  readJackpot,
+  useWallet,
+  walletMessage
+} from './club-wallet.js';
 
 // tavoli della sala tavoli: servono l'iscrizione alla Lega Giochi Binottoland (docs/gettoni.md)
 const LEAGUE_GAMES = [
@@ -385,9 +393,10 @@ export class LobbyHub {
       }
       const key = 'number-connect:' + user.player,
         previous = await this.ctx.storage.get(key);
-      // record personale battuto: 1 BTN (docs/gettoni.md); il primo punteggio fissa il record
-      const won = previous && game.score > previous.points ? 1 : 0;
-      if (won) await prize(this.ctx, user.id, 1);
+      // record personale battuto: il premio, 5 gettoni nel vassoio della macchinetta (docs/gettoni.md); il primo
+      // punteggio fissa il record
+      const won = previous && game.score > previous.points ? PRIZE_GETTONI : 0;
+      if (won) await prize(this.ctx, user.id, won);
       if (!previous || game.score > previous.points) {
         await this.ctx.storage.put(key, {
           id: user.player,
@@ -400,7 +409,7 @@ export class LobbyHub {
       return json({ leaders: await this.numberConnectLeaders(), ...(won ? { prize: won } : {}) });
     }
     // record personale di un gioco da soli (Acquedotto!, Lunar Lander…): una partita pagata con un gettone, poi il
-    // punteggio; se batte il record personale 1 BTN (club-wallet.js)
+    // punteggio; se batte il record personale il premio in gettoni (club-wallet.js)
     if (path === '/lobby/record') {
       const user = userOf(req);
       if (!user) return json({ error: MSG.login }, 401);
@@ -416,7 +425,7 @@ export class LobbyHub {
       const old = await this.ctx.storage.get('result:' + body.key);
       if (!old) {
         await this.ctx.storage.put('result:' + body.key, body);
-        // premio: 1 BTN a ogni vincitore che non è un bot, una volta sola per risultato (club-wallet.js)
+        // premio: 5 gettoni nel vassoio a ogni vincitore che non è un bot, una volta sola per risultato (club-wallet.js)
         await prizeWinners(this.ctx, body.winners);
         this.leaders = null; // risultato nuovo: classifiche da ricalcolare
         const notice = winNotice(body);

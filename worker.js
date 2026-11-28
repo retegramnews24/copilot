@@ -794,7 +794,7 @@ export class Room extends DurableObject {
       }
       if (b.type === 'pinball-score' && a.inClub && !a.closed) {
         const table = b.table === 'gt' ? 'gt' : 'gp';
-        // record personale battuto: 1 BTN (club-wallet.js); il primo punteggio fissa il record
+        // record personale battuto: il premio in gettoni nel vassoio (club-wallet.js); il primo punteggio fissa il record
         let won = 0;
         const better = await this.ctx.blockConcurrencyWhile(() =>
           recordPinball(this.ctx, a, b.score, table, async score => {

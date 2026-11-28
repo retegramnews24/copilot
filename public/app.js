@@ -30,7 +30,7 @@ import {createChessBoard} from './chess-board.js?v=f92d78d981';
 import {createMotoLink} from './moto-link.js?v=7ca29f05f4';
 import {createZonaLink} from './zona-link.js?v=b8e8ed14d4';
 import {createGolfLink} from './golf-link.js?v=3f3958e0a2';
-import {createArcadeLink} from './arcade-link.js?v=9f3421a316';
+import {createArcadeLink} from './arcade-link.js?v=d3dc24e61d';
 import {createF1Link} from './f1-link.js?v=b8d752024d';
 import {createBiliardoLink} from './biliardo-link.js?v=2b2c975586';
 import {initTurnAlerts} from './turn-alerts.js?v=e295946a10';
@@ -110,7 +110,7 @@ async function makeLobby3D(){
  }
 }
 async function buildLobby3D(){
- if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=4d08b9efb7');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
+ if(!lobby3d){const m=await import('./lobby3d/lobby3d.js?v=98789828b6');lobby3d=m.createLobby3D({stoolLayout:()=>lastLobby?.stools||{},stoolSend:msg=>{if(lobbyWS?.readyState!==1)return false;lobbyWS.send(JSON.stringify(msg));return true},tableVolume:()=>sharedTableVolume,peers:()=>onlineUsers,poseChanged:()=>sendPresence(),me:()=>identity,balillaSend:msg=>{if(lobbyWS?.readyState===1)lobbyWS.send(JSON.stringify(msg))},gallery:arcade.gallery,enterGallery:arcade.enterGallery,clubVisibility,projection:()=>cinema.projection(),clubStream:cinema.clubStream,sit:id=>cinema.open(id),tune:()=>window.binottolandClubRadio?.choose(station=>{
  if(lobbyWS?.readyState!==1)return false;
  lobbyWS.send(JSON.stringify({type:'club-radio',station}));return true;
 }),enterZone:()=>enterZone(),games:()=>[...document.querySelectorAll('#page-games .catalog-card')].filter(c=>!c.hidden).map(c=>c.dataset.game),open:key=>openGame(key,{paid:true}),openSettings:()=>$('tab-settings').click(),openGames:()=>$('tab-games').click(),board:()=>lastLobby,tables:()=>games,token:()=>sessionToken,pinballTop:kind=>(kind==='gt'?lastLobby?.pinballTopGT:lastLobby?.pinballTop)||[],slotJackpot:()=>lastLobby?.slotJackpot,pinballStart:kind=>pinballSend({type:'pinball-start',table:kind==='gt'?'gt':'gp'}),pinballScore:(score,kind)=>pinballSend({type:'pinball-score',score,table:kind==='gt'?'gt':'gp'}),wallet:()=>walletState,walletSend:msg=>lobbyLink.send(msg,()=>false),record:d=>request('/api/record',d.win===true?{game:d.game,win:true}:{game:d.game,score:d.score}).then(setWallet).catch(()=>{}),notices:()=>notices.items(),noticesSeen:()=>notices.seen(),awake:()=>tgBack(),launched:()=>{lobby3dBack=Date.now();lobby3dIdle=0;fromGame3D=true;gameSeen3D=!lobbyIdle();sendPresence()},exit:()=>{lobby3dBack=0;try{localStorage.setItem(LOBBY3D_KEY,'0')}catch{}document.documentElement.classList.remove('boot');sendPresence()}})}

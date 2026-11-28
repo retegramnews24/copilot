@@ -1457,7 +1457,7 @@ function buildLobby3D(app, life) {
     notice('Presi: '+[t.gettoni?t.gettoni+' gettoni':'',t.btn?t.btn+' BTN':''].filter(Boolean).join(' e '),'info');
     return true;
   }
-  // premio arrivato (vittoria o record personale): «+1 BTN»
+  // premio arrivato (vittoria o record personale): 5 gettoni nel vassoio della macchinetta del cambio (club-wallet.js)
   let slotWallet=null; // saldo arrivato col giro della slot: si fa vedere quando i rulli si fermano
   function walletUpdate(w){
     if(!w||!Number.isInteger(w.btn))return;
@@ -1471,9 +1471,11 @@ function buildLobby3D(app, life) {
     }
     // giro rifiutato dal server (gettoni finiti): la slot che aspettava si ferma
     if(w.ok===false&&slots)for(const m of Object.values(slots.machines))if(m.waiting())m.reset();
-    const before=wallet?.btn;
+    const had=Number.isInteger(wallet?.btn),before=wallet?.vassoio?.coin?.gettoni|0;
     wallet={btn:w.btn,gettoni:w.gettoni|0,lega:w.lega||0,vassoio:w.vassoio||{}};walletShow();
-    if(Number.isInteger(before)&&w.btn>before)notice('+'+(w.btn-before)+' BTN · '+(w.game==='flipper'||w.prize?'hai battuto il tuo record!':'premio per la vittoria'),'info');
+    // il vassoio della macchinetta cresce anche col tuo cambio: lì conta solo se sei lontano dalla macchinetta
+    const won=(w.vassoio?.coin?.gettoni|0)-before;
+    if(had&&won>0&&(w.prize||atMachine!=='coin'))notice('+'+won+' gettoni · '+(w.game==='flipper'||w.prize?'hai battuto il tuo record!':'premio per la vittoria')+' · ritirali alla macchinetta del cambio','info');
   }
   // giochi a gettone (come COIN_GAMES in club-wallet.js): 1 gettone a partita. Senza gettoni non si gioca: «INSERT
   // COIN» e la strada per la macchinetta dei gettoni. Il cinema e la sala tavoli (Lega Giochi) non usano gettoni.
@@ -2260,7 +2262,7 @@ function buildLobby3D(app, life) {
     if(j.h===0&&j.v<0){c.jumping=null;c.landBend=.28;return}
     c.root.position.y+=j.h;
   }
-  // Pong sul monitor del cabinato: la partita vinta contro il computer vale 1 BTN (docs/gettoni.md)
+  // Pong sul monitor del cabinato: la partita vinta contro il computer vince il premio in gettoni (docs/gettoni.md)
   addEventListener('message',e=>{if(e.origin===location.origin&&monitor&&e.source===monitor.frame.contentWindow&&e.data?.type==='arcade:record')app.record?.(e.data)});
   function resetMovement() {
     tableFootball.blur();

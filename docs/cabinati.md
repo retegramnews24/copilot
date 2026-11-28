@@ -27,8 +27,8 @@ Cabinati dei giochi arcade nella sala giochi della Lobby 3D, rifatti in Blender.
 - **Schermo:** dentro si vede il tubo vero, più bombato, e davanti c'è un vetro esterno piatto.
 - **Vincite dei cabinati:** i gettoni vinti ai cabinati non escono dal cabinato: arrivano direttamente al vassoio
   della macchinetta del cambio e solo chi li ha vinti li può prendere. Per questo la porta delle monete ha solo la
-  fessura e il tasto per riavere il gettone, niente bocca del resto. (Nel codice non è ancora fatto: oggi chi vince
-  prende 1 BTN nel saldo, `docs/gettoni.md`.)
+  fessura e il tasto per riavere il gettone, niente bocca del resto. Fatto nel codice: il premio sono 5 gettoni nel
+  vassoio della macchinetta, per tutti i giochi (`docs/gettoni.md`).
 - **Posto come oggi:** parete nord Moto Trial, F1 e Golf, tra l'ingresso e la porta della Zona; parete sud Pong, i
   cinque giochi da soli e la postazione di Binotto Simulator.
 

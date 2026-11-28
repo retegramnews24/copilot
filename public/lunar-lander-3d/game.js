@@ -260,7 +260,7 @@ function finish() {
     const score = landingScore(flight, mission);
     records[levelIndex] = Math.max(records[levelIndex] ?? 0, score);
     saveRecords(storage, records);
-    // record personale = somma dei migliori atterraggi: se cresce, 1 BTN (docs/gettoni.md)
+    // record personale = somma dei migliori atterraggi: se cresce, premio in gettoni (docs/gettoni.md)
     if (window.parent !== window)
       parent.postMessage({ type: 'arcade:record', game: 'lunar-lander-3d', score: records.reduce((a, b) => a + (b || 0), 0) }, location.origin);
     updateCampaign();

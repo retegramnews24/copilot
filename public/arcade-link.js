@@ -280,8 +280,8 @@ export function createArcadeLink({
       sendArcadeInsets();
     } else if (event.data?.type === 'arcade:exit' || event.data?.type === 'ruggine:exit') closeArcade();
     else if (event.data?.type === 'arcade:record') {
-      // punteggio di fine partita di un gioco da soli: se batte il record personale vale 1 BTN (docs/gettoni.md)
-      // (win: true per una gara vinta, come a Ruggine 89: 1 BTN)
+      // punteggio di fine partita di un gioco da soli: se batte il record personale vince il premio in gettoni (docs/gettoni.md)
+      // (win: true per una gara vinta, come a Ruggine 89: premio in gettoni)
       const { game, score, win } = event.data;
       if (typeof game === 'string' && (Number.isFinite(score) || win === true))
         request('/api/record', win === true ? { game, win: true } : { game, score }).catch(() => {});
