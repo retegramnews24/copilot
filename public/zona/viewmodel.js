@@ -12,10 +12,13 @@ const SIGHT = {
   baretta: [0, 0.0868, 0],
   calabrone: [0, 0.0935, 0],
   tuono: [0, 0.0605, 0.3],
-  ruggito: [0, 0.1, 0.05],
+  ruggito: [0, 0.108, 0.05],
   falco: [0, 0.13, 0.15]
 };
 const sight = new THREE.Vector3();
+// finestrella del mirino a punto rosso del Ruggito (coordinate dell'arma): mirando, lì dentro si vede ingrandito
+const LENS = { ruggito: { x: 0.0135, y0: 0.0965, y1: 0.1195, z: 0.0105 } };
+const corner = new THREE.Vector3();
 // la canna senza mirare punta al mirino a questa distanza (metri davanti agli occhi)
 const HIP_CONVERGE = 15;
 
@@ -127,6 +130,7 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
   let idle = null;
   let flashT = 0;
   let base = null;
+  let lastAim = 0;
 
   // Raddrizzare l'arma: nella posa fatta in Blender la canna non punta dritta verso il centro. Per ogni arma si
   // misura una volta (posa «tiene_», arma ferma) dove punta la canna, e si tengono due rotazioni dell'arma in mano:
@@ -220,15 +224,17 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
     // aim (0..1): mirando l'arma si porta al centro, con le mire sulla linea dello sguardo
     update(dt, move, lookDelta, t, aim = 0) {
       mixer.update(dt);
+      lastAim = aim;
       if (flashT > 0) {
         flashT -= dt;
         if (flashT <= 0)
           for (const g of Object.values(guns)) if (g.userData.flash) g.userData.flash.visible = false;
       }
       base = base || { x: 0, y: 0 };
-      const bob = move * 0.012 * (1 - aim * 0.8);
-      let tx = Math.sin(t * 9) * bob - lookDelta.x * 0.6 * (1 - aim * 0.7);
-      let ty = -Math.abs(Math.cos(t * 9)) * bob - lookDelta.y * 0.6 * (1 - aim * 0.7);
+      // mirando a fondo l'arma sta ferma: niente dondolio del passo né ritardo quando si gira la vista
+      const bob = move * 0.012 * (1 - aim);
+      let tx = Math.sin(t * 9) * bob - lookDelta.x * 0.6 * (1 - aim);
+      let ty = -Math.abs(Math.cos(t * 9)) * bob - lookDelta.y * 0.6 * (1 - aim);
       const g = guns[current];
       // l'arma raddrizzata: verso il mirino senza mirare, dritta lungo lo sguardo mirando
       const s = straight[current];
@@ -243,6 +249,25 @@ export function createViewmodel(gltf, aspect, team = 'blu') {
       }
       holder.position.x += (tx - holder.position.x) * Math.min(1, dt * 10);
       holder.position.y += (ty - holder.position.y) * Math.min(1, dt * 8);
+    },
+    // mirando con un'arma che ha la lente: il rettangolo della finestrella sullo schermo, in pixel con l'origine in
+    // basso a sinistra (come setScissor), altrimenti null
+    lensRect(w, h) {
+      const L = LENS[current];
+      const g = guns[current];
+      if (!L || !g || lastAim < 0.9 || !holder.visible) return null;
+      let x0 = 1, x1 = -1, y0 = 1, y1 = -1;
+      for (const sx of [-L.x, L.x])
+        for (const sy of [L.y0, L.y1]) {
+          g.localToWorld(corner.set(sx, sy, L.z)).project(camera);
+          x0 = Math.min(x0, corner.x);
+          x1 = Math.max(x1, corner.x);
+          y0 = Math.min(y0, corner.y);
+          y1 = Math.max(y1, corner.y);
+        }
+      const x = ((x0 + 1) / 2) * w;
+      const y = ((y0 + 1) / 2) * h;
+      return { x, y, w: ((x1 - x0) / 2) * w, h: ((y1 - y0) / 2) * h };
     },
     muzzleWorld(target) {
       const f = guns[current]?.userData.flash;

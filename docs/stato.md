@@ -100,6 +100,9 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 - Zona Operativa, mirare (non in un commit): tacche di mira vere su Baretta (tre puntini), Calabrone (diottra e palo)
   e Tuono (perline), lente ×2 per il Ruggito. Nell'anteprima provata la Baretta mirando (lama al centro della
   tacca); da provare giocando Calabrone, Tuono e la lente del Ruggito, anche sul telefono.
+- Zona Operativa, mirare (non in un commit): Ruggito con la lente ×1,5 dentro il mirino (prima lente ×2 a schermo
+  nero, scartata); mirando a fondo l'arma sta ferma (il Calabrone «un po' storto»: i numeri dicono che da fermo è
+  dritto e centrato, ondeggiava muovendo la vista). Da provare giocando.
 - Zona Operativa, richieste del proprietario per il codice (28 novembre, da fare quando si lavora sul codice): **più armi
   a terra** (più punti di raccolta: i punti stanno nella mappa, raccolta `punti`), **si deve capire da dove arriva uno
   sparo** (segno a schermo e/o suono che viene dalla sua direzione), **audio migliore** («fa pena»).
