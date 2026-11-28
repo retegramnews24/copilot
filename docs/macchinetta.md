@@ -55,6 +55,42 @@ Solo visiva: niente soldi, niente punti. Si prende un prodotto e lo si consuma c
 - Gli altri lo vedono: la posa (`walk` e `seat`) porta `snack: {id, left, n}`; il server (`worker.js`) accetta solo
   un id valido e da 1 a 3 morsi rimasti (prova in `tests/expedition-runtime.test.js`).
 
+## Una persona alla volta, e tutti vedono (scelta del proprietario, 28 novembre 2026)
+
+Vale per tutte le macchinette della Lobby 3D. Chi usa una macchinetta lo dice nella posa (`use`: quale, la scelta o
+il codice che sta scrivendo, ordini fatti, prodotti presi); il server (`club-machines.js`) la lascia solo al primo,
+collegato e nel club. Gli altri vedono «la sta usando …» al posto di «Usa», e sulla loro macchinetta succede quello
+che fa lui: tasti scritti sul display, spirale e caduta, caffè, popcorn che scoppiano, cartoccio e bicchiere, presa.
+Chi va via senza prendere il prodotto lo perde, e la macchinetta torna libera.
+
+## Carrello dei popcorn e della Binotto Cola
+
+Decisioni del proprietario (28 novembre 2026):
+
+- **Posto:** nell'atrio, contro la parete del cinema, a sinistra della porta, tra la pianta e il divano petrolio e
+  senape (x -5,475; il tettuccio passa davanti alla parte bassa del quadro del panorama).
+- **Aspetto:** carrello rosso e oro dei popcorn con le ruote, la vetrina col pentolino appeso, il tettuccio a strisce
+  rosse e bianche con l'insegna «POPCORN» e le lampadine; accanto la colonnina della **Binotto Cola** (niente marchi
+  veri), con il rubinetto e i bicchieri impilati. Vetro molto trasparente.
+- **Uso:** «Usa (E)», la visuale va davanti al carrello e si sceglie tra tre tasti: **Popcorn**, **Cola**, **Tutti
+  e due**. I popcorn scoppiano davvero: i semi gialli saltano fuori dal pentolino, si aprono in popcorn (quattro forme,
+  col cuore giallo scuro) e cadono sul mucchio, che cresce; poi il pentolino si inclina e versa, e il cartoccio arriva
+  sul banco e si riempie. La cola scende dal rubinetto nel bicchierone, poi arriva il coperchio con la cannuccia.
+  Si tocca il prodotto pronto per prenderlo.
+- **In mano:** il cartoccio nella mano destra, si mangia in sei manciate («Mangia», F) e si svuota a vista; la cola
+  nella sinistra, quattro sorsi («Bevi», B). Con le mani già piene il tasto non parte.
+- **Al cinema:** seduti sul divanetto la cola va da sola nel portabicchiere del bracciolo; a ogni sorso sale verso la
+  bocca e torna giù. Il cartoccio resta in mano.
+- **Gli altri vedono** cartoccio, manciate, cola in mano o nel portabicchiere e i sorsi (posa: `snack` con 6 manciate
+  per i popcorn, `drink`).
+
+Fatto: `blender/popcorn.blend` → `public/lobby3d/models/popcorn.glb` (carrello, tetto, vetro, mucchio, pentolino,
+tasto, cartoccio, quattro chicchi, bicchierone, coperchio, cola, lampadine; i pezzi che si muovono sono all'origine),
+codice in `public/lobby3d/popcorn.js` (`createPopcorn`, `makeHeldPopcorn`, `makeHeldCola`), suoni in `vending.js`
+(scoppio, sfrigolio, versa). Prova del server in `tests/expedition-runtime.test.js`.
+
 ## Da fare
 
-Provarla nell'app di prova, anche con due giocatori (si vede il prodotto in mano all'altro?).
+Provarle nell'app di prova con due giocatori: si vede il prodotto in mano all'altro? Quando uno usa una macchinetta,
+l'altro vede «la sta usando» e quello che fa? I popcorn scoppiano bene anche sul telefono? La cola nel portabicchiere
+sta al posto giusto su tutti i divanetti?

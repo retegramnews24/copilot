@@ -18,7 +18,7 @@ import { Table3D, CLOTHS } from '../biliardo/scene3d.js?v=5022d34425';
 import * as E from '../biliardo/engine.js?v=5d4ddc53d2';
 import { readAppearance, readLook } from '../appearance.js?v=784dba932c';
 import { canvasTex, neonText, parquet, wallFinish, tiles, neonGrid, blackboard, gamesPoster, cabinetScreen, nameTag, blobTex } from './textures.js?v=6d79d0e827';
-import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a262b27013';
+import { makeCharacter, animateCharacter, actCharacter, setLook, SPEED, ARM_LEN, EYE_Y } from './character.js?v=a5078a2ed5';
 import { gameTitle } from '../game-info.js?v=637e9e8793';
 import { roundBoxGeometry } from './shapes.js?v=acaec08552';
 import { SCARABEO_LAYOUT, buildScarabeoTable } from './table-scarabeo.js?v=ea7100a3a8';
@@ -26,7 +26,8 @@ import { CARD_LAYOUTS, cardParts, buildCardTable } from './table-cards.js?v=e5eb
 import { NAVALE_LAYOUT, buildNavaleTable } from './table-navale.js?v=d3cd66386e';
 import { CHESS_LAYOUT, DAMA_LAYOUT, buildChessTable, buildDamaTable } from './table-scacchi.js?v=7ecc7d5df1';
 import { createTableLive } from './table-live.js?v=df2df46159';
-import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=278b8afd1b';
+import { createVending, makeHeld, vendingSounds, SNACKS, DRINKS } from './vending.js?v=226700b87f';
+import { createPopcorn, makeHeldPopcorn, makeHeldCola } from './popcorn.js?v=476f889a23';
 import { drawCinemaSign } from './cinema-sign.js?v=3984411176';
 import { buildCorridor, inZone, ZONE } from './corridor.js?v=0fb346722b';
 
@@ -1405,50 +1406,88 @@ function buildLobby3D(app, life) {
   }
   drawLocandina(null);
 
-  // Macchinetta caffè e snack (docs/macchinetta.md; vending.js, models/macchinetta.glb), nell'atrio contro la parete
-  // del cinema, a destra della porta, girata verso l'atrio. «Usa (E)»: la visuale va davanti al pannello e si toccano
-  // i tasti; il prodotto pronto si prende toccandolo e passa in mano al personaggio; «Mangia / Bevi» (F) per consumarlo
-  // in tre volte. Gli altri lo vedono: il prodotto in mano viaggia nella posa (snack: id, quanti ne restano, morsi).
-  const VEND={x:6.15,z:5.22},HELD_SCALE=2.2; // in mano più grande del vero: i personaggi sono a blocchi
-  let vend=null,vendGltf=null,vendMode=false,held=null,heldBites=0;
+  // Macchinette dell'atrio, contro la parete del cinema (docs/macchinetta.md): a destra della porta caffè e snack
+  // (vending.js, models/macchinetta.glb), a sinistra, tra la pianta e il divano, il carrello dei popcorn e della Binotto
+  // Cola (popcorn.js, models/popcorn.glb). «Usa (E)»: la visuale va davanti e si toccano i tasti; il prodotto pronto si
+  // prende toccandolo. Una persona alla volta: chi la usa lo dice nella posa (use: macchinetta, scelta, ordini, prese),
+  // il server la lascia al primo (club-machines.js) e tutti vedono sulla loro macchinetta quello che fa.
+  // In mano: lo snack o il cartoccio nella destra («Mangia», F), la cola nella sinistra («Bevi», B); seduti al cinema
+  // la cola sta nel portabicchiere del bracciolo. Anche questo viaggia nella posa (snack, drink).
+  const VEND={x:6.15,z:5.22},POP={x:-5.475,z:5.62},HELD_SCALE=2.2,CUP_SCALE=1.4; // in mano più grandi del vero: i personaggi sono a blocchi
+  let vend=null,vendGltf=null,pop=null,popGltf=null,vendMode=false,atMachine=null,held=null,heldBites=0,drink=null,drinkSips=0,mySip=9;
+  let useN=0,useT=0,useK=''; // alla macchinetta che stai usando: ordini fatti, prodotti presi, ultima scelta
   const vendSound=vendingSounds(()=>soundAllowed()&&audioContext?.state==='running'?audioContext:null);
+  // i suoni di una macchinetta usata da un altro si sentono solo da vicino
+  const nearSound=at=>name=>{if(vendMode||Math.hypot(pos.x-at.x,pos.z-at.z)<7)vendSound(name)};
   solid(VEND.x-.57,VEND.x+.57,VEND.z,6.0);
-  spots.push({x:VEND.x,z:VEND.z-.3,hx:.55,hz:.2,pad:.7,label:'Macchinetta',where:'Lobby',vend:true,act:()=>{}});
+  spots.push({x:VEND.x,z:VEND.z-.3,hx:.55,hz:.2,pad:.7,label:'Macchinetta',where:'Lobby',vend:true,machine:'vend',act:()=>{}});
+  solid(POP.x-.43,POP.x+.43,POP.z-.3,6.0);
+  spots.push({x:POP.x,z:POP.z-.42,hx:.45,hz:.14,pad:.7,label:'Popcorn',where:'Lobby',vend:true,machine:'pop',act:()=>{}});
   new GLTFLoader().load(new URL('models/macchinetta.glb',import.meta.url).href,gltf=>{
-    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:vendSound});
+    vendGltf=gltf;vend=createVending(gltf,'grafite',{sound:nearSound(VEND)});
     vend.root.position.set(VEND.x,0,VEND.z);vend.root.rotation.y=Math.PI;scene.add(vend.root);
+    vend.onChange(e=>{if(atMachine==='vend'&&e.state==='scende'){useN++;useK=e.order||''}});
   });
-  const vendExit=document.createElement('button'),eatButton=document.createElement('button');
-  vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=true;
-  // sul computer «Mangia / Bevi» sta sopra il tasto d'azione, così non si coprono
-  for(const [b,up] of [[vendExit,8],[eatButton,60]])b.style.cssText=touch?'order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + '+up+'px);left:50%;transform:translateX(-50%);white-space:nowrap';
-  (touch?dock:el).append(vendExit,eatButton);
-  function enterVend(){
-    if(!vend||held)return;
+  new GLTFLoader().load(new URL('models/popcorn.glb',import.meta.url).href,gltf=>{
+    popGltf=gltf;pop=createPopcorn(gltf,{sound:nearSound(POP)});
+    pop.root.position.set(POP.x,0,POP.z);pop.root.rotation.y=Math.PI;scene.add(pop.root);
+    pop.onChange(e=>{if(atMachine==='pop'&&e.state==='prepara'){useN++;useK=e.key||''}});
+  });
+  const machineOf=m=>m==='pop'?pop:vend;
+  const vendExit=document.createElement('button'),eatButton=document.createElement('button'),drinkButton=document.createElement('button');
+  vendExit.textContent='Esci'+(touch?'':' (Esc)');vendExit.hidden=eatButton.hidden=drinkButton.hidden=true;
+  // sul computer «Mangia» e «Bevi» stanno sopra il tasto d'azione, così non si coprono
+  for(const [b,up] of [[vendExit,8],[eatButton,60],[drinkButton,112]])b.style.cssText=touch?'order:3':'position:absolute;bottom:calc(var(--ui-safe-bottom,0px) + '+up+'px);left:50%;transform:translateX(-50%);white-space:nowrap';
+  (touch?dock:el).append(vendExit,eatButton,drinkButton);
+  // chi sta usando una macchinetta (un altro): il suo nome, o null
+  function machineBusy(m){for(const c of peers.values())if(c.useWanted?.m===m)return c.userName||'un amico';return null}
+  function enterMachine(m){
+    const machine=machineOf(m);
+    if(!machine||machineBusy(m)||(m==='vend'&&held))return;
     if(document.pointerLockElement)document.exitPointerLock?.();
+    atMachine=m;useK='';
     vendMode=true;resetMovement();me.root.visible=false;actB.hidden=true;stick.hidden=true;vendExit.hidden=false;near=null;
   }
   function exitVend(){
     if(!vendMode)return;
-    vendMode=false;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
+    // andando via senza prendere il prodotto, la macchinetta torna libera e pronta per il prossimo
+    const machine=machineOf(atMachine);if(machine&&machine.state()!=='scegli')machine.reset();
+    vendMode=false;atMachine=null;vendExit.hidden=true;me.root.visible=true;stick.hidden=!touch;near=null;restoreActivityView();
   }
   vendExit.onclick=exitVend;
-  // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto (vano, sportello o bicchiere)
+  // un tocco sulla macchinetta: tasto, bevanda, oppure il prodotto pronto
   const vendRay=new THREE.Raycaster(),vendNDC=new THREE.Vector2();
   el.addEventListener('pointerdown',e=>{
-    if(!vendMode||!vend||e.target.tagName!=='CANVAS')return;
+    const machine=machineOf(atMachine);
+    if(!vendMode||!machine||e.target.tagName!=='CANVAS')return;
     e.stopPropagation();e.preventDefault();
     const b=host.getBoundingClientRect();vendNDC.set(2*(e.clientX-b.left)/b.width-1,1-2*(e.clientY-b.top)/b.height);
     vendRay.setFromCamera(vendNDC,camera);
-    const hit=vendRay.intersectObject(vend.root,true)[0];if(!hit)return;
+    const hit=vendRay.intersectObject(machine.root,true)[0];if(!hit)return;
+    if(atMachine==='pop'){
+      // le mani: il cartoccio va nella destra, la cola nella sinistra; se sono già piene, il tasto non parte
+      let o=hit.object;while(o&&!o.userData.popcorn)o=o.parent;
+      const v=o?.userData.popcorn;if(!v)return;
+      if(v.type==='key'&&pop.state()==='scegli'&&((v.key!=='cola'&&held)||(v.key!=='popcorn'&&drink))){vendSound('errore');return}
+      pop.hit(hit.object);
+      if(v.type==='item'){const got=pop.take();if(got){useT++;for(const p of got)p.id==='popcorn'?holdPopcorn():holdCola();exitVend()}}
+      return;
+    }
     const readyMesh=vend.ready()?.mesh;let onReady=false;
     for(let q=hit.object;q;q=q.parent)if(q===readyMesh)onReady=true;
     const v=vend.hit(hit.object);
-    if(onReady||v?.type==='flap'||v?.type==='cup'){const product=vend.take();if(product){holdProduct(product);exitVend()}}
+    if(onReady||v?.type==='flap'||v?.type==='cup'){const product=vend.take();if(product){useT++;holdProduct(makeHeld(vendGltf,product));exitVend()}}
   },true);
-  function holdProduct(product){
-    held=makeHeld(vendGltf,product);heldBites=0;held.group.scale.setScalar(HELD_SCALE);scene.add(held.group);
+  function holdProduct(item){
+    held=item;heldBites=0;held.group.scale.setScalar(HELD_SCALE);scene.add(held.group);
+    const product=item.product;
     eatButton.textContent=(product.pack?'Mangia':'Bevi')+' · '+product.name+(touch?'':' (F)');eatButton.hidden=false;
+  }
+  const holdPopcorn=()=>popGltf&&holdProduct(makeHeldPopcorn(popGltf));
+  function holdCola(){
+    if(!popGltf)return;
+    drink=makeHeldCola(popGltf);drinkSips=0;drink.group.scale.setScalar(HELD_SCALE);scene.add(drink.group);
+    drinkButton.textContent='Bevi · '+drink.product.name+(touch?'':' (B)');drinkButton.hidden=false;
   }
   function eat(){
     if(!held||!held.left())return;
@@ -1457,25 +1496,86 @@ function buildLobby3D(app, life) {
     if(!left){const done=held;held=null;eatButton.hidden=true;setTimeout(()=>done.group.removeFromParent(),450)}
   }
   eatButton.onclick=eat;
-  // il prodotto segue la mano destra del personaggio (in piedi, dritto, girato come lui)
+  function drinkCola(){
+    if(!drink||!drink.left())return;
+    const left=drink.bite();drinkSips++;vendSound('sorso');mySip=0;
+    (me.fx||(me.fx={crouch:0,guard:0,punch:9,starsUntil:0})).sip=0;
+    if(!left){const done=drink;drink=null;drinkButton.hidden=true;setTimeout(()=>done.group.removeFromParent(),700)}
+  }
+  drinkButton.onclick=drinkCola;
+  // il prodotto segue la mano del personaggio (0 la destra, 1 la sinistra): in piedi, dritto, girato come lui
   const handPoint=new THREE.Vector3();
-  function toHand(c,group){
-    c.elbows[0].updateWorldMatrix(true,false);
-    handPoint.set(0,-.3,.12);c.elbows[0].localToWorld(handPoint);
+  function toHand(c,group,hand=0){
+    c.elbows[hand].updateWorldMatrix(true,false);
+    handPoint.set(0,-.3,.12);c.elbows[hand].localToWorld(handPoint);
     group.position.set(handPoint.x,handPoint.y-.1,handPoint.z);group.rotation.set(0,c.root.rotation.y,0);
     group.visible=c.root.visible;
   }
-  const heldPose=()=>held&&held.left()?{snack:{id:held.product.id,left:held.left(),n:heldBites}}:{};
+  // portabicchiere del divanetto del cinema più vicino, dalla parte del posto (models/divanetto.glb: braccioli a
+  // ±0,665 m, 64 cm d'altezza, 18 cm verso lo schermo)
+  const holderPoint=new THREE.Vector3();
+  function holderAt(x,z){
+    let best=null,bd=1e9;
+    for(const s of cinemaSofas){const d=Math.hypot(s.position.x-x,s.position.z-z);if(d<bd){bd=d;best=s}}
+    if(!best||bd>1.2)return null;
+    return holderPoint.set(best.position.x+(x>=best.position.x?.665:-.665),best.position.y+.632,best.position.z+.18);
+  }
+  // la cola nel portabicchiere; a ogni sorso sale per un attimo verso la bocca (sip = secondi dal sorso)
+  const mouth=new THREE.Vector3();
+  function cupInHolder(group,at,sip,head){
+    group.scale.setScalar(CUP_SCALE);group.rotation.set(0,Math.PI,0);group.position.copy(at);group.visible=true;
+    if(sip<1.2&&head){const k=Math.sin(Math.min(1,sip/1.2)*Math.PI);group.position.lerp(head,k*.85)}
+  }
+  const seatedCup=()=>!!(seating&&seating.sit&&drink);
+  const heldPose=()=>({
+    ...(held&&held.left()?{snack:{id:held.product.id,left:held.left(),n:heldBites}}:{}),
+    ...(drink&&drink.left()?{drink:{id:'cola',left:drink.left(),n:drinkSips,...(seatedCup()?{cup:1}:{})}}:{}),
+    ...(atMachine?{use:{m:atMachine,k:atMachine==='vend'&&vend?.state()==='scegli'?vend.typed():useK,n:useN,t:useT}}:{})
+  });
   const PRODUCTS=new Map([...SNACKS,...DRINKS].map(p=>[p.id,p]));
+  const heldFor=id=>id==='popcorn'?(popGltf?makeHeldPopcorn(popGltf):null):PRODUCTS.has(id)&&vendGltf?makeHeld(vendGltf,PRODUCTS.get(id)):null;
   // gli altri: il prodotto in mano come nella loro posa; a ogni morso nuovo il braccio sale alla bocca
   function peerSnack(c){
-    const want=c.snackWanted,product=want&&vendGltf?PRODUCTS.get(want.id):null;
-    if(c.snack&&(!product||c.snack.product!==product)){c.snack.group.removeFromParent();c.snack=null}
-    if(product&&!c.snack){c.snack=makeHeld(vendGltf,product);c.snack.group.scale.setScalar(HELD_SCALE);scene.add(c.snack.group);c.snackN=want.n}
+    const want=c.snackWanted;
+    if(c.snack&&(!want||c.snack.product.id!==want.id)){c.snack.group.removeFromParent();c.snack=null}
+    if(want&&!c.snack){c.snack=heldFor(want.id);if(c.snack){c.snack.group.scale.setScalar(HELD_SCALE);scene.add(c.snack.group);c.snackN=want.n}}
     if(!c.snack)return;
     if(want.n!==c.snackN){c.snackN=want.n;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).bite=0}
     while(c.snack.left()>want.left)c.snack.bite();
     c.snack.update(peerDt);toHand(c,c.snack.group);
+  }
+  function peerDrink(c){
+    const want=c.drinkWanted;
+    if(c.drink&&!want){c.drink.group.removeFromParent();c.drink=null}
+    if(want&&!c.drink&&popGltf){c.drink=makeHeldCola(popGltf);scene.add(c.drink.group);c.drinkN=want.n;c.sip=9}
+    if(!c.drink)return;
+    if(want.n!==c.drinkN){c.drinkN=want.n;c.sip=0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).sip=0}
+    c.sip=(c.sip??9)+peerDt;
+    while(c.drink.left()>want.left)c.drink.bite();
+    c.drink.update(peerDt);
+    const at=want.cup&&c.pose?.station==='seat'?holderAt(c.pose.x,c.pose.z):null;
+    if(at){c.head.updateWorldMatrix(true,false);c.head.getWorldPosition(mouth);mouth.y-=.05;cupInHolder(c.drink.group,at,c.sip,mouth)}
+    else{c.drink.group.scale.setScalar(HELD_SCALE);toHand(c,c.drink.group,1)}
+  }
+  // le macchinette usate dagli altri: la tua fa quello che fa la loro (scelte, prodotto che scende, preso)
+  const remote={vend:null,pop:null};
+  function peerMachines(){
+    for(const m of ['vend','pop']){
+      const machine=machineOf(m);if(!machine)continue;
+      let user=null;for(const c of peers.values())if(c.useWanted?.m===m){user=c;break}
+      if(atMachine===m){
+        remote[m]=null;
+        // l'ha presa un altro un attimo prima: si lascia a lui
+        if(user){exitVend();notice('La sta usando '+(user.userName||'un amico'),'info')}
+        continue;
+      }
+      const u=user?.useWanted,r=remote[m];
+      if(!u){if(r){remote[m]=null;if(machine.state()!=='scegli')machine.reset()}continue}
+      if(!r||r.who!==user){remote[m]={who:user,n:u.n,t:u.t};continue} // si comincia a guardare da adesso
+      if(u.n!==r.n){r.n=u.n;if(machine.state()!=='scegli')machine.reset();machine.play(u.k)}
+      else if(m==='vend'&&machine.state()==='scegli')machine.typing(u.k);
+      if(u.t!==r.t){r.t=u.t;machine.take()}
+    }
   }
   // Reception counter and tabletop receiver on the east side of the atrium.
   const counterX=5.95,counterZ=-3.35;
@@ -1897,7 +1997,7 @@ function buildLobby3D(app, life) {
     for(const arm of c.arms){arm.quaternion.identity();arm.scale.y=1}
     c.lookYaw=Number(p.look)||0;c.lookPitch=0;
     animateCharacter(c,w.speed<.15?0:w.speed,peerDt,t);
-    actCharacter(c,{crouch:p.crouch,guard:p.guard,hold:!!p.snack},peerDt,t);
+    actCharacter(c,{crouch:p.crouch,guard:p.guard,hold:!!p.snack,hold2:!!p.drink&&!p.drink.cup},peerDt,t);
     peerJump(c);
     return {x:w.x,z:w.z,yaw:w.yaw};
   }
@@ -2042,15 +2142,17 @@ function buildLobby3D(app, life) {
         if((cp.jump||0)!==c.seenJump){c.seenJump=cp.jump||0;if(!c.jumping)c.jumping={prep:.12,h:0,v:0};c.landBend=.28}
         if((cp.punch||0)!==c.seenPunch){c.seenPunch=cp.punch||0;(c.fx||(c.fx={crouch:0,guard:0,punch:9,starsUntil:0})).punch=0}
         if(cp.hit&&cp.hit.n!==c.seenHit){c.seenHit=cp.hit.n;struck(String(cp.hit.id),!!cp.hit.blocked,c)}
-        c.snackWanted=cp.snack||null; // prodotto della macchinetta in mano (peerSnack)
+        c.snackWanted=cp.snack||null; // prodotto della macchinetta o cartoccio in mano (peerSnack)
+        c.drinkWanted=cp.drink||null;c.useWanted=cp.use||null;c.userName=user.name||''; // cola (peerDrink), macchinetta in uso (peerMachines)
       }
       for(const [id,c] of peers)if(!present.has(id)){
-        c.root.removeFromParent();c.snack?.group.removeFromParent();
+        c.root.removeFromParent();c.snack?.group.removeFromParent();c.drink?.group.removeFromParent();
         const geometries=new Set(),materials=new Set();c.root.traverse(o=>{if(o.isMesh||o.isSprite){geometries.add(o.geometry);materials.add(o.material)}});
         for(const g of geometries)g.dispose();for(const m of materials){m.map?.dispose();m.dispose()}peers.delete(id);
       }
     }
-    for(const c of peers.values()){c.root.visible=!!modelPose(c,c.pose);peerSnack(c)}
+    for(const c of peers.values()){c.root.visible=!!modelPose(c,c.pose);peerSnack(c);peerDrink(c)}
+    peerMachines();
   }
   let jumpHeight = 0, verticalSpeed = 0, lastFoot = 0, jumpPrep = 0;
   // salto: prima le ginocchia si piegano un poco (0,12 s, la spinta) e poi si stacca da terra
@@ -2087,6 +2189,7 @@ function buildLobby3D(app, life) {
     // davanti alla macchinetta si usano solo i tasti sul pannello; Esc per andare via
     if (vendMode) { if (e.type === 'keydown' && e.code === 'Escape') exitVend(); e.preventDefault(); return; }
     if (held && e.code === 'KeyF') { if (e.type === 'keydown' && !e.repeat) eat(); e.preventDefault(); return; }
+    if (drink && e.code === 'KeyB') { if (e.type === 'keydown' && !e.repeat) drinkCola(); e.preventDefault(); return; }
     if(e.altKey||e.key==='Alt'){if(e.type==='keydown')return}
     if(e.code==='KeyV'){if(e.type==='keydown'&&!e.repeat&&!activityView)setFirst(!firstPerson);e.preventDefault();return}
     if(e.code==='KeyH'){if(e.type==='keydown'&&!e.repeat)toggleHelp();e.preventDefault();return} // i comandi
@@ -2277,7 +2380,7 @@ function buildLobby3D(app, life) {
     animateCharacter(me, moving, dt, t);
     // un passo a ogni appoggio del piede (più piano abbassati, più forte correndo)
     { const foot = Math.floor(me.phase / Math.PI); if (foot !== lastFoot) { lastFoot = foot; if (moving > 0.4 && !seating && jumpHeight === 0) fxSound('step', Math.min(1.2, moving / SPEED) * (crouching ? 0.45 : 1)); } }
-    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating, hold: !!held }, dt, t);
+    actCharacter(me, { crouch: crouching && !seating, guard: guarding && !seating, hold: !!held, hold2: !!drink && !seatedCup() }, dt, t);
     if (jumpPrep > 0 && (jumpPrep -= dt) <= 0) { jumpPrep = 0; if (!seating) verticalSpeed = 4.1; } // finita la spinta: si salta
     if (verticalSpeed !== 0 || jumpHeight > 0) {
       const gravity = 13, inAir = jumpHeight > 0;
@@ -2315,6 +2418,8 @@ function buildLobby3D(app, life) {
       else if (near?.balilla) actB.textContent = near.label + (touch ? ' · Gioca' : ' · Gioca (E)');
       else if (near) actB.textContent = (near.sit||near.seat?'':near.vend?'Usa · ':'Apri · ') + near.label + (touch ? '' : '  (E)') + (near.stool!=null&&!touch ? ' · Prendi (G)' : '');
     }
+    // macchinetta che sta usando un altro: si vede chi, e non si può usare
+    if (near?.machine) { const who = machineBusy(near.machine), text = who ? near.label + ' · la sta usando ' + who : 'Usa · ' + near.label + (touch ? '' : '  (E)'); if (actB.textContent !== text) actB.textContent = text; }
     if (vendMode) { near = null; actB.hidden = true; } // davanti alla macchinetta c'è solo «Esci»
     ring.visible = !!near && !!near.mq;
     for (const s of spots) if (s.mq) s.mq.material.color.setScalar(s === near ? 2.4 + Math.sin(t * 6) * 0.5 : 1.8);
@@ -2354,10 +2459,22 @@ function buildLobby3D(app, life) {
       // abbastanza lontano da vedere tutta la larghezza (1,1 m) anche su uno schermo stretto, almeno 1,15 m
       const half=Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.aspect);
       const d=Math.max(1.15,.62/Math.tan(half));
-      camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z);
+      if(atMachine==='pop'){
+        // carrello: largo 0,9 m col tetto, alto 1,9 m
+        const dp=Math.max(1.25,.5/Math.tan(half));
+        camera.position.set(POP.x,1.32,POP.z-dp);camera.lookAt(POP.x,1.08,POP.z);
+      }else{camera.position.set(VEND.x-.05,1.3+.1*Math.min(1,d/2),VEND.z-d);camera.lookAt(VEND.x-.05,1.02,VEND.z)}
     }
-    if(vend&&(vendMode||Math.hypot(pos.x-VEND.x,pos.z-VEND.z)<9))vend.update(dt,performance.now());
+    if(vend&&(atMachine==='vend'||Math.hypot(pos.x-VEND.x,pos.z-VEND.z)<9))vend.update(dt,performance.now());
+    if(pop&&(atMachine==='pop'||Math.hypot(pos.x-POP.x,pos.z-POP.z)<10))pop.update(dt);
     if(held){held.update(dt);toHand(me,held.group)}
+    if(drink){
+      drink.update(dt);mySip+=dt;
+      // seduti al cinema la cola sta nel portabicchiere e a ogni sorso sale verso di te; se no in mano (sinistra)
+      const at=seatedCup()?holderAt(pos.x,pos.z):null;
+      if(at){mouth.copy(camera.position).y-=.18;cupInHolder(drink.group,at,mySip,mouth)}
+      else{drink.group.scale.setScalar(HELD_SCALE);toHand(me,drink.group,1)}
+    }
     if(seating){
       standButton.hidden=!touch;seatActions.hidden=!touch&&enterButton.hidden;
       actB.hidden=true;
@@ -2593,7 +2710,7 @@ function buildLobby3D(app, life) {
       return;
     }
     if(s.radio){resetMovement();s.act();return}
-    if(s.vend){enterVend();return} // macchinetta: visuale davanti al pannello, la 3D resta aperta
+    if(s.vend){enterMachine(s.machine);return} // macchinetta: visuale davanti al pannello, la 3D resta aperta
     if(s.station)parked={station:s.station,slot:freeSeat(s)};
     hide();
     s.act();

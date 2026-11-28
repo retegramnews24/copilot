@@ -53,6 +53,31 @@ try{
  spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:4.5,yaw:0,snack:{id:'<b>',left:9}}}));
  walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.5))).users.find(u=>u.id==='21').clubPose;
  assert.equal(walker.snack,undefined,'snack non valido scartato');
+ // carrello dei popcorn: il cartoccio (sei manciate) e la Binotto Cola nell'altra mano o nel portabicchiere
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'seat',x:-1.85,z:8.1,yaw:0,y:0,snack:{id:'popcorn',left:6,n:0},drink:{id:'cola',left:3,n:1,cup:1}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.drink))).users.find(u=>u.id==='21').clubPose;
+ assert.deepEqual(walker.snack,{id:'popcorn',left:6,n:0});assert.deepEqual(walker.drink,{id:'cola',left:3,n:1,cup:1},'la cola nel portabicchiere arriva agli altri');
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:4.6,yaw:0,snack:{id:'espresso',left:6},drink:{id:'acqua',left:2}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.6))).users.find(u=>u.id==='21').clubPose;
+ assert.equal(walker.snack,undefined,'sei morsi solo per i popcorn');assert.equal(walker.drink,undefined,'nell\'altra mano solo la cola');
+ // macchinette: una persona alla volta; chi la usa lo dice nella posa e gli altri vedono le sue scelte
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.4,z:5.05,yaw:0,use:{m:'pop',k:'tutti',n:2,t:1}}}));
+ walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.use))).users.find(u=>u.id==='21').clubPose;
+ assert.deepEqual(walker.use,{m:'pop',k:'tutti',n:2,t:1});
+ const otherRes=await mf.dispatchFetch('https://unit.test/api/lobby/ws',{headers:{Upgrade:'websocket','Sec-WebSocket-Protocol':'checkmate,'+token(23)}});assert.equal(otherRes.status,101);
+ const other={ws:otherRes.webSocket,packets:[],waiters:[]};other.ws.addEventListener('message',event=>{const p=JSON.parse(event.data);other.packets.push(p);for(const fn of [...other.waiters])fn(p)});other.ws.accept();sockets.push(other.ws);
+ other.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.3,z:5.1,yaw:0,use:{m:'pop',k:'cola',n:1}}}));
+ let second=(await until(spectator,p=>p.users?.some(u=>u.id==='23'&&u.clubPose?.z===5.1))).users.find(u=>u.id==='23').clubPose;
+ assert.equal(second.use,undefined,'il carrello è già in uso: il secondo non lo ottiene');
+ other.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:5.2,yaw:0,use:{m:'vend',k:'A1',n:1}}}));
+ second=(await until(spectator,p=>p.users?.some(u=>u.id==='23'&&u.clubPose?.z===5.2))).users.find(u=>u.id==='23').clubPose;
+ assert.deepEqual(second.use,{m:'vend',k:'A1',n:1,t:0},'l\'altra macchinetta è libera');
+ spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.4,z:4.9,yaw:0}}));
+ await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===4.9));
+ other.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:-5.3,z:5.3,yaw:0,use:{m:'pop',k:'',n:0}}}));
+ second=(await until(spectator,p=>p.users?.some(u=>u.id==='23'&&u.clubPose?.z===5.3))).users.find(u=>u.id==='23').clubPose;
+ assert.equal(second.use?.m,'pop','lasciato libero, il carrello passa al secondo');
+ other.ws.send(JSON.stringify({type:'presence',inClub:false,room:null,away:false,pose:null}));
  // i movimenti si vedono anche dagli altri: abbassato, parata, colpi e salti (contatori)
  spectator.ws.send(JSON.stringify({type:'presence',inClub:true,room:null,away:false,pose:{station:'walk',x:6,z:5,yaw:0,crouch:1,guard:1,punch:3,jump:7}}));
  walker=(await until(spectator,p=>p.users?.some(u=>u.id==='21'&&u.clubPose?.z===5))).users.find(u=>u.id==='21').clubPose;

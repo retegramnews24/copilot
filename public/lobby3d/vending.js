@@ -353,7 +353,8 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
     job = null,
     ready = null,
     listeners = [];
-  const emit = () => listeners.forEach(fn => fn({ state, ready: ready?.product || null }));
+  let order = null; // l'ultima scelta: codice dello snack o id della bevanda (la vedono anche gli altri)
+  const emit = () => listeners.forEach(fn => fn({ state, ready: ready?.product || null, order }));
   const idle = () => show(typed || 'SCEGLI', typed ? 'premi OK' : 'snack A1…D3 o caffè');
   idle();
 
@@ -366,6 +367,7 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
       return;
     }
     state = 'scende';
+    order = code;
     sound('motore');
     job = { kind: 'snack', slot, t: 0, item: slot.items[0], fall: null };
     show(code, slot.p.name);
@@ -373,6 +375,7 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
   }
   function vendDrink(d) {
     state = 'scende';
+    order = d.id;
     liquidMat.color.set(d.color);
     cup.visible = true;
     cup.position.copy(CUP).add(new THREE.Vector3(0, 0.2, 0));
@@ -414,6 +417,39 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
     idle();
     emit();
     return got.product;
+  }
+
+  // Per far vedere quello che fa chi la sta usando (lo stesso, sulla macchinetta di chi guarda):
+  // play(scelta) fa scendere lo snack o il caffè, typing(testo) mostra il codice che sta scrivendo,
+  // reset() la rimette a «scegli» se chi la usava se ne va senza prendere il prodotto
+  function play(code) {
+    if (state !== 'scegli') return false;
+    const d = DRINKS.find(x => x.id === code);
+    if (d) vendDrink(d);
+    else if (slots.has(code)) vendSnack(code);
+    else return false;
+    typed = '';
+    return true;
+  }
+  function typing(text) {
+    if (state !== 'scegli' || typed === text || !/^([A-D][1-3]?)?$/.test(text || '')) return;
+    typed = text || '';
+    idle();
+  }
+  function reset() {
+    if (ready) ready.mesh.removeFromParent();
+    ready = null;
+    if (job?.kind === 'snack') {
+      if (job.fall) job.item.removeFromParent();
+      job.slot.spiral.rotation.z = 0;
+      job.slot.items.forEach((m, k) => (m.position.z = -0.18 - k * 0.1));
+    }
+    job = null;
+    cup.visible = stream.visible = false;
+    state = 'scegli';
+    typed = '';
+    idle();
+    emit();
   }
 
   const ease = t => t * t * (3 - 2 * t);
@@ -508,8 +544,12 @@ export function createVending(gltf, theme = 'grafite', { sound = () => {} } = {}
     buttons,
     hit,
     take,
+    play,
+    typing,
+    reset,
     update,
     state: () => state,
+    typed: () => typed,
     ready: () => ready,
     onChange: fn => listeners.push(fn)
   };
@@ -561,7 +601,8 @@ export function makeHeld(gltf, product) {
 }
 
 // Suoni della macchinetta, fatti al momento con Web Audio (niente file). ctx(): l'AudioContext da usare, o null se
-// i suoni sono spenti. Nomi: tasto, errore, motore, caduta, sportello, presa, bicchiere, erogazione, pronto, morso, sorso
+// i suoni sono spenti. Nomi: tasto, errore, motore, caduta, sportello, presa, bicchiere, erogazione, pronto, morso, sorso;
+// per il carrello dei popcorn anche scoppio, sfrigolio, versa
 export function vendingSounds(ctx) {
   let noiseBuf = null;
   const noise = ac => {
@@ -667,6 +708,24 @@ export function vendingSounds(ctx) {
       for (let k = 0; k < 4; k++)
         hiss(ac, t + k * 0.05 + Math.random() * 0.02, 'highpass', 1800, 1, 0.07, 0.002, 0.015, 0.04);
     },
+    // carrello dei popcorn: uno scoppio (colpetto secco e un clic), l'olio che sfrigola nel pentolino (4,5 s),
+    // i popcorn versati che frusciano
+    scoppio: (ac, t) => (
+      hiss(
+        ac,
+        t,
+        'bandpass',
+        1500 + Math.random() * 1800,
+        2.5,
+        0.06 + Math.random() * 0.05,
+        0.001,
+        0.005,
+        0.03
+      ),
+      tone(ac, t, 'sine', 380 + Math.random() * 380, 0.025, 0.03, 180)
+    ),
+    sfrigolio: (ac, t) => hiss(ac, t, 'highpass', 4200, 0.7, 0.025, 0.6, 3.4, 0.5),
+    versa: (ac, t) => hiss(ac, t, 'bandpass', 2600, 0.8, 0.05, 0.05, 0.7, 0.4, 1200),
     sorso: (ac, t) => (
       hiss(ac, t, 'bandpass', 350, 3, 0.07, 0.03, 0.12, 0.12, 900),
       tone(ac, t + 0.2, 'sine', 160, 0.03, 0.12, 110)

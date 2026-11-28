@@ -83,6 +83,12 @@ gara online aperta (la tua, o una che aspetta piloti) invece di aprire una gara 
 
 ## Da provare
 
+- Lobby 3D, carrello dei popcorn e della Binotto Cola (non in un commit; `docs/macchinetta.md`): nell'atrio a
+  sinistra della porta del cinema; popcorn che scoppiano, cartoccio in mano (6 manciate), cola in mano o nel
+  portabicchiere del divanetto al cinema. Nuova regola per tutte le macchinette: una persona alla volta e gli altri
+  vedono quello che fa (`club-machines.js`). Provato nell'anteprima locale con amici finti; da provare in due
+  nell'app di prova (anche il telefono: il modello pesa circa 1 MB e i chicchi che scoppiano sono 48 pezzi).
+
 - Lobby 3D tra amici (non in un commit): il salto ora si vede anche dagli altri (contatore `jump` nella posa, come i
   colpi; il server lo lascia passare, `worker.js`; chi guarda fa lo stesso salto, `peerJump`). Abbassarsi, parata e
   colpi arrivavano già: controllati con la prova `test:multiplayer-runtime`. Da provare in due nell'app.
@@ -191,6 +197,8 @@ Telegram Desktop; su Telegram Web il tasto non fa niente, perché Telegram Web n
 
 - Stile A «Circolo italiano anni '60» per pareti e finiture; i mobili della sala tavoli invece sono moderni.
 - Modanature lunghe fatte in codice, oggetti singoli in Blender.
+- Macchinette (caffè e snack, carrello dei popcorn): tutto quello che succede si vede da tutti, e una macchinetta la
+  usa una persona alla volta (`docs/macchinetta.md`).
 
 **Altri giochi**
 

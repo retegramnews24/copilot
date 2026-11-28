@@ -30,6 +30,9 @@ ci si fa, con lo stesso legno sotto; la sala giochi è l'eccezione voluta, con i
 - Pannello di boiserie, rastrelliera delle stecche e applique d'ottone (`blender/arredi_lobby.blend` → `public/lobby3d/models/finiture.glb`, 140 KB). I pannelli (cornice e specchiatura in rilievo) sono tutti in un oggetto a istanze, ognuno alla misura del suo riquadro e con il legno della sua stanza; quelli piatti di `trimWall` restano finché il modello non arriva. Rastrelliera sulla parete di fondo del biliardo (8 stecche, mensola a coppette); applique: 4 nell'atrio, 2 nella sala tavoli, 2 nel biliardo.
 - Sala tavoli, tavoli e sedie moderni (`blender/sala_tavoli.blend` → `public/lobby3d/models/sala_tavoli.glb`, 80 KB): tavolo con il piano di noce dagli angoli arrotondati su una colonna centrale scura con il disco a terra; sedia girevole a quattro razze con seduta e schienale imbottiti in pelle, lo schienale staccato su un montante di metallo. Stesse misure di prima (piano a 80,5 cm, seduta a 48,5 cm): pedine e posti a sedere non cambiano. A istanze, un oggetto per materiale.
 - Applique dell'atrio spostate dove non coprono quadri e lavagna.
+- Carrello dei popcorn e della Binotto Cola (`blender/popcorn.blend` → `public/lobby3d/models/popcorn.glb`, circa
+  1 MB): nell'atrio a sinistra della porta del cinema, tra la pianta e il divano. Funzionamento e scelte in
+  `docs/macchinetta.md`.
 - Zona operativa (`public/lobby3d/corridor.js`): porta blindata industriale sulla parete nord della sala giochi
   (centro x -15,95, vano 1,2 × 2,3 m, insegna rossa «ZONA OPERATIVA»; il quadro «INSERT COIN» è stato spostato a
   x -17,85 per farle posto). Si apre scorrendo avvicinandosi. Dietro, un tunnel di cemento di 12 m (z -6,3…-18,3,

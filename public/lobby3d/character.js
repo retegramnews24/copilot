@@ -247,6 +247,16 @@ export function actCharacter(c, a, dt, t) {
     c.elbows[0].rotation.z = 0;
     c.head.rotation.x += 0.12 * b;
   }
+  // la cola del carrello nell'altra mano (a.hold2): braccio sinistro avanti; a ogni sorso (c.fx.sip) sale alla bocca
+  fx.sip = (fx.sip ?? 9) + dt;
+  if (a.hold2) {
+    const b = fx.sip < 0.6 ? Math.sin((fx.sip / 0.6) * Math.PI) : 0;
+    c.arms[1].rotation.x = mix(0.55, 1.05, b);
+    c.arms[1].rotation.z = mix(-0.12, -0.25, b);
+    c.elbows[1].rotation.x = mix(1.25, 2.15, b);
+    c.elbows[1].rotation.z = 0;
+    c.head.rotation.x += 0.12 * b;
+  }
   // stelline
   const st = fx.starsUntil > t ? stars(c) : c.stars;
   if (st) {
