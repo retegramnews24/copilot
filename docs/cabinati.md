@@ -72,7 +72,7 @@ Pezzi di ogni cabinato (suffisso `_1`, `_2`, `_4`):
 
 ## Nella Lobby 3D (28 novembre 2026, su richiesta del proprietario)
 
-- `cabinet` in `public/lobby3d/lobby3d.js` («SALA ARCADE») carica `models/cabinati.glb` e mette il modello giusto per
+- `buildCabinets` in `public/lobby3d/cabinets.js` (chiamato da `lobby3d.js`, «SALA ARCADE») carica `models/cabinati.glb` e mette il modello giusto per
   ogni gioco (`SEATS`: Pong 2, Moto Trial, F1 e Golf 4; Binotto Simulator il muretto). Posti, ingombri e tasti ci
   sono subito, i pezzi arrivano col modello. Le UV del modello si girano al caricamento (v dal basso), così tele e
   Pong sul monitor stanno dritti.
@@ -86,7 +86,7 @@ Pezzi di ogni cabinato (suffisso `_1`, `_2`, `_4`):
   nel muro e i flipper stavano a 18 e 14 cm.
 - **Parete dell'ARCADE, stesso spazio tra tutti** (scelta del proprietario): 10 cm dall'angolo (parete nord) al
   Binotto GT, tra i due flipper, tra il Grand Prix e la slot nera e tra una slot e l'altra (`SPACING` in `slot.js`,
-  `SLOT_STEP` e `SLOTS` in `lobby3d.js`). Larghezze misurate dai modelli: GT 1,004 m, Grand Prix 0,844, slot con la
+  `SLOT_STEP` e `SLOTS` in `lobby3d.js`; `WALL_GAP` in `cabinets.js`). Larghezze misurate dai modelli: GT 1,004 m, Grand Prix 0,844, slot con la
   leva 0,915 (ingrandita del 25%). Così flipper e slot sono più verso l'angolo: le slot non stanno più sotto la
   scritta ARCADE, ma accanto.
 - **Disegni a tema per ogni gioco** (`public/lobby3d/cabinet-art.js`, richiesta del proprietario: scritte adatte a

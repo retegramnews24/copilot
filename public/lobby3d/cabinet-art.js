@@ -286,3 +286,16 @@ export function panelArt(key, color, seats, aspect) {
     }
   });
 }
+
+// monitor «tempi» e «meteo» del muretto di Binotto Simulator
+export const monitorArt = kind => canvasTex(256, 160, (ctx, w, h) => {
+  ctx.fillStyle = '#05080d'; ctx.fillRect(0, 0, w, h); ctx.font = 'bold 15px monospace'; ctx.textBaseline = 'top';
+  if (kind === 'tempi') {
+    ctx.fillStyle = '#ffd236'; ctx.fillText('LAP   SETTORI      TEMPO', 10, 8);
+    for (let i = 0; i < 6; i++) { ctx.fillStyle = i === 2 ? '#c77dff' : i === 4 ? '#3ddc84' : '#d8e2ee'; ctx.fillText(`${12 + i}  ${(28 + i * .13).toFixed(2)} ${(31 - i * .07).toFixed(2)}  1:${(31 - i * .21).toFixed(3)}`, 10, 32 + i * 20); }
+  } else {
+    ctx.fillStyle = '#9ad8ff'; ctx.fillText('METEO PISTA', 10, 8);
+    ctx.fillStyle = '#ffd236'; ctx.beginPath(); ctx.arc(60, 82, 26, 0, 7); ctx.fill();
+    ctx.fillStyle = '#d8e2ee'; ctx.fillText('ARIA 24°  ASFALTO 38°', 100, 60); ctx.fillText('PIOGGIA 10%', 100, 84); ctx.fillText('VENTO 6 km/h', 100, 108);
+  }
+});

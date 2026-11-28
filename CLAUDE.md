@@ -92,7 +92,7 @@ questo file si carica da solo. Non tenere decisioni solo nelle note di Claude: v
 | Golf | `docs/golf.md` | `public/golf/`, `golf-server.js` |
 | Moto Trial | `docs/moto-trial.md` | `public/moto-trial/`, `moto-trial-server.js` |
 | Acquedotto! e giochi arcade | `docs/acquedotto.md` | `public/arcade/` |
-| Cabinati della sala giochi | `docs/cabinati.md` | `blender/cabinati.blend`, `public/lobby3d/lobby3d.js`, `cabinet-art.js` |
+| Cabinati della sala giochi | `docs/cabinati.md` | `blender/cabinati.blend`, `public/lobby3d/cabinets.js`, `cabinet-art.js` |
 | Binotto Simulator | `docs/binotto-simulator.md`, `docs/circuit-pits.md` | `simulator/`, `public/simulator/` |
 | Slot machine | `docs/slot.md` | `public/lobby3d/slot.js`, `public/slot-rules.js`, `club-wallet.js` |
 | Cinema | `docs/cinema.md` | `public/cinema/`, `cinema-*.js` |
